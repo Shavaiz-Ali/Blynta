@@ -80,6 +80,9 @@ export class User {
   @Prop({ default: true })
   isActive: boolean;
 
+  @Prop({ default: false })
+  isWelcomed: boolean;
+
   // --- Credits system ---
   @Prop({ default: PLAN_CREDITS[UserPlan.FREE] })
   creditsBalance: number;

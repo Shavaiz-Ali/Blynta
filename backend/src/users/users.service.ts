@@ -165,4 +165,11 @@ export class UsersService {
       },
     );
   }
+
+  async markWelcomed(userId: string): Promise<void> {
+    await this.userModel.updateOne(
+      { _id: userId, isWelcomed: false },
+      { isWelcomed: true },
+    );
+  }
 }

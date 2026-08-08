@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AppButton } from "@/components/common/AppButton";
+import type { AuthProvider } from "@/features/auth/types";
 
 export interface SocialLoginButtonsProps {
   onFacebookClick?: () => void;
@@ -10,7 +11,7 @@ export interface SocialLoginButtonsProps {
   googleLoading?: boolean;
   className?: string;
   /** Array of enabled provider strings from GET /auth/providers */
-  enabledProviders?: string[];
+  enabledProviders?: AuthProvider[];
 }
 
 function SocialLoginButtons({

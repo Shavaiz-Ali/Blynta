@@ -10,6 +10,7 @@ import { AppInput } from "@/components/common/AppInput";
 import { AppButton } from "@/components/common/AppButton";
 import { AuthDivider } from "@/features/auth/components/AuthDivider";
 import { SocialLoginButtons } from "@/features/auth/components/SocialLoginButtons";
+import type { AuthProvider } from "@/features/auth/types";
 import {
   loginSchema,
   type LoginInput,
@@ -19,7 +20,7 @@ export interface LoginFormProps {
   showForgotPassword?: boolean;
   className?: string;
   /** Enabled provider strings from GET /auth/providers (e.g. ["local","google","facebook"]) */
-  enabledProviders?: string[];
+  enabledProviders?: AuthProvider[];
 }
 
 function LoginForm({
@@ -78,10 +79,8 @@ function LoginForm({
       return;
     }
 
-    // Success — navigate to the dashboard (update this path once it exists).
-    // TODO: replace '/' with the authenticated dashboard route when created.
-    router.push("/");
-    router.refresh(); // Sync server session with the new cookie
+    router.push("/dashboard");
+    router.refresh();
   };
 
   // Show social buttons only when the backend says local login is not the

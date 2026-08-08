@@ -14,12 +14,15 @@ declare module "next-auth" {
       id: string;
       role: string;
     } & DefaultSession["user"];
+    /** Signed JWT issued by the NestJS backend; used for API requests. */
+    accessToken?: string;
   }
 
   // Returned by `authorize()` in CredentialsProvider and used
   // as the `user` param in the `jwt()` callback on first sign-in.
   interface User extends DefaultUser {
     role?: string;
+    accessToken?: string;
   }
 }
 
@@ -27,6 +30,8 @@ declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
     id?: string;
     role?: string;
+    /** Signed JWT issued by the NestJS backend. */
+    accessToken?: string;
     /** Holds OAuth backend user data between signIn() and jwt() callbacks */
     backendUser?: { id: string; email: string; role: string };
   }

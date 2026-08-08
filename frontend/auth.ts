@@ -32,6 +32,7 @@ interface BackendUser {
   id: string;
   email: string;
   role: string;
+  accessToken: string;
 }
 
 /** Standard NestJS API response envelope. */
@@ -74,7 +75,7 @@ async function callBackend<T>(
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
 
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 }, // 7 days — aligned with backend JWT expiresIn ('7d')
 
   providers: [
     // ------------------------------------------------------------------
@@ -102,6 +103,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             id: user.id,
             email: user.email,
             role: user.role,
+            accessToken: user.accessToken,
           };
         } catch {
           // Returning null signals "invalid credentials" to Auth.js.
@@ -151,6 +153,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           user.id = backendUser.id;
           user.email = backendUser.email;
           (user as { role?: string }).role = backendUser.role;
+          (user as { accessToken?: string }).accessToken = backendUser.accessToken;
           return true;
         }
 
@@ -164,6 +167,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           user.id = backendUser.id;
           user.email = backendUser.email;
           (user as { role?: string }).role = backendUser.role;
+          (user as { accessToken?: string }).accessToken = backendUser.accessToken;
           return true;
         }
 
@@ -187,6 +191,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role ?? "user";
+        const at = (user as { accessToken?: string }).accessToken;
+        if (at) token.accessToken = at;
       }
       return token;
     },
@@ -199,6 +205,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string;
+      }
+      const at = token.accessToken as string | undefined;
+      if (at) {
+        (session as { accessToken?: string }).accessToken = at;
       }
       return session;
     },

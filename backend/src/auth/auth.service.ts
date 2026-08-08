@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
@@ -8,16 +9,27 @@ import { InvalidCredentialsException } from '../common/exceptions';
 import { randomBytes, randomInt } from 'crypto';
 import { MailService } from 'src/mail/mail.service';
 
+export interface AuthResult {
+  id: string;
+  email: string;
+  role: string;
+  accessToken: string;
+}
+
 @Injectable()
 export class AuthService {
-  constructor(private usersService: UsersService, private mailService: MailService) { }
+  constructor(
+    private usersService: UsersService,
+    private mailService: MailService,
+    private jwtService: JwtService,
+  ) { }
 
   async signup(dto: CreateUserDto) {
     const user = await this.usersService.create(dto);
     return { id: user._id, email: user.email };
   }
 
-  async validateLogin(dto: LoginDto) {
+  async validateLogin(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmailWithPassword(dto.email);
     if (!user || !user.password) {
       throw new InvalidCredentialsException();
@@ -26,10 +38,16 @@ export class AuthService {
     if (!isValid) {
       throw new InvalidCredentialsException();
     }
-    return { id: user._id.toString(), email: user.email, role: user.role };
+    const id = user._id.toString();
+    const accessToken = await this.jwtService.signAsync({
+      sub: id,
+      email: user.email,
+      role: user.role,
+    });
+    return { id, email: user.email, role: user.role, accessToken };
   }
 
-  async validateSocialLogin(dto: SocialLoginDto, provider: AuthProvider) {
+  async validateSocialLogin(dto: SocialLoginDto, provider: AuthProvider): Promise<AuthResult> {
     const user = await this.usersService.findOrCreateFromSocialProvider({
       provider,
       providerId: dto.providerId,
@@ -37,7 +55,13 @@ export class AuthService {
       name: dto.name,
       avatarUrl: dto.avatarUrl,
     });
-    return { id: user._id.toString(), email: user.email, role: user.role };
+    const id = user._id.toString();
+    const accessToken = await this.jwtService.signAsync({
+      sub: id,
+      email: user.email,
+      role: user.role,
+    });
+    return { id, email: user.email, role: user.role, accessToken };
   }
 
 

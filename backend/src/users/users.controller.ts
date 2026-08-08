@@ -22,6 +22,7 @@ export class UsersController {
       creditsBalance: user.creditsBalance,
       creditsResetAt: user.creditsResetAt,
       role: user.role,
+      isWelcomed: user.isWelcomed,
     };
   }
 
@@ -34,5 +35,11 @@ export class UsersController {
     await user.save();
 
     return { id: user._id, name: user.name };
+  }
+
+  @Patch('me/welcomed')
+  async markWelcomed(@Request() req) {
+    await this.usersService.markWelcomed(req.user.userId);
+    return { message: 'Welcome screen marked as seen' };
   }
 }

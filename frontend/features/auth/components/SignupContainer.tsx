@@ -8,8 +8,14 @@ import { SignupForm, type SignupFormValues } from "@/features/auth/components/Si
 import { VerifyOtpDialog } from "@/features/auth/components/VerifyOtpDialog";
 import { AuthDivider } from "@/features/auth/components/AuthDivider";
 import { SocialLoginButtons } from "@/features/auth/components/SocialLoginButtons";
+import type { AuthProvider } from "@/features/auth/types";
 
-export function SignupContainer() {
+export interface SignupContainerProps {
+  /** Enabled provider strings from GET /auth/providers (e.g. ["local","google","facebook"]) */
+  enabledProviders?: AuthProvider[];
+}
+
+export function SignupContainer({ enabledProviders }: SignupContainerProps) {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [socialLoading, setSocialLoading] = React.useState<
     "facebook" | "google" | null
@@ -42,6 +48,11 @@ export function SignupContainer() {
     console.log("resend otp");
   }
 
+  const showSocialSection =
+    !enabledProviders ||
+    enabledProviders.includes("google") ||
+    enabledProviders.includes("facebook");
+
   return (
     <AuthCard
       header={
@@ -66,20 +77,22 @@ export function SignupContainer() {
         </p>
       }
     >
-      {/* 1. Top Social Login Buttons Grid */}
-      <SocialLoginButtons
-        onFacebookClick={() => handleSocial("facebook")}
-        onGoogleClick={() => handleSocial("google")}
-        facebookLoading={socialLoading === "facebook"}
-        googleLoading={socialLoading === "google"}
-      />
+      {showSocialSection && (
+        <SocialLoginButtons
+          onFacebookClick={() => handleSocial("facebook")}
+          onGoogleClick={() => handleSocial("google")}
+          facebookLoading={socialLoading === "facebook"}
+          googleLoading={socialLoading === "google"}
+          enabledProviders={enabledProviders}
+        />
+      )}
 
-      {/* 2. OR CONTINUE WITH Divider */}
-      <div className="my-5">
-        <AuthDivider />
-      </div>
+      {showSocialSection && (
+        <div className="my-5">
+          <AuthDivider />
+        </div>
+      )}
 
-      {/* 3. Signup Form */}
       <SignupForm
         onSubmit={handleSubmit}
         isSubmitting={isSubmitting}
