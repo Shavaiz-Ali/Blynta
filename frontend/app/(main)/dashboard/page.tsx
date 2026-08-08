@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { DashboardShell } from "@/features/dashboard/components/DashboardShell";
+import { DashboardHome } from "@/features/dashboard/components/DashboardHome";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,5 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  return <DashboardShell />;
+  return <DashboardHome />;
 }

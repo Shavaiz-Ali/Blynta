@@ -9,11 +9,10 @@ dns.setDefaultResultOrder('ipv4first');
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  const frontendOrigin =
-    process.env.FRONTEND_URL!
+  const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
 
   app.enableCors({
-    origin: [frontendOrigin],
+    origin: [frontendOrigin, 'http://127.0.0.1:3000', 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],

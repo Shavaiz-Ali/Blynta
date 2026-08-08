@@ -1,5 +1,6 @@
-export { DashboardShell } from "./components/DashboardShell";
-export type { DashboardShellProps } from "./components/DashboardShell";
+export { DashboardLayout } from "./components/DashboardLayout";
+export type { DashboardLayoutProps } from "./components/DashboardLayout";
+export { DashboardHome } from "./components/DashboardHome";
 export { WelcomeDialog } from "./components/WelcomeDialog";
 export type { WelcomeDialogProps } from "./components/WelcomeDialog";
 export { fetchDashboardProfile } from "./api";
