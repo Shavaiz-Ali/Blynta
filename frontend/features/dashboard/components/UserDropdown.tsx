@@ -47,7 +47,7 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2.5 rounded-xl p-1 hover:bg-muted/60 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer"
+        className="flex items-center gap-2.5 rounded-xl p-1 px-2 hover:bg-muted/60 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer"
         aria-expanded={open}
         aria-haspopup="true"
       >

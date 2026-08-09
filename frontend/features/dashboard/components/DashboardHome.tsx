@@ -58,7 +58,7 @@ export function DashboardHome() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6">
         {/* ── Top Upgrade Short Banner (Opus Clip style) ── */}
         {!profileLoading && <UpgradeBanner plan={profile?.plan ?? "free"} />}
 

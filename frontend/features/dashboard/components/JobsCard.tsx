@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Job, JobStatus } from "@/features/jobs";
-import { AppButton } from "@/components/common/AppButton";
 import { cn } from "@/lib/utils";
 import {
   FilmIcon,
@@ -88,7 +87,7 @@ export function JobsCard({
         <div className="flex items-center justify-between px-6 py-4 border-b border-border/70">
           <h3 className="font-semibold text-foreground">My Clips</h3>
           <span className="text-xs font-medium text-muted-foreground">
-            0 jobs
+            0 Clips
           </span>
         </div>
         <div className="px-6 py-10 flex flex-col items-center text-center">

@@ -12,18 +12,13 @@ import { useCurrentUser } from "@/features/auth/queries";
 import { UpgradeCard } from "./UpgradeCard";
 import { InviteMembersDialog } from "./InviteMembersDialog";
 import {
-  PanelLeftCloseIcon,
-  PanelLeftOpenIcon,
   UserPlusIcon,
   FilmIcon,
   ClockIcon,
   CreditCardIcon,
   SettingsIcon,
-  PaletteIcon,
   FolderIcon,
   Share2Icon,
-  HelpCircleIcon,
-  BookOpenIcon,
 } from "../icons";
 
 /* -------------------------------------------------------------------------- */
@@ -52,6 +47,12 @@ const Icon = {
       <path d="m6 6 12 12" />
     </svg>
   ),
+  PanelToggle: (p: any) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...p}>
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M9 3v18" />
+    </svg>
+  ),
 };
 
 /* -------------------------------------------------------------------------- */
@@ -74,7 +75,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Home", href: "/dashboard", icon: Icon.LayoutDashboard },
       { label: "My Clips", href: "/jobs", icon: FilmIcon },
-      { label: "Brand template", href: "/settings", icon: PaletteIcon, badge: "Pro" },
       { label: "Asset library", href: "/jobs", icon: FolderIcon },
     ],
   },
@@ -86,15 +86,26 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
-    title: "Account & Help",
+    title: "Account",
     items: [
       { label: "Subscription", href: "/billing", icon: CreditCardIcon },
       { label: "Settings", href: "/settings", icon: SettingsIcon },
-      { label: "Learning center", href: "/dashboard", icon: BookOpenIcon },
-      { label: "Help center", href: "/dashboard", icon: HelpCircleIcon },
     ],
   },
 ];
+
+/* -------------------------------------------------------------------------- */
+/*                           Helper: find active nav item                     */
+/* -------------------------------------------------------------------------- */
+
+function findActiveNavItem(pathname: string) {
+  for (const group of navGroups) {
+    for (const item of group.items) {
+      if (item.href === pathname) return item;
+    }
+  }
+  return navGroups[0].items[0];
+}
 
 /* -------------------------------------------------------------------------- */
 /*                           Layout Props & Interface                         */
@@ -111,12 +122,10 @@ export interface DashboardLayoutProps {
 
 function SidebarContent({
   isCollapsed,
-  onToggleCollapse,
   onOpenInvite,
   onNavigate,
 }: {
   isCollapsed: boolean;
-  onToggleCollapse: () => void;
   onOpenInvite: () => void;
   onNavigate?: () => void;
 }) {
@@ -134,11 +143,11 @@ function SidebarContent({
 
   return (
     <div className="flex h-full flex-col p-3.5 sm:p-4 gap-4 overflow-y-auto overflow-x-hidden">
-      {/* ── Sidebar Top Header: Logo + Plan Badge + Collapse Toggle ── */}
+      {/* ── Sidebar Top Header: Logo + Plan Badge ── */}
       <div
         className={cn(
           "flex items-center gap-2 shrink-0 px-1 pt-1",
-          isCollapsed ? "justify-center" : "justify-between"
+          isCollapsed ? "justify-center" : "justify-start"
         )}
       >
         <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2 min-w-0">
@@ -149,20 +158,6 @@ function SidebarContent({
             </span>
           )}
         </Link>
-
-        <button
-          type="button"
-          onClick={onToggleCollapse}
-          className="hidden md:inline-flex items-center justify-center p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors cursor-pointer"
-          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {isCollapsed ? (
-            <PanelLeftOpenIcon className="h-4.5 w-4.5" />
-          ) : (
-            <PanelLeftCloseIcon className="h-4.5 w-4.5" />
-          )}
-        </button>
       </div>
 
       {/* ── Workspace / User Account Selector & Invite Members Button ── */}
@@ -218,9 +213,9 @@ function SidebarContent({
       <Separator />
 
       {/* ── Grouped Nav Sections ── */}
-      <nav className="flex-1 flex flex-col gap-4">
+      <nav className="flex-1 flex flex-col gap-3">
         {navGroups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-1">
+          <div key={group.title} className="flex flex-col gap-2">
             {!isCollapsed && (
               <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-sidebar-foreground/50 mb-1">
                 {group.title}
@@ -236,7 +231,7 @@ function SidebarContent({
                   onClick={onNavigate}
                   title={isCollapsed ? item.label : undefined}
                   className={cn(
-                    "group flex items-center gap-3 rounded-xl py-2 text-xs font-medium transition-all",
+                    "group flex items-center gap-3 rounded-md py-2 text-xs font-medium transition-all",
                     isCollapsed ? "justify-center px-2" : "px-3",
                     isActive
                       ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold shadow-xs"
@@ -258,11 +253,11 @@ function SidebarContent({
       </nav>
 
       {/* ── Footer Upgrade Card ── */}
-      {!isCollapsed && (
+      {/* {!isCollapsed && (
         <div className="mt-auto pt-2 shrink-0">
           <UpgradeCard plan={profile?.plan ?? "free"} />
         </div>
-      )}
+      )} */}
     </div>
   );
 }
@@ -301,7 +296,6 @@ function MobileDrawer({
         <div className="flex-1 overflow-y-auto">
           <SidebarContent
             isCollapsed={false}
-            onToggleCollapse={() => { }}
             onOpenInvite={onOpenInvite}
             onNavigate={() => onOpenChange(false)}
           />
@@ -319,6 +313,9 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [inviteOpen, setInviteOpen] = React.useState(false);
+  const pathname = usePathname();
+
+  const activeItem = findActiveNavItem(pathname);
 
   return (
     <div className="h-screen flex bg-background text-foreground overflow-hidden">
@@ -331,7 +328,6 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
       >
         <SidebarContent
           isCollapsed={isCollapsed}
-          onToggleCollapse={() => setIsCollapsed((prev) => !prev)}
           onOpenInvite={() => setInviteOpen(true)}
         />
       </aside>
@@ -345,7 +341,8 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
 
       {/* Main Content Viewport */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8 bg-background/80 backdrop-blur border-b border-border shrink-0">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 bg-background/80 backdrop-blur border-b border-border shrink-0">
+          {/* Mobile menu button */}
           <button
             onClick={() => setMobileOpen(true)}
             className="md:hidden p-2 -ml-2 rounded-lg hover:bg-accent transition-colors"
@@ -353,7 +350,35 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
           >
             <Icon.Menu className="h-5 w-5" />
           </button>
-          {headerContent}
+
+          {/* Desktop: Sidebar collapse + current page indicator */}
+          <div className="hidden md:flex items-center gap-2 min-w-0">
+            {/* Collapse toggle button */}
+            <button
+              type="button"
+              onClick={() => setIsCollapsed((prev) => !prev)}
+              className="inline-flex items-center justify-center h-9 w-9 rounded-lg bg-transparent hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <Icon.PanelToggle className="h-5 w-5" />
+            </button>
+
+            {/* Vertical separator */}
+            <div className="h-6 w-px bg-border shrink-0" />
+
+            {/* Current page title */}
+            <div className="flex items-center gap-2 min-w-0">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground truncate">
+                {activeItem.label}
+              </h2>
+            </div>
+          </div>
+
+          {/* Right-side header content */}
+          <div className="flex-1 min-w-0 flex items-center">
+            {headerContent}
+          </div>
         </header>
         <main className="flex-1 min-w-0">{children}</main>
       </div>

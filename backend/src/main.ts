@@ -4,10 +4,40 @@ import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import * as dns from 'dns';
+import * as express from 'express';
 dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // We disable Nest's automatic body parser globally because we need the
+  // Stripe webhook endpoint to receive the ORIGINAL raw request body for
+  // signature verification (Stripe's HMAC check fails if JSON parser has
+  // already re-serialized the body). We instead apply body parsers
+  // selectively ourselves on the underlying Express app.
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+    rawBody: true,
+  });
+
+  const adapter = app.getHttpAdapter();
+  const instance = adapter.getInstance();
+
+  // 1) For the Stripe webhook ONLY — parse body as RAW Buffer, and let
+  // Nest's rawBody flag + @nestjs/platform-express attach `req.rawBody`.
+  instance.use(
+    '/billing/webhook',
+    express.raw({ type: 'application/json' }),
+  );
+
+  // 2) For EVERYTHING ELSE — standard JSON body parser (the default Nest
+  // behavior we disabled above).
+  instance.use(
+    '/',
+    (req: any, res: any, next: any) => {
+      if (req.path.startsWith('/billing/webhook')) return next();
+      return express.json({ limit: '10mb' })(req, res, next);
+    },
+  );
+  instance.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
 
