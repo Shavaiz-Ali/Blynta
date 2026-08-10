@@ -113,3 +113,60 @@ export function platformIcon(platform: SourcePlatform, className = "h-4 w-4") {
       return <UploadIcon className={className} />;
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/*                         Pipeline step helpers                              */
+/* -------------------------------------------------------------------------- */
+
+export type PipelineStepState = "done" | "active" | "pending";
+
+export const PIPELINE_STEPS: {
+  key: JobStatus;
+  label: string;
+}[] = [
+  { key: JobStatus.PENDING, label: "Download" },
+  { key: JobStatus.TRANSCRIBING, label: "Transcribe" },
+  { key: JobStatus.DETECTING_HIGHLIGHTS, label: "Detect highlights" },
+  { key: JobStatus.CUTTING_CLIPS, label: "Cut & caption" },
+  { key: JobStatus.COMPLETED, label: "Done" },
+];
+
+export function getPipelineStepState(
+  stepKey: JobStatus,
+  currentStatus: JobStatus
+): PipelineStepState {
+  const stepIndex = PIPELINE_STEPS.findIndex((s) => s.key === stepKey);
+  const currentIndex = PIPELINE_STEPS.findIndex((s) => s.key === currentStatus);
+
+  if (currentStatus === JobStatus.FAILED) {
+    return stepIndex < Math.max(0, currentIndex >= 0 ? currentIndex : 0)
+      ? "done"
+      : "pending";
+  }
+  if (currentIndex < 0) return "pending";
+  if (stepIndex < currentIndex) return "done";
+  if (stepIndex === currentIndex) return "active";
+  return "pending";
+}
+
+export function isProcessingStatus(status: JobStatus): boolean {
+  return (
+    status === JobStatus.PENDING ||
+    status === JobStatus.TRANSCRIBING ||
+    status === JobStatus.DETECTING_HIGHLIGHTS ||
+    status === JobStatus.CUTTING_CLIPS
+  );
+}
+
+export function formatTimestamp(totalSeconds: number): string {
+  if (!isFinite(totalSeconds) || totalSeconds < 0) totalSeconds = 0;
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  if (m >= 60) {
+    const h = Math.floor(m / 60);
+    const rm = m % 60;
+    return `${pad(h)}:${pad(rm)}:${pad(s)}`;
+  }
+  return `${pad(m)}:${pad(s)}`;
+}

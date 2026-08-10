@@ -6,6 +6,7 @@ import {
   useQueryClient,
   UseQueryOptions,
   UseQueryResult,
+  Query,
 } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
 
@@ -45,17 +46,55 @@ export const jobsQueryKeys = {
 /*                                Types                                       */
 /* -------------------------------------------------------------------------- */
 
+export interface TranscriptSegment {
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
+export interface Highlight {
+  startTime: number;
+  endTime: number;
+  reason?: string;
+  score?: number;
+}
+
+export interface Clip {
+  id: string;
+  startTime: number;
+  endTime: number;
+  outputUrl?: string;
+  localFilePath?: string;
+  captionedFilePath?: string;
+  downloadUrl: string;
+  hasCaptions: boolean;
+  status: JobStatus;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface CreateJobInput {
   sourceUrl: string;
   sourcePlatform: SourcePlatform;
+  customPrompt?: string;
+  aiModel?: string;
 }
 
 export interface Job {
   id: string;
+  _id:string;
   sourceUrl: string;
   sourcePlatform: SourcePlatform;
   status: JobStatus;
   errorMessage?: string | null;
+  errorStage?: string | null;
+  localVideoPath?: string;
+  localAudioPath?: string;
+  customPrompt?: string;
+  aiModel?: string;
+  transcript: TranscriptSegment[];
+  highlights: Highlight[];
+  clips: Clip[];
   createdAt: string;
   updatedAt: string;
 }
@@ -82,6 +121,13 @@ export function useJobs(
 /*                         useJob(id) — GET /jobs/:id                         */
 /* -------------------------------------------------------------------------- */
 
+const ACTIVE_JOB_STATUSES: JobStatus[] = [
+  JobStatus.PENDING,
+  JobStatus.TRANSCRIBING,
+  JobStatus.DETECTING_HIGHLIGHTS,
+  JobStatus.CUTTING_CLIPS,
+];
+
 export function useJob(
   id: string,
   opts?: Omit<UseQueryOptions<Job, Error>, "queryKey" | "queryFn">
@@ -94,6 +140,13 @@ export function useJob(
     },
     enabled: Boolean(id),
     staleTime: 1000 * 10,
+    refetchInterval: (query: Query<Job, Error>) => {
+      const status = query.state.data?.status;
+      if (status && ACTIVE_JOB_STATUSES.includes(status)) {
+        return 4000;
+      }
+      return false;
+    },
     ...opts,
   });
 }
@@ -114,7 +167,17 @@ export function useCreateJob(
   const { onSuccess: userOnSuccess, ...restOpts } = opts;
   return useMutation({
     mutationFn: async (input: CreateJobInput) => {
-      const { data } = await axiosClient.post<Job>("/jobs", input);
+      const body: Record<string, unknown> = {
+        sourceUrl: input.sourceUrl,
+        sourcePlatform: input.sourcePlatform,
+      };
+      if (input.customPrompt && input.customPrompt.trim().length > 0) {
+        body.customPrompt = input.customPrompt.trim();
+      }
+      if (input.aiModel && input.aiModel !== "default") {
+        body.aiModel = input.aiModel;
+      }
+      const { data } = await axiosClient.post<Job>("/jobs", body);
       return data;
     },
     onSuccess: (...args: any[]) => {
@@ -124,5 +187,31 @@ export function useCreateJob(
       if (userOnSuccess) (userOnSuccess as any)(...args);
     },
     ...restOpts,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                  useDownloadClip — GET /jobs/:id/clips/:id/download        */
+/* -------------------------------------------------------------------------- */
+
+type DownloadClipOpts = Omit<
+  UseMutationOptions<Blob, Error, { jobId: string; clipId: string }, unknown>,
+  "mutationFn"
+>;
+
+export function useDownloadClip(
+  opts: DownloadClipOpts = {}
+): UseMutationResult<Blob, Error, { jobId: string; clipId: string }, unknown> {
+  return useMutation({
+    mutationFn: async ({ jobId, clipId }) => {
+      const response = await axiosClient.get(
+        `/jobs/${jobId}/clips/${clipId}/download`,
+        {
+          responseType: "blob",
+        }
+      );
+      return response.data as Blob;
+    },
+    ...opts,
   });
 }

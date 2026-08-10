@@ -65,6 +65,15 @@ export class Clip {
   @Prop()
   outputUrl: string; // where the final clip file lives (e.g. S3/VPS storage path)
 
+  @Prop()
+  localFilePath: string;
+
+  @Prop()
+  captionedFilePath: string;
+
+  @Prop()
+  downloadUrl: string;
+
   @Prop({ default: false })
   hasCaptions: boolean;
 
@@ -86,6 +95,18 @@ export class Job {
 
   @Prop({ enum: JobStatus, default: JobStatus.PENDING, index: true })
   status: JobStatus;
+
+  @Prop()
+  localVideoPath: string;
+
+  @Prop()
+  localAudioPath: string;
+
+  @Prop()
+  customPrompt: string;
+
+  @Prop({ default: 'default' })
+  aiModel: string;
 
   @Prop({ type: [TranscriptSegmentSchema], default: [] })
   transcript: TranscriptSegment[];

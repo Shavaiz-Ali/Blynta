@@ -134,10 +134,11 @@ export function JobsCard({
           <ul className="divide-y divide-border/50">
             {activeJobs.map((j) => {
               const meta = STATUS_META[j.status];
+              console.log(j)
               return (
                 <li key={j.id}>
                   <button
-                    onClick={() => router.push(`/jobs/${j.id}`)}
+                    onClick={() => router.push(`/jobs/${j._id}`)}
                     className="w-full flex items-center gap-4 px-6 py-3.5 hover:bg-accent/30 transition-colors text-left"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card border border-border">

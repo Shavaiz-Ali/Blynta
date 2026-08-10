@@ -53,7 +53,7 @@ const logger = new Logger('MongooseModule');
     UsersModule,
     AuthModule,
     JobsModule,
-    // RedisModule
+    RedisModule
   ],
   controllers: [AppController],
   providers: [AppService],

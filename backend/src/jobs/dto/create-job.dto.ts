@@ -5,6 +5,8 @@ import { SourcePlatform } from '../schemas/job.schema';
 const CreateJobSchema = z.object({
   sourceUrl: z.string().url(),
   sourcePlatform: z.nativeEnum(SourcePlatform),
+  customPrompt: z.string().optional(),
+  aiModel: z.string().optional(),
 });
 
 export class CreateJobDto extends createZodDto(CreateJobSchema) {}

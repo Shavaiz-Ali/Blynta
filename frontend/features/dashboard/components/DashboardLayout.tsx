@@ -9,7 +9,6 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
 import { useCurrentUser } from "@/features/auth/queries";
-import { UpgradeCard } from "./UpgradeCard";
 import { InviteMembersDialog } from "./InviteMembersDialog";
 import {
   UserPlusIcon,
@@ -66,6 +65,7 @@ export interface NavGroup {
     href: string;
     icon: React.ComponentType<any>;
     badge?: string;
+    disabled?: boolean;
   }[];
 }
 
@@ -82,7 +82,13 @@ export const navGroups: NavGroup[] = [
     title: "Post",
     items: [
       { label: "Calendar", href: "/jobs", icon: ClockIcon },
-      { label: "Social accounts", href: "/settings", icon: Share2Icon },
+      {
+        label: "Social accounts",
+        href: "#",
+        icon: Share2Icon,
+        badge: "Soon",
+        disabled: true,
+      },
     ],
   },
   {
@@ -222,29 +228,67 @@ function SidebarContent({
               </p>
             )}
             {group.items.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = !item.disabled && pathname === item.href;
               const Comp = item.icon;
+              const baseCls = cn(
+                "group flex items-center gap-3 rounded-md py-2 text-xs font-medium transition-all w-full",
+                isCollapsed ? "justify-center px-2" : "px-3",
+                item.disabled
+                  ? "opacity-50 cursor-not-allowed text-sidebar-foreground/60"
+                  : isActive
+                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold shadow-xs cursor-pointer"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer"
+              );
+
+              const inner = (
+                <>
+                  <Comp className="h-4.5 w-4.5 shrink-0" />
+                  {!isCollapsed && (
+                    <span className="truncate">{item.label}</span>
+                  )}
+                  {!isCollapsed && item.badge && (
+                    <span
+                      className={cn(
+                        "ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
+                        item.disabled
+                          ? "bg-muted text-muted-foreground border border-border/60"
+                          : "bg-primary/15 text-primary"
+                      )}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
+                </>
+              );
+
+              if (item.disabled) {
+                return (
+                  <button
+                    key={item.label}
+                    type="button"
+                    disabled
+                    onClick={(e) => e.preventDefault()}
+                    title={
+                      isCollapsed
+                        ? `${item.label} — Coming soon`
+                        : "Coming soon"
+                    }
+                    className={baseCls}
+                  >
+                    {inner}
+                  </button>
+                );
+              }
+
               return (
                 <Link
                   key={item.label}
                   href={item.href}
                   onClick={onNavigate}
                   title={isCollapsed ? item.label : undefined}
-                  className={cn(
-                    "group flex items-center gap-3 rounded-md py-2 text-xs font-medium transition-all",
-                    isCollapsed ? "justify-center px-2" : "px-3",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold shadow-xs"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )}
+                  className={baseCls}
                 >
-                  <Comp className="h-4.5 w-4.5 shrink-0" />
-                  {!isCollapsed && <span className="truncate">{item.label}</span>}
-                  {!isCollapsed && item.badge && (
-                    <span className="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider bg-primary/15 text-primary">
-                      {item.badge}
-                    </span>
-                  )}
+                  {inner}
                 </Link>
               );
             })}
