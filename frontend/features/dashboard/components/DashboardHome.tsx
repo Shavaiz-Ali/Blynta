@@ -21,10 +21,11 @@ export function DashboardHome() {
   const router = useRouter();
   const { data: profile, isLoading: profileLoading } = useCurrentUser();
   const {
-    data: jobs = [],
+    data: jobsResult,
     isLoading: jobsLoading,
     error: jobsError,
   } = useJobs();
+  const jobs = jobsResult?.jobs ?? [];
 
   const [showWelcome, setShowWelcome] = React.useState(false);
 

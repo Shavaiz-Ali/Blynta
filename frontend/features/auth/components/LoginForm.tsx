@@ -16,6 +16,8 @@ import {
   type LoginInput,
 } from "@/lib/validators/auth.schema";
 
+import { toast } from "sonner";
+
 export interface LoginFormProps {
   showForgotPassword?: boolean;
   className?: string;
@@ -51,10 +53,12 @@ function LoginForm({
   // ------------------------------------------------------------------
   async function handleSocial(provider: "facebook" | "google") {
     setSocialLoading(provider);
+    toast.info(`Connecting to ${provider.charAt(0).toUpperCase() + provider.slice(1)}...`);
     try {
       await signIn(provider); // Auth.js handles the redirect automatically
     } catch {
       // signIn() with OAuth redirects away; an error here is unexpected.
+      toast.error(`Failed to connect to ${provider}. Please try again.`);
       setSocialLoading(null);
     }
   }
@@ -76,9 +80,11 @@ function LoginForm({
         type: "manual",
         message: "Invalid email or password. Please try again.",
       });
+      toast.error("Invalid email or password. Please try again.");
       return;
     }
 
+    toast.success("Signed in successfully! Redirecting...");
     router.push("/dashboard");
     router.refresh();
   };

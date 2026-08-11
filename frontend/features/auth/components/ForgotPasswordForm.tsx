@@ -13,6 +13,8 @@ import {
   type ForgotPasswordInput,
 } from "@/lib/validators/auth.schema";
 
+import { toast } from "sonner";
+
 export interface ForgotPasswordFormProps {
   onSubmit?: SubmitHandler<ForgotPasswordInput>;
   isSubmitting?: boolean;
@@ -39,7 +41,7 @@ function ForgotPasswordForm({
 
   const submitFn: SubmitHandler<ForgotPasswordInput> = (values, event) => {
     if (onSubmit) return onSubmit(values, event);
-    console.log("forgot password submit", values);
+    toast.success(`Password reset instructions sent to ${values.email}!`);
   };
 
   return (

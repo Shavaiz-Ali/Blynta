@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/common/AppButton";
@@ -445,7 +446,12 @@ export function BillingPage() {
   const { data: profile, isLoading: profileLoading } = useCurrentUser();
   const clipsGenerated = 0;
 
-  const createCheckout = useCreateCheckoutSession({});
+  const createCheckout = useCreateCheckoutSession({
+    onError: (err: any) => {
+      toast.dismiss();
+      toast.error(err?.message || "Failed to initiate checkout. Please try again.");
+    },
+  });
 
   const creditsResetText = profile?.creditsResetAt
     ? new Date(profile.creditsResetAt).toLocaleDateString(undefined, {
@@ -460,6 +466,14 @@ export function BillingPage() {
   // of the URL once they've been shown once so a refresh doesn't re-trigger.
   const [dismissSuccess, setDismissSuccess] = React.useState(!showSuccess);
   const [dismissCancel, setDismissCancel] = React.useState(!showCanceled);
+
+  React.useEffect(() => {
+    if (showSuccess) {
+      toast.success("Upgrade successful! Your plan & credits have been updated.");
+    } else if (showCanceled) {
+      toast.info("Checkout was canceled. No charges were made.");
+    }
+  }, [showSuccess, showCanceled]);
 
   React.useEffect(() => {
     if (!showSuccess && !showCanceled) return;
@@ -491,6 +505,7 @@ export function BillingPage() {
   );
 
   const handleUpgrade = (tier: BillingPlanTier) => {
+    toast.loading(`Preparing ${tier.toUpperCase()} plan checkout...`);
     createCheckout.mutate({ plan: tier });
   };
 

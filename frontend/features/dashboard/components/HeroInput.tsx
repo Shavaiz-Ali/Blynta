@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { toast } from "sonner";
 import { SourcePlatform, useCreateJob } from "@/features/jobs";
 import { AppButton } from "@/components/common/AppButton";
 import { AppInput } from "@/components/common/AppInput";
@@ -170,7 +171,11 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       setCustomPrompt("");
       setAiModel("default");
       setAdvancedOpen(false);
+      toast.success("Video URL submitted! AI clip generation started.");
       onSuccess?.();
+    },
+    onError: (err: any) => {
+      toast.error(err?.message || "Failed to submit video. Please try again.");
     },
   });
 
@@ -246,9 +251,11 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
           const isSelected = selectedId === p.id;
           const isAutoDetected = detected?.id === p.id;
           return (
-            <button
+            <AppButton
               key={p.id}
               type="button"
+              variant={isSelected ? "default" : "outline"}
+              size="sm"
               onClick={() => {
                 setSelectedId(p.id);
                 if (p.id === "upload" && !url) {
@@ -256,20 +263,22 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
                 }
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-all cursor-pointer",
+                "h-8 rounded-lg px-2.5 text-xs font-medium transition-all",
                 isSelected
-                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary/30"
+                  ? "bg-primary/10 text-foreground border-primary ring-1 ring-primary/30 hover:bg-primary/15"
                   : "border-border/70 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {p.icon}
-              <span>{p.label}</span>
-              {isAutoDetected && !isSelected && (
-                <span className="text-[9px] font-bold uppercase px-1 rounded bg-chart-4/20 text-chart-4 leading-none">
-                  Auto
-                </span>
-              )}
-            </button>
+              <div className="flex items-center gap-1.5">
+                {p.icon}
+                <span>{p.label}</span>
+                {isAutoDetected && !isSelected && (
+                  <span className="text-[9px] font-bold uppercase px-1 rounded bg-chart-4/20 text-chart-4 leading-none">
+                    Auto
+                  </span>
+                )}
+              </div>
+            </AppButton>
           );
         })}
       </div>
@@ -308,15 +317,17 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             />
 
             {/* Quick file upload button inside input */}
-            <button
+            <AppButton
               type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => fileInputRef.current?.click()}
-              className="absolute right-2 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-muted text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+              className="absolute right-2 h-8 px-2.5 rounded-lg bg-muted text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
               title="Upload local video file"
+              icon={<UploadIcon className="h-3.5 w-3.5" />}
             >
-              <UploadIcon className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Upload</span>
-            </button>
+            </AppButton>
           </div>
 
           <AppButton
@@ -339,7 +350,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             <button
               type="button"
               onClick={() => setAdvancedOpen((o) => !o)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors cursor-pointer text-left"
+              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-accent/20 transition-colors text-left rounded-none cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <span className="inline-flex items-center gap-2 text-xs font-semibold text-foreground">
                 <CrownIcon className="h-3.5 w-3.5 text-chart-4" />
@@ -358,23 +369,23 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             {advancedOpen && (
               <div className="border-t border-border/70 px-4 py-4 space-y-4">
                 {/* Custom instructions */}
-                <AppInput
-                  label="Custom instructions (optional)"
-                  placeholder="e.g. Focus on moments with strong opinions or controversial statements"
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  component={(inputProps:any) => (
-                    <textarea
-                      {...(inputProps as any)}
-                      rows={3}
-                      className={cn(
-                        "w-full rounded-xl border bg-card/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-all resize-y min-h-[80px] focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary border-border/80",
-                        "border-border/80"
-                      )}
-                    />
-                  )}
-                  helperText="Tell the AI what kinds of moments you want prioritized."
-                />
+                <div className="flex w-full flex-col gap-1.5">
+                  <label className="text-sm font-medium leading-none text-foreground">
+                    Custom instructions (optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="e.g. Focus on moments with strong opinions or controversial statements"
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    className={cn(
+                      "w-full rounded-xl border bg-card/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 outline-none transition-all resize-y min-h-[80px] focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:border-primary border-border/80"
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Tell the AI what kinds of moments you want prioritized.
+                  </p>
+                </div>
 
                 {/* AI Model select */}
                 <div className="space-y-1.5" ref={modelDropdownRef}>
@@ -385,7 +396,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
                     <button
                       type="button"
                       onClick={() => setModelOpen((o) => !o)}
-                      className="w-full flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-left hover:bg-accent/20 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between gap-3 rounded-xl border border-border/80 bg-card/60 px-3 py-2.5 text-left hover:bg-accent/20 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium text-foreground">
@@ -414,7 +425,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
                                 setAiModel(opt.value);
                                 setModelOpen(false);
                               }}
-                              className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-accent/40 transition-colors text-left cursor-pointer border-b border-border/60 last:border-b-0"
+                              className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-accent/40 transition-colors text-left border-b border-border/60 last:border-b-0 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                             >
                               <div
                                 className={cn(
@@ -457,16 +468,18 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         <div className="mt-2 flex items-center gap-2 text-xs text-primary font-medium">
           <UploadIcon className="h-3.5 w-3.5" />
           <span>Selected file: {fileName}</span>
-          <button
+          <AppButton
             type="button"
+            variant="link"
+            size="sm"
             onClick={() => {
               setFileName(null);
               setUrl("");
             }}
-            className="text-muted-foreground hover:text-destructive underline ml-2 cursor-pointer"
+            className="text-muted-foreground hover:text-destructive underline ml-2 h-auto p-0 text-xs"
           >
             Remove
-          </button>
+          </AppButton>
         </div>
       )}
 

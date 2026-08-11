@@ -18,6 +18,7 @@ import {
   SettingsIcon,
   FolderIcon,
   Share2Icon,
+  ChevronRightIcon,
 } from "../icons";
 
 /* -------------------------------------------------------------------------- */
@@ -74,7 +75,7 @@ export const navGroups: NavGroup[] = [
     title: "Create",
     items: [
       { label: "Home", href: "/dashboard", icon: Icon.LayoutDashboard },
-      { label: "My Clips", href: "/jobs", icon: FilmIcon },
+      { label: "My Clips", href: "/my-clips", icon: FilmIcon },
       { label: "Asset library", href: "/jobs", icon: FolderIcon },
     ],
   },
@@ -205,14 +206,16 @@ function SidebarContent({
           >
             {initials}
           </div>
-          <button
+          <AppButton
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={onOpenInvite}
-            className="p-2 rounded-lg text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors cursor-pointer"
+            className="h-8 w-8 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
             title="Invite members"
           >
             <UserPlusIcon className="h-4 w-4" />
-          </button>
+          </AppButton>
         </div>
       )}
 
@@ -267,13 +270,12 @@ function SidebarContent({
                     key={item.label}
                     type="button"
                     disabled
-                    onClick={(e) => e.preventDefault()}
                     title={
                       isCollapsed
                         ? `${item.label} — Coming soon`
                         : "Coming soon"
                     }
-                    className={baseCls}
+                    className={cn(baseCls, "h-auto p-2")}
                   >
                     {inner}
                   </button>
@@ -329,13 +331,15 @@ function MobileDrawer({
       <aside className="absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-sidebar text-sidebar-foreground shadow-2xl flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-sidebar-border">
           <BlyntaLogo size="sm" />
-          <button
+          <AppButton
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => onOpenChange(false)}
-            className="p-2 rounded-lg hover:bg-sidebar-accent transition-colors"
             aria-label="Close menu"
           >
             <Icon.X className="h-5 w-5" />
-          </button>
+          </AppButton>
         </div>
         <div className="flex-1 overflow-y-auto">
           <SidebarContent
@@ -346,6 +350,59 @@ function MobileDrawer({
         </div>
       </aside>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           Breadcrumbs Component                            */
+/* -------------------------------------------------------------------------- */
+
+function Breadcrumbs() {
+  const pathname = usePathname();
+
+  const segments: { label: string; href?: string }[] = [
+    { label: "Dashboard", href: "/dashboard" },
+  ];
+
+  if (pathname === "/my-clips" || pathname === "/jobs") {
+    segments.push({ label: "My Clips" });
+  } else if (pathname.startsWith("/jobs/")) {
+    segments.push({ label: "My Clips", href: "/my-clips" });
+    segments.push({ label: "Job Detail" });
+  } else if (pathname === "/billing") {
+    segments.push({ label: "Subscription" });
+  } else if (pathname === "/settings") {
+    segments.push({ label: "Settings" });
+  } else if (pathname !== "/dashboard") {
+    const raw = pathname.replace(/^\//, "").replace(/-/g, " ");
+    segments.push({ label: raw.charAt(0).toUpperCase() + raw.slice(1) });
+  }
+
+  return (
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs sm:text-sm min-w-0">
+      {segments.map((item, index) => {
+        const isLast = index === segments.length - 1;
+        return (
+          <React.Fragment key={index}>
+            {index > 0 && (
+              <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
+            )}
+            {isLast || !item.href ? (
+              <span className="font-semibold text-foreground truncate">
+                {item.label}
+              </span>
+            ) : (
+              <Link
+                href={item.href}
+                className="text-muted-foreground hover:text-foreground transition-colors font-medium truncate"
+              >
+                {item.label}
+              </Link>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -387,35 +444,38 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         <header className="sticky top-0 z-30 flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 bg-background/80 backdrop-blur border-b border-border shrink-0">
           {/* Mobile menu button */}
-          <button
+          <AppButton
+            type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => setMobileOpen(true)}
-            className="md:hidden p-2 -ml-2 rounded-lg hover:bg-accent transition-colors"
+            className="md:hidden -ml-2"
             aria-label="Open menu"
           >
             <Icon.Menu className="h-5 w-5" />
-          </button>
+          </AppButton>
 
-          {/* Desktop: Sidebar collapse + current page indicator */}
+          {/* Desktop: Sidebar collapse + current page indicator / Breadcrumb */}
           <div className="hidden md:flex items-center gap-2 min-w-0">
             {/* Collapse toggle button */}
-            <button
+            <AppButton
               type="button"
+              variant="ghost"
+              size="icon"
               onClick={() => setIsCollapsed((prev) => !prev)}
-              className="inline-flex items-center justify-center h-9 w-9 rounded-lg bg-transparent hover:bg-accent text-muted-foreground hover:text-foreground transition-colors cursor-pointer shrink-0"
+              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <Icon.PanelToggle className="h-5 w-5" />
-            </button>
+            </AppButton>
 
             {/* Vertical separator */}
             <div className="h-6 w-px bg-border shrink-0" />
 
-            {/* Current page title */}
+            {/* Current page title / Breadcrumb */}
             <div className="flex items-center gap-2 min-w-0">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight text-foreground truncate">
-                {activeItem.label}
-              </h2>
+              <Breadcrumbs />
             </div>
           </div>
 

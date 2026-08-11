@@ -37,7 +37,7 @@ export enum JobStatus {
 export const jobsQueryKeys = {
   all: ["jobs"] as const,
   lists: () => [...jobsQueryKeys.all, "list"] as const,
-  list: () => [...jobsQueryKeys.lists()] as const,
+  list: (params?: JobsListParams) => [...jobsQueryKeys.lists(), params] as const,
   details: () => [...jobsQueryKeys.all, "detail"] as const,
   detail: (id: string) => [...jobsQueryKeys.details(), id] as const,
 };
@@ -82,7 +82,7 @@ export interface CreateJobInput {
 
 export interface Job {
   id: string;
-  _id:string;
+  _id: string;
   sourceUrl: string;
   sourcePlatform: SourcePlatform;
   status: JobStatus;
@@ -99,17 +99,33 @@ export interface Job {
   updatedAt: string;
 }
 
+export interface JobsListParams {
+  status?: JobStatus;
+  page?: number;
+  limit?: number;
+}
+
+export interface JobsListResult {
+  jobs: Job[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
 /* -------------------------------------------------------------------------- */
-/*                           useJobs — GET /jobs                              */
+/*                  useJobs — GET /jobs (paginated + filtered)                */
 /* -------------------------------------------------------------------------- */
 
 export function useJobs(
-  opts?: Omit<UseQueryOptions<Job[], Error>, "queryKey" | "queryFn">
-): UseQueryResult<Job[], Error> {
+  params?: JobsListParams,
+  opts?: Omit<UseQueryOptions<JobsListResult, Error>, "queryKey" | "queryFn">
+): UseQueryResult<JobsListResult, Error> {
   return useQuery({
-    queryKey: jobsQueryKeys.list(),
+    queryKey: jobsQueryKeys.list(params),
     queryFn: async () => {
-      const { data } = await axiosClient.get<Job[]>("/jobs");
+      const { data } = await axiosClient.get<JobsListResult>("/jobs", {
+        params,
+      });
       return data;
     },
     staleTime: 1000 * 10,
@@ -182,7 +198,7 @@ export function useCreateJob(
     },
     onSuccess: (...args: any[]) => {
       const data = args[0] as Job;
-      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.list() });
+      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
       queryClient.setQueryData(jobsQueryKeys.detail(data.id), data);
       if (userOnSuccess) (userOnSuccess as any)(...args);
     },
@@ -213,5 +229,80 @@ export function useDownloadClip(
       return response.data as Blob;
     },
     ...opts,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*              useDeleteJob — DELETE /jobs/:id                               */
+/* -------------------------------------------------------------------------- */
+
+export function useDeleteJob(): UseMutationResult<
+  { message: string },
+  Error,
+  string,
+  unknown
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobId: string) => {
+      const { data } = await axiosClient.delete<{ message: string }>(
+        `/jobs/${jobId}`
+      );
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*         useDeleteClip — DELETE /jobs/:jobId/clips/:clipId                  */
+/* -------------------------------------------------------------------------- */
+
+export function useDeleteClip(): UseMutationResult<
+  { message: string },
+  Error,
+  { jobId: string; clipId: string },
+  unknown
+> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      jobId,
+      clipId,
+    }: {
+      jobId: string;
+      clipId: string;
+    }) => {
+      const { data } = await axiosClient.delete<{ message: string }>(
+        `/jobs/${jobId}/clips/${clipId}`
+      );
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: jobsQueryKeys.detail(variables.jobId),
+      });
+      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
+    },
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*              useRetryJob — POST /jobs/:id/retry                            */
+/* -------------------------------------------------------------------------- */
+
+export function useRetryJob(): UseMutationResult<Job, Error, string, unknown> {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (jobId: string) => {
+      const { data } = await axiosClient.post<Job>(`/jobs/${jobId}/retry`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
+      queryClient.invalidateQueries({ queryKey: ["users", "me"] });
+    },
   });
 }

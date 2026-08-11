@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { signOut } from "next-auth/react";
 import type { UserProfile } from "@/features/auth/types";
 import { Separator } from "@/components/ui/separator";
@@ -105,7 +106,7 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
             className="flex w-full items-center px-3 py-2 text-xs font-medium rounded-xl hover:bg-accent hover:text-accent-foreground transition-colors"
             role="menuitem"
           >
-            Billing & Plan
+            Billing &amp; Plan
           </Link>
 
           <Separator className="my-1" />
@@ -115,6 +116,7 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
             type="button"
             onClick={() => {
               setOpen(false);
+              toast.info("Logged out of session.");
               signOut({ callbackUrl: "/login" });
             }}
             className="flex w-full items-center px-3 py-2 text-xs font-medium rounded-xl text-destructive hover:bg-destructive/10 transition-colors text-left cursor-pointer"

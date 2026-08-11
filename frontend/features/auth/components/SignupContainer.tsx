@@ -10,6 +10,8 @@ import { AuthDivider } from "@/features/auth/components/AuthDivider";
 import { SocialLoginButtons } from "@/features/auth/components/SocialLoginButtons";
 import type { AuthProvider } from "@/features/auth/types";
 
+import { toast } from "sonner";
+
 export interface SignupContainerProps {
   /** Enabled provider strings from GET /auth/providers (e.g. ["local","google","facebook"]) */
   enabledProviders?: AuthProvider[];
@@ -29,23 +31,28 @@ export function SignupContainer({ enabledProviders }: SignupContainerProps) {
     window.setTimeout(() => {
       setIsSubmitting(false);
       setOtpOpen(true);
+      toast.success("Account details saved! Please verify the code sent to your email.");
     }, 800);
   }
 
   function handleSocial(provider: "facebook" | "google") {
     setSocialLoading(provider);
-    console.log("social auth", provider);
+    toast.info(`Connecting to ${provider.charAt(0).toUpperCase() + provider.slice(1)}...`);
     window.setTimeout(() => setSocialLoading(null), 800);
   }
 
   function handleOtpVerify(code: string) {
     setOtpSubmitting(true);
     console.log("verify otp", code);
-    window.setTimeout(() => setOtpSubmitting(false), 800);
+    window.setTimeout(() => {
+      setOtpSubmitting(false);
+      setOtpOpen(false);
+      toast.success("Email verified successfully! Welcome to Blynta.");
+    }, 800);
   }
 
   function handleOtpResend() {
-    console.log("resend otp");
+    toast.info("Verification code resent to your email.");
   }
 
   const showSocialSection =

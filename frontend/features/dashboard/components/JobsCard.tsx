@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Job, JobStatus } from "@/features/jobs";
+
 import { cn } from "@/lib/utils";
 import {
   FilmIcon,
@@ -138,8 +139,9 @@ export function JobsCard({
               return (
                 <li key={j.id}>
                   <button
+                    type="button"
                     onClick={() => router.push(`/jobs/${j._id}`)}
-                    className="w-full flex items-center gap-4 px-6 py-3.5 hover:bg-accent/30 transition-colors text-left"
+                    className="w-full flex items-center justify-between gap-4 px-6 py-3.5 hover:bg-accent/30 transition-colors text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card border border-border">
                       {platformIcon(j.sourcePlatform, "h-4 w-4")}
@@ -178,8 +180,9 @@ export function JobsCard({
             return (
               <li key={j.id}>
                 <button
+                  type="button"
                   onClick={() => router.push(`/jobs/${j.id}`)}
-                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-accent/40 transition-colors text-left"
+                  className="w-full flex items-center justify-between gap-4 px-6 py-4 hover:bg-accent/40 transition-colors text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted border border-border">
                     {platformIcon(j.sourcePlatform, "h-5 w-5")}

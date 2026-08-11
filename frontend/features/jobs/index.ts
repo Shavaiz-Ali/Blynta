@@ -3,6 +3,9 @@ export {
   useJob,
   useCreateJob,
   useDownloadClip,
+  useDeleteJob,
+  useDeleteClip,
+  useRetryJob,
   jobsQueryKeys,
   SourcePlatform,
   JobStatus,
@@ -13,4 +16,6 @@ export type {
   Highlight,
   TranscriptSegment,
   CreateJobInput,
+  JobsListParams,
+  JobsListResult,
 } from "./queries";
