@@ -1,0 +1,39 @@
+import { spawn } from 'child_process';
+
+export function runCommandWithProgress(
+  command: string,
+  args: string[],
+  onLine: (line: string) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args);
+    let stderrBuffer = '';
+    let stdoutBuffer = '';
+    let fullStderr = '';
+
+    proc.stdout.on('data', (chunk) => {
+      stdoutBuffer += chunk.toString();
+      const lines = stdoutBuffer.split('\n');
+      stdoutBuffer = lines.pop() || '';
+      lines.forEach(onLine);
+    });
+
+    proc.stderr.on('data', (chunk) => {
+      const text = chunk.toString();
+      fullStderr += text;
+      stderrBuffer += text;
+      const lines = stderrBuffer.split('\n');
+      stderrBuffer = lines.pop() || '';
+      lines.forEach(onLine);
+    });
+
+    proc.on('error', (err) => {
+      reject(new Error(`Failed to spawn ${command}: ${err.message}`));
+    });
+
+    proc.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}: ${fullStderr.slice(-500)}`));
+    });
+  });
+}

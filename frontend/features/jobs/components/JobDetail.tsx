@@ -37,10 +37,31 @@ import {
 } from "@/features/dashboard/icons";
 
 /* -------------------------------------------------------------------------- */
+/*                         id normalization helpers                           */
+/* -------------------------------------------------------------------------- */
+// Backend (Mongo) sends `_id`; some types/callers assume `id`. Normalize once
+// here so every call site (download, delete, key, loading-state) agrees on
+// the same value instead of drifting out of sync.
+
+function getClipId(clip: Job["clips"][number]): string {
+  return (clip as any)._id ?? (clip as any).id;
+}
+
+function getJobId(job: Job): string {
+  return (job as any).id ?? (job as any)._id;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                         PipelineStepper                                    */
 /* -------------------------------------------------------------------------- */
 
-export function PipelineStepper({ status }: { status: JobStatus }) {
+export function PipelineStepper({
+  status,
+  progressPercent,
+}: {
+  status: JobStatus;
+  progressPercent?: number;
+}) {
   if (!isProcessingStatus(status)) return null;
 
   const visibleSteps = PIPELINE_STEPS.filter(
@@ -55,6 +76,11 @@ export function PipelineStepper({ status }: { status: JobStatus }) {
           const isLast = idx === visibleSteps.length - 1;
           const doneAfter = isStepDoneAfter(step.key, status);
 
+          const isProgressCapable =
+            step.key === JobStatus.PENDING || step.key === JobStatus.TRANSCRIBING;
+          const showProgress = isProgressCapable && state === "active";
+          const pct = Math.min(100, Math.max(0, Math.round(progressPercent ?? 0)));
+
           return (
             <React.Fragment key={step.key}>
               <li className="flex items-center gap-2 shrink-0">
@@ -62,11 +88,11 @@ export function PipelineStepper({ status }: { status: JobStatus }) {
                   className={cn(
                     "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-bold transition-all",
                     state === "done" &&
-                      "bg-chart-1/15 border-chart-1/40 text-chart-1",
+                    "bg-chart-1/15 border-chart-1/40 text-chart-1",
                     state === "active" &&
-                      "bg-primary/15 border-primary/40 text-primary",
+                    "bg-primary/15 border-primary/40 text-primary",
                     state === "pending" &&
-                      "bg-muted/50 border-border/60 text-muted-foreground/60"
+                    "bg-muted/50 border-border/60 text-muted-foreground/60"
                   )}
                 >
                   {state === "active" && (
@@ -80,19 +106,35 @@ export function PipelineStepper({ status }: { status: JobStatus }) {
                     )}
                   </span>
                 </div>
-                <span
-                  className={cn(
-                    "text-xs font-medium whitespace-nowrap",
-                    state === "done" && "text-foreground",
-                    state === "active" && "text-primary font-semibold",
-                    state === "pending" && "text-muted-foreground/60"
+                <div className="flex flex-col min-w-[70px]">
+                  <span
+                    className={cn(
+                      "text-xs font-medium whitespace-nowrap",
+                      state === "done" && "text-foreground",
+                      state === "active" && "text-primary font-semibold",
+                      state === "pending" && "text-muted-foreground/60"
+                    )}
+                  >
+                    {step.label}
+                    {showProgress ? (
+                      <span className="ml-1.5 font-bold text-primary tabular-nums">
+                        {pct}%
+                      </span>
+                    ) : (
+                      state === "active" && (
+                        <span className="ml-0.5 text-primary/70">…</span>
+                      )
+                    )}
+                  </span>
+                  {showProgress && (
+                    <div className="h-1 w-full rounded-full bg-muted/60 overflow-hidden mt-1">
+                      <div
+                        className="h-full bg-primary transition-all duration-1000 ease-out"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   )}
-                >
-                  {step.label}
-                  {state === "active" && (
-                    <span className="ml-0.5 text-primary/70">…</span>
-                  )}
-                </span>
+                </div>
               </li>
               {!isLast && (
                 <li
@@ -125,7 +167,7 @@ export function FailedStateCard({ job }: { job: Job }) {
   const router = useRouter();
   const createJob = useCreateJob({
     onSuccess: (data: Job) => {
-      router.push(`/jobs/${data.id}`);
+      router.push(`/jobs/${getJobId(data)}`);
     },
   });
 
@@ -219,11 +261,49 @@ function ClipCard({
   onDownload: (clip: Job["clips"][number]) => void;
 }) {
   const deleteClip = useDeleteClip();
+  const downloadClip = useDownloadClip();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const clipId = getClipId(clip);
+
+  // The raw downloadUrl requires the same auth as the download button (that's
+  // why the download endpoint works via mutateAsync but a bare <video src>
+  // does not: the browser can't attach the API client's auth to a plain src
+  // request). So we fetch the clip through the same authenticated path used
+  // for downloads and hand the browser a local blob URL to actually play.
+  const [previewSrc, setPreviewSrc] = React.useState<string | null>(null);
+  const [previewError, setPreviewError] = React.useState(false);
+  const previewUrlRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreview() {
+      try {
+        const blob = await downloadClip.mutateAsync({ jobId, clipId });
+        if (cancelled) return;
+        const url = window.URL.createObjectURL(blob);
+        previewUrlRef.current = url;
+        setPreviewSrc(url);
+      } catch {
+        if (!cancelled) setPreviewError(true);
+      }
+    }
+
+    loadPreview();
+
+    return () => {
+      cancelled = true;
+      if (previewUrlRef.current) {
+        window.URL.revokeObjectURL(previewUrlRef.current);
+        previewUrlRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clipId, jobId]);
 
   function handleDelete() {
     deleteClip.mutate(
-      { jobId, clipId: clip.id || (clip as any)._id },
+      { jobId, clipId },
       {
         onSuccess: () => {
           toast.success("Clip deleted.");
@@ -241,13 +321,23 @@ function ClipCard({
     <>
       <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col group relative">
         <div className="relative aspect-[9/16] w-full bg-black overflow-hidden">
-          <video
-            src={clip.downloadUrl}
-            preload="metadata"
-            controls
-            playsInline
-            className="h-full w-full object-cover"
-          />
+          {previewSrc ? (
+            <video
+              src={previewSrc}
+              preload="metadata"
+              controls
+              playsInline
+              className="h-full w-full object-cover"
+            />
+          ) : previewError ? (
+            <div className="h-full w-full flex items-center justify-center">
+              <span className="text-xs text-muted-foreground/70">
+                Preview unavailable
+              </span>
+            </div>
+          ) : (
+            <div className="h-full w-full animate-pulse bg-muted/30" />
+          )}
           {isTopPick && (
             <div className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-chart-4 text-chart-4-foreground px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm z-10">
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -294,9 +384,9 @@ function ClipCard({
           <AppButton
             size="sm"
             onClick={() => onDownload(clip)}
-            isLoading={downloadingId === clip.id}
+            isLoading={downloadingId === clipId}
             icon={
-              downloadingId === clip.id ? undefined : (
+              downloadingId === clipId ? undefined : (
                 <DownloadIcon className="h-4 w-4" />
               )
             }
@@ -349,6 +439,7 @@ export function ClipsGrid({ job }: { job: Job }) {
   );
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const downloadClip = useDownloadClip();
+  const jobId = getJobId(job);
 
   if (finishedClips.length === 0) {
     return (
@@ -366,17 +457,18 @@ export function ClipsGrid({ job }: { job: Job }) {
   const maxScore = scores.length > 0 ? Math.max(...scores) : -1;
 
   async function handleDownload(clip: Job["clips"][number]) {
+    const clipId = getClipId(clip);
     try {
-      setDownloadingId(clip.id);
+      setDownloadingId(clipId);
       toast.info("Preparing clip download...");
       const blob = await downloadClip.mutateAsync({
-        jobId: job.id,
-        clipId: clip.id,
+        jobId,
+        clipId,
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `blynta-clip-${clip.id}.mp4`;
+      a.download = `blynta-clip-${clipId}.mp4`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -400,10 +492,10 @@ export function ClipsGrid({ job }: { job: Job }) {
 
         return (
           <ClipCard
-            key={clip.id || (clip as any)._id || i}
+            key={getClipId(clip) || i}
             clip={clip}
             index={i}
-            jobId={job.id || job._id}
+            jobId={jobId}
             highlight={highlight}
             isTopPick={isTopPick}
             downloadingId={downloadingId}
@@ -524,6 +616,14 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
               <span className="capitalize">{job.sourcePlatform}</span>
               <span>·</span>
               <span>{formatDate(job.createdAt)}</span>
+              {job.resolutionUsed && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground font-mono text-[11px] font-medium border border-border/40">
+                    {job.resolutionUsed}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -545,7 +645,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
       </div>
 
       {/* Pipeline stepper (only when processing) */}
-      <PipelineStepper status={job.status} />
+      <PipelineStepper status={job.status} progressPercent={job.progressPercent} />
 
       {/* Failed state */}
       {job.status === JobStatus.FAILED && <FailedStateCard job={job} />}

@@ -75,34 +75,58 @@ export class JobsProcessor extends WorkerHost {
       await fs.promises.mkdir(clipsDir, { recursive: true });
       const apiBaseUrl = this.configService.get<string>('API_BASE_URL', 'http://localhost:5001');
 
+      // --- User & Plan resolution lookup ---
+      const user = await this.usersService.findById(userId);
+      if (!user) throw new Error(`User ${userId} not found`);
+
+      const resolution: '720p' | '1080p' =
+        user.plan === UserPlan.PRO || user.plan === UserPlan.BUSINESS ? '1080p' : '720p';
+
+      let lastProgressUpdate = 0;
+      const makeThrottledProgressUpdate = () => async (percent: number) => {
+        const now = Date.now();
+        if (now - lastProgressUpdate < 2000) return;
+        lastProgressUpdate = now;
+        await this.jobsService.updateJob(jobId, { progressPercent: Math.round(percent) });
+      };
+
       // --- Stage 1: Download ---
-      this.logger.log(`[${jobId}] Stage 1/5: Downloading video`);
-      await this.jobsService.updateJob(jobId, { status: JobStatus.PENDING });
+      this.logger.log(`[${jobId}] Stage 1/5: Downloading video (${resolution})`);
+      await this.jobsService.updateJob(jobId, {
+        status: JobStatus.PENDING,
+        progressPercent: 0,
+        resolutionUsed: resolution,
+      });
       const { videoPath, audioPath } = await this.videoDownloadService.downloadVideo(
         job.sourceUrl,
         jobDir,
+        resolution,
+        makeThrottledProgressUpdate(),
       );
       await this.jobsService.updateJob(jobId, {
         localVideoPath: videoPath,
         localAudioPath: audioPath,
+        progressPercent: 100,
       });
 
       // --- Stage 2: Transcribe ---
       this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio`);
-      await this.jobsService.updateJob(jobId, { status: JobStatus.TRANSCRIBING });
-      const transcript = await this.transcriptionService.transcribe(audioPath);
+      lastProgressUpdate = 0;
+      await this.jobsService.updateJob(jobId, { status: JobStatus.TRANSCRIBING, progressPercent: 0 });
+      const transcript = await this.transcriptionService.transcribe(
+        audioPath,
+        makeThrottledProgressUpdate(),
+      );
       const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
         startTime: t.startTime,
         endTime: t.endTime,
         text: t.text,
       }));
-      await this.jobsService.updateJob(jobId, { transcript: transcriptDocs });
+      await this.jobsService.updateJob(jobId, { transcript: transcriptDocs, progressPercent: 100 });
 
       // --- Stage 3: Highlight detection ---
       this.logger.log(`[${jobId}] Stage 3/5: Detecting highlights`);
       await this.jobsService.updateJob(jobId, { status: JobStatus.DETECTING_HIGHLIGHTS });
-      const user = await this.usersService.findById(userId);
-      if (!user) throw new Error(`User ${userId} not found`);
 
       const isPaidPlan = user.plan === UserPlan.PRO || user.plan === UserPlan.BUSINESS;
       let options: { customPrompt?: string; model?: string } | undefined;

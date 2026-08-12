@@ -71,6 +71,7 @@ export interface Clip {
   status: JobStatus;
   createdAt?: string;
   updatedAt?: string;
+  _id: string;
 }
 
 export interface CreateJobInput {
@@ -88,6 +89,8 @@ export interface Job {
   status: JobStatus;
   errorMessage?: string | null;
   errorStage?: string | null;
+  progressPercent?: number;
+  resolutionUsed?: string;
   localVideoPath?: string;
   localAudioPath?: string;
   customPrompt?: string;

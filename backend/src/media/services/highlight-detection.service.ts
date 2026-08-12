@@ -1,85 +1,87 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import OpenAI from 'openai';
+import { generateObject, NoObjectGeneratedError } from 'ai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { z } from 'zod';
 import { TranscriptSegmentDto } from './transcription.service';
 
-export interface HighlightDto {
-  startTime: number;
-  endTime: number;
-  reason: string;
-  score: number;
-}
+const HighlightSchema = z.object({
+  startTime: z.number().describe('Start time of the clip in seconds'),
+  endTime: z.number().describe('End time of the clip in seconds'),
+  reason: z.string().describe('Short explanation of why this moment is engaging'),
+  score: z
+    .number()
+    .describe('Engagement score strictly between 0 and 1, e.g. 0.5, 0.82, 0.95. NEVER use a 0-10 or 0-100 scale.')
+    // Safety net: if the model still drifts to a 0-10 or 0-100 scale, normalize instead of hard-failing.
+    .transform((val) => {
+      if (val > 1 && val <= 10) return val / 10;
+      if (val > 10 && val <= 100) return val / 100;
+      return val;
+    })
+    .pipe(z.number().min(0).max(1)),
+});
+
+const HighlightsResponseSchema = z.object({
+  highlights: z.array(HighlightSchema),
+});
+
+export type HighlightDto = z.infer<typeof HighlightSchema>;
 
 @Injectable()
 export class HighlightDetectionService {
   private readonly logger = new Logger(HighlightDetectionService.name);
-  private client: OpenAI;
+  private google: ReturnType<typeof createGoogleGenerativeAI>;
 
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('LLM_API_KEY');
-    const baseURL = this.configService.get<string>('LLM_BASE_URL');
-    this.client = new OpenAI({
-      apiKey,
-      baseURL: baseURL || undefined,
-    });
+    this.google = createGoogleGenerativeAI({ apiKey });
   }
 
   async detectHighlights(
     segments: TranscriptSegmentDto[],
     options?: { customPrompt?: string; model?: string },
   ): Promise<HighlightDto[]> {
-    const model = options?.model || this.configService.get<string>('LLM_DEFAULT_MODEL', 'gpt-4o-mini');
+    const modelName = options?.model || this.configService.get<string>('LLM_MODEL_NAME', 'gemini-flash-latest');
     const transcriptText = segments
       .map((s) => `[${s.startTime.toFixed(1)}s - ${s.endTime.toFixed(1)}s] ${s.text}`)
       .join('\n');
 
-    const systemPrompt = `You are a video editor's assistant. Given a timestamped transcript, identify the 3-5 most engaging, self-contained moments suitable for short vertical clips (15-60 seconds each). Each clip must: (1) be at least 15 seconds long, (2) not exceed 60 seconds, (3) contain a complete, self-contained thought or moment. Return ONLY valid JSON matching this exact shape, no other text, no markdown fences, no commentary:
-{"highlights": [{"startTime": number, "endTime": number, "reason": "short string explaining why this is engaging", "score": number between 0 and 1}]}`;
+    const systemPrompt = `You are a video editor's assistant. Given a timestamped transcript, identify the 3-5 most engaging, self-contained moments suitable for short vertical clips (15-60 seconds each). Each clip must: (1) be at least 15 seconds long, (2) not exceed 60 seconds, (3) contain a complete, self-contained thought or moment. The "score" field must be a decimal between 0 and 1 (e.g. 0.5, 0.82, 0.95) representing engagement — never use a 0-10 or 0-100 scale.`;
 
     const userPrompt = options?.customPrompt
       ? `${options.customPrompt}\n\nTranscript:\n${transcriptText}`
       : `Transcript:\n${transcriptText}`;
 
-    this.logger.log(`Detecting highlights with model=${model}, transcript segments=${segments.length}`);
+    this.logger.log(`Detecting highlights with model=${modelName}, transcript segments=${segments.length}`);
 
-    const response = await this.client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.3,
-    });
-
-    const raw = response.choices[0]?.message?.content;
-    if (!raw) throw new Error('LLM returned no content for highlight detection');
-
-    let parsed: any;
+    let object: z.infer<typeof HighlightsResponseSchema>;
     try {
-      parsed = JSON.parse(raw);
+      const result = await generateObject({
+        model: this.google(modelName),
+        schema: HighlightsResponseSchema,
+        system: systemPrompt,
+        prompt: userPrompt,
+        temperature: 0.3,
+        maxOutputTokens: 4096,
+      });
+      object = result.object;
     } catch (e) {
-      this.logger.error(`Failed to parse LLM response as JSON. Raw response: ${raw}`);
-      throw new Error('LLM returned invalid JSON for highlight detection');
+      if (NoObjectGeneratedError.isInstance(e)) {
+        this.logger.error(`No object generated. Raw text: ${e.text}`);
+        this.logger.error(`Cause: ${JSON.stringify(e.cause)}`);
+        this.logger.error(`Finish reason: ${e.finishReason}, usage: ${JSON.stringify(e.usage)}`);
+      } else {
+        this.logger.error(`LLM call failed for highlight detection: ${e.message}`);
+      }
+      throw new Error(`Failed to generate highlights: ${e.message}`);
     }
 
-    const highlights: HighlightDto[] = Array.isArray(parsed)
-      ? parsed
-      : parsed.highlights || parsed.data || [];
-
-    return highlights
-      .filter((h: HighlightDto) => {
-        const valid = typeof h.startTime === 'number'
-          && typeof h.endTime === 'number'
-          && h.endTime > h.startTime;
+    return object.highlights
+      .filter((h) => {
+        const valid = h.endTime > h.startTime;
         if (!valid) this.logger.warn(`Dropping invalid highlight: ${JSON.stringify(h)}`);
         return valid;
       })
-      .map((h: HighlightDto) => ({
-        startTime: Number(h.startTime),
-        endTime: Number(h.endTime),
-        reason: String(h.reason || ''),
-        score: Math.max(0, Math.min(1, Number(h.score) || 0.5)),
-      }))
-      .sort((a: HighlightDto, b: HighlightDto) => b.score - a.score);
+      .sort((a, b) => b.score - a.score);
   }
 }

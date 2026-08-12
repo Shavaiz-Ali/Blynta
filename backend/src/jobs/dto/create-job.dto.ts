@@ -7,6 +7,8 @@ const CreateJobSchema = z.object({
   sourcePlatform: z.nativeEnum(SourcePlatform),
   customPrompt: z.string().optional(),
   aiModel: z.string().optional(),
+  resolution: z.string().optional(),
+  // progressPercent: z.number()
 });
 
-export class CreateJobDto extends createZodDto(CreateJobSchema) {}
+export class CreateJobDto extends createZodDto(CreateJobSchema) { }

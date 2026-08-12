@@ -26,7 +26,7 @@ export class JobsService {
     @InjectQueue(JOBS_QUEUE) private jobsQueue: Queue,
     private usersService: UsersService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
     await this.usersService.deductCredit(userId);
@@ -38,6 +38,8 @@ export class JobsService {
       status: JobStatus.PENDING,
       customPrompt: dto.customPrompt,
       aiModel: dto.aiModel,
+      resolutionUsed: dto.resolution,
+      progressPercent: 0,
     });
     const saved = await job.save();
 
@@ -197,6 +199,7 @@ export class JobsService {
       sourcePlatform: original.sourcePlatform,
       customPrompt: original.customPrompt,
       aiModel: original.aiModel,
+      resolution: original.resolutionUsed as '720p' | '1080p'
     });
   }
 }

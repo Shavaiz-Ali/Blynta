@@ -23,6 +23,7 @@ import {
   CrownIcon,
   CheckIcon,
 } from "../icons";
+import { useRouter } from "next/navigation";
 
 export interface PlatformConfig {
   id: string;
@@ -109,27 +110,27 @@ const AI_MODEL_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  {
-    value: "default",
-    label: "Standard (fast)",
-    description: "Great quality, fast · gpt-4o-mini",
-  },
-  {
-    value: "gpt-4o",
-    label: "Advanced (higher quality)",
-    description: "Slower, sharper reasoning · gpt-4o",
-  },
-  {
-    value: "claude-3-5-sonnet",
-    label: "Sonnet",
-    description: "Balanced speed & depth · Claude 3.5 Sonnet",
-  },
-  {
-    value: "claude-3-opus",
-    label: "Opus",
-    description: "Highest-tier reasoning · Claude 3 Opus",
-  },
-];
+    {
+      value: "default",
+      label: "Standard (fast)",
+      description: "Great quality, fast · gpt-4o-mini",
+    },
+    {
+      value: "gpt-4o",
+      label: "Advanced (higher quality)",
+      description: "Slower, sharper reasoning · gpt-4o",
+    },
+    {
+      value: "claude-3-5-sonnet",
+      label: "Sonnet",
+      description: "Balanced speed & depth · Claude 3.5 Sonnet",
+    },
+    {
+      value: "claude-3-opus",
+      label: "Opus",
+      description: "Highest-tier reasoning · Claude 3 Opus",
+    },
+  ];
 
 interface HeroInputProps {
   onSuccess?: () => void;
@@ -137,6 +138,7 @@ interface HeroInputProps {
 
 export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: profile } = useCurrentUser();
+  const router = useRouter()
   const isPaid = profile?.plan === "pro" || profile?.plan === "business";
 
   const [url, setUrl] = React.useState("");
@@ -164,7 +166,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   }, []);
 
   const { mutate, isPending, failureReason, reset } = useCreateJob({
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       setUrl("");
       setFileName(null);
       setFieldError(undefined);
@@ -172,6 +174,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       setAiModel("default");
       setAdvancedOpen(false);
       toast.success("Video URL submitted! AI clip generation started.");
+      router.push(`/jobs/${data?._id}`)
       onSuccess?.();
     },
     onError: (err: any) => {

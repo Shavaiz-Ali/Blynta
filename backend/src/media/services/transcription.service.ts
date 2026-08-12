@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
-import { spawn } from 'child_process';
+import { runCommandWithProgress } from '../utils/run-command-with-progress';
 
 export interface TranscriptSegmentDto {
   startTime: number;
@@ -20,7 +20,10 @@ export class TranscriptionService {
     this.whisperModelPath = this.configService.get<string>('WHISPER_MODEL_PATH');
   }
 
-  async transcribe(audioPath: string): Promise<TranscriptSegmentDto[]> {
+  async transcribe(
+    audioPath: string,
+    onProgress?: (percent: number) => void,
+  ): Promise<TranscriptSegmentDto[]> {
     if (!this.whisperBinaryPath || !this.whisperModelPath) {
       throw new Error('WHISPER_BINARY_PATH or WHISPER_MODEL_PATH is not configured');
     }
@@ -29,13 +32,20 @@ export class TranscriptionService {
     this.logger.log(`Transcribing ${audioPath} with whisper.cpp`);
 
     const binary = this.whisperBinaryPath;
-    await this.runWhisper(binary, [
-      '-m', this.whisperModelPath,
-      '-f', audioPath,
-      '-oj',
-      '-of', outputBase,
-      '-l', 'auto',
-    ]);
+    await runCommandWithProgress(
+      binary,
+      [
+        '-m', this.whisperModelPath,
+        '-f', audioPath,
+        '-oj',
+        '-of', outputBase,
+        '-l', 'auto',
+      ],
+      (line: string) => {
+        const match = line.match(/progress\s*=\s*(\d+)%/);
+        if (match && onProgress) onProgress(parseInt(match[1], 10));
+      },
+    );
 
     const jsonPath = `${outputBase}.json`;
     const rawJson = await fs.promises.readFile(jsonPath, 'utf-8');
@@ -67,22 +77,6 @@ export class TranscriptionService {
 
       text = (seg.text || '').trim();
       return { startTime, endTime, text };
-    });
-  }
-
-  private runWhisper(binary: string, args: string[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn(binary, args);
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.stdout.on('data', () => {});
-      proc.on('error', (err) => {
-        reject(new Error(`Failed to spawn whisper.cpp: ${err.message}`));
-      });
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`whisper.cpp exited with code ${code}: ${stderr.slice(-500)}`));
-      });
     });
   }
 }

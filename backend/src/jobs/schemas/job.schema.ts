@@ -122,6 +122,12 @@ export class Job {
 
   @Prop()
   errorStage: string; // which pipeline stage failed — transcription, highlight detection, or cutting
+
+  @Prop({ default: 0 })
+  progressPercent: number; // 0-100, meaning depends on current status
+
+  @Prop()
+  resolutionUsed: string; // '720p' | '1080p' — recorded after the fact, for support/debugging purposes
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);
