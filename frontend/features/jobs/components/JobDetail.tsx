@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -12,6 +13,7 @@ import {
   useDeleteClip,
   Highlight,
 } from "@/features/jobs";
+import { useCurrentUser } from "@/features/auth/queries";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
 import { cn } from "@/lib/utils";
@@ -19,6 +21,7 @@ import {
   STATUS_META,
   platformIcon,
   truncateUrl,
+  getJobDisplayTitle,
   formatDate,
   PIPELINE_STEPS,
   getPipelineStepState,
@@ -34,6 +37,7 @@ import {
   RefreshCwIcon,
   FilmIcon,
   TrashIcon,
+  LockIcon,
 } from "@/features/dashboard/icons";
 
 /* -------------------------------------------------------------------------- */
@@ -240,6 +244,38 @@ export function FailedStateCard({ job }: { job: Job }) {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                         ClipDescription                                    */
+/* -------------------------------------------------------------------------- */
+
+function ClipDescription({ highlight }: { highlight?: Highlight }) {
+  const { data: user } = useCurrentUser();
+
+  if (highlight?.clipDescription) {
+    // Backend sent a description — user is Pro/Business. Show it.
+    return (
+      <p className="text-[13px] text-muted-foreground leading-relaxed line-clamp-3">
+        {highlight.clipDescription}
+      </p>
+    );
+  }
+
+  // No description in response. Only show upsell if we've confirmed it's a free-plan user.
+  if (user?.plan === "free") {
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
+        <LockIcon className="h-3 w-3 shrink-0" />
+        <span>Clip descriptions available on </span>
+        <Link href="/billing" className="text-primary font-medium hover:underline">
+          Pro
+        </Link>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/* -------------------------------------------------------------------------- */
 /*                           ClipCard                                         */
 /* -------------------------------------------------------------------------- */
 
@@ -265,25 +301,17 @@ function ClipCard({
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const clipId = getClipId(clip);
 
-  // The raw downloadUrl requires the same auth as the download button (that's
-  // why the download endpoint works via mutateAsync but a bare <video src>
-  // does not: the browser can't attach the API client's auth to a plain src
-  // request). So we fetch the clip through the same authenticated path used
-  // for downloads and hand the browser a local blob URL to actually play.
   const [previewSrc, setPreviewSrc] = React.useState<string | null>(null);
   const [previewError, setPreviewError] = React.useState(false);
-  const previewUrlRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
 
     async function loadPreview() {
       try {
-        const blob = await downloadClip.mutateAsync({ jobId, clipId });
+        const { signedUrl } = await downloadClip.mutateAsync({ jobId, clipId });
         if (cancelled) return;
-        const url = window.URL.createObjectURL(blob);
-        previewUrlRef.current = url;
-        setPreviewSrc(url);
+        setPreviewSrc(signedUrl);
       } catch {
         if (!cancelled) setPreviewError(true);
       }
@@ -293,10 +321,6 @@ function ClipCard({
 
     return () => {
       cancelled = true;
-      if (previewUrlRef.current) {
-        window.URL.revokeObjectURL(previewUrlRef.current);
-        previewUrlRef.current = null;
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clipId, jobId]);
@@ -317,17 +341,23 @@ function ClipCard({
     );
   }
 
+  const duration = formatTimestamp(clip.endTime - clip.startTime);
+  const matchScore =
+    typeof highlight?.score === "number"
+      ? `${(highlight.score * 100).toFixed(0)}%`
+      : null;
+
   return (
     <>
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col group relative">
-        <div className="relative aspect-[9/16] w-full bg-black overflow-hidden">
+      <div className="group rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col hover:shadow-md hover:border-border/80 transition-all duration-200">
+        <div className="relative aspect-[4/5] w-full bg-black overflow-hidden shrink-0">
           {previewSrc ? (
             <video
               src={previewSrc}
               preload="metadata"
               controls
               playsInline
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain"
             />
           ) : previewError ? (
             <div className="h-full w-full flex items-center justify-center">
@@ -338,66 +368,83 @@ function ClipCard({
           ) : (
             <div className="h-full w-full animate-pulse bg-muted/30" />
           )}
+
           {isTopPick && (
-            <div className="absolute top-2.5 left-2.5 inline-flex items-center gap-1 rounded-full bg-chart-4 text-chart-4-foreground px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide shadow-sm z-10">
+            <div className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-chart-4/95 text-chart-4-foreground px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md z-10 backdrop-blur-sm">
               <span className="h-1.5 w-1.5 rounded-full bg-current" />
-              Top pick
+              Top Pick
             </div>
           )}
-          {/* Delete clip button top-right */}
+
+          {matchScore && !isTopPick && (
+            <div className="absolute top-3 left-3 inline-flex items-center rounded-full bg-background/90 text-foreground px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider shadow-md z-10 backdrop-blur-sm border border-border/60">
+              {matchScore} match
+            </div>
+          )}
+
+          <div className="absolute bottom-3 right-3 inline-flex items-center rounded-full bg-black/70 text-white px-2 py-0.5 text-[10px] font-semibold tabular-nums z-10 backdrop-blur-sm">
+            {duration}
+          </div>
+
           <button
             type="button"
             onClick={() => setDeleteOpen(true)}
-            className="absolute top-2.5 right-2.5 h-8 w-8 rounded-full bg-black/60 hover:bg-destructive text-white flex items-center justify-center transition-colors cursor-pointer z-10 backdrop-blur-sm shadow-sm"
+            className="absolute top-3 right-3 h-8 w-8 rounded-full bg-black/50 hover:bg-destructive text-white flex items-center justify-center transition-all duration-200 cursor-pointer z-10 backdrop-blur-sm shadow-sm opacity-0 group-hover:opacity-100"
             title="Delete clip"
           >
-            <TrashIcon className="h-4 w-4" />
+            <TrashIcon className="h-3.5 w-3.5" />
           </button>
 
           {clip.status === JobStatus.FAILED && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-              <span className="text-xs font-semibold text-destructive">
-                Clip failed to render
-              </span>
+            <div className="absolute inset-0 flex items-center justify-center bg-black/75 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <AlertTriangleIcon className="h-4 w-4 text-destructive" />
+                <span className="text-xs font-semibold text-destructive">
+                  Clip failed to render
+                </span>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="flex-1 flex flex-col p-4 gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-medium text-muted-foreground">
-              Clip {index + 1} · {formatTimestamp(clip.endTime - clip.startTime)}
-            </span>
-            {typeof highlight?.score === "number" && !isTopPick && (
-              <span className="text-[11px] text-muted-foreground/70 tabular-nums">
-                {(highlight.score * 100).toFixed(0)}% match
-              </span>
-            )}
+        <div className="flex-1 flex flex-col p-4 sm:p-5 gap-3">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground tracking-tight leading-snug">
+              {highlight?.clipTitle?.trim() || `Clip ${index + 1}`}
+            </h3>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {clip.hasCaptions && (
+                <span className="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide border border-primary/20">
+                  CC
+                </span>
+              )}
+            </div>
           </div>
 
-          {highlight?.reason && (
-            <p className="text-xs text-foreground/80 line-clamp-3">
-              “{highlight.reason}”
-            </p>
-          )}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground/60 font-mono">{duration}</span>
+          </div>
 
-          <AppButton
-            size="sm"
-            onClick={() => onDownload(clip)}
-            isLoading={downloadingId === clipId}
-            icon={
-              downloadingId === clipId ? undefined : (
-                <DownloadIcon className="h-4 w-4" />
-              )
-            }
-            className="mt-auto w-full"
-          >
-            Download MP4
-          </AppButton>
+          <ClipDescription highlight={highlight} />
+
+          <div className="mt-auto pt-2">
+            <AppButton
+              size="sm"
+              onClick={() => onDownload(clip)}
+              isLoading={downloadingId === clipId}
+              icon={
+                downloadingId === clipId ? undefined : (
+                  <DownloadIcon className="h-4 w-4" />
+                )
+              }
+              className="w-full h-9 text-xs font-semibold"
+            >
+              Download MP4
+            </AppButton>
+          </div>
         </div>
       </div>
 
-      {/* Delete clip confirmation dialog */}
       <AppDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
@@ -434,19 +481,25 @@ function ClipCard({
 /* -------------------------------------------------------------------------- */
 
 export function ClipsGrid({ job }: { job: Job }) {
-  const finishedClips = job.clips.filter(
-    (c) => c.status === JobStatus.COMPLETED
-  );
-  const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const downloadClip = useDownloadClip();
+  const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
   const jobId = getJobId(job);
 
-  if (finishedClips.length === 0) {
+  // Total expected clips is known once highlights exist, even before any clip
+  // is cut — use that as the slot count so skeletons appear immediately at the
+  // start of Stage 4, not just "0 clips" until the first one finishes.
+  const expectedCount = job.highlights?.length ?? 0;
+  if (expectedCount === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-card/50 p-8 text-center">
-        <FilmIcon className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-        <p className="text-sm text-muted-foreground">
+      <div className="rounded-2xl border border-border bg-card/50 p-8 sm:p-10 text-center">
+        <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/60 mb-4">
+          <FilmIcon className="h-6 w-6 text-muted-foreground/50" />
+        </div>
+        <p className="text-sm font-medium text-foreground/70">
           No finished clips yet.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Clips will appear here once processing is complete.
         </p>
       </div>
     );
@@ -461,18 +514,17 @@ export function ClipsGrid({ job }: { job: Job }) {
     try {
       setDownloadingId(clipId);
       toast.info("Preparing clip download...");
-      const blob = await downloadClip.mutateAsync({
+      const { signedUrl } = await downloadClip.mutateAsync({
         jobId,
         clipId,
       });
-      const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
+      a.href = signedUrl;
       a.download = `blynta-clip-${clipId}.mp4`;
+      a.target = "_blank";
       document.body.appendChild(a);
       a.click();
       a.remove();
-      window.URL.revokeObjectURL(url);
       toast.success("Clip download started!");
     } catch (err: any) {
       toast.error(err?.message || "Failed to download clip. Please try again.");
@@ -482,9 +534,18 @@ export function ClipsGrid({ job }: { job: Job }) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
-      {finishedClips.map((clip, i) => {
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+      {Array.from({ length: expectedCount }).map((_, i) => {
+        const clip = job.clips[i]; // present once that index's DB write has landed
         const highlight = job.highlights[i];
+
+        if (!clip) {
+          return <ClipCardSkeleton key={`skeleton-${i}`} index={i} />;
+        }
+        if (clip.status === JobStatus.FAILED) {
+          return <ClipCardFailed key={getClipId(clip) || i} index={i} />;
+        }
+
         const isTopPick =
           typeof highlight?.score === "number" &&
           highlight.score === maxScore &&
@@ -503,6 +564,34 @@ export function ClipsGrid({ job }: { job: Job }) {
           />
         );
       })}
+    </div>
+  );
+}
+
+function ClipCardSkeleton({ index }: { index: number }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden flex flex-col">
+      <div className="aspect-[4/5] w-full bg-muted/40 animate-pulse" />
+      <div className="p-4 sm:p-5 space-y-3 flex-1 flex flex-col">
+        <div className="h-4 w-3/4 rounded-md bg-muted/60 animate-pulse" />
+        <div className="h-3 w-1/3 rounded-md bg-muted/40 animate-pulse" />
+        <div className="mt-auto pt-2">
+          <div className="h-9 w-full rounded-xl bg-muted/50 animate-pulse" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClipCardFailed({ index }: { index: number }) {
+  return (
+    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 aspect-[4/5] flex items-center justify-center p-4">
+      <div className="flex items-center gap-2 text-center">
+        <AlertTriangleIcon className="h-4 w-4 text-destructive shrink-0" />
+        <span className="text-xs font-semibold text-destructive">
+          Clip {index + 1} failed to render
+        </span>
+      </div>
     </div>
   );
 }
@@ -584,21 +673,26 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
           </div>
         </div>
         <div className="h-16 rounded-2xl bg-muted animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div
-              key={i}
-              className="aspect-[9/16] rounded-2xl bg-muted animate-pulse"
-            />
-          ))}
+        <div className="space-y-3 sm:space-y-4">
+          <div className="h-5 w-24 rounded-lg bg-muted animate-pulse" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-[4/5] rounded-2xl bg-muted animate-pulse"
+              />
+            ))}
+          </div>
         </div>
       </div>
     );
   }
 
   const meta = STATUS_META[job.status];
+  const hasHighlights = job.highlights && job.highlights.length > 0;
+  const hasClips = job.clips && job.clips.length > 0;
   const showCompletedContent =
-    job.status === JobStatus.COMPLETED || job.clips.length > 0;
+    job.status === JobStatus.COMPLETED || hasHighlights || hasClips;
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6">
@@ -610,7 +704,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm sm:text-base font-semibold text-foreground truncate">
-              {truncateUrl(job.sourceUrl, 80)}
+              {getJobDisplayTitle(job, 80)}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="capitalize">{job.sourcePlatform}</span>
@@ -624,6 +718,17 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
                   </span>
                 </>
               )}
+              <span>·</span>
+              <a
+                href={job.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="text-muted-foreground/60 hover:text-primary transition-colors truncate max-w-[180px]"
+                title={job.sourceUrl}
+              >
+                {truncateUrl(job.sourceUrl, 40)}
+              </a>
             </div>
           </div>
         </div>
@@ -650,10 +755,11 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
       {/* Failed state */}
       {job.status === JobStatus.FAILED && <FailedStateCard job={job} />}
 
-      {/* Processing-only empty card (no clips or transcript yet) */}
+      {/* Processing-only empty card (no clips, highlights, or transcript yet) */}
       {isProcessingStatus(job.status) &&
         job.transcript.length === 0 &&
-        job.clips.length === 0 && (
+        !hasHighlights &&
+        !hasClips && (
           <div className="rounded-2xl border border-border bg-card/50 p-6 sm:p-8 text-center">
             <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 mb-3">
               <FilmIcon className="h-6 w-6 text-primary animate-pulse" />
@@ -671,11 +777,19 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
       {/* Completed / has content */}
       {showCompletedContent && (
         <>
-          {job.clips.length > 0 && (
+          {(hasHighlights || hasClips) && (
             <section>
-              <h2 className="text-sm sm:text-base font-semibold text-foreground mb-3 sm:mb-4">
-                Your clips
-              </h2>
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-sm sm:text-base font-semibold text-foreground tracking-tight">
+                    Your clips
+                  </h2>
+                  <span className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-2 rounded-full bg-muted text-muted-foreground text-[11px] font-bold border border-border/70">
+                    {job.clips.filter((c) => c.status === JobStatus.COMPLETED).length}
+                    {hasHighlights && ` / ${job.highlights.length}`}
+                  </span>
+                </div>
+              </div>
               <ClipsGrid job={job} />
             </section>
           )}
@@ -684,7 +798,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
         </>
       )}
 
-      {/* Processing — transcript ready but not yet complete */}
+      {/* Processing — transcript ready but not yet highlights or clips */}
       {isProcessingStatus(job.status) &&
         !showCompletedContent &&
         job.transcript.length > 0 && (

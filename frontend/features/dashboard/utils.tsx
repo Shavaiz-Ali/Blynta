@@ -25,6 +25,18 @@ export function truncateUrl(url: string, max = 55): string {
   }
 }
 
+/**
+ * Returns the best human-readable title for a job.
+ * Prefers videoTitle when it's a real title (not the fallback "Untitled video" string),
+ * falls back to the truncated source URL.
+ */
+export function getJobDisplayTitle(job: Pick<Job, "videoTitle" | "sourceUrl">, maxUrlLen = 55): string {
+  if (job.videoTitle && job.videoTitle.trim() && job.videoTitle !== "Untitled video") {
+    return job.videoTitle;
+  }
+  return truncateUrl(job.sourceUrl, maxUrlLen);
+}
+
 export function formatDate(iso: string): string {
   try {
     const d = new Date(iso);

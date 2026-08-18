@@ -1,7 +1,7 @@
 import * as React from "react";
 import type { Job } from "@/features/jobs";
 import { AlertTriangleIcon } from "../icons";
-import { getFailedJobs, platformIcon, truncateUrl } from "../utils";
+import { getFailedJobs, getJobDisplayTitle, platformIcon, truncateUrl } from "../utils";
 
 export function AttentionNeeded({ jobs }: { jobs: Job[] }) {
   const failed = getFailedJobs(jobs);
@@ -23,7 +23,7 @@ export function AttentionNeeded({ jobs }: { jobs: Job[] }) {
             {platformIcon(j.sourcePlatform)}
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-foreground truncate">
-                {truncateUrl(j.sourceUrl, 35)}
+                {getJobDisplayTitle(j, 35)}
               </p>
               <p className="text-[11px] text-muted-foreground truncate">
                 {j.errorMessage || "Processing failed — try again"}

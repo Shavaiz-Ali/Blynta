@@ -19,13 +19,30 @@ const HighlightSchema = z.object({
       return val;
     })
     .pipe(z.number().min(0).max(1)),
+  clipTitle: z
+    .string()
+    .optional()
+    .default('')
+    .describe('Short, punchy title under 60 characters, like a social media caption'),
+  clipDescription: z
+    .string()
+    .optional()
+    .default('')
+    .describe('1-2 sentence description explaining what makes this moment worth watching'),
 });
 
 const HighlightsResponseSchema = z.object({
   highlights: z.array(HighlightSchema),
 });
 
-export type HighlightDto = z.infer<typeof HighlightSchema>;
+export interface HighlightDto {
+  startTime: number;
+  endTime: number;
+  reason: string;
+  score: number;
+  clipTitle: string;
+  clipDescription: string;
+}
 
 @Injectable()
 export class HighlightDetectionService {
@@ -46,7 +63,8 @@ export class HighlightDetectionService {
       .map((s) => `[${s.startTime.toFixed(1)}s - ${s.endTime.toFixed(1)}s] ${s.text}`)
       .join('\n');
 
-    const systemPrompt = `You are a video editor's assistant. Given a timestamped transcript, identify the 3-5 most engaging, self-contained moments suitable for short vertical clips (15-60 seconds each). Each clip must: (1) be at least 15 seconds long, (2) not exceed 60 seconds, (3) contain a complete, self-contained thought or moment. The "score" field must be a decimal between 0 and 1 (e.g. 0.5, 0.82, 0.95) representing engagement — never use a 0-10 or 0-100 scale.`;
+    const systemPrompt = `You are a video editor's assistant. Given a timestamped transcript, identify the 3-5 most engaging, self-contained moments suitable for short vertical clips (15-60 seconds each). For each moment, also write a short, punchy title (under 60 characters, like a social media caption) and a 1-2 sentence description explaining what makes this moment worth watching. Return ONLY valid JSON matching this exact shape, no other text:
+[{"startTime": number, "endTime": number, "reason": "short string explaining why this was chosen", "score": number between 0 and 1, "clipTitle": "short punchy title", "clipDescription": "1-2 sentence description"}]`;
 
     const userPrompt = options?.customPrompt
       ? `${options.customPrompt}\n\nTranscript:\n${transcriptText}`
@@ -82,6 +100,14 @@ export class HighlightDetectionService {
         if (!valid) this.logger.warn(`Dropping invalid highlight: ${JSON.stringify(h)}`);
         return valid;
       })
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => b.score - a.score)
+      .map((h, index) => ({
+        startTime: h.startTime,
+        endTime: h.endTime,
+        reason: h.reason,
+        score: h.score,
+        clipTitle: h.clipTitle?.trim() || `Clip ${index + 1}`,
+        clipDescription: h.clipDescription?.trim() || '',
+      }));
   }
 }

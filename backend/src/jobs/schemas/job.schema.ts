@@ -47,6 +47,12 @@ export class Highlight {
 
   @Prop({ min: 0, max: 1 })
   score: number; // confidence/engagement score, useful for ranking multiple highlights
+
+  @Prop()
+  clipTitle: string; // short, punchy — e.g. "The moment he admits he was wrong"
+
+  @Prop()
+  clipDescription: string; // 1-2 sentences, only populated/shown for Pro/Business — see Task 3
 }
 export const HighlightSchema = SchemaFactory.createForClass(Highlight);
 
@@ -74,6 +80,9 @@ export class Clip {
   @Prop()
   downloadUrl: string;
 
+  @Prop()
+  r2ObjectKey: string; // R2 object key for the captioned (or raw) clip — e.g. "clips/<jobId>/clip-1-captioned.mp4"
+
   @Prop({ default: false })
   hasCaptions: boolean;
 
@@ -97,6 +106,12 @@ export class Job {
   status: JobStatus;
 
   @Prop()
+  videoTitle: string; // from yt-dlp, e.g. "How I Built a Startup in 30 Days"
+
+  @Prop()
+  videoUploader: string; // channel name, from yt-dlp
+
+  @Prop()
   localVideoPath: string;
 
   @Prop()
@@ -107,6 +122,9 @@ export class Job {
 
   @Prop({ default: 'default' })
   aiModel: string;
+
+  @Prop({ default: 'default' })
+  stylePreset: string; // key into STYLE_PRESETS — 'default' | 'meme' | 'sad' | 'motivational'
 
   @Prop({ type: [TranscriptSegmentSchema], default: [] })
   transcript: TranscriptSegment[];
@@ -128,6 +146,13 @@ export class Job {
 
   @Prop()
   resolutionUsed: string; // '720p' | '1080p' — recorded after the fact, for support/debugging purposes
+
+  // Populated for YouTube jobs that hit the SourceVideo cache. Null/undefined for non-YouTube
+  // platforms or for jobs processed before this field was introduced.
+  // NOTE: Deleting a Job never cascades to the associated SourceVideo — SourceVideo entries
+  // are shared across jobs/users and managed independently.
+  @Prop({ type: Types.ObjectId, ref: 'SourceVideo' })
+  sourceVideoId: Types.ObjectId;
 }
 
 export const JobSchema = SchemaFactory.createForClass(Job);

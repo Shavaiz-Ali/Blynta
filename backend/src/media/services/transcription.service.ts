@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
+import * as path from 'path';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
 
 export interface TranscriptSegmentDto {
@@ -20,34 +21,85 @@ export class TranscriptionService {
     this.whisperModelPath = this.configService.get<string>('WHISPER_MODEL_PATH');
   }
 
+  /**
+   * @param initialPrompt Optional vocabulary hint passed to whisper (e.g. show
+   *   name, speaker names, recurring proper nouns). Whisper leans heavily on
+   *   this to disambiguate phonetically-similar words — this is the single
+   *   biggest lever for fixing misspelled names/titles beyond model size.
+   */
   async transcribe(
     audioPath: string,
     onProgress?: (percent: number) => void,
+    initialPrompt?: string,
   ): Promise<TranscriptSegmentDto[]> {
     if (!this.whisperBinaryPath || !this.whisperModelPath) {
       throw new Error('WHISPER_BINARY_PATH or WHISPER_MODEL_PATH is not configured');
     }
 
     const outputBase = audioPath.replace(/\.wav$/, '');
-    this.logger.log(`Transcribing ${audioPath} with whisper.cpp`);
+    this.logger.log(`Transcribing ${audioPath} with whisper.cpp (model=${this.whisperModelPath})`);
 
     const binary = this.whisperBinaryPath;
+    const args = [
+      '-m', this.whisperModelPath,
+      '-f', audioPath,
+      '-oj',
+      '-of', outputBase,
+      '-l', 'auto',
+      '-pp',
+      '--best-of', '5',
+      '--beam-size', '5',
+    ];
+
+    if (initialPrompt) {
+      args.push('--prompt', initialPrompt);
+    }
+
     await runCommandWithProgress(
       binary,
-      [
-        '-m', this.whisperModelPath,
-        '-f', audioPath,
-        '-oj',
-        '-of', outputBase,
-        '-l', 'auto',
-      ],
+      args,
       (line: string) => {
         const match = line.match(/progress\s*=\s*(\d+)%/);
         if (match && onProgress) onProgress(parseInt(match[1], 10));
       },
     );
 
-    const jsonPath = `${outputBase}.json`;
+    const candidatePaths = [
+      `${outputBase}.json`,
+      `${audioPath}.json`,
+      `${outputBase}.wav.json`,
+      `${audioPath}.wav.json`,
+    ];
+
+    let jsonPath: string | undefined;
+    for (const candidate of candidatePaths) {
+      try {
+        await fs.promises.access(candidate);
+        jsonPath = candidate;
+        break;
+      } catch {
+        // continue
+      }
+    }
+
+    if (!jsonPath) {
+      const dir = path.dirname(audioPath);
+      try {
+        const files = await fs.promises.readdir(dir);
+        const jsonFile = files.find((f) => f.endsWith('.json'));
+        if (jsonFile) {
+          jsonPath = path.join(dir, jsonFile);
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!jsonPath) {
+      throw new Error(`Whisper transcription finished but no output JSON file was found at ${outputBase}.json`);
+    }
+
+    this.logger.log(`Reading whisper output from ${jsonPath}`);
     const rawJson = await fs.promises.readFile(jsonPath, 'utf-8');
     const parsed = JSON.parse(rawJson);
 

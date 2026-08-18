@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
@@ -31,14 +32,14 @@ export class VideoDownloadService {
   async downloadVideo(
     sourceUrl: string,
     outputDir: string,
-    resolution: '720p' | '1080p',
+    resolution: '720p' | '1080p' | '360p' | '240p',
     onProgress?: (percent: number) => void,
-  ): Promise<{ videoPath: string; audioPath: string }> {
+  ): Promise<{ videoPath: string; audioPath: string; title: string; uploader: string }> {
     await fs.promises.mkdir(outputDir, { recursive: true });
     const videoPath = path.join(outputDir, 'source.mp4');
     const audioPath = path.join(outputDir, 'audio.wav');
-    // const maxHeight = resolution === '1080p' ? 1080 : 720;
-    const maxHeight = 360;
+    // const maxHeight = resolution === '1080p' ? 1080 : 720; //TODO: UNCOMMENT LATER
+    const maxHeight = 240;
 
     const ytDlpArgs = [
       '--js-runtimes', 'deno',
@@ -85,6 +86,44 @@ export class VideoDownloadService {
       () => { },
     );
 
-    return { videoPath, audioPath };
+    const metadata = await this.fetchVideoMetadata(sourceUrl);
+
+    return { videoPath, audioPath, title: metadata.title, uploader: metadata.uploader };
+  }
+
+  private async fetchVideoMetadata(sourceUrl: string): Promise<{ title: string; uploader: string }> {
+    return new Promise((resolve) => {
+      const ytDlpArgs = [
+        '--js-runtimes', 'deno',
+        '--print', '%(title)s|||%(uploader)s',
+        '--skip-download',
+      ];
+
+      const cookiesPath = this.configService.get<string>('YOUTUBE_COOKIES_PATH');
+      if (cookiesPath && fs.existsSync(cookiesPath)) {
+        ytDlpArgs.push('--cookies', cookiesPath);
+      }
+
+      ytDlpArgs.push(sourceUrl);
+
+      const proc = spawn('yt-dlp', ytDlpArgs);
+      let output = '';
+      let stderr = '';
+      proc.stdout.on('data', (d) => (output += d.toString()));
+      proc.stderr.on('data', (d) => (stderr += d.toString()));
+      proc.on('close', (code) => {
+        if (code !== 0) {
+          this.logger.warn(`Failed to fetch video metadata: ${stderr.slice(-300)}`);
+          resolve({ title: 'Untitled video', uploader: '' });
+          return;
+        }
+        const [title, uploader] = output.trim().split('|||');
+        resolve({ title: title?.trim() || 'Untitled video', uploader: uploader?.trim() || '' });
+      });
+      proc.on('error', (err) => {
+        this.logger.warn(`Error running yt-dlp metadata fetch: ${err.message}`);
+        resolve({ title: 'Untitled video', uploader: '' });
+      });
+    });
   }
 }

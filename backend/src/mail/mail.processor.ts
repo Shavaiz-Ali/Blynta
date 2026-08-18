@@ -3,7 +3,7 @@ import { Job } from 'bullmq';
 import { Resend } from 'resend';
 import { ConfigService } from '@nestjs/config';
 import { MAIL_QUEUE, MAIL_JOBS } from './mail.constants';
-import { otpEmailTemplate, passwordResetEmailTemplate } from './templates/mail.templates';
+import { otpEmailTemplate, passwordResetEmailTemplate, referralInviteEmailTemplate } from './templates/mail.templates';
 
 
 
@@ -42,6 +42,13 @@ export class MailProcessor extends WorkerHost {
                 const resetUrl = `${this.configService.get<string>('FRONTEND_URL')}/reset-password?token=${resetToken}`;
                 const { subject, html } = passwordResetEmailTemplate(resetUrl);
                 await this.sendEmail(email, subject, html);
+                break;
+            }
+
+            case MAIL_JOBS.SEND_REFERRAL_INVITE: {
+                const { toEmail, referrerName, referralLink } = job.data;
+                const { subject, html } = referralInviteEmailTemplate(referrerName, referralLink);
+                await this.sendEmail(toEmail, subject, html);
                 break;
             }
 

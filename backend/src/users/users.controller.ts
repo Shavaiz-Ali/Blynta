@@ -6,7 +6,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 @Controller('users')
 @UseGuards(AuthGuard('jwt'))
 export class UsersController {
-  constructor(private usersService: UsersService) {}
+  constructor(private usersService: UsersService) { }
 
   @Get('me')
   async getProfile(@Request() req) {
@@ -23,6 +23,7 @@ export class UsersController {
       creditsResetAt: user.creditsResetAt,
       role: user.role,
       isWelcomed: user.isWelcomed,
+      referralCode: user.referralCode
     };
   }
 

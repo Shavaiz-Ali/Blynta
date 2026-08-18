@@ -14,4 +14,8 @@ export class MailService {
     async queuePasswordResetEmail(email: string, resetToken: string) {
         await this.mailQueue.add(MAIL_JOBS.SEND_PASSWORD_RESET, { email, resetToken });
     }
+
+    async queueReferralInviteEmail(toEmail: string, referrerName: string, referralLink: string) {
+        await this.mailQueue.add(MAIL_JOBS.SEND_REFERRAL_INVITE, { toEmail, referrerName, referralLink });
+    }
 }

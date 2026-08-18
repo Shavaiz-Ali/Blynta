@@ -21,6 +21,7 @@ import {
   STATUS_META,
   platformIcon,
   truncateUrl,
+  getJobDisplayTitle,
   formatDate,
   getActiveJobs,
   isProcessingStatus,
@@ -217,7 +218,7 @@ function JobRow({ job }: { job: Job }) {
           {/* URL + meta */}
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground truncate">
-              {truncateUrl(job.sourceUrl, 60)}
+              {getJobDisplayTitle(job, 60)}
             </p>
             <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
               <span>{formatDate(job.createdAt)}</span>

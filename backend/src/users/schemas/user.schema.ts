@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export type UserDocument = User & Document;
 
@@ -110,6 +110,21 @@ export class User {
 
   @Prop()
   passwordResetExpiresAt: Date;
+
+  @Prop({ required: true, unique: true, index: true })
+  referralCode: string;
+
+  @Prop({ type: Types.ObjectId, ref: 'User' })
+  referredBy: Types.ObjectId;
+
+  @Prop({ default: false })
+  referralRewardGranted: boolean;
+
+  @Prop({ default: 0 })
+  successfulReferralCount: number;
+
+  @Prop({ default: false })
+  hasLoggedInOnce: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

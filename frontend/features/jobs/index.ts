@@ -2,6 +2,7 @@ export {
   useJobs,
   useJob,
   useCreateJob,
+  useStylePresets,
   useDownloadClip,
   useDeleteJob,
   useDeleteClip,
@@ -16,6 +17,7 @@ export type {
   Highlight,
   TranscriptSegment,
   CreateJobInput,
+  StylePresetInfo,
   JobsListParams,
   JobsListResult,
 } from "./queries";

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { SourcePlatform, useCreateJob } from "@/features/jobs";
+import { SourcePlatform, useCreateJob, useStylePresets } from "@/features/jobs";
 import { AppButton } from "@/components/common/AppButton";
 import { AppInput } from "@/components/common/AppInput";
 import { useCurrentUser } from "@/features/auth/queries";
@@ -132,6 +132,56 @@ const AI_MODEL_OPTIONS: {
     },
   ];
 
+function StylePresetPicker({
+  value,
+  onChange,
+  isPaidPlan,
+}: {
+  value: string;
+  onChange: (key: string) => void;
+  isPaidPlan: boolean;
+}) {
+  const { data: presets } = useStylePresets();
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap gap-2">
+        {presets?.map((p) => {
+          const locked = p.isPro && !isPaidPlan;
+          const isSelected = value === p.key;
+          return (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => locked ? {} : onChange(p.key)}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-xs sm:text-sm font-medium transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                isSelected
+                  ? "border-primary bg-primary/10 text-foreground ring-1 ring-primary/30"
+                  : "border-border/70 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground",
+                locked && "disabled! cursor-none pointer-events-none"
+
+              )}
+            >
+              {p.label}
+              {locked && (
+                <span className="ml-1.5 text-[10px] font-bold uppercase tracking-wider text-chart-4 bg-chart-4/15 px-1.5 py-0.5 rounded">
+                  Pro
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {presets?.find((p) => p.key === value)?.isPro && !isPaidPlan && (
+        <p className="w-full text-[11px] text-muted-foreground mt-1">
+          This style needs Pro — we&apos;ll use Simple for this job unless you upgrade.
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface HeroInputProps {
   onSuccess?: () => void;
 }
@@ -143,6 +193,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
   const [url, setUrl] = React.useState("");
   const [selectedId, setSelectedId] = React.useState<string>("youtube");
+  const [stylePreset, setStylePreset] = React.useState<string>("default");
   const [fileName, setFileName] = React.useState<string | null>(null);
   const [fieldError, setFieldError] = React.useState<string | undefined>();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -172,6 +223,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       setFieldError(undefined);
       setCustomPrompt("");
       setAiModel("default");
+      setStylePreset("default");
       setAdvancedOpen(false);
       toast.success("Video URL submitted! AI clip generation started.");
       router.push(`/jobs/${data?._id}`)
@@ -229,6 +281,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
     const body: Parameters<typeof mutate>[0] = {
       sourceUrl,
       sourcePlatform: activeConfig.platform,
+      stylePreset,
     };
 
     if (isPaid) {
@@ -297,6 +350,18 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
       {/* Main input + file upload button + CTA */}
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        {/* Style preset selector */}
+        <div className="mb-1">
+          <label className="text-xs font-semibold text-foreground/80 block mb-1.5">
+            Style preset
+          </label>
+          <StylePresetPicker
+            value={stylePreset}
+            onChange={setStylePreset}
+            isPaidPlan={isPaid}
+          />
+        </div>
+
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1 flex items-center">
             <input

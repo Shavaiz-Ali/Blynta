@@ -19,6 +19,7 @@ import {
   STATUS_META,
   platformIcon,
   truncateUrl,
+  getJobDisplayTitle,
   formatDate,
   getActiveJobs,
 } from "../utils";
@@ -148,7 +149,7 @@ export function JobsCard({
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-foreground truncate">
-                        {truncateUrl(j.sourceUrl, 55)}
+                        {getJobDisplayTitle(j, 55)}
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
                         Started {formatDate(j.createdAt)}
@@ -189,7 +190,7 @@ export function JobsCard({
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground truncate">
-                      {truncateUrl(j.sourceUrl, 60)}
+                      {getJobDisplayTitle(j, 60)}
                     </p>
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
                       <span>{formatDate(j.createdAt)}</span>

@@ -13,7 +13,7 @@ export function runCommandWithProgress(
 
     proc.stdout.on('data', (chunk) => {
       stdoutBuffer += chunk.toString();
-      const lines = stdoutBuffer.split('\n');
+      const lines = stdoutBuffer.split(/\r?\n|\r/);
       stdoutBuffer = lines.pop() || '';
       lines.forEach(onLine);
     });
@@ -22,7 +22,7 @@ export function runCommandWithProgress(
       const text = chunk.toString();
       fullStderr += text;
       stderrBuffer += text;
-      const lines = stderrBuffer.split('\n');
+      const lines = stderrBuffer.split(/\r?\n|\r/);
       stderrBuffer = lines.pop() || '';
       lines.forEach(onLine);
     });

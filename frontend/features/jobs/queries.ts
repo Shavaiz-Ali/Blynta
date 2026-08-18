@@ -57,6 +57,8 @@ export interface Highlight {
   endTime: number;
   reason?: string;
   score?: number;
+  clipTitle?: string;
+  clipDescription?: string;
 }
 
 export interface Clip {
@@ -74,11 +76,18 @@ export interface Clip {
   _id: string;
 }
 
+export interface StylePresetInfo {
+  key: string;
+  label: string;
+  isPro: boolean;
+}
+
 export interface CreateJobInput {
   sourceUrl: string;
   sourcePlatform: SourcePlatform;
   customPrompt?: string;
   aiModel?: string;
+  stylePreset?: string;
 }
 
 export interface Job {
@@ -86,6 +95,8 @@ export interface Job {
   _id: string;
   sourceUrl: string;
   sourcePlatform: SourcePlatform;
+  videoTitle?: string;
+  videoUploader?: string;
   status: JobStatus;
   errorMessage?: string | null;
   errorStage?: string | null;
@@ -95,6 +106,7 @@ export interface Job {
   localAudioPath?: string;
   customPrompt?: string;
   aiModel?: string;
+  stylePreset?: string;
   transcript: TranscriptSegment[];
   highlights: Highlight[];
   clips: Clip[];
@@ -196,6 +208,9 @@ export function useCreateJob(
       if (input.aiModel && input.aiModel !== "default") {
         body.aiModel = input.aiModel;
       }
+      if (input.stylePreset && input.stylePreset !== "default") {
+        body.stylePreset = input.stylePreset;
+      }
       const { data } = await axiosClient.post<Job>("/jobs", body);
       return data;
     },
@@ -210,26 +225,41 @@ export function useCreateJob(
 }
 
 /* -------------------------------------------------------------------------- */
+/*                  useStylePresets — GET /style-presets                      */
+/* -------------------------------------------------------------------------- */
+
+export function useStylePresets(
+  opts?: Omit<UseQueryOptions<StylePresetInfo[], Error>, "queryKey" | "queryFn">
+): UseQueryResult<StylePresetInfo[], Error> {
+  return useQuery({
+    queryKey: ["style-presets"],
+    queryFn: async () => {
+      const { data } = await axiosClient.get<StylePresetInfo[]>("/style-presets");
+      return data;
+    },
+    staleTime: 1000 * 60 * 60,
+    ...opts,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /*                  useDownloadClip — GET /jobs/:id/clips/:id/download        */
 /* -------------------------------------------------------------------------- */
 
 type DownloadClipOpts = Omit<
-  UseMutationOptions<Blob, Error, { jobId: string; clipId: string }, unknown>,
+  UseMutationOptions<{ signedUrl: string }, Error, { jobId: string; clipId: string }, unknown>,
   "mutationFn"
 >;
 
 export function useDownloadClip(
   opts: DownloadClipOpts = {}
-): UseMutationResult<Blob, Error, { jobId: string; clipId: string }, unknown> {
+): UseMutationResult<{ signedUrl: string }, Error, { jobId: string; clipId: string }, unknown> {
   return useMutation({
     mutationFn: async ({ jobId, clipId }) => {
-      const response = await axiosClient.get(
-        `/jobs/${jobId}/clips/${clipId}/download`,
-        {
-          responseType: "blob",
-        }
+      const { data } = await axiosClient.get<{ signedUrl: string }>(
+        `/jobs/${jobId}/clips/${clipId}/download`
       );
-      return response.data as Blob;
+      return data;
     },
     ...opts,
   });

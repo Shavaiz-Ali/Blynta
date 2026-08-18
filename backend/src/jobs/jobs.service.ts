@@ -16,6 +16,7 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { JobAccessDeniedException } from '../common/exceptions';
 import { UsersService } from '../users/users.service';
 import { JOBS_QUEUE, JOBS_TYPES } from './jobs.constants';
+import { R2Service } from '../storage/r2.service';
 
 @Injectable()
 export class JobsService {
@@ -26,6 +27,7 @@ export class JobsService {
     @InjectQueue(JOBS_QUEUE) private jobsQueue: Queue,
     private usersService: UsersService,
     private configService: ConfigService,
+    private r2Service: R2Service,
   ) { }
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
@@ -38,6 +40,7 @@ export class JobsService {
       status: JobStatus.PENDING,
       customPrompt: dto.customPrompt,
       aiModel: dto.aiModel,
+      stylePreset: dto.stylePreset || 'default',
       resolutionUsed: dto.resolution,
       progressPercent: 0,
     });
@@ -97,7 +100,7 @@ export class JobsService {
     updates: Partial<Job>,
   ): Promise<JobDocument | null> {
     return this.jobModel
-      .findByIdAndUpdate(jobId, updates, { new: true })
+      .findByIdAndUpdate(jobId, updates, { returnDocument: 'after' })
       .exec();
   }
 
@@ -105,16 +108,17 @@ export class JobsService {
     userId: string,
     jobId: string,
     clipId: string,
-  ): Promise<{ clip: Clip; filePath: string }> {
+  ): Promise<{ clip: Clip }> {
     const job = await this.getJobById(userId, jobId);
     const clip = job.clips.find((c) => c._id.toString() === clipId);
     if (!clip) throw new NotFoundException('Clip not found');
-    const filePath = clip.captionedFilePath || clip.localFilePath;
-    if (!filePath) throw new NotFoundException('Clip file not ready');
-    return { clip, filePath };
+    // clip.r2ObjectKey is the R2 object key for the captioned (or raw) clip.
+    // The controller depends on this field being present to call r2Service.getSignedDownloadUrl().
+    if (!clip.r2ObjectKey) throw new NotFoundException('Clip file not ready');
+    return { clip };
   }
 
-  // Task 2 — delete an entire job + its files on disk
+  // Task 2 — delete an entire job + its clips from R2
   async deleteJob(
     userId: string,
     jobId: string,
@@ -133,20 +137,47 @@ export class JobsService {
       );
     }
 
-    const storageRoot = this.configService.get<string>(
-      'STORAGE_ROOT',
-      '/var/blynta/storage',
-    );
-    const jobDir = path.join(storageRoot, 'jobs', jobId);
-
-    try {
-      await fs.promises.rm(jobDir, { recursive: true, force: true });
-    } catch (err) {
-      // Log but don't block deletion — orphaned folders will be caught by the
-      // disk-cleanup cron (flagged as TODO in JobsProcessor).
-      this.logger.warn(
-        `Failed to delete job directory ${jobDir}: ${err instanceof Error ? err.message : err}`,
+    // Local disk cleanup:
+    // For jobs in a terminal state (COMPLETED or FAILED), the local temp directory
+    // was already cleaned up at the end of JobsProcessor.processClipVideoJob() via
+    // the finally block. Attempting fs.rm here would find nothing and succeed silently
+    // (force: true suppresses ENOENT). We still attempt it for the rare edge case where
+    // a job reached a terminal state without the finally block running (e.g. process crash).
+    // For active jobs we already throw ConflictException above, so we won't reach here.
+    if (!activeStatuses.includes(job.status)) {
+      const storageRoot = this.configService.get<string>(
+        'STORAGE_ROOT',
+        '/var/blynta/storage',
       );
+      const jobDir = path.join(storageRoot, 'jobs', jobId);
+      try {
+        // Expected behaviour: directory won't exist for completed/failed jobs since
+        // the processor's finally block already removed it. force:true makes this a no-op
+        // rather than an error, which is correct and intentional.
+        await fs.promises.rm(jobDir, { recursive: true, force: true });
+      } catch (err) {
+        this.logger.warn(
+          `Failed to delete job directory ${jobDir}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    // Delete each clip's R2 object.
+    // IMPORTANT: We do NOT delete the SourceVideo record or its associated
+    // source-videos/<externalId>/... R2 objects, even if this job was the last one
+    // referencing them. SourceVideo entries are shared across jobs and users;
+    // per-job deletion must never cascade to the shared cache. SourceVideo-level
+    // R2 cleanup is a separate future concern (background cron by referenceCount/age).
+    for (const clip of job.clips) {
+      if (clip.r2ObjectKey) {
+        try {
+          await this.r2Service.deleteFile(clip.r2ObjectKey);
+        } catch (err) {
+          this.logger.warn(
+            `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      }
     }
 
     await this.jobModel.findByIdAndDelete(jobId).exec();
@@ -163,16 +194,15 @@ export class JobsService {
     const clip = job.clips.find((c) => c._id.toString() === clipId);
     if (!clip) throw new NotFoundException('Clip not found');
 
-    const filesToDelete = [clip.localFilePath, clip.captionedFilePath].filter(
-      Boolean,
-    ) as string[];
-
-    for (const filePath of filesToDelete) {
+    // Delete the clip's R2 object. Local file paths (localFilePath, captionedFilePath)
+    // are no longer the source of truth — they were temp working copies cleaned up
+    // by the processor's finally block after the job completed.
+    if (clip.r2ObjectKey) {
       try {
-        await fs.promises.unlink(filePath);
+        await this.r2Service.deleteFile(clip.r2ObjectKey);
       } catch (err) {
         this.logger.warn(
-          `Failed to delete clip file ${filePath}: ${err instanceof Error ? err.message : err}`,
+          `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,
         );
       }
     }
@@ -199,7 +229,8 @@ export class JobsService {
       sourcePlatform: original.sourcePlatform,
       customPrompt: original.customPrompt,
       aiModel: original.aiModel,
-      resolution: original.resolutionUsed as '720p' | '1080p'
+      stylePreset: original.stylePreset,
+      resolution: original.resolutionUsed as '720p' | '1080p',
     });
   }
 }

@@ -6,6 +6,7 @@ import { AppDialog } from "@/components/common/AppDialog";
 import { AppButton } from "@/components/common/AppButton";
 import { AppInput } from "@/components/common/AppInput";
 import { UserPlusIcon, CheckCircleIcon } from "../icons";
+import { useCurrentUser } from "@/features/auth";
 
 export interface InviteMembersDialogProps {
   open: boolean;
@@ -17,6 +18,10 @@ export function InviteMembersDialog({ open, onOpenChange }: InviteMembersDialogP
   const [role, setRole] = React.useState<"member" | "admin">("member");
   const [copied, setCopied] = React.useState(false);
   const [sent, setSent] = React.useState(false);
+  const { data: profile } = useCurrentUser();
+
+  console.log(profile)
+
 
   function handleSendInvite(e?: React.FormEvent) {
     e?.preventDefault();
@@ -75,7 +80,16 @@ export function InviteMembersDialog({ open, onOpenChange }: InviteMembersDialogP
           autoFocus
         />
 
-        <div className="flex flex-col gap-1.5">
+        <AppInput
+          label="InviteLink"
+          placeholder="Copy invite link"
+          value={profile ? `${process.env.NEXT_PUBLIC_API_URL}/${profile.referralCode}` : ""}
+          onChange={(e) => setEmail(e.target.value)}
+          autoFocus
+        />
+
+
+        {/* <div className="flex flex-col gap-1.5">
           <label className="text-xs font-semibold text-foreground">Role</label>
           <div className="grid grid-cols-2 gap-2">
             <AppButton
@@ -110,7 +124,7 @@ export function InviteMembersDialog({ open, onOpenChange }: InviteMembersDialogP
               </p>
             </AppButton>
           </div>
-        </div>
+        </div> */}
       </form>
     </AppDialog>
   );

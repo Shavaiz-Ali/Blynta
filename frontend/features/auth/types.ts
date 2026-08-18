@@ -34,6 +34,7 @@ export interface UserProfile {
   creditsResetAt: string;
   role: UserRole;
   isWelcomed: boolean;
+  referralCode: string
 }
 
 export interface AuthSession {

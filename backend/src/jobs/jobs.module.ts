@@ -8,6 +8,7 @@ import { Job, JobSchema } from './schemas/job.schema';
 import { JOBS_QUEUE } from './jobs.constants';
 import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { MediaModule } from '../media/media.module';
     BullModule.registerQueue({ name: JOBS_QUEUE }),
     UsersModule,
     MediaModule,
+    StorageModule,
   ],
   controllers: [JobsController],
   providers: [JobsService, JobsProcessor],
