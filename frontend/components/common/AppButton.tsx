@@ -118,6 +118,13 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
     const shadcnVariant: ShadcnButtonVariant =
       variant != null ? appVariantToShadcn[variant] ?? "default" : "default";
 
+    const spinnerSize: "xs" | "sm" | "md" =
+      size === "xs" || size === "icon-xs"
+        ? "xs"
+        : size === "lg" || size === "icon-lg"
+        ? "md"
+        : "sm";
+
     return (
       <Button
         ref={ref}
@@ -128,17 +135,20 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
         className={cn(appButtonVariants({ variant }), className)}
         {...props}
       >
-        {showSpinner && (
-          <AppSpinner size="sm" className="-ml-1 mr-2" />
-        )}
-        {!showSpinner && resolvedIcon && iconPosition === "left" && (
-          <span className="shrink-0">{resolvedIcon}</span>
-        )}
-        {!showSpinner && (
-          <span>{children}</span>
-        )}
-        {!showSpinner && resolvedIcon && iconPosition === "right" && (
-          <span className="shrink-0">{resolvedIcon}</span>
+        {showSpinner ? (
+          <span className="flex items-center justify-center leading-none">
+            <AppSpinner size={spinnerSize} className="m-0" />
+          </span>
+        ) : (
+          <>
+            {resolvedIcon && iconPosition === "left" && (
+              <span className="shrink-0">{resolvedIcon}</span>
+            )}
+            {children != null && <span>{children}</span>}
+            {resolvedIcon && iconPosition === "right" && (
+              <span className="shrink-0">{resolvedIcon}</span>
+            )}
+          </>
         )}
       </Button>
     );
