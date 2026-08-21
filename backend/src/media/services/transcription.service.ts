@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
+import { ProcessRegistryService } from '../../common/services/process-registry.service';
 
 export interface TranscriptSegmentDto {
   startTime: number;
@@ -16,7 +17,10 @@ export class TranscriptionService {
   private readonly whisperBinaryPath: string | undefined;
   private readonly whisperModelPath: string | undefined;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    private processRegistry: ProcessRegistryService,
+  ) {
     this.whisperBinaryPath = this.configService.get<string>('WHISPER_BINARY_PATH');
     this.whisperModelPath = this.configService.get<string>('WHISPER_MODEL_PATH');
   }
@@ -62,6 +66,7 @@ export class TranscriptionService {
         const match = line.match(/progress\s*=\s*(\d+)%/);
         if (match && onProgress) onProgress(parseInt(match[1], 10));
       },
+      this.processRegistry,
     );
 
     const candidatePaths = [

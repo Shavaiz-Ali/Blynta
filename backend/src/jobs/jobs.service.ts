@@ -104,6 +104,18 @@ export class JobsService {
       .exec();
   }
 
+  async findStuckJobs(
+    statuses: JobStatus[],
+    cutoff: Date,
+  ): Promise<JobDocument[]> {
+    return this.jobModel
+      .find({
+        status: { $in: statuses },
+        updatedAt: { $lt: cutoff },
+      })
+      .exec();
+  }
+
   async getClipForDownload(
     userId: string,
     jobId: string,

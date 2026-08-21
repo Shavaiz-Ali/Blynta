@@ -1,9 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import ffmpeg from 'fluent-ffmpeg';
+import { ProcessRegistryService } from '../../common/services/process-registry.service';
 
 @Injectable()
 export class ClipCuttingService {
   private readonly logger = new Logger(ClipCuttingService.name);
+
+  constructor(private processRegistry: ProcessRegistryService) {}
 
   async cutClip(
     sourceVideoPath: string,
@@ -30,7 +33,7 @@ export class ClipCuttingService {
     return new Promise((resolve, reject) => {
       const vf = 'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos';
 
-      ffmpeg(sourceVideoPath)
+      const cmd = ffmpeg(sourceVideoPath)
         .setStartTime(startTime)
         .setDuration(duration)
         .outputOptions([`-vf ${vf}`])
@@ -42,8 +45,10 @@ export class ClipCuttingService {
         .on('error', (err: Error, stdout: string, stderr: string) => {
           this.logger.error(`ffmpeg clip cut failed: ${err.message}\n${stderr}`);
           reject(new Error(`ffmpeg clip cut failed: ${err.message}`));
-        })
-        .save(outputPath);
+        });
+
+      this.processRegistry.registerFfmpeg(cmd);
+      cmd.save(outputPath);
     });
   }
 }

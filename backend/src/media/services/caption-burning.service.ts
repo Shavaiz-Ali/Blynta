@@ -3,10 +3,13 @@ import * as fs from 'fs';
 import ffmpeg from 'fluent-ffmpeg';
 import { TranscriptSegmentDto } from './transcription.service';
 import { CaptionStyleConfig } from '../style-presets';
+import { ProcessRegistryService } from '../../common/services/process-registry.service';
 
 @Injectable()
 export class CaptionBurningService {
   private readonly logger = new Logger(CaptionBurningService.name);
+
+  constructor(private processRegistry: ProcessRegistryService) {}
 
   async burnCaptions(
     inputVideoPath: string,
@@ -78,7 +81,7 @@ Format: Layer, Start, End, Style, Text
       const escapedAssPath = assPath.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
       const filter = `subtitles='${escapedAssPath}'`;
 
-      ffmpeg(videoPath)
+      const cmd = ffmpeg(videoPath)
         .outputOptions([`-vf ${filter}`])
         .outputOptions(['-c:a copy'])
         .outputOptions(['-y'])
@@ -86,8 +89,10 @@ Format: Layer, Start, End, Style, Text
         .on('error', (err: Error, stdout: string, stderr: string) => {
           this.logger.error(`ffmpeg caption burn failed: ${err.message}\n${stderr}`);
           reject(new Error(`ffmpeg caption burn failed: ${err.message}`));
-        })
-        .save(outputPath);
+        });
+
+      this.processRegistry.registerFfmpeg(cmd);
+      cmd.save(outputPath);
     });
   }
 }

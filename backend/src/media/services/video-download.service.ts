@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
+import { ProcessRegistryService } from '../../common/services/process-registry.service';
 
 /**
  * YOUTUBE_COOKIES_PATH (optional):
@@ -27,7 +28,10 @@ import { runCommandWithProgress } from '../utils/run-command-with-progress';
 @Injectable()
 export class VideoDownloadService {
   private readonly logger = new Logger(VideoDownloadService.name);
-  constructor(private configService: ConfigService) { }
+  constructor(
+    private configService: ConfigService,
+    private processRegistry: ProcessRegistryService,
+  ) { }
 
   async downloadVideo(
     sourceUrl: string,
@@ -63,10 +67,15 @@ export class VideoDownloadService {
     this.logger.log(`Downloading video (${resolution}) from ${sourceUrl} to ${videoPath}`);
 
     try {
-      await runCommandWithProgress('yt-dlp', ytDlpArgs, (line: string) => {
-        const match = line.match(/PROGRESS\s+([\d.]+)%/);
-        if (match && onProgress) onProgress(parseFloat(match[1]));
-      });
+      await runCommandWithProgress(
+        'yt-dlp',
+        ytDlpArgs,
+        (line: string) => {
+          const match = line.match(/PROGRESS\s+([\d.]+)%/);
+          if (match && onProgress) onProgress(parseFloat(match[1]));
+        },
+        this.processRegistry,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (/sign in to confirm|not a bot/i.test(message)) {
@@ -84,6 +93,7 @@ export class VideoDownloadService {
       'ffmpeg',
       ['-i', videoPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', '-y', audioPath],
       () => { },
+      this.processRegistry,
     );
 
     const metadata = await this.fetchVideoMetadata(sourceUrl);
@@ -106,11 +116,13 @@ export class VideoDownloadService {
 
       ytDlpArgs.push(sourceUrl);
 
-      const proc = spawn('yt-dlp', ytDlpArgs);
+      const proc = spawn('yt-dlp', ytDlpArgs, { detached: true });
+      this.processRegistry.register(proc);
+
       let output = '';
       let stderr = '';
-      proc.stdout.on('data', (d) => (output += d.toString()));
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
+      proc.stdout?.on('data', (d) => (output += d.toString()));
+      proc.stderr?.on('data', (d) => (stderr += d.toString()));
       proc.on('close', (code) => {
         if (code !== 0) {
           this.logger.warn(`Failed to fetch video metadata: ${stderr.slice(-300)}`);

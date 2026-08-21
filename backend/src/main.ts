@@ -1,13 +1,17 @@
 import { NestFactory } from '@nestjs/core';
+import { Logger } from '@nestjs/common';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { ProcessRegistryService } from './common/services/process-registry.service';
 import * as dns from 'dns';
 import * as express from 'express';
 dns.setDefaultResultOrder('ipv4first');
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
+
   // We disable Nest's automatic body parser globally because we need the
   // Stripe webhook endpoint to receive the ORIGINAL raw request body for
   // signature verification (Stripe's HMAC check fails if JSON parser has
@@ -17,6 +21,18 @@ async function bootstrap() {
     bodyParser: false,
     rawBody: true,
   });
+  app.enableShutdownHooks();
+
+  const processRegistry = app.get(ProcessRegistryService);
+
+  const shutdown = async (signal: string) => {
+    logger.log(`Received ${signal}, shutting down gracefully...`);
+    await processRegistry.killAll();
+    await app.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
   const adapter = app.getHttpAdapter();
   const instance = adapter.getInstance();

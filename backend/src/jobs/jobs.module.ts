@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 import { JobsProcessor } from './jobs.processor';
+import { JobsReconciliationService } from './jobs-reconciliation.service';
 import { Job, JobSchema } from './schemas/job.schema';
 import { JOBS_QUEUE } from './jobs.constants';
 import { UsersModule } from '../users/users.module';
@@ -19,6 +20,6 @@ import { StorageModule } from '../storage/storage.module';
     StorageModule,
   ],
   controllers: [JobsController],
-  providers: [JobsService, JobsProcessor],
+  providers: [JobsService, JobsProcessor, JobsReconciliationService],
 })
 export class JobsModule { }

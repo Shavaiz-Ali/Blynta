@@ -29,7 +29,12 @@ type ClipDraft = {
   errorMessage?: string;
 };
 
-@Processor(JOBS_QUEUE)
+@Processor(JOBS_QUEUE, {
+  concurrency: 2,
+  lockDuration: 60_000, // ms a job can be "locked" by a worker before considered stalled
+  stalledInterval: 30_000, // how often BullMQ checks for stalled jobs
+  maxStalledCount: 1, // after this many stall-detections, job is marked FAILED
+})
 export class JobsProcessor extends WorkerHost {
   private readonly logger = new Logger(JobsProcessor.name);
 

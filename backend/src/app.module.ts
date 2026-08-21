@@ -1,6 +1,7 @@
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ScheduleModule } from '@nestjs/schedule';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -12,12 +13,15 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { StripeModule } from './stripe/stripe.module';
 import { BillingModule } from './billing/billing.module';
+import { CommonModule } from './common/common.module';
 
 const logger = new Logger('MongooseModule');
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
+    CommonModule,
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -53,7 +57,7 @@ const logger = new Logger('MongooseModule');
     UsersModule,
     AuthModule,
     JobsModule,
-    RedisModule
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],
