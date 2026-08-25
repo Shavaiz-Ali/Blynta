@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { SourcePlatform, useCreateJob } from "@/features/jobs";
+import { SourcePlatform, useCreateJob, useStylePresets, type StylePresetInfo } from "@/features/jobs";
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
 import { AppSelect, type AppSelectOption } from "@/components/common/AppSelect";
@@ -15,6 +15,7 @@ import {
   YoutubeIcon,
   CrownIcon,
   CheckIcon,
+  PaletteIcon,
 } from "../icons";
 import { useRouter } from "next/navigation";
 
@@ -45,16 +46,46 @@ const AI_MODEL_OPTIONS: AppSelectOption[] = [
   },
 ];
 
+const PRESETS_FALLBACK: StylePresetInfo[] = [
+  { key: "default", label: "Simple", isPro: false },
+  { key: "meme", label: "Meme / Funny", isPro: true },
+  { key: "sad", label: "Emotional", isPro: true },
+  { key: "motivational", label: "Motivational", isPro: true },
+];
+
+const PRESET_META: Record<string, { icon: string; description: string }> = {
+  default: {
+    icon: "✨",
+    description: "Natural AI highlight detection with clean Montserrat subtitles",
+  },
+  meme: {
+    icon: "😂",
+    description: "Prioritizes punchlines & twists with bold animated pop captions",
+  },
+  sad: {
+    icon: "🥺",
+    description: "Prioritizes heartfelt & sincere moments with elegant serif captions",
+  },
+  motivational: {
+    icon: "⚡",
+    description: "Prioritizes inspiring advice & high energy with dynamic captions",
+  },
+};
+
 interface HeroInputProps {
   onSuccess?: () => void;
 }
 
 export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: profile } = useCurrentUser();
+  const { data: fetchedPresets } = useStylePresets();
   const router = useRouter();
   const isPaid = profile?.plan === "pro" || profile?.plan === "business";
 
+  const presets = fetchedPresets?.length ? fetchedPresets : PRESETS_FALLBACK;
+
   const [url, setUrl] = React.useState("");
+  const [stylePreset, setStylePreset] = React.useState<string>("default");
   const [fieldError, setFieldError] = React.useState<string | undefined>();
 
   /* Advanced options state (paid only) */
@@ -69,6 +100,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const { mutate, isPending, failureReason, reset } = useCreateJob({
     onSuccess: (data: any) => {
       setUrl("");
+      setStylePreset("default");
       setFieldError(undefined);
       setCustomPrompt("");
       setAiModel("default");
@@ -86,6 +118,9 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
   const selectedModel =
     AI_MODEL_OPTIONS.find((m) => m.value === aiModel) || AI_MODEL_OPTIONS[0];
+  const selectedPresetMeta =
+    PRESET_META[stylePreset] || PRESET_META.default;
+  const currentPresetInfo = presets.find((p) => p.key === stylePreset);
 
   function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -108,6 +143,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
     const body: Parameters<typeof mutate>[0] = {
       sourceUrl,
       sourcePlatform: SourcePlatform.YOUTUBE,
+      stylePreset,
     };
 
     if (isPaid) {
@@ -130,17 +166,84 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const submitDisabled = !url.trim() || isPending;
 
   return (
-    <div className="w-full rounded-2xl border border-border bg-card shadow-sm p-4 sm:p-6">
-      {/* YouTube platform static badge */}
-      <div className="flex items-center gap-2 mb-3">
-        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/60 text-xs font-medium text-foreground">
-          <YoutubeIcon className="h-4 w-4 text-[#FF0000]" />
-          <span>YouTube</span>
+    <div className="w-full rounded-2xl border border-border bg-card shadow-sm p-4 sm:p-6 space-y-4">
+      {/* Top Bar: YouTube badge + Style preset header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/60 text-xs font-medium text-foreground">
+            <YoutubeIcon className="h-4 w-4 text-[#FF0000]" />
+            <span>YouTube</span>
+          </div>
+        </div>
+
+        {/* Pro status hint if active */}
+        {isPaid && (
+          <div className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CrownIcon className="h-3.5 w-3.5 text-chart-4" />
+            <span className="font-medium text-foreground">Pro features unlocked</span>
+          </div>
+        )}
+      </div>
+
+      {/* Tone & Style Preset Picker */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-semibold text-foreground/90 inline-flex items-center gap-1.5">
+            <PaletteIcon className="h-3.5 w-3.5 text-primary" />
+            <span>Highlight Tone & Style</span>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {presets.map((preset) => {
+            const isSelected = stylePreset === preset.key;
+            const meta = PRESET_META[preset.key];
+
+            return (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => setStylePreset(preset.key)}
+                className={cn(
+                  "group relative inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs sm:text-sm font-medium transition-all cursor-pointer outline-none",
+                  "focus-visible:ring-2 focus-visible:ring-primary/40",
+                  isSelected
+                    ? "border-primary bg-primary/10 text-primary shadow-xs ring-1 ring-primary/30 font-semibold"
+                    : "border-border/70 bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border"
+                )}
+              >
+                <span className="text-sm leading-none">{meta?.icon || "✨"}</span>
+                <span>{preset.label}</span>
+                {preset.isPro && (
+                  <span
+                    className={cn(
+                      "text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded ml-0.5 transition-colors",
+                      isSelected
+                        ? "text-chart-4 bg-chart-4/20"
+                        : "text-chart-4/80 bg-chart-4/10 group-hover:text-chart-4 group-hover:bg-chart-4/15"
+                    )}
+                  >
+                    PRO
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Selected Preset Description Subtext */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground/90 pl-0.5">
+          <span>{selectedPresetMeta.description}</span>
+          {currentPresetInfo?.isPro && !isPaid && (
+            <span className="text-[11px] text-chart-4 font-medium">
+              (styled captions included; AI moment bias requires Pro)
+            </span>
+          )}
         </div>
       </div>
 
       {/* Main input + CTA */}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3 pt-1">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1 flex items-center">
             <input

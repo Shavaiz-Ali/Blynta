@@ -326,16 +326,30 @@ export function useDeleteClip(): UseMutationResult<
 /*              useRetryJob — POST /jobs/:id/retry                            */
 /* -------------------------------------------------------------------------- */
 
-export function useRetryJob(): UseMutationResult<Job, Error, string, unknown> {
+type RetryJobResponse = { jobId: string; status: string };
+
+type RetryJobOpts = Omit<
+  UseMutationOptions<RetryJobResponse, Error, string, unknown>,
+  "mutationFn"
+>;
+
+export function useRetryJob(
+  opts: RetryJobOpts = {}
+): UseMutationResult<RetryJobResponse, Error, string, unknown> {
   const queryClient = useQueryClient();
+  const { onSuccess: userOnSuccess, ...restOpts } = opts;
   return useMutation({
     mutationFn: async (jobId: string) => {
-      const { data } = await axiosClient.post<Job>(`/jobs/${jobId}/retry`);
+      const { data } = await axiosClient.post<RetryJobResponse>(`/jobs/${jobId}/retry`);
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (...args: any[]) => {
+      const data = args[0] as RetryJobResponse;
+      // Invalidate this specific job so useJob polling picks up the new PENDING status immediately.
+      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.detail(data.jobId) });
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: ["users", "me"] });
+      if (userOnSuccess) (userOnSuccess as any)(...args);
     },
+    ...restOpts,
   });
 }

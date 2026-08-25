@@ -99,13 +99,32 @@ export class JobsProcessor extends WorkerHost {
       };
 
       // =========================================================================
-      // Stage 1: Download (or cache hit) + Stage 2: Transcribe (or cache hit)
+      // Resume-state detection — check DB fields AND verify files still exist on
+      // disk before trusting them. Trusting DB alone risks ENOENT crashes deep in
+      // a later stage if the volume was wiped between failure and retry.
+      // =========================================================================
+      const hasLocalVideo = Boolean(job.localVideoPath && fs.existsSync(job.localVideoPath));
+      const hasLocalAudio = Boolean(job.localAudioPath && fs.existsSync(job.localAudioPath));
+      const hasTranscript = Boolean(job.transcript && job.transcript.length > 0);
+      const hasHighlights = Boolean(job.highlights && job.highlights.length > 0);
+
+      this.logger.log(
+        `[${jobId}] Resume check — video:${hasLocalVideo} audio:${hasLocalAudio} transcript:${hasTranscript} highlights:${hasHighlights}`,
+      );
+
+      // =========================================================================
+      // Stage 1: Download (or resume) + Stage 2: Transcribe (or resume)
       //
-      // For YouTube jobs, check SourceVideo cache first. On a hit, pull the
-      // already-processed video and audio from R2 into the job's local temp dir
-      // and skip download + transcription entirely. On a miss (or for non-YouTube
-      // platforms where extractExternalId returns null), process fresh and then
-      // upload to R2 + create a SourceVideo entry.
+      // Retry resume takes priority: if local files + transcript are already on
+      // disk from a prior attempt, skip download and/or transcription entirely.
+      // Falls through to the SourceVideo cache-hit path, then fresh download,
+      // only when the resume check can't find valid local state.
+      //
+      // For YouTube jobs (non-resume path), check SourceVideo cache first. On a
+      // hit, pull the already-processed video and audio from R2 into the job's
+      // local temp dir and skip download + transcription entirely. On a miss (or
+      // for non-YouTube platforms where extractExternalId returns null), process
+      // fresh and then upload to R2 + create a SourceVideo entry.
       // =========================================================================
 
       const externalId = this.sourceVideoService.extractExternalId(
@@ -114,151 +133,198 @@ export class JobsProcessor extends WorkerHost {
       );
       let sourceVideo: SourceVideoDocument | null = null;
 
-      if (externalId) {
-        sourceVideo = await this.sourceVideoService.findCached(
-          job.sourcePlatform,
-          externalId,
-        );
-      }
-
       let videoPath = '';
       let audioPath = '';
       let transcript: TranscriptSegmentDto[] = [];
 
-      if (sourceVideo) {
-        try {
-          // -----------------------------------------------------------------------
-          // CACHE HIT — pull from R2 into this job's local temp dir.
-          // Stages 1 + 2 are skipped; progress jumps straight to 100 for both.
-          // -----------------------------------------------------------------------
-          this.logger.log(
-            `[${jobId}] Cache hit for ${job.sourcePlatform}:${externalId} — reusing video, audio, transcript from SourceVideo ${sourceVideo._id}`,
-          );
-          await this.sourceVideoService.recordReuse(sourceVideo._id.toString());
-
-          videoPath = path.join(jobDir, 'source.mp4');
-          audioPath = path.join(jobDir, 'audio.wav');
-
-          this.logger.log(`[${jobId}] Downloading cached files from R2...`);
-          await this.r2Service.downloadToLocal(sourceVideo.videoObjectKey, videoPath);
-          await this.r2Service.downloadToLocal(sourceVideo.audioObjectKey, audioPath);
-
-          transcript = sourceVideo.transcript as TranscriptSegmentDto[];
-
-          await this.jobsService.updateJob(jobId, {
-            sourceVideoId: sourceVideo._id,
-            localVideoPath: videoPath,
-            localAudioPath: audioPath,
-            videoTitle: sourceVideo.videoTitle,
-            videoUploader: sourceVideo.videoUploader,
-            transcript: transcript as any,
-            resolutionUsed: resolution,
-            progressPercent: 100,
-          });
-        } catch (cacheErr) {
-          this.logger.warn(
-            `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
-          );
-          sourceVideo = null;
-        }
-      }
-
-      if (!sourceVideo) {
+      if (hasLocalVideo && hasLocalAudio && hasTranscript) {
         // -----------------------------------------------------------------------
-        // CACHE MISS — process fresh, then upload to R2.
-        // Non-YouTube platforms (externalId === null) always land here.
+        // RESUME (full) — both download AND transcription already completed on
+        // a prior attempt and local files are still on disk. Most valuable skip:
+        // transcription is the slowest/most resource-heavy local stage.
         // -----------------------------------------------------------------------
-        this.logger.log(
-          `[${jobId}] No cache for ${job.sourcePlatform}:${externalId ?? 'n/a'} — downloading fresh`,
-        );
+        this.logger.log(`[${jobId}] Resuming: skipping download + transcription (already complete on disk)`);
+        videoPath = job.localVideoPath!;
+        audioPath = job.localAudioPath!;
+        transcript = job.transcript as TranscriptSegmentDto[];
+        await this.jobsService.updateJob(jobId, { progressPercent: 100 });
+      } else if (hasLocalVideo && hasLocalAudio) {
+        // -----------------------------------------------------------------------
+        // RESUME (partial) — download succeeded, transcription didn't (or its DB
+        // output is missing). Skip download only; re-run transcription.
+        // -----------------------------------------------------------------------
+        this.logger.log(`[${jobId}] Resuming: skipping download, re-running transcription`);
+        videoPath = job.localVideoPath!;
+        audioPath = job.localAudioPath!;
 
-        // --- Stage 1: Download ---
-        this.logger.log(`[${jobId}] Stage 1/5: Downloading video (${resolution})`);
-        await this.jobsService.updateJob(jobId, {
-          status: JobStatus.PENDING,
-          progressPercent: 0,
-          resolutionUsed: resolution,
-        });
-
-        const { videoPath: dlVideoPath, audioPath: dlAudioPath, title, uploader } =
-          await this.videoDownloadService.downloadVideo(
-            job.sourceUrl,
-            jobDir,
-            resolution,
-            makeThrottledProgressUpdate(),
-          );
-        videoPath = dlVideoPath;
-        audioPath = dlAudioPath;
-
-        await this.jobsService.updateJob(jobId, {
-          localVideoPath: videoPath,
-          localAudioPath: audioPath,
-          videoTitle: title,
-          videoUploader: uploader,
-          progressPercent: 100,
-        });
-
-        // --- Stage 2: Transcribe ---
-        this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio`);
+        this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio (resumed)`);
         lastProgressUpdate = 0;
-        await this.jobsService.updateJob(jobId, {
-          status: JobStatus.TRANSCRIBING,
-          progressPercent: 0,
-        });
+        await this.jobsService.updateJob(jobId, { status: JobStatus.TRANSCRIBING, progressPercent: 0 });
 
         transcript = await this.transcriptionService.transcribe(
           audioPath,
           makeThrottledProgressUpdate(),
         );
-        const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
+        const transcriptDocsResumed: TranscriptSegment[] = transcript.map((t) => ({
           startTime: t.startTime,
           endTime: t.endTime,
           text: t.text,
         }));
         await this.jobsService.updateJob(jobId, {
-          transcript: transcriptDocs,
+          transcript: transcriptDocsResumed,
           progressPercent: 100,
         });
-
-        // ONLY cache if this platform actually supports it (YouTube — externalId is non-null)
+      } else {
+        // -----------------------------------------------------------------------
+        // NO LOCAL RESUME STATE — fall through to the SourceVideo cache-hit path
+        // (for YouTube) or a fresh download. This is the existing logic, fully
+        // unchanged. Genuinely new jobs and retries where the disk was wiped both
+        // land here.
+        // -----------------------------------------------------------------------
         if (externalId) {
-          this.logger.log(`[${jobId}] Uploading source video + audio to R2 for caching`);
-          const videoObjectKey = `source-videos/${externalId}/video.mp4`;
-          const audioObjectKey = `source-videos/${externalId}/audio.wav`;
-
-          await this.r2Service.uploadFile(videoPath, videoObjectKey);
-          await this.r2Service.uploadFile(audioPath, audioObjectKey);
-
-          const newSourceVideo = await this.sourceVideoService.createFromProcessing({
-            platform: job.sourcePlatform,
+          sourceVideo = await this.sourceVideoService.findCached(
+            job.sourcePlatform,
             externalId,
-            sourceUrl: job.sourceUrl,
-            videoObjectKey,
-            audioObjectKey,
-            transcript,
+          );
+        }
+
+        if (sourceVideo) {
+          try {
+            // -------------------------------------------------------------------
+            // CACHE HIT — pull from R2 into this job's local temp dir.
+            // Stages 1 + 2 are skipped; progress jumps straight to 100 for both.
+            // -------------------------------------------------------------------
+            this.logger.log(
+              `[${jobId}] Cache hit for ${job.sourcePlatform}:${externalId} — reusing video, audio, transcript from SourceVideo ${sourceVideo._id}`,
+            );
+            await this.sourceVideoService.recordReuse(sourceVideo._id.toString());
+
+            videoPath = path.join(jobDir, 'source.mp4');
+            audioPath = path.join(jobDir, 'audio.wav');
+
+            this.logger.log(`[${jobId}] Downloading cached files from R2...`);
+            await this.r2Service.downloadToLocal(sourceVideo.videoObjectKey, videoPath);
+            await this.r2Service.downloadToLocal(sourceVideo.audioObjectKey, audioPath);
+
+            transcript = sourceVideo.transcript as TranscriptSegmentDto[];
+
+            await this.jobsService.updateJob(jobId, {
+              sourceVideoId: sourceVideo._id,
+              localVideoPath: videoPath,
+              localAudioPath: audioPath,
+              videoTitle: sourceVideo.videoTitle,
+              videoUploader: sourceVideo.videoUploader,
+              transcript: transcript as any,
+              resolutionUsed: resolution,
+              progressPercent: 100,
+            });
+          } catch (cacheErr) {
+            this.logger.warn(
+              `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
+            );
+            sourceVideo = null;
+          }
+        }
+
+        if (!sourceVideo) {
+          // -------------------------------------------------------------------
+          // CACHE MISS — process fresh, then upload to R2.
+          // Non-YouTube platforms (externalId === null) always land here.
+          // -------------------------------------------------------------------
+          this.logger.log(
+            `[${jobId}] No cache for ${job.sourcePlatform}:${externalId ?? 'n/a'} — downloading fresh`,
+          );
+
+          // --- Stage 1: Download ---
+          this.logger.log(`[${jobId}] Stage 1/5: Downloading video (${resolution})`);
+          await this.jobsService.updateJob(jobId, {
+            status: JobStatus.PENDING,
+            progressPercent: 0,
+            resolutionUsed: resolution,
+          });
+
+          const { videoPath: dlVideoPath, audioPath: dlAudioPath, title, uploader } =
+            await this.videoDownloadService.downloadVideo(
+              job.sourceUrl,
+              jobDir,
+              resolution,
+              makeThrottledProgressUpdate(),
+            );
+          videoPath = dlVideoPath;
+          audioPath = dlAudioPath;
+
+          await this.jobsService.updateJob(jobId, {
+            localVideoPath: videoPath,
+            localAudioPath: audioPath,
             videoTitle: title,
             videoUploader: uploader,
+            progressPercent: 100,
           });
+
+          // --- Stage 2: Transcribe ---
+          this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio`);
+          lastProgressUpdate = 0;
           await this.jobsService.updateJob(jobId, {
-            sourceVideoId: newSourceVideo._id,
+            status: JobStatus.TRANSCRIBING,
+            progressPercent: 0,
           });
-          sourceVideo = newSourceVideo;
-          this.logger.log(
-            `[${jobId}] SourceVideo created: ${newSourceVideo._id} (key: ${videoObjectKey})`,
+
+          transcript = await this.transcriptionService.transcribe(
+            audioPath,
+            makeThrottledProgressUpdate(),
           );
+          const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
+            startTime: t.startTime,
+            endTime: t.endTime,
+            text: t.text,
+          }));
+          await this.jobsService.updateJob(jobId, {
+            transcript: transcriptDocs,
+            progressPercent: 100,
+          });
+
+          // ONLY cache if this platform actually supports it (YouTube — externalId is non-null)
+          if (externalId) {
+            this.logger.log(`[${jobId}] Uploading source video + audio to R2 for caching`);
+            const videoObjectKey = `source-videos/${externalId}/video.mp4`;
+            const audioObjectKey = `source-videos/${externalId}/audio.wav`;
+
+            await this.r2Service.uploadFile(videoPath, videoObjectKey);
+            await this.r2Service.uploadFile(audioPath, audioObjectKey);
+
+            const newSourceVideo = await this.sourceVideoService.createFromProcessing({
+              platform: job.sourcePlatform,
+              externalId,
+              sourceUrl: job.sourceUrl,
+              videoObjectKey,
+              audioObjectKey,
+              transcript,
+              videoTitle: title,
+              videoUploader: uploader,
+            });
+            await this.jobsService.updateJob(jobId, {
+              sourceVideoId: newSourceVideo._id,
+            });
+            sourceVideo = newSourceVideo;
+            this.logger.log(
+              `[${jobId}] SourceVideo created: ${newSourceVideo._id} (key: ${videoObjectKey})`,
+            );
+          }
         }
       }
 
       // =========================================================================
       // Stage 3: Highlight detection
       //
-      // If there's no custom prompt/model AND we have a cached SourceVideo with
-      // defaultHighlights already saved for this preset, skip the LLM call and reuse them.
-      // After a fresh LLM call on a default/preset request, save the result back to
-      // SourceVideo so the next job with this video skips the call too.
+      // Resume check: if the job already has highlights persisted from a prior
+      // attempt, skip the LLM call entirely — this is the most expensive stage
+      // to repeat (costs an API call every time). Mirrors the SourceVideo
+      // defaultHighlights cache-hit pattern for consistency.
+      //
+      // If highlights are missing (fresh job or failed before this stage),
+      // fall through to the normal detection + SourceVideo caching logic.
       // =========================================================================
       this.logger.log(`[${jobId}] Stage 3/5: Detecting highlights`);
-      await this.jobsService.updateJob(jobId, { status: JobStatus.DETECTING_HIGHLIGHTS });
 
       const isPaidPlan = user.plan === UserPlan.PRO || user.plan === UserPlan.BUSINESS;
       const requestedPreset = resolveStylePreset(job.stylePreset);
@@ -297,41 +363,55 @@ export class JobsProcessor extends WorkerHost {
 
       let highlights: HighlightDto[] = [];
 
-      const cachedHighlights = sourceVideo?.defaultHighlightsByPreset instanceof Map
-        ? sourceVideo.defaultHighlightsByPreset.get(effectivePresetKey)
-        : (sourceVideo?.defaultHighlightsByPreset as any)?.[effectivePresetKey];
-
-      if (sourceVideo && !usingCustomOptions && cachedHighlights && cachedHighlights.length > 0) {
+      if (hasHighlights) {
+        // -----------------------------------------------------------------------
+        // RESUME — highlights already detected and persisted on a prior attempt.
+        // Skip the LLM call; re-use what's already in the DB.
+        // -----------------------------------------------------------------------
         this.logger.log(
-          `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id}`,
+          `[${jobId}] Resuming: skipping highlight detection (already have ${job.highlights.length} highlight(s))`,
         );
-        highlights = cachedHighlights as HighlightDto[];
+        highlights = job.highlights as HighlightDto[];
+        await this.jobsService.updateJob(jobId, { status: JobStatus.DETECTING_HIGHLIGHTS });
       } else {
-        highlights = await this.highlightDetectionService.detectHighlights(transcript, options);
+        await this.jobsService.updateJob(jobId, { status: JobStatus.DETECTING_HIGHLIGHTS });
 
-        // Save default highlights on the SourceVideo so future jobs with this video skip the LLM call
-        if (!usingCustomOptions && sourceVideo) {
-          await this.sourceVideoService.saveDefaultHighlights(
-            sourceVideo._id.toString(),
-            effectivePresetKey,
-            highlights,
-          );
+        const cachedHighlights = sourceVideo?.defaultHighlightsByPreset instanceof Map
+          ? sourceVideo.defaultHighlightsByPreset.get(effectivePresetKey)
+          : (sourceVideo?.defaultHighlightsByPreset as any)?.[effectivePresetKey];
+
+        if (sourceVideo && !usingCustomOptions && cachedHighlights && cachedHighlights.length > 0) {
           this.logger.log(
-            `[${jobId}] Saved highlights for preset "${effectivePresetKey}" to SourceVideo ${sourceVideo._id}`,
+            `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id}`,
           );
-        }
-      }
+          highlights = cachedHighlights as HighlightDto[];
+        } else {
+          highlights = await this.highlightDetectionService.detectHighlights(transcript, options);
 
-      await this.jobsService.updateJob(jobId, {
-        highlights: highlights.map((h) => ({
-          startTime: h.startTime,
-          endTime: h.endTime,
-          reason: h.reason,
-          score: h.score,
-          clipTitle: h.clipTitle,
-          clipDescription: h.clipDescription,
-        })),
-      });
+          // Save default highlights on the SourceVideo so future jobs with this video skip the LLM call
+          if (!usingCustomOptions && sourceVideo) {
+            await this.sourceVideoService.saveDefaultHighlights(
+              sourceVideo._id.toString(),
+              effectivePresetKey,
+              highlights,
+            );
+            this.logger.log(
+              `[${jobId}] Saved highlights for preset "${effectivePresetKey}" to SourceVideo ${sourceVideo._id}`,
+            );
+          }
+        }
+
+        await this.jobsService.updateJob(jobId, {
+          highlights: highlights.map((h) => ({
+            startTime: h.startTime,
+            endTime: h.endTime,
+            reason: h.reason,
+            score: h.score,
+            clipTitle: h.clipTitle,
+            clipDescription: h.clipDescription,
+          })),
+        });
+      }
 
       // =========================================================================
       // Stage 4: Cut + caption clips
@@ -343,10 +423,30 @@ export class JobsProcessor extends WorkerHost {
       this.logger.log(`[${jobId}] Stage 4/5: Cutting ${highlights.length} clip(s)`);
       await this.jobsService.updateJob(jobId, { status: JobStatus.CUTTING_CLIPS });
 
-      const clipDrafts: ClipDraft[] = highlights.map((h) => ({
-        highlight: h,
-        status: JobStatus.PENDING,
-      }));
+      // -----------------------------------------------------------------------
+      // Build clipDrafts from existing job.clips where possible (resume path).
+      // A clip that was already COMPLETED with a valid R2 upload is marked as
+      // done up-front; the cutting loop will persist its doc and continue
+      // without re-running cutClip/burnCaptions/uploadFile.
+      // Fresh jobs (no prior clips) fall through to the identical PENDING draft.
+      // -----------------------------------------------------------------------
+      const existingClips = job.clips ?? [];
+      const clipDrafts: ClipDraft[] = highlights.map((h, i) => {
+        const existing = existingClips[i];
+        if (existing && existing.status === JobStatus.COMPLETED && existing.r2ObjectKey) {
+          this.logger.log(
+            `[${jobId}]   Clip ${i + 1} already completed (${existing.r2ObjectKey}) — skipping cut/caption/upload`,
+          );
+          return {
+            highlight: h,
+            status: JobStatus.COMPLETED,
+            localFilePath: existing.localFilePath,
+            captionedFilePath: existing.captionedFilePath,
+            r2ObjectKey: existing.r2ObjectKey,
+          };
+        }
+        return { highlight: h, status: JobStatus.PENDING };
+      });
 
       const apiBaseUrl = this.configService.get<string>('API_BASE_URL', 'http://localhost:5001');
       const clipDocs: Clip[] = []; // now built incrementally, not after the loop
@@ -358,56 +458,62 @@ export class JobsProcessor extends WorkerHost {
         const captionedClipPath = path.join(clipsDir, `clip-${i + 1}-captioned.mp4`);
         const clipId = new Types.ObjectId();
 
-        try {
-          this.logger.log(
-            `[${jobId}]   Cutting clip ${i + 1}/${clipDrafts.length}: ${h.startTime.toFixed(1)}s - ${h.endTime.toFixed(1)}s`,
-          );
-          await this.clipCuttingService.cutClip(
-            videoPath,
-            h.startTime,
-            h.endTime,
-            rawClipPath,
-          );
-          draft.localFilePath = rawClipPath;
-
-          const relevantSegments = this.extractSegmentsForHighlight(
-            transcript,
-            h.startTime,
-            h.endTime,
-          );
-
-          let finalLocalPath: string;
-          if (relevantSegments.length > 0) {
-            this.logger.log(`[${jobId}]   Burning captions for clip ${i + 1}`);
-            await this.captionBurningService.burnCaptions(
+        if (draft.status !== JobStatus.COMPLETED) {
+          // Not yet completed — run the full cut/caption/upload pipeline.
+          try {
+            this.logger.log(
+              `[${jobId}]   Cutting clip ${i + 1}/${clipDrafts.length}: ${h.startTime.toFixed(1)}s - ${h.endTime.toFixed(1)}s`,
+            );
+            await this.clipCuttingService.cutClip(
+              videoPath,
+              h.startTime,
+              h.endTime,
               rawClipPath,
-              relevantSegments,
-              captionedClipPath,
-              requestedPreset.captionStyle,
             );
-            draft.captionedFilePath = captionedClipPath;
-            finalLocalPath = captionedClipPath;
-          } else {
-            this.logger.warn(
-              `[${jobId}]   Clip ${i + 1} has no transcript segments; skipping caption burn.`,
+            draft.localFilePath = rawClipPath;
+
+            const relevantSegments = this.extractSegmentsForHighlight(
+              transcript,
+              h.startTime,
+              h.endTime,
             );
-            finalLocalPath = rawClipPath;
+
+            let finalLocalPath: string;
+            if (relevantSegments.length > 0) {
+              this.logger.log(`[${jobId}]   Burning captions for clip ${i + 1}`);
+              await this.captionBurningService.burnCaptions(
+                rawClipPath,
+                relevantSegments,
+                captionedClipPath,
+                requestedPreset.captionStyle,
+              );
+              draft.captionedFilePath = captionedClipPath;
+              finalLocalPath = captionedClipPath;
+            } else {
+              this.logger.warn(
+                `[${jobId}]   Clip ${i + 1} has no transcript segments; skipping caption burn.`,
+              );
+              finalLocalPath = rawClipPath;
+            }
+
+            // Upload finished clip to R2. Key is deterministic and collision-safe:
+            // jobId is a unique MongoDB ObjectId, so clips/<jobId>/... never collides.
+            const clipObjectKey = `clips/${jobId}/clip-${i + 1}-captioned.mp4`;
+            await this.r2Service.uploadFile(finalLocalPath, clipObjectKey);
+            draft.r2ObjectKey = clipObjectKey;
+            this.logger.log(`[${jobId}]   Clip ${i + 1} uploaded to R2: ${clipObjectKey}`);
+
+            draft.status = JobStatus.COMPLETED;
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            this.logger.error(`[${jobId}]   Clip ${i + 1} failed: ${msg}`);
+            draft.status = JobStatus.FAILED;
+            draft.errorMessage = msg;
           }
-
-          // Upload finished clip to R2. Key is deterministic and collision-safe:
-          // jobId is a unique MongoDB ObjectId, so clips/<jobId>/... never collides.
-          const clipObjectKey = `clips/${jobId}/clip-${i + 1}-captioned.mp4`;
-          await this.r2Service.uploadFile(finalLocalPath, clipObjectKey);
-          draft.r2ObjectKey = clipObjectKey;
-          this.logger.log(`[${jobId}]   Clip ${i + 1} uploaded to R2: ${clipObjectKey}`);
-
-          draft.status = JobStatus.COMPLETED;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.logger.error(`[${jobId}]   Clip ${i + 1} failed: ${msg}`);
-          draft.status = JobStatus.FAILED;
-          draft.errorMessage = msg;
         }
+        // else: clip was already COMPLETED from a prior attempt — skip cut/caption/upload
+        // but still fall through to build + persist the clipDoc below so the full
+        // clips array is always written back on every loop iteration.
 
         // Build and persist THIS clip's doc immediately — do not wait for remaining clips.
         const downloadUrl = `${apiBaseUrl}/jobs/${jobId}/clips/${clipId}/download`;
@@ -471,22 +577,37 @@ export class JobsProcessor extends WorkerHost {
       });
     } finally {
       // -------------------------------------------------------------------------
-      // Local temp cleanup — always runs, whether the job succeeded or failed.
+      // Local temp cleanup — only runs on COMPLETED jobs.
+      //
+      // On failure, the jobDir is left in place so that a subsequent retry can
+      // resume from existing local files (video, audio, clips) rather than
+      // re-downloading and re-transcribing from scratch.
+      //
+      // Abandoned FAILED dirs that are never retried are swept by the nightly
+      // TTL cron in JobsReconciliationService.sweepAbandonedFailedJobDirs().
       //
       // Local disk is purely a transient working area for ffmpeg/whisper.cpp.
       // Durable copies of source videos live in R2 (under source-videos/<externalId>/)
-      // and clips live in R2 (under clips/<jobId>/). Cleaning up here replaces the
-      // old TODO(disk-cleanup) concern for job-level files entirely.
+      // and clips live in R2 (under clips/<jobId>/).
       //
       // SourceVideo-level R2 cleanup (evicting stale source-videos/... objects)
       // is a SEPARATE future concern that requires a background cron — NOT done here.
       // -------------------------------------------------------------------------
-      try {
-        await fs.promises.rm(jobDir, { recursive: true, force: true });
-        this.logger.log(`[${jobId}] Cleaned up local temp directory: ${jobDir}`);
-      } catch (err) {
-        this.logger.warn(
-          `[${jobId}] Failed to clean up local temp directory: ${err instanceof Error ? err.message : err}`,
+      const finalJobState = await this.jobsService.updateJob(jobId, {});
+      const succeeded = finalJobState?.status === JobStatus.COMPLETED;
+
+      if (succeeded) {
+        try {
+          await fs.promises.rm(jobDir, { recursive: true, force: true });
+          this.logger.log(`[${jobId}] Cleaned up local temp directory: ${jobDir}`);
+        } catch (err) {
+          this.logger.warn(
+            `[${jobId}] Failed to clean up local temp directory: ${err instanceof Error ? err.message : err}`,
+          );
+        }
+      } else {
+        this.logger.log(
+          `[${jobId}] Job did not complete — leaving ${jobDir} in place for possible retry/resume.`,
         );
       }
     }

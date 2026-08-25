@@ -89,13 +89,11 @@ export class JobsController {
     return this.jobsService.deleteJob(req.user.userId, id);
   }
 
-  // POST /jobs/:id/retry — recreate a failed job as a new job (Task 4)
+  // POST /jobs/:id/retry — resume the same failed job in-place (Step 2)
+  // Returns { jobId, status: 'queued_for_retry' } — no new job doc, same page.
   @Post(':id/retry')
-  async retryJob(@Request() req, @Param('id') id: string) {
-    const user = await this.usersService.findById(req.user.userId);
-    const plan = user?.plan || UserPlan.FREE;
-    const job = await this.jobsService.retryJob(req.user.userId, id);
-    return this.shapeJobResponse(job, plan);
+  retryJob(@Request() req, @Param('id') id: string) {
+    return this.jobsService.retryJob(req.user.userId, id);
   }
 
   // GET /jobs/:jobId/clips/:clipId/download — returns a time-limited presigned R2 download URL

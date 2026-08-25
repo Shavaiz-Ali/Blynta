@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+
+
 import { toast } from "sonner";
 import {
   Job,
   JobStatus,
   useJob,
-  useCreateJob,
+  useRetryJob,
   useDownloadClip,
   useDeleteClip,
   Highlight,
@@ -168,10 +169,15 @@ function isStepDoneAfter(stepKey: JobStatus, status: JobStatus): boolean {
 /* -------------------------------------------------------------------------- */
 
 export function FailedStateCard({ job }: { job: Job }) {
-  const router = useRouter();
-  const createJob = useCreateJob({
-    onSuccess: (data: Job) => {
-      router.push(`/jobs/${getJobId(data)}`);
+  // TODO: confirm with product — should a resumed retry consume a credit?
+  // Currently it does NOT because we re-enqueue the same job document rather
+  // than creating a new one. If credits should be charged per-attempt, this
+  // needs a credit deduction in JobsService.retryJob().
+  const retryJob = useRetryJob({
+    onSuccess: () => {
+      toast.success("Retrying job… resuming from where it stopped");
+      // No router.push — same jobId, same page. useJob's polling will pick up the
+      // new PENDING status automatically via the invalidated query cache.
     },
   });
 
@@ -183,12 +189,10 @@ export function FailedStateCard({ job }: { job: Job }) {
     unknown: "Processing",
   };
   const stage = job.errorStage ?? "unknown";
+  const jobId = job.id ?? job._id;
 
   function handleRetry() {
-    createJob.mutate({
-      sourceUrl: job.sourceUrl,
-      sourcePlatform: job.sourcePlatform,
-    });
+    retryJob.mutate(jobId);
   }
 
   return (
@@ -227,14 +231,14 @@ export function FailedStateCard({ job }: { job: Job }) {
           <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
             <AppButton
               onClick={handleRetry}
-              isLoading={createJob.isPending}
+              isLoading={retryJob.isPending}
               icon={<RefreshCwIcon className="h-4 w-4" />}
               size="sm"
             >
-              Try again (new job)
+              Resume from where it stopped
             </AppButton>
             <p className="text-[11px] text-muted-foreground sm:ml-1">
-              Creates a fresh job with the same URL · uses 1 credit
+              Skips already-completed stages · same job, same page
             </p>
           </div>
         </div>

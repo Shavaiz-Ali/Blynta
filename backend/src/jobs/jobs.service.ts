@@ -150,11 +150,13 @@ export class JobsService {
     }
 
     // Local disk cleanup:
-    // For jobs in a terminal state (COMPLETED or FAILED), the local temp directory
-    // was already cleaned up at the end of JobsProcessor.processClipVideoJob() via
-    // the finally block. Attempting fs.rm here would find nothing and succeed silently
-    // (force: true suppresses ENOENT). We still attempt it for the rare edge case where
-    // a job reached a terminal state without the finally block running (e.g. process crash).
+    // For COMPLETED jobs the local temp directory was already cleaned up at the
+    // end of JobsProcessor.processClipVideoJob() (finally block, success path).
+    // For FAILED jobs the dir is intentionally kept so that a retry can resume
+    // from existing local files. Attempting fs.rm here with force:true is still
+    // correct for both cases: it's a no-op for completed jobs (dir already gone)
+    // and it ensures the dir is cleaned for FAILED jobs that are being deleted
+    // without ever being retried — avoiding a permanent disk leak.
     // For active jobs we already throw ConflictException above, so we won't reach here.
     if (!activeStatuses.includes(job.status)) {
       const storageRoot = this.configService.get<string>(
@@ -229,20 +231,44 @@ export class JobsService {
     return { message: 'Clip deleted successfully' };
   }
 
-  // Task 4 — recreate a failed job as a new job (costs a credit — see summary)
-  async retryJob(userId: string, jobId: string): Promise<JobDocument> {
-    const original = await this.getJobById(userId, jobId);
-    if (original.status !== JobStatus.FAILED) {
+  // Resume-in-place retry — re-enqueues the SAME job instead of creating a new one.
+  // Does NOT deduct a credit (same job, continuing from where it stopped).
+  // Only resets terminal error fields; leaves localVideoPath, transcript,
+  // highlights, and clips intact so the processor can detect which stages
+  // are already complete and skip straight past them.
+  //
+  // TODO: confirm with product — should a resumed retry consume a credit?
+  // Currently it does NOT because it re-uses the same job document.
+  async retryJob(userId: string, jobId: string): Promise<{ jobId: string; status: string }> {
+    await this.getJobById(userId, jobId); // ownership check + NotFoundException
+    const job = await this.jobModel.findById(jobId).exec();
+    if (!job) throw new NotFoundException('Job not found');
+    if (job.status !== JobStatus.FAILED) {
       throw new ConflictException('Only failed jobs can be retried');
     }
 
-    return this.createJob(userId, {
-      sourceUrl: original.sourceUrl,
-      sourcePlatform: original.sourcePlatform,
-      customPrompt: original.customPrompt,
-      aiModel: original.aiModel,
-      stylePreset: original.stylePreset,
-      resolution: original.resolutionUsed as '720p' | '1080p',
-    });
+    // Reset only the terminal error fields — DO NOT touch localVideoPath,
+    // transcript, highlights, or clips. Those are what the resume logic needs.
+    await this.jobModel
+      .findByIdAndUpdate(jobId, {
+        $set: { status: JobStatus.PENDING },
+        $unset: { errorMessage: '', errorStage: '' },
+      })
+      .exec();
+
+    await this.jobsQueue.add(JOBS_TYPES.CLIP_VIDEO, { jobId });
+
+    return { jobId, status: 'queued_for_retry' };
+  }
+
+  // Finds FAILED jobs that have not been updated (i.e. not retried) since the
+  // given cutoff date. Used by the TTL sweep cron to delete stale jobDirs.
+  async findAbandonedFailedJobs(cutoff: Date): Promise<JobDocument[]> {
+    return this.jobModel
+      .find({
+        status: JobStatus.FAILED,
+        updatedAt: { $lt: cutoff },
+      })
+      .exec();
   }
 }

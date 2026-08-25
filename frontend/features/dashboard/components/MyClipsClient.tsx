@@ -189,10 +189,12 @@ function JobRow({ job }: { job: Job }) {
 
   function handleRetry() {
     retryJob.mutate(job.id || job._id, {
-      onSuccess: (newJob) => {
-        toast.success("Retry started — 1 credit used.");
+      onSuccess: () => {
+        toast.success("Retrying job\u2026 resuming from where it stopped.");
         setRetryOpen(false);
-        router.push(`/jobs/${newJob.id || newJob._id}`);
+        // No router.push \u2014 retry resumes the SAME job in-place.
+        // Navigate to the job detail page so the user can watch progress.
+        router.push(`/jobs/${job.id || job._id}`);
       },
       onError: (err: any) => {
         toast.error(err?.message || "Failed to retry job.");
