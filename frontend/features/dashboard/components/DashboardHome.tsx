@@ -37,9 +37,9 @@ export function DashboardHome() {
 
   const creditsResetText = profile?.creditsResetAt
     ? `Resets ${new Date(profile.creditsResetAt).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      })}`
+      month: "short",
+      day: "numeric",
+    })}`
     : "Resets monthly";
 
   const totalClipsGenerated = countCompletedClips(jobs);

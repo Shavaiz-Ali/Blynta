@@ -57,9 +57,31 @@ jest.mock('@ai-sdk/google', () => ({
   createGoogleGenerativeAI: jest.fn().mockReturnValue((modelName: string) => `google-model:${modelName}`),
 }));
 
-import { HighlightDetectionService, HighlightSchema } from './highlight-detection.service';
+import {
+  HighlightDetectionService,
+  HighlightSchema,
+  HighlightsResponseSchema,
+  buildHighlightSystemPrompt,
+} from './highlight-detection.service';
 
 describe('HighlightDetectionService & Schemas', () => {
+  describe('System Prompt Generation', () => {
+    it('should generate long-form duration rule for videos >= 10 minutes (600s)', () => {
+      const prompt = buildHighlightSystemPrompt(600);
+      expect(prompt).toContain('Every clip duration (endTime − startTime) MUST be strictly between 45');
+      expect(prompt).toContain('NEVER produce a clip shorter than 45 seconds.');
+      expect(prompt).toContain('curiosity-hook');
+      expect(prompt).toContain('emotional-ken-burns');
+    });
+
+    it('should generate short-form duration rule for videos < 10 minutes (600s)', () => {
+      const prompt = buildHighlightSystemPrompt(300);
+      expect(prompt).toContain('This video is under 10 minutes long, so clips do NOT need to hit a');
+      expect(prompt).toContain('45-second minimum.');
+      expect(prompt).toContain('curiosity-hook');
+    });
+  });
+
   describe('Zod Schema Length Constraints', () => {
     it('should validate valid highlight objects', () => {
       const validHighlight = {
@@ -69,6 +91,8 @@ describe('HighlightDetectionService & Schemas', () => {
         score: 0.9,
         clipTitle: 'Key Takeaway',
         clipDescription: 'Explanation of the main insight.',
+        tags: ['strategy', 'business'],
+        style: 'curiosity-hook',
       };
       expect(() => HighlightSchema.parse(validHighlight)).not.toThrow();
     });
@@ -108,6 +132,28 @@ describe('HighlightDetectionService & Schemas', () => {
       };
       expect(() => HighlightSchema.parse(invalidHighlight)).toThrow();
     });
+
+    it('should validate full HighlightsResponseSchema with video metadata', () => {
+      const validResponse = {
+        videoTitle: 'Great Video Title',
+        videoDescription: 'A great video description here.',
+        keywords: 'growth, business, tips',
+        hashtags: ['#business', '#growth'],
+        highlights: [
+          {
+            startTime: 12,
+            endTime: 58,
+            reason: 'Compelling insight',
+            score: 0.95,
+            clipTitle: 'The Insight',
+            clipDescription: 'Describing the clip',
+            tags: ['business'],
+            style: 'motivational-zoom-in',
+          },
+        ],
+      };
+      expect(() => HighlightsResponseSchema.parse(validResponse)).not.toThrow();
+    });
   });
 
   describe('HighlightDetectionService execution and retries', () => {
@@ -139,6 +185,10 @@ describe('HighlightDetectionService & Schemas', () => {
     it('should call generateObject with schemaName and explicit system prompt', async () => {
       mockGenerateObject.mockResolvedValueOnce({
         object: {
+          videoTitle: 'Test Video',
+          videoDescription: 'Test Description',
+          keywords: 'test',
+          hashtags: ['#test'],
           highlights: [
             {
               startTime: 5,
@@ -147,6 +197,10 @@ describe('HighlightDetectionService & Schemas', () => {
               score: 0.85,
               clipTitle: 'Great Hook',
               clipDescription: 'Interesting beginning',
+              tags: ['hook'],
+              style: 'curiosity-hook',
+              hookText: 'Watch till the end 🤯',
+              emojis: ['🤯', '🔥'],
             },
           ],
         },
@@ -161,10 +215,13 @@ describe('HighlightDetectionService & Schemas', () => {
       expect(callArgs.temperature).toBe(0.3);
       expect(result).toHaveLength(1);
       expect(result[0].clipTitle).toBe('Great Hook');
+      expect(result[0].style).toBe('curiosity-hook');
+      expect(result[0].hookText).toBe('Watch till the end 🤯');
+      expect(result[0].emojis).toEqual(['🤯', '🔥']);
     });
 
     it('should retry on json_validate_failed schema mismatch with lower temperature (0.1)', async () => {
-      const schemaError = new Error("Generated JSON does not match the expected schema: json_validate_failed");
+      const schemaError = new Error('Generated JSON does not match the expected schema: json_validate_failed');
       (schemaError as any).code = 'json_validate_failed';
 
       mockGenerateObject
@@ -179,6 +236,8 @@ describe('HighlightDetectionService & Schemas', () => {
                 score: 0.9,
                 clipTitle: 'Recovered Clip',
                 clipDescription: 'Clean generation',
+                tags: ['clean'],
+                style: 'fixed-caption-clean',
               },
             ],
           },
@@ -192,6 +251,7 @@ describe('HighlightDetectionService & Schemas', () => {
       expect(mockGenerateObject.mock.calls[1][0].temperature).toBe(0.1);
       expect(result).toHaveLength(1);
       expect(result[0].clipTitle).toBe('Recovered Clip');
+      expect(result[0].style).toBe('fixed-caption-clean');
     });
 
     it('should retry on finishReason=length with temperature 0.1', async () => {
@@ -213,6 +273,8 @@ describe('HighlightDetectionService & Schemas', () => {
                 score: 0.9,
                 clipTitle: 'Recovered Clip',
                 clipDescription: 'Clean generation',
+                tags: ['recovered'],
+                style: 'meme-zoom-pop',
               },
             ],
           },
@@ -226,10 +288,10 @@ describe('HighlightDetectionService & Schemas', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('should not retry a second time if retry fails', async () => {
-      const schemaError1 = new Error("json_validate_failed 1");
+    it('should return empty list gracefully if retries fail', async () => {
+      const schemaError1 = new Error('json_validate_failed 1');
       (schemaError1 as any).code = 'json_validate_failed';
-      const schemaError2 = new Error("json_validate_failed 2");
+      const schemaError2 = new Error('json_validate_failed 2');
       (schemaError2 as any).code = 'json_validate_failed';
 
       mockGenerateObject
@@ -238,10 +300,10 @@ describe('HighlightDetectionService & Schemas', () => {
 
       const segments = [{ startTime: 0, endTime: 30, text: 'Hello world transcript' }];
 
-      await expect(service.detectHighlights(segments)).rejects.toThrow(
-        /Failed to generate highlights after retry/i,
-      );
+      const result = await service.detectHighlights(segments);
+      expect(result).toEqual([]);
       expect(mockGenerateObject).toHaveBeenCalledTimes(2);
     });
   });
 });
+

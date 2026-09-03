@@ -203,9 +203,13 @@ function JobRow({ job }: { job: Job }) {
     });
   }
 
+  const completedClips = job.clips?.filter((c) => c.status === JobStatus.COMPLETED).length ?? 0;
+  const totalHighlights = job.highlights?.length ?? 0;
+  const hasHighlights = totalHighlights > 0;
+
   return (
     <>
-      <li className="flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 sm:py-4 hover:bg-accent/30 transition-colors">
+      <li className="flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 sm:py-4 hover:bg-accent/30 transition-colors group">
         {/* Main clickable area for job info */}
         <button
           type="button"
@@ -213,27 +217,45 @@ function JobRow({ job }: { job: Job }) {
           className="flex-1 flex items-center gap-3 sm:gap-4 min-w-0 text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg p-0.5 -m-0.5"
         >
           {/* Platform icon */}
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-muted border border-border">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card border border-border group-hover:border-primary/30 transition-colors shadow-2xs">
             {platformIcon(job.sourcePlatform, "h-5 w-5")}
           </div>
 
           {/* URL + meta */}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-foreground truncate">
-              {getJobDisplayTitle(job, 60)}
-            </p>
-            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-              <span>{formatDate(job.createdAt)}</span>
-              <span>·</span>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+                {getJobDisplayTitle(job, 70)}
+              </p>
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
               <span className="capitalize">{job.sourcePlatform}</span>
-              {job.clips.length > 0 && (
+              <span>·</span>
+              <span className="font-mono text-[11px]">{formatDate(job.createdAt)}</span>
+              {job.resolutionUsed && (
                 <>
                   <span>·</span>
-                  <span>
-                    {job.clips.filter((c) => c.status === JobStatus.COMPLETED).length} clip
-                    {job.clips.filter((c) => c.status === JobStatus.COMPLETED).length !== 1 ? "s" : ""}
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-mono text-[10px] font-semibold border border-border/70">
+                    {job.resolutionUsed}
                   </span>
                 </>
+              )}
+              {hasHighlights ? (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center font-medium text-primary">
+                    {completedClips}/{totalHighlights} clips ready
+                  </span>
+                </>
+              ) : (
+                completedClips > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="inline-flex items-center font-medium text-primary">
+                      {completedClips} clip{completedClips !== 1 ? "s" : ""} ready
+                    </span>
+                  </>
+                )
               )}
             </div>
           </div>
@@ -243,7 +265,7 @@ function JobRow({ job }: { job: Job }) {
         <div className="flex items-center gap-2 shrink-0">
           {/* Error snippet */}
           {job.status === JobStatus.FAILED && job.errorMessage && (
-            <span className="hidden xl:flex items-center gap-1 text-[11px] text-destructive max-w-[160px] truncate">
+            <span className="hidden xl:flex items-center gap-1 text-[11px] text-destructive max-w-[160px] truncate" title={job.errorMessage}>
               <AlertTriangleIcon className="h-3 w-3 shrink-0" />
               <span className="truncate">{job.errorMessage}</span>
             </span>

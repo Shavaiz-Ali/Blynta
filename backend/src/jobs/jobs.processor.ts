@@ -19,6 +19,7 @@ import { ClipCuttingService } from '../media/services/clip-cutting.service';
 import { SourceVideoService } from '../media/services/source-video.service';
 import { R2Service } from '../storage/r2.service';
 import { resolveStylePreset, DEFAULT_STYLE_PRESET_KEY } from '../media/style-presets';
+import { resolveEditorStyle } from '../media/editor-styles';
 
 type ClipDraft = {
   highlight: HighlightDto;
@@ -376,17 +377,22 @@ export class JobsProcessor extends WorkerHost {
       } else {
         await this.jobsService.updateJob(jobId, { status: JobStatus.DETECTING_HIGHLIGHTS });
 
-        const cachedHighlights = sourceVideo?.defaultHighlightsByPreset instanceof Map
-          ? sourceVideo.defaultHighlightsByPreset.get(effectivePresetKey)
-          : (sourceVideo?.defaultHighlightsByPreset as any)?.[effectivePresetKey];
+        const presetMap = sourceVideo?.defaultHighlightsByPreset;
+        const cachedHighlights = (
+          presetMap instanceof Map
+            ? presetMap.get(effectivePresetKey)
+            : (presetMap as any)?.[effectivePresetKey]
+        ) as HighlightDto[] | undefined;
+        let detectionResult: { videoTitle?: string; videoDescription?: string; keywords?: string; hashtags?: string[]; highlights: HighlightDto[] } | null = null;
 
         if (sourceVideo && !usingCustomOptions && cachedHighlights && cachedHighlights.length > 0) {
           this.logger.log(
             `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id}`,
           );
-          highlights = cachedHighlights as HighlightDto[];
+          highlights = cachedHighlights;
         } else {
-          highlights = await this.highlightDetectionService.detectHighlights(transcript, options);
+          detectionResult = await this.highlightDetectionService.detectHighlightsWithMetadata(transcript, options);
+          highlights = detectionResult.highlights;
 
           // Save default highlights on the SourceVideo so future jobs with this video skip the LLM call
           if (!usingCustomOptions && sourceVideo) {
@@ -402,6 +408,9 @@ export class JobsProcessor extends WorkerHost {
         }
 
         await this.jobsService.updateJob(jobId, {
+          ...(detectionResult?.videoDescription ? { videoDescription: detectionResult.videoDescription } : {}),
+          ...(detectionResult?.keywords ? { keywords: detectionResult.keywords } : {}),
+          ...(detectionResult?.hashtags && detectionResult.hashtags.length > 0 ? { hashtags: detectionResult.hashtags } : {}),
           highlights: highlights.map((h) => ({
             startTime: h.startTime,
             endTime: h.endTime,
@@ -409,6 +418,10 @@ export class JobsProcessor extends WorkerHost {
             score: h.score,
             clipTitle: h.clipTitle,
             clipDescription: h.clipDescription,
+            tags: h.tags || [],
+            style: h.style,
+            hookText: h.hookText || '',
+            emojis: h.emojis || [],
           })),
         });
       }
@@ -480,12 +493,20 @@ export class JobsProcessor extends WorkerHost {
 
             let finalLocalPath: string;
             if (relevantSegments.length > 0) {
-              this.logger.log(`[${jobId}]   Burning captions for clip ${i + 1}`);
+              const editorStyle = resolveEditorStyle(h.style);
+              const captionStyle =
+                requestedPreset.key !== DEFAULT_STYLE_PRESET_KEY
+                  ? requestedPreset.captionStyle
+                  : editorStyle.captionStyle;
+
+              this.logger.log(
+                `[${jobId}]   Burning captions for clip ${i + 1} (preset=${requestedPreset.key}, editorStyle=${editorStyle.key})`,
+              );
               await this.captionBurningService.burnCaptions(
                 rawClipPath,
                 relevantSegments,
                 captionedClipPath,
-                requestedPreset.captionStyle,
+                captionStyle,
               );
               draft.captionedFilePath = captionedClipPath;
               finalLocalPath = captionedClipPath;

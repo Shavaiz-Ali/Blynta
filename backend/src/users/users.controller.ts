@@ -20,6 +20,7 @@ export class UsersController {
       avatarUrl: user.avatarUrl,
       plan: user.plan,
       creditsBalance: user.creditsBalance,
+      // creditsPlan: user.creditsPlan,
       creditsResetAt: user.creditsResetAt,
       role: user.role,
       isWelcomed: user.isWelcomed,

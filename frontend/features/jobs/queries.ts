@@ -10,25 +10,33 @@ import {
 } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
 
-/* -------------------------------------------------------------------------- */
-/*                              Enums (matches backend)                       */
-/* -------------------------------------------------------------------------- */
+export {
+  SourcePlatform,
+  JobStatus,
+} from "./types";
+export type {
+  TranscriptSegment,
+  Highlight,
+  Clip,
+  StylePresetInfo,
+  CreateJobInput,
+  Job,
+  JobsListParams,
+  JobsListResult,
+} from "./types";
 
-export enum SourcePlatform {
-  YOUTUBE = "youtube",
-  TIKTOK = "tiktok",
-  INSTAGRAM = "instagram",
-  UPLOAD = "upload",
-}
-
-export enum JobStatus {
-  PENDING = "pending",
-  TRANSCRIBING = "transcribing",
-  DETECTING_HIGHLIGHTS = "detecting_highlights",
-  CUTTING_CLIPS = "cutting_clips",
-  COMPLETED = "completed",
-  FAILED = "failed",
-}
+import {
+  SourcePlatform,
+  JobStatus,
+  TranscriptSegment,
+  Highlight,
+  Clip,
+  StylePresetInfo,
+  CreateJobInput,
+  Job,
+  JobsListParams,
+  JobsListResult,
+} from "./types";
 
 /* -------------------------------------------------------------------------- */
 /*                              Query keys                                    */
@@ -41,91 +49,6 @@ export const jobsQueryKeys = {
   details: () => [...jobsQueryKeys.all, "detail"] as const,
   detail: (id: string) => [...jobsQueryKeys.details(), id] as const,
 };
-
-/* -------------------------------------------------------------------------- */
-/*                                Types                                       */
-/* -------------------------------------------------------------------------- */
-
-export interface TranscriptSegment {
-  startTime: number;
-  endTime: number;
-  text: string;
-}
-
-export interface Highlight {
-  startTime: number;
-  endTime: number;
-  reason?: string;
-  score?: number;
-  clipTitle?: string;
-  clipDescription?: string;
-}
-
-export interface Clip {
-  id: string;
-  startTime: number;
-  endTime: number;
-  outputUrl?: string;
-  localFilePath?: string;
-  captionedFilePath?: string;
-  downloadUrl: string;
-  hasCaptions: boolean;
-  status: JobStatus;
-  createdAt?: string;
-  updatedAt?: string;
-  _id: string;
-}
-
-export interface StylePresetInfo {
-  key: string;
-  label: string;
-  isPro: boolean;
-}
-
-export interface CreateJobInput {
-  sourceUrl: string;
-  sourcePlatform: SourcePlatform;
-  customPrompt?: string;
-  aiModel?: string;
-  stylePreset?: string;
-}
-
-export interface Job {
-  id: string;
-  _id: string;
-  sourceUrl: string;
-  sourcePlatform: SourcePlatform;
-  videoTitle?: string;
-  videoUploader?: string;
-  status: JobStatus;
-  errorMessage?: string | null;
-  errorStage?: string | null;
-  progressPercent?: number;
-  resolutionUsed?: string;
-  localVideoPath?: string;
-  localAudioPath?: string;
-  customPrompt?: string;
-  aiModel?: string;
-  stylePreset?: string;
-  transcript: TranscriptSegment[];
-  highlights: Highlight[];
-  clips: Clip[];
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface JobsListParams {
-  status?: JobStatus;
-  page?: number;
-  limit?: number;
-}
-
-export interface JobsListResult {
-  jobs: Job[];
-  total: number;
-  page: number;
-  totalPages: number;
-}
 
 /* -------------------------------------------------------------------------- */
 /*                  useJobs — GET /jobs (paginated + filtered)                */

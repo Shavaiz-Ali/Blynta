@@ -178,24 +178,54 @@ export function JobsCard({
         <ul className="divide-y divide-border/70">
           {completedOrFailed.map((j) => {
             const meta = STATUS_META[j.status];
+            const completedClips = j.clips?.filter((c) => c.status === JobStatus.COMPLETED).length ?? 0;
+            const totalHighlights = j.highlights?.length ?? 0;
+            const hasHighlights = totalHighlights > 0;
+            const jobId = j.id || j._id;
+
             return (
-              <li key={j.id}>
+              <li key={jobId}>
                 <button
                   type="button"
-                  onClick={() => router.push(`/jobs/${j.id}`)}
-                  className="w-full flex items-center justify-between gap-4 px-6 py-4 hover:bg-accent/40 transition-colors text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  onClick={() => router.push(`/jobs/${jobId}`)}
+                  className="w-full flex items-center justify-between gap-4 px-6 py-4 hover:bg-accent/40 transition-colors text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-muted border border-border">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card border border-border group-hover:border-primary/30 transition-colors shadow-2xs">
                     {platformIcon(j.sourcePlatform, "h-5 w-5")}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground truncate">
+                    <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                       {getJobDisplayTitle(j, 60)}
                     </p>
-                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{formatDate(j.createdAt)}</span>
-                      <span>·</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
                       <span className="capitalize">{j.sourcePlatform}</span>
+                      <span>·</span>
+                      <span className="font-mono text-[11px]">{formatDate(j.createdAt)}</span>
+                      {j.resolutionUsed && (
+                        <>
+                          <span>·</span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-mono text-[10px] font-semibold border border-border/70">
+                            {j.resolutionUsed}
+                          </span>
+                        </>
+                      )}
+                      {hasHighlights ? (
+                        <>
+                          <span>·</span>
+                          <span className="inline-flex items-center font-medium text-primary">
+                            {completedClips}/{totalHighlights} clips ready
+                          </span>
+                        </>
+                      ) : (
+                        completedClips > 0 && (
+                          <>
+                            <span>·</span>
+                            <span className="inline-flex items-center font-medium text-primary">
+                              {completedClips} clip{completedClips !== 1 ? "s" : ""} ready
+                            </span>
+                          </>
+                        )
+                      )}
                     </div>
                   </div>
 

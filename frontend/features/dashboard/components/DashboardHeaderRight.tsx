@@ -1,13 +1,29 @@
 import * as React from "react";
+import Link from "next/link";
 import type { UserProfile } from "@/features/auth/types";
 import { AppButton } from "@/components/common/AppButton";
-import { BellIcon } from "../icons";
+import { BellIcon, ZapIcon } from "../icons";
 import { UserDropdown } from "./UserDropdown";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 
 export function DashboardHeaderRight({ profile }: { profile: UserProfile }) {
   return (
     <div className="ml-auto flex items-center gap-2 sm:gap-3">
+      {/* Credits Badge */}
+      <Link
+        href="/billing"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-card border border-border/80 hover:border-primary/50 text-xs font-semibold text-foreground transition-colors shadow-2xs"
+        title="Credits Balance"
+      >
+        <ZapIcon className="h-3.5 w-3.5 text-primary fill-primary" />
+        <span className="tabular-nums font-bold text-foreground">
+          {profile.creditsBalance ?? 0}
+        </span>
+        <span className="text-[11px] text-muted-foreground hidden sm:inline font-normal">
+          credits
+        </span>
+      </Link>
+
       <ThemeToggle />
 
       <AppButton
@@ -25,3 +41,4 @@ export function DashboardHeaderRight({ profile }: { profile: UserProfile }) {
     </div>
   );
 }
+

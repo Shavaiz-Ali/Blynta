@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { DashboardLayout } from "@/features/dashboard";
 import { JobDetailContent } from "@/features/jobs/components/JobDetail";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +16,6 @@ export default async function JobDetailPage({
 
   const { id } = await params;
 
-  return (
-    <DashboardLayout>
-      <JobDetailContent jobId={id} />
-    </DashboardLayout>
-  );
+  return <JobDetailContent jobId={id} />;
 }
+

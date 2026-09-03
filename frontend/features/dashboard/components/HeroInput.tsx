@@ -305,8 +305,8 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
                 {isCustomPromptSet && isCustomModelSet
                   ? "Custom prompt & model set"
                   : isCustomPromptSet
-                  ? "Custom prompt set"
-                  : `${selectedModel?.label || "Custom model"} set`}
+                    ? "Custom prompt set"
+                    : `${selectedModel?.label || "Custom model"} set`}
               </span>
             )}
           </div>

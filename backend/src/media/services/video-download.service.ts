@@ -42,8 +42,8 @@ export class VideoDownloadService {
     await fs.promises.mkdir(outputDir, { recursive: true });
     const videoPath = path.join(outputDir, 'source.mp4');
     const audioPath = path.join(outputDir, 'audio.wav');
-    // const maxHeight = resolution === '1080p' ? 1080 : 720; //TODO: UNCOMMENT LATER
-    const maxHeight = 240;
+    const maxHeight = resolution === '1080p' ? 1080 : 720; //TODO: UNCOMMENT LATER
+    // const maxHeight = 240;
 
     const ytDlpArgs = [
       '--js-runtimes', 'deno',

@@ -53,6 +53,18 @@ export class Highlight {
 
   @Prop()
   clipDescription: string; // 1-2 sentences, only populated/shown for Pro/Business — see Task 3
+
+  @Prop({ type: [String], default: [] })
+  tags: string[];
+
+  @Prop()
+  style: string;
+
+  @Prop()
+  hookText: string;
+
+  @Prop({ type: [String], default: [] })
+  emojis: string[];
 }
 export const HighlightSchema = SchemaFactory.createForClass(Highlight);
 
@@ -107,6 +119,15 @@ export class Job {
 
   @Prop()
   videoTitle: string; // from yt-dlp, e.g. "How I Built a Startup in 30 Days"
+
+  @Prop()
+  videoDescription: string;
+
+  @Prop()
+  keywords: string;
+
+  @Prop({ type: [String], default: [] })
+  hashtags: string[];
 
   @Prop()
   videoUploader: string; // channel name, from yt-dlp
