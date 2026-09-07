@@ -80,6 +80,8 @@ export interface Job {
   keywords?: string;
   hashtags?: string[];
   videoUploader?: string;
+  thumbnailUrl?: string;
+  videoDuration?: number;
   status: JobStatus;
   errorMessage?: string | null;
   errorStage?: string | null;

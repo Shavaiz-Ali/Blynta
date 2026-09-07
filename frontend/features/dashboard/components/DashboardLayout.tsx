@@ -6,6 +6,10 @@ import { usePathname } from "next/navigation";
 import { BlyntaLogo } from "@/components/logo";
 import { AppButton } from "@/components/common/AppButton";
 import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 import { useCurrentUser } from "@/features/auth/queries";
@@ -19,6 +23,7 @@ import {
   FolderIcon,
   Share2Icon,
   ChevronRightIcon,
+  ZapIcon,
 } from "../icons";
 
 /* -------------------------------------------------------------------------- */
@@ -26,7 +31,7 @@ import {
 /* -------------------------------------------------------------------------- */
 
 const Icon = {
-  LayoutDashboard: (p: any) => (
+  LayoutDashboard: (p: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
       <rect width="7" height="9" x="3" y="3" rx="1" />
       <rect width="7" height="5" x="14" y="3" rx="1" />
@@ -34,20 +39,14 @@ const Icon = {
       <rect width="7" height="5" x="3" y="16" rx="1" />
     </svg>
   ),
-  Menu: (p: any) => (
+  Menu: (p: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
       <line x1="4" x2="20" y1="12" y2="12" />
       <line x1="4" x2="20" y1="6" y2="6" />
       <line x1="4" x2="20" y1="18" y2="18" />
     </svg>
   ),
-  X: (p: any) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...p}>
-      <path d="M18 6 6 18" />
-      <path d="m6 6 12 12" />
-    </svg>
-  ),
-  PanelToggle: (p: any) => (
+  PanelLeft: (p: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" {...p}>
       <rect x="3" y="3" width="18" height="18" rx="3" />
       <path d="M9 3v18" />
@@ -56,7 +55,7 @@ const Icon = {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                           Grouped Navigation Schema                        */
+/*                           Navigation Schema                                */
 /* -------------------------------------------------------------------------- */
 
 export interface NavGroup {
@@ -64,7 +63,7 @@ export interface NavGroup {
   items: {
     label: string;
     href: string;
-    icon: React.ComponentType<any>;
+    icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
     badge?: string;
     disabled?: boolean;
   }[];
@@ -72,19 +71,19 @@ export interface NavGroup {
 
 export const navGroups: NavGroup[] = [
   {
-    title: "Create",
+    title: "Workspace",
     items: [
       { label: "Home", href: "/dashboard", icon: Icon.LayoutDashboard },
       { label: "My Clips", href: "/my-clips", icon: FilmIcon },
-      { label: "Asset library", href: "/jobs", icon: FolderIcon },
+      { label: "Projects", href: "/jobs", icon: FolderIcon },
     ],
   },
   {
-    title: "Post",
+    title: "Publish",
     items: [
       { label: "Calendar", href: "/jobs", icon: ClockIcon },
       {
-        label: "Social accounts",
+        label: "Social Accounts",
         href: "#",
         icon: Share2Icon,
         badge: "Soon",
@@ -95,15 +94,11 @@ export const navGroups: NavGroup[] = [
   {
     title: "Account",
     items: [
-      { label: "Subscription", href: "/billing", icon: CreditCardIcon },
+      { label: "Billing", href: "/billing", icon: CreditCardIcon },
       { label: "Settings", href: "/settings", icon: SettingsIcon },
     ],
   },
 ];
-
-/* -------------------------------------------------------------------------- */
-/*                           Helper: find active nav item                     */
-/* -------------------------------------------------------------------------- */
 
 function findActiveNavItem(pathname: string) {
   for (const group of navGroups) {
@@ -115,12 +110,97 @@ function findActiveNavItem(pathname: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                           Layout Props & Interface                         */
+/*                           Nav Item                                         */
 /* -------------------------------------------------------------------------- */
 
-export interface DashboardLayoutProps {
-  children: React.ReactNode;
-  headerContent?: React.ReactNode;
+function NavItem({
+  item,
+  isActive,
+  isCollapsed,
+  onNavigate,
+}: {
+  item: NavGroup["items"][number];
+  isActive: boolean;
+  isCollapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  const Comp = item.icon;
+
+  const inner = (
+    <>
+      <Comp
+        className={cn(
+          "h-4 w-4 shrink-0 transition-colors",
+          isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"
+        )}
+      />
+      {!isCollapsed && (
+        <>
+          <span className="truncate flex-1">{item.label}</span>
+          {item.badge && (
+            <Badge
+              variant={isActive ? "outline" : "secondary"}
+              className={cn(
+                "text-[10px] h-4 px-1.5 font-bold uppercase tracking-wider ml-auto",
+                isActive
+                  ? "bg-primary-foreground/20 text-primary-foreground border-transparent"
+                  : "bg-muted text-muted-foreground",
+                item.disabled && "opacity-60"
+              )}
+            >
+              {item.badge}
+            </Badge>
+          )}
+        </>
+      )}
+    </>
+  );
+
+  const baseCls = cn(
+    "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-all w-full",
+    isCollapsed && "justify-center px-2",
+    item.disabled
+      ? "opacity-40 cursor-not-allowed text-muted-foreground"
+      : isActive
+        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground cursor-pointer"
+  );
+
+  const element = item.disabled ? (
+    <button
+      key={item.label}
+      type="button"
+      disabled
+      title={isCollapsed ? `${item.label} — Coming soon` : "Coming soon"}
+      className={baseCls}
+    >
+      {inner}
+    </button>
+  ) : (
+    <Link
+      key={item.label}
+      href={item.href}
+      onClick={onNavigate}
+      title={isCollapsed ? item.label : undefined}
+      className={baseCls}
+    >
+      {inner}
+    </Link>
+  );
+
+  if (isCollapsed) {
+    return (
+      <Tooltip>
+        <TooltipTrigger render={element} />
+        <TooltipContent side="right" className="text-xs">
+          {item.label}
+          {item.badge && ` — ${item.badge}`}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  return element;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -146,263 +226,136 @@ function SidebarContent({
     .join("")
     .toUpperCase();
 
-  const planLabel = profile?.plan === "free" ? "Free" : "Pro";
-
   return (
-    <div className="flex h-full flex-col p-3.5 sm:p-4 gap-4 overflow-y-auto overflow-x-hidden">
-      {/* ── Sidebar Top Header: Logo + Plan Badge ── */}
+    <div className="flex h-full flex-col gap-2 overflow-y-auto overflow-x-hidden">
+      {/* ── Logo & Workspace Lockup ── */}
       <div
         className={cn(
-          "flex items-center gap-2 shrink-0 px-1 pt-1",
-          isCollapsed ? "justify-center" : "justify-start"
+          "flex items-center shrink-0 px-3.5 pt-3.5 pb-1",
+          isCollapsed ? "justify-center" : "justify-between"
         )}
       >
-        <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2 min-w-0">
+        <Link href="/dashboard" onClick={onNavigate} className="flex items-center gap-2.5 min-w-0">
           <BlyntaLogo variant={isCollapsed ? "icon" : "full"} size="md" />
-          {!isCollapsed && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-muted text-muted-foreground border border-border/80">
-              {planLabel}
-            </span>
-          )}
         </Link>
       </div>
 
-      {/* ── Workspace / User Account Selector & Invite Members Button ── */}
-      {!isCollapsed ? (
-        <div className="flex flex-col gap-2 shrink-0 p-2.5 rounded-xl bg-sidebar-accent/50 border border-sidebar-border/80">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-chart-4 text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0 shadow-xs">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold text-sidebar-foreground truncate leading-tight">
-                {profile?.name || profile?.email || "My Workspace"}
-              </p>
-              <div className="flex items-center gap-1 text-[10px] text-sidebar-foreground/60 mt-0.5">
-                <span>👤</span>
-                <span>0 members</span>
-              </div>
-            </div>
-          </div>
-
-          <AppButton
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              onOpenInvite();
-              onNavigate?.();
-            }}
-            icon={<UserPlusIcon className="h-3.5 w-3.5" />}
-            className="w-full h-8 text-xs font-semibold justify-center bg-card/60 border-sidebar-border/80 hover:bg-sidebar-accent"
+      {/* ── Quick Create Action Pill ── */}
+      <div className={cn("shrink-0 px-2.5 pt-1 pb-1")}>
+        {isCollapsed ? (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Link
+                  href="/dashboard"
+                  onClick={onNavigate}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors mx-auto"
+                >
+                  <ZapIcon className="h-4 w-4" />
+                </Link>
+              }
+            />
+            <TooltipContent side="right" className="text-xs">
+              Quick Create
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <Link
+            href="/dashboard"
+            onClick={onNavigate}
+            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-all"
           >
-            Invite members
-          </AppButton>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-2 shrink-0 py-1">
-          <div
-            className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-chart-4 text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0 shadow-xs"
-            title={profile?.name || profile?.email || "My Workspace"}
-          >
-            {initials}
-          </div>
-          <AppButton
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={onOpenInvite}
-            className="h-8 w-8 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-            title="Invite members"
-          >
-            <UserPlusIcon className="h-4 w-4" />
-          </AppButton>
-        </div>
-      )}
+            <ZapIcon className="h-4 w-4 shrink-0" />
+            <span>Quick Create</span>
+          </Link>
+        )}
+      </div>
 
-      <Separator />
+      <div className="px-2.5 py-0.5">
+        <Separator className="bg-border/50" />
+      </div>
 
-      {/* ── Grouped Nav Sections ── */}
-      <nav className="flex-1 flex flex-col gap-3">
+      {/* ── Grouped Navigation ── */}
+      <nav className="flex-1 flex flex-col gap-3 px-2.5">
         {navGroups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-2">
+          <div key={group.title} className="flex flex-col gap-1">
             {!isCollapsed && (
-              <p className="px-2 text-[10px] font-bold uppercase tracking-wider text-sidebar-foreground/50 mb-1">
+              <p className="px-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
                 {group.title}
               </p>
             )}
             {group.items.map((item) => {
               const isActive = !item.disabled && pathname === item.href;
-              const Comp = item.icon;
-              const baseCls = cn(
-                "group flex items-center gap-3 rounded-md py-2 text-xs font-medium transition-all w-full",
-                isCollapsed ? "justify-center px-2" : "px-3",
-                item.disabled
-                  ? "opacity-50 cursor-not-allowed text-sidebar-foreground/60"
-                  : isActive
-                    ? "bg-sidebar-primary text-sidebar-primary-foreground font-semibold shadow-xs cursor-pointer"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer"
-              );
-
-              const inner = (
-                <>
-                  <Comp className="h-4.5 w-4.5 shrink-0" />
-                  {!isCollapsed && (
-                    <span className="truncate">{item.label}</span>
-                  )}
-                  {!isCollapsed && item.badge && (
-                    <span
-                      className={cn(
-                        "ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider",
-                        item.disabled
-                          ? "bg-muted text-muted-foreground border border-border/60"
-                          : "bg-primary/15 text-primary"
-                      )}
-                    >
-                      {item.badge}
-                    </span>
-                  )}
-                </>
-              );
-
-              if (item.disabled) {
-                return (
-                  <button
-                    key={item.label}
-                    type="button"
-                    disabled
-                    title={
-                      isCollapsed
-                        ? `${item.label} — Coming soon`
-                        : "Coming soon"
-                    }
-                    className={cn(baseCls, "h-auto p-2")}
-                  >
-                    {inner}
-                  </button>
-                );
-              }
-
               return (
-                <Link
+                <NavItem
                   key={item.label}
-                  href={item.href}
-                  onClick={onNavigate}
-                  title={isCollapsed ? item.label : undefined}
-                  className={baseCls}
-                >
-                  {inner}
-                </Link>
+                  item={item}
+                  isActive={isActive}
+                  isCollapsed={isCollapsed}
+                  onNavigate={onNavigate}
+                />
               );
             })}
           </div>
         ))}
       </nav>
 
-      {/* ── Footer Upgrade Card ── */}
-      {/* {!isCollapsed && (
-        <div className="mt-auto pt-2 shrink-0">
-          <UpgradeCard plan={profile?.plan ?? "free"} />
-        </div>
-      )} */}
+      {/* ── Sidebar Footer: Workspace & User Profile ── */}
+      <div className={cn("shrink-0 mt-auto border-t border-border/60", isCollapsed ? "p-2" : "p-3 space-y-2.5")}>
+        {!isCollapsed ? (
+          <>
+            <div className="flex items-center gap-2.5 px-0.5">
+              <Avatar className="h-8 w-8 rounded-lg shrink-0 border border-border/80 bg-muted">
+                <AvatarFallback className="rounded-lg bg-primary/15 text-primary text-xs font-bold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-foreground truncate leading-tight">
+                  {profile?.name || "Workspace"}
+                </p>
+                <p className="text-[11px] text-muted-foreground truncate">
+                  {profile?.email || "Personal workspace"}
+                </p>
+              </div>
+            </div>
+
+            <AppButton
+              variant="outline"
+              size="sm"
+              onClick={onOpenInvite}
+              className="w-full justify-center h-8 text-xs font-medium cursor-pointer shadow-2xs border-border/70 hover:bg-muted/60"
+              icon={<UserPlusIcon className="h-3.5 w-3.5 text-primary" />}
+            >
+              Invite members
+            </AppButton>
+          </>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  onClick={onOpenInvite}
+                  className="flex justify-center w-full py-1 hover:opacity-80 transition-opacity cursor-pointer"
+                />
+              }
+            >
+              <Avatar className="h-8 w-8 rounded-lg border border-border/80 bg-muted">
+                <AvatarFallback className="rounded-lg bg-primary/15 text-primary text-xs font-bold">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">
+              {profile?.name || "Workspace"}
+              <br />
+              <span className="text-muted-foreground">+ Invite members</span>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
     </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                          Mobile Drawer Overlay                             */
-/* -------------------------------------------------------------------------- */
-
-function MobileDrawer({
-  open,
-  onOpenChange,
-  onOpenInvite,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onOpenInvite: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 md:hidden">
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={() => onOpenChange(false)}
-      />
-      <aside className="absolute left-0 top-0 h-full w-72 max-w-[85vw] bg-sidebar text-sidebar-foreground shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-sidebar-border">
-          <BlyntaLogo size="sm" />
-          <AppButton
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => onOpenChange(false)}
-            aria-label="Close menu"
-          >
-            <Icon.X className="h-5 w-5" />
-          </AppButton>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          <SidebarContent
-            isCollapsed={false}
-            onOpenInvite={onOpenInvite}
-            onNavigate={() => onOpenChange(false)}
-          />
-        </div>
-      </aside>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*                           Breadcrumbs Component                            */
-/* -------------------------------------------------------------------------- */
-
-function Breadcrumbs() {
-  const pathname = usePathname();
-
-  const segments: { label: string; href?: string }[] = [
-    { label: "Dashboard", href: "/dashboard" },
-  ];
-
-  if (pathname === "/my-clips" || pathname === "/jobs") {
-    segments.push({ label: "My Clips" });
-  } else if (pathname.startsWith("/jobs/")) {
-    segments.push({ label: "My Clips", href: "/my-clips" });
-    segments.push({ label: "Job Detail" });
-  } else if (pathname === "/billing") {
-    segments.push({ label: "Subscription" });
-  } else if (pathname === "/settings") {
-    segments.push({ label: "Settings" });
-  } else if (pathname !== "/dashboard") {
-    const raw = pathname.replace(/^\//, "").replace(/-/g, " ");
-    segments.push({ label: raw.charAt(0).toUpperCase() + raw.slice(1) });
-  }
-
-  return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs sm:text-sm min-w-0">
-      {segments.map((item, index) => {
-        const isLast = index === segments.length - 1;
-        return (
-          <React.Fragment key={index}>
-            {index > 0 && (
-              <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground/60 shrink-0" />
-            )}
-            {isLast || !item.href ? (
-              <span className="font-semibold text-foreground truncate">
-                {item.label}
-              </span>
-            ) : (
-              <Link
-                href={item.href}
-                className="text-muted-foreground hover:text-foreground transition-colors font-medium truncate"
-              >
-                {item.label}
-              </Link>
-            )}
-          </React.Fragment>
-        );
-      })}
-    </nav>
   );
 }
 
@@ -410,21 +363,23 @@ function Breadcrumbs() {
 /*                         Exported DashboardLayout                           */
 /* -------------------------------------------------------------------------- */
 
+export interface DashboardLayoutProps {
+  children: React.ReactNode;
+  headerContent?: React.ReactNode;
+}
+
 export function DashboardLayout({ children, headerContent }: DashboardLayoutProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [inviteOpen, setInviteOpen] = React.useState(false);
-  const pathname = usePathname();
-
-  const activeItem = findActiveNavItem(pathname);
 
   return (
     <div className="h-screen flex bg-background text-foreground overflow-hidden">
-      {/* Desktop Collapsible Sidebar */}
+      {/* ── Desktop Collapsible Sidebar ── */}
       <aside
         className={cn(
           "hidden md:flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground h-screen transition-all duration-300 ease-in-out",
-          isCollapsed ? "w-[72px]" : "w-64 lg:w-72"
+          isCollapsed ? "w-[60px]" : "w-[220px] lg:w-[240px]"
         )}
       >
         <SidebarContent
@@ -433,57 +388,59 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
         />
       </aside>
 
-      {/* Mobile Drawer */}
-      <MobileDrawer
-        open={mobileOpen}
-        onOpenChange={setMobileOpen}
-        onOpenInvite={() => setInviteOpen(true)}
-      />
+      {/* ── Mobile Drawer (shadcn Sheet) ── */}
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-[240px] p-0 bg-sidebar text-sidebar-foreground">
+          <SheetTitle className="sr-only">Navigation</SheetTitle>
+          <SidebarContent
+            isCollapsed={false}
+            onOpenInvite={() => {
+              setMobileOpen(false);
+              setInviteOpen(true);
+            }}
+            onNavigate={() => setMobileOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
 
-      {/* Main Content Viewport */}
+      {/* ── Main Content Viewport ── */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 bg-background/80 backdrop-blur border-b border-border shrink-0">
-          {/* Mobile menu button */}
+        {/* Topbar */}
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 px-4 sm:px-5 bg-background/90 backdrop-blur-sm border-b border-border/70 shrink-0">
+          {/* Mobile hamburger */}
           <AppButton
             type="button"
             variant="ghost"
             size="icon"
             onClick={() => setMobileOpen(true)}
-            className="md:hidden -ml-2"
+            className="md:hidden h-8 w-8 rounded-lg -ml-1"
             aria-label="Open menu"
           >
-            <Icon.Menu className="h-5 w-5" />
+            <Icon.Menu className="h-4.5 w-4.5" />
           </AppButton>
 
-          {/* Desktop: Sidebar collapse + current page indicator / Breadcrumb */}
-          <div className="hidden md:flex items-center gap-2 min-w-0">
-            {/* Collapse toggle button */}
+          {/* Desktop collapse toggle */}
+          <div className="hidden md:flex items-center gap-2 shrink-0">
             <AppButton
               type="button"
               variant="ghost"
               size="icon"
               onClick={() => setIsCollapsed((prev) => !prev)}
-              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-foreground"
+              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
               title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              <Icon.PanelToggle className="h-5 w-5" />
+              <Icon.PanelLeft className="h-4.5 w-4.5" />
             </AppButton>
-
-            {/* Vertical separator */}
-            <div className="h-6 w-px bg-border shrink-0" />
-
-            {/* Current page title / Breadcrumb */}
-            <div className="flex items-center gap-2 min-w-0">
-              <Breadcrumbs />
-            </div>
+            <div className="h-5 w-px bg-border/80 shrink-0" />
           </div>
 
-          {/* Right-side header content */}
+          {/* Header content */}
           <div className="flex-1 min-w-0 flex items-center">
             {headerContent}
           </div>
         </header>
+
         <main className="flex-1 min-w-0">{children}</main>
       </div>
 

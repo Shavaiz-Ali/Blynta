@@ -7,8 +7,6 @@ import {
   Job,
   JobStatus,
   useJobs,
-  useDeleteJob,
-  useRetryJob,
 } from "@/features/jobs";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
@@ -16,26 +14,17 @@ import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardH
 import { AppButton } from "@/components/common/AppButton";
 import { AppDialog } from "@/components/common/AppDialog";
 import { JobsSkeleton } from "@/features/dashboard/components/JobsSkeleton";
+import { ViewModeToggle, ViewMode } from "@/features/dashboard/components/ViewModeToggle";
+import { JobCardGrid } from "@/features/dashboard/components/JobCardGrid";
+import { JobCardList } from "@/features/dashboard/components/JobCardList";
 import { cn } from "@/lib/utils";
-import {
-  STATUS_META,
-  platformIcon,
-  truncateUrl,
-  getJobDisplayTitle,
-  formatDate,
-  getActiveJobs,
-  isProcessingStatus,
-} from "@/features/dashboard/utils";
 import {
   FilmIcon,
   AlertTriangleIcon,
-  ArrowRightIcon,
   YoutubeIcon,
   CheckCircleIcon,
   LightbulbIcon,
   ClockIcon,
-  RefreshCwIcon,
-  TrashIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@/features/dashboard/icons";
@@ -60,10 +49,6 @@ const FILTER_OPTIONS: { label: string; value: FilterValue }[] = [
   { label: "Failed", value: JobStatus.FAILED },
 ];
 
-/* -------------------------------------------------------------------------- */
-/*  Empty-state tips (full onboarding — shown only when zero jobs at all)     */
-/* -------------------------------------------------------------------------- */
-
 function EmptyStateTips() {
   const tips = [
     {
@@ -83,270 +68,22 @@ function EmptyStateTips() {
     },
   ];
   return (
-    <ul className="space-y-3.5 mt-6 text-left">
+    <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 text-left w-full max-w-2xl">
       {tips.map((t, i) => (
-        <li key={i} className="flex gap-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <li
+          key={i}
+          className="flex flex-col p-3.5 rounded-xl bg-card border border-border/60 shadow-2xs"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
             {t.icon}
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">{t.title}</p>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-              {t.desc}
-            </p>
-          </div>
+          <p className="text-xs font-semibold text-foreground">{t.title}</p>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+            {t.desc}
+          </p>
         </li>
       ))}
     </ul>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  ConfirmDialog — generic reusable confirmation                             */
-/* -------------------------------------------------------------------------- */
-
-interface ConfirmDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  title: string;
-  description: string;
-  confirmLabel: string;
-  confirmVariant?: "default" | "destructive";
-  isLoading?: boolean;
-  onConfirm: () => void;
-}
-
-function ConfirmDialog({
-  open,
-  onOpenChange,
-  title,
-  description,
-  confirmLabel,
-  confirmVariant = "destructive",
-  isLoading,
-  onConfirm,
-}: ConfirmDialogProps) {
-  return (
-    <AppDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      size="sm"
-      title={title}
-      description={description}
-      footer={
-        <div className="flex w-full gap-2 justify-end">
-          <AppButton
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-            disabled={isLoading}
-          >
-            Cancel
-          </AppButton>
-          <AppButton
-            variant={confirmVariant === "destructive" ? "destructive" : "default"}
-            size="sm"
-            isLoading={isLoading}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </AppButton>
-        </div>
-      }
-    />
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  JobRow — a single job row with status, actions                            */
-/* -------------------------------------------------------------------------- */
-
-function JobRow({ job }: { job: Job }) {
-  const router = useRouter();
-  const deleteJob = useDeleteJob();
-  const retryJob = useRetryJob();
-  const [deleteOpen, setDeleteOpen] = React.useState(false);
-  const [retryOpen, setRetryOpen] = React.useState(false);
-
-  const meta = STATUS_META[job.status];
-  const active = isProcessingStatus(job.status);
-  const canDelete =
-    job.status === JobStatus.COMPLETED || job.status === JobStatus.FAILED;
-  const canRetry = job.status === JobStatus.FAILED;
-
-  function handleDelete() {
-    deleteJob.mutate(job.id || job._id, {
-      onSuccess: () => {
-        toast.success("Job deleted.");
-        setDeleteOpen(false);
-      },
-      onError: (err: any) => {
-        toast.error(err?.message || "Failed to delete job.");
-        setDeleteOpen(false);
-      },
-    });
-  }
-
-  function handleRetry() {
-    retryJob.mutate(job.id || job._id, {
-      onSuccess: () => {
-        toast.success("Retrying job\u2026 resuming from where it stopped.");
-        setRetryOpen(false);
-        // No router.push \u2014 retry resumes the SAME job in-place.
-        // Navigate to the job detail page so the user can watch progress.
-        router.push(`/jobs/${job.id || job._id}`);
-      },
-      onError: (err: any) => {
-        toast.error(err?.message || "Failed to retry job.");
-        setRetryOpen(false);
-      },
-    });
-  }
-
-  const completedClips = job.clips?.filter((c) => c.status === JobStatus.COMPLETED).length ?? 0;
-  const totalHighlights = job.highlights?.length ?? 0;
-  const hasHighlights = totalHighlights > 0;
-
-  return (
-    <>
-      <li className="flex items-center justify-between gap-3 sm:gap-4 px-4 sm:px-6 py-3.5 sm:py-4 hover:bg-accent/30 transition-colors group">
-        {/* Main clickable area for job info */}
-        <button
-          type="button"
-          onClick={() => router.push(`/jobs/${job.id || job._id}`)}
-          className="flex-1 flex items-center gap-3 sm:gap-4 min-w-0 text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg p-0.5 -m-0.5"
-        >
-          {/* Platform icon */}
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card border border-border group-hover:border-primary/30 transition-colors shadow-2xs">
-            {platformIcon(job.sourcePlatform, "h-5 w-5")}
-          </div>
-
-          {/* URL + meta */}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                {getJobDisplayTitle(job, 70)}
-              </p>
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-              <span className="capitalize">{job.sourcePlatform}</span>
-              <span>·</span>
-              <span className="font-mono text-[11px]">{formatDate(job.createdAt)}</span>
-              {job.resolutionUsed && (
-                <>
-                  <span>·</span>
-                  <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-mono text-[10px] font-semibold border border-border/70">
-                    {job.resolutionUsed}
-                  </span>
-                </>
-              )}
-              {hasHighlights ? (
-                <>
-                  <span>·</span>
-                  <span className="inline-flex items-center font-medium text-primary">
-                    {completedClips}/{totalHighlights} clips ready
-                  </span>
-                </>
-              ) : (
-                completedClips > 0 && (
-                  <>
-                    <span>·</span>
-                    <span className="inline-flex items-center font-medium text-primary">
-                      {completedClips} clip{completedClips !== 1 ? "s" : ""} ready
-                    </span>
-                  </>
-                )
-              )}
-            </div>
-          </div>
-        </button>
-
-        {/* Right side items: Status badge + Retry button + Delete button + Arrow */}
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Error snippet */}
-          {job.status === JobStatus.FAILED && job.errorMessage && (
-            <span className="hidden xl:flex items-center gap-1 text-[11px] text-destructive max-w-[160px] truncate" title={job.errorMessage}>
-              <AlertTriangleIcon className="h-3 w-3 shrink-0" />
-              <span className="truncate">{job.errorMessage}</span>
-            </span>
-          )}
-
-          {/* Status badge */}
-          <span
-            className={cn(
-              "hidden sm:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium",
-              meta.chip
-            )}
-          >
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                active && "animate-pulse",
-                meta.dot
-              )}
-            />
-            {meta.label}
-          </span>
-
-          {/* Action: Retry */}
-          {canRetry && (
-            <button
-              type="button"
-              onClick={() => setRetryOpen(true)}
-              title="Retry job (costs 1 credit)"
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded-xl transition-colors cursor-pointer"
-            >
-              <RefreshCwIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Retry</span>
-            </button>
-          )}
-
-          {/* Action: Delete */}
-          {canDelete && (
-            <button
-              type="button"
-              onClick={() => setDeleteOpen(true)}
-              title="Delete job"
-              className="inline-flex items-center justify-center h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-xl transition-colors cursor-pointer"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => router.push(`/jobs/${job.id || job._id}`)}
-            className="text-muted-foreground/50 hover:text-foreground p-1 transition-colors cursor-pointer hidden sm:block"
-          >
-            <ArrowRightIcon className="h-4 w-4" />
-          </button>
-        </div>
-      </li>
-
-      {/* Delete confirmation */}
-      <ConfirmDialog
-        open={deleteOpen}
-        onOpenChange={setDeleteOpen}
-        title="Delete this job?"
-        description="This will permanently delete the job and all its clips from disk. This cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
-        isLoading={deleteJob.isPending}
-        onConfirm={handleDelete}
-      />
-
-      {/* Retry confirmation */}
-      <ConfirmDialog
-        open={retryOpen}
-        onOpenChange={setRetryOpen}
-        title="Retry this job?"
-        description="This creates a fresh processing job using the same video URL. It will use 1 credit from your balance."
-        confirmLabel="Retry — use 1 credit"
-        confirmVariant="default"
-        isLoading={retryJob.isPending}
-        onConfirm={handleRetry}
-      />
-    </>
   );
 }
 
@@ -359,10 +96,22 @@ export function MyClipsClient() {
   const { data: profile } = useCurrentUser();
   const [filter, setFilter] = React.useState<FilterValue>("all");
   const [page, setPage] = React.useState(1);
-  const LIMIT = 20;
+  const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
+  const LIMIT = 24;
 
-  // For "processing" filter: fetch all (no status param), then filter client-side.
-  // For all other filters, pass status directly to the backend for efficient DB-level filtering.
+  // Load saved view mode
+  React.useEffect(() => {
+    const saved = localStorage.getItem("blynta_clips_view_mode") as ViewMode;
+    if (saved === "grid" || saved === "list") {
+      setViewMode(saved);
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem("blynta_clips_view_mode", mode);
+  };
+
   const apiStatus =
     filter === "all" || filter === "processing"
       ? undefined
@@ -383,18 +132,15 @@ export function MyClipsClient() {
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
-  const activeJobs = getActiveJobs(jobs);
-  const completedOrFailed = jobs.filter(
-    (j) => j.status === JobStatus.COMPLETED || j.status === JobStatus.FAILED
-  );
-
   // Reset to page 1 when filter changes
   React.useEffect(() => {
     setPage(1);
   }, [filter]);
 
   const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center">
+    <div className="flex-1 min-w-0 flex items-center justify-between">
+      <h1 className="text-sm font-medium text-foreground">My Clips</h1>
+
       {profile ? (
         <DashboardHeaderRight profile={profile} />
       ) : (
@@ -407,42 +153,48 @@ export function MyClipsClient() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6">
-        {/* Header row with page title & Filter pills */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto">
+        {/* ── Header row with page title, Filter tabs & View toggle ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border/60">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              My Clips<span className="text-primary">.</span>
+              Media Archives & Clips<span className="text-primary">.</span>
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Manage and download your generated video clips.
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+              Browse your processed long-form videos and viral shorts.
             </p>
           </div>
 
-          {/* Filter Pills Tabs */}
-          <div className="flex items-center gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/60 self-start sm:self-auto overflow-x-auto max-w-full">
-            {FILTER_OPTIONS.map((opt) => {
-              const active = filter === opt.value;
-              return (
-                <button
-                  key={opt.label}
-                  type="button"
-                  onClick={() => setFilter(opt.value)}
-                  className={cn(
-                    "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all whitespace-nowrap cursor-pointer",
-                    active
-                      ? "bg-background text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground hover:bg-background/40"
-                  )}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
+          {/* Right controls: Filter tabs + View Mode toggle */}
+          <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+            {/* Filter Pills Tabs */}
+            <div className="flex items-center gap-1 p-1 bg-card/90 rounded-lg border border-border/80 shadow-2xs backdrop-blur-sm">
+              {FILTER_OPTIONS.map((opt) => {
+                const active = filter === opt.value;
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setFilter(opt.value)}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap cursor-pointer",
+                      active
+                        ? "bg-background text-foreground font-semibold border border-border/80 shadow-xs"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* View Mode Toggle (Grid vs. List) */}
+            <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
           </div>
         </div>
 
-        {/* Content area */}
+        {/* ── Content area ── */}
         {isLoading ? (
           <JobsSkeleton />
         ) : error ? (
@@ -456,46 +208,39 @@ export function MyClipsClient() {
             </p>
           </div>
         ) : filter === "all" && total === 0 ? (
-          /* Zero jobs TOTAL (no filter) — full onboarding empty state */
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border/70">
-              <h2 className="font-semibold text-foreground">My Clips</h2>
-              <span className="text-xs font-medium text-muted-foreground">
-                0 clips
-              </span>
-            </div>
-            <div className="px-6 py-10 flex flex-col items-center text-center">
-              <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                <FilmIcon className="h-8 w-8 text-primary" />
+          /* Zero jobs TOTAL (no filter) — onboarding empty state */
+          <div className="rounded-2xl border border-border/80 bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
+            <div className="px-6 py-12 flex flex-col items-center text-center">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 text-primary border border-primary/20">
+                <FilmIcon className="h-7 w-7" />
               </div>
-              <h3 className="text-lg font-bold text-foreground">No clips yet</h3>
-              <p className="mt-1 text-sm text-muted-foreground max-w-sm">
+              <h3 className="text-lg font-bold text-foreground">No media archives yet</h3>
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground max-w-sm">
                 Paste a video link on the{" "}
                 <button
                   type="button"
                   onClick={() => router.push("/dashboard")}
-                  className="underline hover:text-foreground transition-colors cursor-pointer"
+                  className="text-primary underline hover:text-primary/80 transition-colors cursor-pointer"
                 >
                   dashboard
                 </button>{" "}
-                and Blynta will find the best moments, cut vertical clips, and add
-                captions automatically.
+                to generate viral vertical clips automatically.
               </p>
               <EmptyStateTips />
             </div>
           </div>
         ) : jobs.length === 0 ? (
           /* Jobs filtered to zero (but jobs DO exist) — simple empty state */
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-border/80 bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
             <div className="flex flex-col items-center py-12 px-6 text-center gap-3">
               <FilmIcon className="h-10 w-10 text-muted-foreground/30" />
               <p className="text-sm font-medium text-foreground">
                 No{" "}
                 {FILTER_OPTIONS.find((f) => f.value === filter)?.label.toLowerCase()}{" "}
-                clips
+                videos found
               </p>
               <p className="text-xs text-muted-foreground">
-                Try switching to a different filter.
+                Try switching to a different filter or check your search terms.
               </p>
               <AppButton
                 variant="outline"
@@ -503,67 +248,40 @@ export function MyClipsClient() {
                 onClick={() => setFilter("all")}
                 className="mt-1"
               >
-                Show all clips
+                Show all archives
               </AppButton>
             </div>
           </div>
         ) : (
-          /* Has jobs list */
-          <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-            {/* Card header: total count */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border/70">
-              <div>
-                <h2 className="font-semibold text-foreground">My Clips</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {total} {total === 1 ? "job" : "jobs"} total
-                </p>
-              </div>
-            </div>
-
-            {/* Active jobs sub-section */}
-            {activeJobs.length > 0 && (
-              <div className="border-b border-border/70 bg-muted/20">
-                <div className="flex items-center gap-2 px-6 py-2.5">
-                  <ClockIcon className="h-3.5 w-3.5 text-chart-4" />
-                  <span className="text-xs font-semibold text-chart-4 uppercase tracking-wide">
-                    Processing
-                  </span>
-                  <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-chart-4">
-                    <span className="h-1.5 w-1.5 rounded-full bg-chart-4 animate-pulse" />
-                    {activeJobs.length} in progress
-                  </span>
-                </div>
-                <ul className="divide-y divide-border/50">
-                  {activeJobs.map((j) => (
-                    <JobRow key={j.id || j._id} job={j} />
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Completed / failed jobs */}
-            {completedOrFailed.length > 0 && (
-              <ul className="divide-y divide-border/70">
-                {completedOrFailed.map((j) => (
-                  <JobRow key={j.id || j._id} job={j} />
+          /* Has jobs */
+          <div className="space-y-6">
+            {/* Grid or List Display */}
+            {viewMode === "grid" ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+                {jobs.map((job) => (
+                  <JobCardGrid
+                    key={job._id || job.id}
+                    job={job}
+                  />
                 ))}
-              </ul>
-            )}
-
-            {/* Soft message when only active jobs */}
-            {activeJobs.length > 0 && completedOrFailed.length === 0 && (
-              <div className="px-6 py-5 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Your clips will appear here once processing is complete.
-                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {jobs.map((job) => (
+                  <JobCardList
+                    key={job._id || job.id}
+                    job={job}
+                  />
+                ))}
               </div>
             )}
 
-            {/* Pagination */}
+            {/* Pagination Controls */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-border/70 bg-muted/10">
+              <div className="flex items-center justify-between p-4 rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm">
                 <p className="text-xs text-muted-foreground">
-                  Page {page} of {totalPages}
+                  Page <span className="font-semibold text-foreground">{page}</span> of{" "}
+                  <span className="font-semibold text-foreground">{totalPages}</span>
                 </p>
                 <div className="flex items-center gap-2">
                   <AppButton

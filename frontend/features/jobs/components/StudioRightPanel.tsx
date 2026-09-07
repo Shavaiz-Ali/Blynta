@@ -290,14 +290,15 @@ export function StudioRightPanel({
           </AppButton>
 
           <div className="flex justify-center pt-0.5">
-            <button
-              type="button"
+            <AppButton
+              variant="ghost"
+              size="sm"
               onClick={onDeleteClip}
-              className="text-[11px] font-medium text-muted-foreground/60 hover:text-destructive transition-colors inline-flex items-center gap-1.5 cursor-pointer py-1"
+              className="text-[11px] font-medium text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors h-7 px-2"
+              icon={<TrashIcon className="h-3.5 w-3.5" />}
             >
-              <TrashIcon className="h-3.5 w-3.5" />
-              <span>Delete this clip</span>
-            </button>
+              Delete this clip
+            </AppButton>
           </div>
         </div>
       </div>

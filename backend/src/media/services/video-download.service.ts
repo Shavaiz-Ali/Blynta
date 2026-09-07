@@ -38,12 +38,18 @@ export class VideoDownloadService {
     outputDir: string,
     resolution: '720p' | '1080p' | '360p' | '240p',
     onProgress?: (percent: number) => void,
-  ): Promise<{ videoPath: string; audioPath: string; title: string; uploader: string }> {
+  ): Promise<{
+    videoPath: string;
+    audioPath: string;
+    title: string;
+    uploader: string;
+    thumbnailUrl: string;
+    duration: number;
+  }> {
     await fs.promises.mkdir(outputDir, { recursive: true });
     const videoPath = path.join(outputDir, 'source.mp4');
     const audioPath = path.join(outputDir, 'audio.wav');
-    const maxHeight = resolution === '1080p' ? 1080 : 720; //TODO: UNCOMMENT LATER
-    // const maxHeight = 240;
+    const maxHeight = resolution === '1080p' ? 1080 : 720;
 
     const ytDlpArgs = [
       '--js-runtimes', 'deno',
@@ -98,14 +104,26 @@ export class VideoDownloadService {
 
     const metadata = await this.fetchVideoMetadata(sourceUrl);
 
-    return { videoPath, audioPath, title: metadata.title, uploader: metadata.uploader };
+    return {
+      videoPath,
+      audioPath,
+      title: metadata.title,
+      uploader: metadata.uploader,
+      thumbnailUrl: metadata.thumbnailUrl,
+      duration: metadata.duration,
+    };
   }
 
-  private async fetchVideoMetadata(sourceUrl: string): Promise<{ title: string; uploader: string }> {
+  private async fetchVideoMetadata(sourceUrl: string): Promise<{
+    title: string;
+    uploader: string;
+    thumbnailUrl: string;
+    duration: number;
+  }> {
     return new Promise((resolve) => {
       const ytDlpArgs = [
         '--js-runtimes', 'deno',
-        '--print', '%(title)s|||%(uploader)s',
+        '--print', '%(title)s|||%(uploader)s|||%(thumbnail)s|||%(duration)s',
         '--skip-download',
       ];
 
@@ -126,15 +144,21 @@ export class VideoDownloadService {
       proc.on('close', (code) => {
         if (code !== 0) {
           this.logger.warn(`Failed to fetch video metadata: ${stderr.slice(-300)}`);
-          resolve({ title: 'Untitled video', uploader: '' });
+          resolve({ title: 'Untitled video', uploader: '', thumbnailUrl: '', duration: 0 });
           return;
         }
-        const [title, uploader] = output.trim().split('|||');
-        resolve({ title: title?.trim() || 'Untitled video', uploader: uploader?.trim() || '' });
+        const [title, uploader, thumbnail, durationStr] = output.trim().split('|||');
+        const duration = parseFloat(durationStr) || 0;
+        resolve({
+          title: title?.trim() || 'Untitled video',
+          uploader: uploader?.trim() || '',
+          thumbnailUrl: thumbnail?.trim() || '',
+          duration,
+        });
       });
       proc.on('error', (err) => {
         this.logger.warn(`Error running yt-dlp metadata fetch: ${err.message}`);
-        resolve({ title: 'Untitled video', uploader: '' });
+        resolve({ title: 'Untitled video', uploader: '', thumbnailUrl: '', duration: 0 });
       });
     });
   }

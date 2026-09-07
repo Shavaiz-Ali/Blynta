@@ -51,6 +51,8 @@ export class SourceVideoService {
     transcript: any[];
     videoTitle?: string;
     videoUploader?: string;
+    thumbnailUrl?: string;
+    videoDuration?: number;
   }): Promise<SourceVideoDocument> {
     return this.sourceVideoModel
       .findOneAndUpdate(

@@ -85,7 +85,7 @@ function AppDialog({
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute right-4 top-4 rounded-full opacity-70 transition-opacity hover:opacity-100 h-8 w-8"
+                className="absolute right-4 top-4 rounded-full opacity-70 transition-opacity hover:opacity-100 h-8 w-8 cursor-pointer"
                 onClick={() => onOpenChange(false)}
                 aria-label="Close"
               >

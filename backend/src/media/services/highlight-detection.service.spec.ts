@@ -61,8 +61,8 @@ import {
   HighlightDetectionService,
   HighlightSchema,
   HighlightsResponseSchema,
-  buildHighlightSystemPrompt,
 } from './highlight-detection.service';
+import { buildHighlightSystemPrompt } from '../prompts/highlight-detection.prompts';
 
 describe('HighlightDetectionService & Schemas', () => {
   describe('System Prompt Generation', () => {

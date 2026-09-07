@@ -191,27 +191,29 @@ export function StudioTopBar({
 
           {/* Right: Share & Schedule Actions */}
           <div className="flex items-center gap-2 shrink-0 self-end lg:self-auto">
-            <button
-              type="button"
+            <AppButton
+              variant="outline"
+              size="sm"
               disabled
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/70 bg-card/60 hover:bg-muted/40 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed transition-colors shadow-2xs"
+              className="h-8 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed shadow-2xs gap-1.5"
+              icon={<Share2Icon className="h-3.5 w-3.5" />}
               title="Share Preview Link — Coming Soon"
             >
-              <Share2Icon className="h-3.5 w-3.5" />
               <span>Share Link</span>
               <SoonBadge />
-            </button>
+            </AppButton>
 
-            <button
-              type="button"
+            <AppButton
+              variant="outline"
+              size="sm"
               disabled
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border/70 bg-card/60 hover:bg-muted/40 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed transition-colors shadow-2xs"
+              className="h-8 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed shadow-2xs gap-1.5"
+              icon={<CalendarIcon className="h-3.5 w-3.5" />}
               title="Push to Scheduled Social Queue — Coming Soon"
             >
-              <CalendarIcon className="h-3.5 w-3.5" />
               <span>Schedule</span>
               <SoonBadge />
-            </button>
+            </AppButton>
           </div>
         </div>
       )}

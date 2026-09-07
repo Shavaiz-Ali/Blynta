@@ -215,6 +215,8 @@ export class JobsProcessor extends WorkerHost {
               localAudioPath: audioPath,
               videoTitle: sourceVideo.videoTitle,
               videoUploader: sourceVideo.videoUploader,
+              thumbnailUrl: sourceVideo.thumbnailUrl,
+              videoDuration: sourceVideo.videoDuration,
               transcript: transcript as any,
               resolutionUsed: resolution,
               progressPercent: 100,
@@ -244,13 +246,19 @@ export class JobsProcessor extends WorkerHost {
             resolutionUsed: resolution,
           });
 
-          const { videoPath: dlVideoPath, audioPath: dlAudioPath, title, uploader } =
-            await this.videoDownloadService.downloadVideo(
-              job.sourceUrl,
-              jobDir,
-              resolution,
-              makeThrottledProgressUpdate(),
-            );
+          const {
+            videoPath: dlVideoPath,
+            audioPath: dlAudioPath,
+            title,
+            uploader,
+            thumbnailUrl,
+            duration,
+          } = await this.videoDownloadService.downloadVideo(
+            job.sourceUrl,
+            jobDir,
+            resolution,
+            makeThrottledProgressUpdate(),
+          );
           videoPath = dlVideoPath;
           audioPath = dlAudioPath;
 
@@ -259,6 +267,8 @@ export class JobsProcessor extends WorkerHost {
             localAudioPath: audioPath,
             videoTitle: title,
             videoUploader: uploader,
+            thumbnailUrl,
+            videoDuration: duration,
             progressPercent: 100,
           });
 
@@ -302,6 +312,8 @@ export class JobsProcessor extends WorkerHost {
               transcript,
               videoTitle: title,
               videoUploader: uploader,
+              thumbnailUrl,
+              videoDuration: duration,
             });
             await this.jobsService.updateJob(jobId, {
               sourceVideoId: newSourceVideo._id,
@@ -312,6 +324,7 @@ export class JobsProcessor extends WorkerHost {
             );
           }
         }
+
       }
 
       // =========================================================================

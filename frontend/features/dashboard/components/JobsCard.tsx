@@ -1,32 +1,21 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Job, JobStatus } from "@/features/jobs";
-
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
+import { JobCardGrid } from "./JobCardGrid";
+import { JobCardList } from "./JobCardList";
 import {
   FilmIcon,
-  PlusIcon,
-  AlertTriangleIcon,
-  ArrowRightIcon,
+  ExternalLinkIcon,
   YoutubeIcon,
   CheckCircleIcon,
   LightbulbIcon,
-  ClockIcon,
 } from "../icons";
-import {
-  STATUS_META,
-  platformIcon,
-  truncateUrl,
-  getJobDisplayTitle,
-  formatDate,
-  getActiveJobs,
-} from "../utils";
-
-/* -------------------------------------------------------------------------- */
-/*  Getting-started tips — only shown in empty state                          */
-/* -------------------------------------------------------------------------- */
 
 function EmptyStateTips() {
   const tips = [
@@ -48,58 +37,71 @@ function EmptyStateTips() {
   ];
 
   return (
-    <ul className="space-y-3.5 mt-6 text-left">
+    <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6 text-left w-full max-w-2xl">
       {tips.map((t, i) => (
-        <li key={i} className="flex gap-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <li
+          key={i}
+          className="flex flex-col p-3 rounded-xl bg-card border border-border/60 shadow-2xs"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary mb-2">
             {t.icon}
           </div>
-          <div>
-            <p className="text-sm font-medium text-foreground">{t.title}</p>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
-              {t.desc}
-            </p>
-          </div>
+          <p className="text-xs font-semibold text-foreground">{t.title}</p>
+          <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+            {t.desc}
+          </p>
         </li>
       ))}
     </ul>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/*  JobsCard                                                                  */
-/* -------------------------------------------------------------------------- */
-
-export function JobsCard({
-  jobs,
-}: {
-  jobs: Job[];
-}) {
+export function JobsCard({ jobs }: { jobs: Job[] }) {
   const router = useRouter();
-  const activeJobs = getActiveJobs(jobs);
-  const completedOrFailed = jobs.filter(
+
+  // Persistent view mode state
+  const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
+
+  React.useEffect(() => {
+    const saved = localStorage.getItem("blynta_dashboard_view_mode") as ViewMode;
+    if (saved === "grid" || saved === "list") {
+      setViewMode(saved);
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    localStorage.setItem("blynta_dashboard_view_mode", mode);
+  };
+
+  const activeCount = jobs.filter(
     (j) =>
-      j.status === JobStatus.COMPLETED || j.status === JobStatus.FAILED
-  );
+      j.status === JobStatus.PENDING ||
+      j.status === JobStatus.TRANSCRIBING ||
+      j.status === JobStatus.DETECTING_HIGHLIGHTS ||
+      j.status === JobStatus.CUTTING_CLIPS
+  ).length;
 
   /* ---- Empty state ---- */
   if (jobs.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border/70">
-          <h3 className="font-semibold text-foreground">My Clips</h3>
-          <span className="text-xs font-medium text-muted-foreground">
-            0 Clips
-          </span>
-        </div>
-        <div className="px-6 py-10 flex flex-col items-center text-center">
-          <div className="h-16 w-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-            <FilmIcon className="h-8 w-8 text-primary" />
+      <div className="rounded-2xl border border-border bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/70">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-foreground">Recent Projects</h3>
+            <span className="text-xs font-mono font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+              0 active
+            </span>
           </div>
-          <h4 className="text-lg font-bold text-foreground">No clips yet</h4>
-          <p className="mt-1 text-sm text-muted-foreground max-w-sm">
-            Paste a video link above and Blynta will find the best moments, cut
-            vertical clips, and add captions automatically.
+        </div>
+        <div className="px-6 py-12 flex flex-col items-center text-center">
+          <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 text-primary border border-primary/20">
+            <FilmIcon className="h-7 w-7" />
+          </div>
+          <h4 className="text-base font-bold text-foreground">No projects yet</h4>
+          <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground max-w-md">
+            Paste a video link above and Blynta will analyze conversational salience, cut
+            vertical clips, and generate dynamic subtitles automatically.
           </p>
           <EmptyStateTips />
         </div>
@@ -109,161 +111,58 @@ export function JobsCard({
 
   /* ---- Has jobs ---- */
   return (
-    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-border/70">
-        <div>
-          <h3 className="font-semibold text-foreground">My Clips</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {jobs.length} {jobs.length === 1 ? "job" : "jobs"} total
-          </p>
+    <div className="space-y-4">
+      {/* ── Section Header & View Switcher ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
+            Recent Projects
+          </h3>
+          {activeCount > 0 ? (
+            <span className="text-xs font-mono font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+              {activeCount} active
+            </span>
+          ) : (
+            <span className="text-xs font-mono font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+              {jobs.length} total
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Grid vs List View Toggle */}
+          <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
+
+          {/* View all Link */}
+          <Link
+            href="/my-clips"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary transition-colors pl-1"
+          >
+            <span>View all</span>
+            <span>→</span>
+          </Link>
         </div>
       </div>
 
-      {/* Active / in-progress jobs section */}
-      {activeJobs.length > 0 && (
-        <div className="border-b border-border/70 bg-muted/20">
-          <div className="flex items-center gap-2 px-6 py-2.5">
-            <ClockIcon className="h-3.5 w-3.5 text-chart-4" />
-            <span className="text-xs font-semibold text-chart-4 uppercase tracking-wide">
-              Processing
-            </span>
-            <span className="ml-auto inline-flex items-center gap-1 text-xs font-medium text-chart-4">
-              <span className="h-1.5 w-1.5 rounded-full bg-chart-4 animate-pulse" />
-              {activeJobs.length} in progress
-            </span>
-          </div>
-          <ul className="divide-y divide-border/50">
-            {activeJobs.map((j) => {
-              const meta = STATUS_META[j.status];
-              console.log(j)
-              return (
-                <li key={j.id}>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/jobs/${j._id}`)}
-                    className="w-full flex items-center justify-between gap-4 px-6 py-3.5 hover:bg-accent/30 transition-colors text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-card border border-border">
-                      {platformIcon(j.sourcePlatform, "h-4 w-4")}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {getJobDisplayTitle(j, 55)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Started {formatDate(j.createdAt)}
-                      </p>
-                    </div>
-                    <span
-                      className={cn(
-                        "hidden sm:inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium shrink-0",
-                        meta.chip
-                      )}
-                    >
-                      <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", meta.dot)} />
-                      {meta.label}
-                    </span>
-                    <ArrowRightIcon className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+      {/* ── Grid or List Display ── */}
+      {viewMode === "grid" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {jobs.slice(0, 9).map((job) => (
+            <JobCardGrid
+              key={job._id || job.id}
+              job={job}
+            />
+          ))}
         </div>
-      )}
-
-      {/* Completed / failed jobs */}
-      {completedOrFailed.length > 0 && (
-        <ul className="divide-y divide-border/70">
-          {completedOrFailed.map((j) => {
-            const meta = STATUS_META[j.status];
-            const completedClips = j.clips?.filter((c) => c.status === JobStatus.COMPLETED).length ?? 0;
-            const totalHighlights = j.highlights?.length ?? 0;
-            const hasHighlights = totalHighlights > 0;
-            const jobId = j.id || j._id;
-
-            return (
-              <li key={jobId}>
-                <button
-                  type="button"
-                  onClick={() => router.push(`/jobs/${jobId}`)}
-                  className="w-full flex items-center justify-between gap-4 px-6 py-4 hover:bg-accent/40 transition-colors text-left cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-primary/40 group"
-                >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-card border border-border group-hover:border-primary/30 transition-colors shadow-2xs">
-                    {platformIcon(j.sourcePlatform, "h-5 w-5")}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
-                      {getJobDisplayTitle(j, 60)}
-                    </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
-                      <span className="capitalize">{j.sourcePlatform}</span>
-                      <span>·</span>
-                      <span className="font-mono text-[11px]">{formatDate(j.createdAt)}</span>
-                      {j.resolutionUsed && (
-                        <>
-                          <span>·</span>
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground font-mono text-[10px] font-semibold border border-border/70">
-                            {j.resolutionUsed}
-                          </span>
-                        </>
-                      )}
-                      {hasHighlights ? (
-                        <>
-                          <span>·</span>
-                          <span className="inline-flex items-center font-medium text-primary">
-                            {completedClips}/{totalHighlights} clips ready
-                          </span>
-                        </>
-                      ) : (
-                        completedClips > 0 && (
-                          <>
-                            <span>·</span>
-                            <span className="inline-flex items-center font-medium text-primary">
-                              {completedClips} clip{completedClips !== 1 ? "s" : ""} ready
-                            </span>
-                          </>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="hidden sm:flex items-center gap-4">
-                    <div className="flex flex-col items-end gap-1.5 min-w-[120px]">
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium",
-                          meta.chip
-                        )}
-                      >
-                        <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
-                        {meta.label}
-                      </span>
-                      {j.status === JobStatus.FAILED && (
-                        <span className="text-[11px] text-destructive flex items-center gap-1 max-w-[160px] truncate">
-                          <AlertTriangleIcon className="h-3 w-3 shrink-0" />
-                          <span className="truncate">
-                            {j.errorMessage || "Processing failed"}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                    <ArrowRightIcon className="h-4 w-4 text-muted-foreground/60" />
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {/* Only active jobs but no completed — soft message */}
-      {activeJobs.length > 0 && completedOrFailed.length === 0 && (
-        <div className="px-6 py-5 text-center">
-          <p className="text-sm text-muted-foreground">
-            Your clips will appear here once processing is complete.
-          </p>
+      ) : (
+        <div className="space-y-2.5">
+          {jobs.slice(0, 9).map((job) => (
+            <JobCardList
+              key={job._id || job.id}
+              job={job}
+            />
+          ))}
         </div>
       )}
     </div>

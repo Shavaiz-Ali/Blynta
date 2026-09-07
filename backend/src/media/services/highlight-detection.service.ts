@@ -5,6 +5,14 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
 import { TranscriptSegmentDto } from './transcription.service';
+import { EDITOR_STYLES, EditorStyleKey, DEFAULT_EDITOR_STYLE_KEY } from '../editor-styles';
+import { buildHighlightSystemPrompt } from '../prompts/highlight-detection.prompts';
+
+// Zod needs a literal tuple of string values for z.enum(), not a plain
+// string[] — this line derives that tuple from EDITOR_STYLES' actual keys
+// at runtime/compile-time, so the enum can NEVER drift from what
+// EDITOR_STYLES actually defines:
+const EDITOR_STYLE_KEYS = Object.keys(EDITOR_STYLES) as [EditorStyleKey, ...EditorStyleKey[]];
 
 export const HighlightSchema = z.object({
   startTime: z.number().describe('Start time of the clip in seconds'),
@@ -29,12 +37,10 @@ export const HighlightSchema = z.object({
       'List of 3-8 short, lowercase keywords or hashtag-style tags describing the clip content, topic, mood, and people involved (e.g. "comedy", "celebrity", "reaction"). No # symbol, use hyphens if a tag needs multiple words.',
     ),
   style: z
-    .string()
+    .enum(EDITOR_STYLE_KEYS)
     .optional()
-    .default('curiosity-hook')
-    .describe(
-      'Exactly one editing style: "curiosity-hook" | "fixed-caption-clean" | "meme-zoom-pop" | "emotional-ken-burns" | "motivational-zoom-in" | "emoji-reaction"',
-    ),
+    .default(DEFAULT_EDITOR_STYLE_KEY)
+    .describe('Editing style selected based on this specific clip\'s context — see system prompt for the full list and criteria.'),
   hookText: z
     .string()
     .max(100)
@@ -77,120 +83,6 @@ export interface HighlightDetectionResult {
   keywords: string;
   hashtags: string[];
   highlights: HighlightDto[];
-}
-
-export function buildHighlightSystemPrompt(videoDurationSeconds: number): string {
-  const isLongForm = videoDurationSeconds >= 600;
-
-  const durationBlock = isLongForm
-    ? `> - Every clip duration (endTime − startTime) MUST be strictly between 45
->   seconds (minimum) and 60 seconds (maximum).
-> - NEVER produce a clip shorter than 45 seconds.
-> - NEVER produce a clip longer than 60 seconds.
-> - Ensure the start and end timestamps encompass a full, coherent story,
->   joke, discussion point, or moment without cutting off mid-sentence.`
-    : `> - This video is under 10 minutes long, so clips do NOT need to hit a
->   45-second minimum.
-> - Every clip duration (endTime − startTime) MUST still be strictly LESS
->   THAN 60 seconds.
-> - Clip length can vary naturally per moment (for example 18s, 34s, 52s) —
->   pick whatever length makes THAT specific moment complete and
->   self-contained, as long as it stays under 60 seconds.
-> - Ensure the start and end timestamps encompass a full, coherent story,
->   joke, discussion point, or moment without cutting off mid-sentence.`;
-
-  return `You are a professional video editor and virality expert. Given a complete timestamped transcript from a video, identify AT LEAST 6 (ideally 6–8) of the most engaging, interesting, and self-contained moments suitable for short vertical clips. Never return fewer than 6 unless the transcript is genuinely too short to contain 6 non-overlapping moments.
-
-### CRITICAL DURATION RULE (NON-NEGOTIABLE)
-
-${durationBlock}
-
-### For each moment, provide:
-
-- **startTime / endTime** — must match the transcript timestamps and satisfy the duration rule above.
-- **reason** — 1–2 sentences explaining why this moment is engaging or viral.
-- **score** — engagement score strictly between 0 and 1 (e.g. 0.85, 0.95).
-- **clipTitle** — short, punchy title under 60 characters.
-- **clipDescription** — concise 1–2 sentence description, under 300 characters.
-- **tags** — 3–8 short, lowercase, hashtag-style keywords describing content, topic, mood, and people involved (e.g. \`comedy\`, \`celebrity\`, \`reaction\`). No \`#\` symbol; use hyphens for multi-word tags.
-- **style** — exactly one editing style for this clip (see below).
-- **hookText** — 2–8 word contextual persistent top-banner hook or topic title tailored specifically to this clip's moment (e.g. "Wait for the ending 🤯", "Watch till the end 👇", "Step 1 of 3: The Secret", "Tax Rule You Didn't Know 💡") that ffmpeg overlays at the top of the vertical frame.
-- **emojis** — 1–3 contextual emojis matching the emotional tone or reaction of the moment (e.g. \`["🤯", "🔥"]\`, \`["😂", "💀"]\`).
-
-### STYLE SELECTION
-
-Choose exactly one \`style\` value per clip. Pick whichever example below is closest to the actual moment — don't reason abstractly about "which style sounds right," match against the examples.
-
-**Example 1** — moment: *"So here's the thing nobody tells you about starting a business... I'm going to explain the exact three-step process I used, but first let me tell you why most people get this backwards."*
-→ \`style: "curiosity-hook"\` — opens by withholding information and teasing what's coming; classic retention hook. Adds a small persistent "keep watching" style caption.
-
-**Example 2** — moment: a calm, detailed explanation of how a tax law works, step by step, with no jokes or emotional beats.
-→ \`style: "fixed-caption-clean"\` — dense informational content reads better with one steady caption than fast-changing word-pop text.
-
-**Example 3** — moment: *"And then he just — [laughs] — he FULL ON tripped over the dog, in front of everyone, and just laid there."*
-→ \`style: "meme-zoom-pop"\` — physical-comedy punchline; fast captions and a zoom on the punchline land the joke.
-
-**Example 4** — moment: *"I didn't tell anyone this for years... my dad passed away right before I got the acceptance letter."*
-→ \`style: "emotional-ken-burns"\` — vulnerable, sincere disclosure; slow drift, no emojis, nothing that undercuts the moment.
-
-**Example 5** — moment: *"You have to stop waiting for permission. Nobody is coming to save you — get up and go do the thing today."*
-→ \`style: "motivational-zoom-in"\` — direct call to action / advice; builds intensity toward the key line.
-
-**Example 6** — moment: a guest reacts with genuine shock to a piece of celebrity gossip, lots of gasping and "no way" reactions.
-→ \`style: "emoji-reaction"\` — high-energy reaction moment; emojis amplify the reaction without needing a zoom.
-
-If a moment doesn't clearly match any example, default to \`"curiosity-hook"\`.
-
-### VIDEO-LEVEL METADATA (return once, for the whole video — not per clip)
-
-- **videoTitle** — punchy, clickable title under 100 characters.
-- **videoDescription** — 2–4 sentences, max 500 characters, naturally weaving in relevant keywords and a couple of hashtags — written for someone scrolling a feed, not a dry summary.
-- **keywords** — comma-separated SEO keywords/phrases for the whole video, max 500 characters total.
-- **hashtags** — 5–15 hashtags, kept SEPARATE from keywords, each starting with \`#\`, lowercase, no spaces.
-
-**Example** (video containing a business-advice clip, a motivational clip, and a funny dog story clip):
-
-> - videoTitle: \`"The Business Advice Nobody Gives You (+ That Dog Story)"\`
-> - videoDescription: \`"From the exact 3-step framework that changed everything to the story about the dog that derailed an entire pitch meeting — this episode has it all. #businesstips #podcastclips #entrepreneur"\`
-> - keywords: \`"business strategy, startup advice, entrepreneur podcast, motivational story, funny podcast moment, business framework, quitting too early, pitch meeting story"\`
-> - hashtags: \`["#businesstips", "#podcastclips", "#entrepreneur", "#motivation", "#startuplife", "#funnymoments"]\`
-
-### OUTPUT FORMAT
-
-Return valid JSON with exactly this structure — no markdown, no preamble:
-
-\`\`\`json
-{
-  "videoTitle": "...",
-  "videoDescription": "...",
-  "keywords": "...",
-  "hashtags": ["...", "..."],
-  "highlights": [
-    {
-      "startTime": 12.0,
-      "endTime": 58.0,
-      "reason": "Captivating hook and punchline with complete thought",
-      "score": 0.92,
-      "clipTitle": "The Secret Formula",
-      "clipDescription": "Speaker reveals the core strategy that changed everything.",
-      "tags": ["strategy", "business", "growth"],
-      "style": "motivational-zoom-in",
-      "hookText": "The 3-Step Formula 👇",
-      "emojis": ["🔥", "💡"]
-    }
-  ]
-}
-\`\`\`
-
-IMPORTANT: Do NOT nest an "items" object inside "highlights". The value of "highlights" must be a direct array: "highlights": [...]
-
----
-
-### Available \`style\` values
-
-\`curiosity-hook\` · \`fixed-caption-clean\` · \`meme-zoom-pop\` · \`emotional-ken-burns\` · \`motivational-zoom-in\` · \`emoji-reaction\`
-
-Each maps to a caption/zoom/emoji treatment your editor (ffmpeg) applies — the agent only needs to name the style, not describe the treatment.`;
 }
 
 const SDK_MAX_RETRIES = 0;

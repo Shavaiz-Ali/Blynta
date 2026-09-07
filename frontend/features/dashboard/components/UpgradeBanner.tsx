@@ -2,28 +2,37 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AppButton } from "@/components/common/AppButton";
 import type { UserProfile } from "@/features/auth/types";
 import { CrownIcon } from "../icons";
+import { cn } from "@/lib/utils";
 
 export function UpgradeBanner({ plan }: { plan: UserProfile["plan"] }) {
-  if (plan !== "free") return null;
+  const [dismissed, setDismissed] = React.useState(false);
+
+  if (plan !== "free" || dismissed) return null;
 
   return (
-    <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-border/80 bg-card/80 backdrop-blur text-xs text-muted-foreground shadow-sm">
-      <div className="flex items-center gap-2 min-w-0">
-        <CrownIcon className="h-4 w-4 text-primary shrink-0" />
+    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg border border-border/70 bg-card/60 text-xs">
+      <div className="flex items-center gap-2 min-w-0 text-muted-foreground">
+        <CrownIcon className="h-3.5 w-3.5 text-primary/70 shrink-0" />
         <span className="truncate">
-          You are using the{" "}
-          <strong className="text-foreground font-semibold">Free Plan</strong>{" "}
-          with watermark &amp; standard features.
+          Free plan active —{" "}
+          <Link href="/billing" className="text-foreground font-semibold hover:text-primary transition-colors">
+            upgrade
+          </Link>{" "}
+          for HD exports, no watermark, and 10× more credits.
         </span>
       </div>
-      <Link href="/billing" className="shrink-0 sm:w-auto w-full">
-        <AppButton size="sm" className="h-7.5 text-xs px-3.5 font-semibold w-full sm:w-auto">
-          Upgrade
-        </AppButton>
-      </Link>
+      <button
+        type="button"
+        onClick={() => setDismissed(true)}
+        className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors cursor-pointer"
+        aria-label="Dismiss"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+          <path d="M18 6 6 18" /><path d="m6 6 12 12" />
+        </svg>
+      </button>
     </div>
   );
 }

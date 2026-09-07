@@ -133,6 +133,12 @@ export class Job {
   videoUploader: string; // channel name, from yt-dlp
 
   @Prop()
+  thumbnailUrl: string; // thumbnail image URL from source or yt-dlp
+
+  @Prop()
+  videoDuration: number; // total duration in seconds from yt-dlp/ffmpeg
+
+  @Prop()
   localVideoPath: string;
 
   @Prop()

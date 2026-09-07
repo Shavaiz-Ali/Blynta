@@ -3,19 +3,21 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/features/auth/queries";
-import { useJobs } from "@/features/jobs";
+import { useJobs, JobStatus } from "@/features/jobs";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { WelcomeDialog } from "@/features/dashboard/components/WelcomeDialog";
 import { AppButton } from "@/components/common/AppButton";
 import { DashboardHeaderRight } from "./DashboardHeaderRight";
 import { UpgradeBanner } from "./UpgradeBanner";
 import { HeroInput } from "./HeroInput";
-import { StatsBar, StatsBarSkeleton } from "./StatsBar";
+import { ActivePipelineBanner } from "./ActivePipelineBanner";
+import { ReadyClipsRack } from "./ReadyClipsRack";
 import { JobsCard } from "./JobsCard";
 import { JobsSkeleton } from "./JobsSkeleton";
 import { AttentionNeeded } from "./AttentionNeeded";
+import { PipelineThroughput } from "./PipelineThroughput";
 import { AlertTriangleIcon } from "../icons";
-import { getFirstName, countCompletedClips } from "../utils";
+import { countCompletedClips } from "../utils";
 
 export function DashboardHome() {
   const router = useRouter();
@@ -35,17 +37,13 @@ export function DashboardHome() {
     }
   }, [profile?.isWelcomed]);
 
-  const creditsResetText = profile?.creditsResetAt
-    ? `Resets ${new Date(profile.creditsResetAt).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    })}`
-    : "Resets monthly";
-
   const totalClipsGenerated = countCompletedClips(jobs);
+  const hasCompletedClips = jobs.some((j) => j.status === JobStatus.COMPLETED && j.clips && j.clips.length > 0);
 
   const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center">
+    <div className="flex-1 min-w-0 flex items-center justify-between">
+      <h1 className="text-sm font-medium text-foreground">Home</h1>
+
       {profile ? (
         <DashboardHeaderRight profile={profile} />
       ) : (
@@ -59,52 +57,20 @@ export function DashboardHome() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6">
-        {/* ── Top Upgrade Short Banner (Opus Clip style) ── */}
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6 max-w-6xl mx-auto">
+        {/* ── Top Upgrade Short Banner (if on free tier) ── */}
         {!profileLoading && <UpgradeBanner plan={profile?.plan ?? "free"} />}
 
-        {/* ── Page heading ── */}
-        <div>
-          {profileLoading ? (
-            <div className="space-y-1.5">
-              <div className="h-8 w-56 bg-muted rounded-lg animate-pulse" />
-              <div className="h-4 w-72 bg-muted rounded-md animate-pulse" />
-            </div>
-          ) : profile ? (
-            <>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                Welcome back, {getFirstName(profile.name || profile.email)}
-                <span className="text-primary">.</span>
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Paste a video link or upload a file to generate viral clips automatically.
-              </p>
-            </>
-          ) : (
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
-              Dashboard
-            </h1>
-          )}
-        </div>
-
-        {/* ── Hero input (primary action) ── */}
+        {/* ── High-Impact Hero & Smart Input ── */}
         <HeroInput />
 
-        {/* ── Slim stats bar (secondary info) ── */}
-        {profileLoading || jobsLoading ? (
-          <StatsBarSkeleton />
-        ) : (
-          <StatsBar
-            profile={profile}
-            totalClips={totalClipsGenerated}
-            creditsResetText={creditsResetText}
-          />
-        )}
+        {/* ── Active Real-time Pipeline Progress Banner ── */}
+        {!jobsLoading && <ActivePipelineBanner jobs={jobs} />}
 
         {/* ── Attention needed (failed jobs banner if any) ── */}
         {!jobsLoading && <AttentionNeeded jobs={jobs} />}
 
-        {/* ── Full width jobs list ── */}
+        {/* ── Split Layout: Archives (Main) & Ready Clips Showcase (Side) ── */}
         <div className="min-w-0">
           {jobsLoading ? (
             <JobsSkeleton />
@@ -127,10 +93,25 @@ export function DashboardHome() {
                 Refresh
               </AppButton>
             </div>
+          ) : hasCompletedClips ? (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Left / Main Archives Column */}
+              <div className="lg:col-span-12 min-w-0">
+                <JobsCard jobs={jobs} />
+              </div>
+
+              {/* Right / Ready Viral Clips Column */}
+              {/* <div className="lg:col-span-4 min-w-0 sticky top-20">
+                <ReadyClipsRack jobs={jobs} />
+              </div> */}
+            </div>
           ) : (
             <JobsCard jobs={jobs} />
           )}
         </div>
+
+        {/* ── Pipeline Throughput & Keyboard Status Footer ── */}
+        {/* <PipelineThroughput profile={profile} totalClips={totalClipsGenerated} /> */}
       </div>
 
       {profile ? (

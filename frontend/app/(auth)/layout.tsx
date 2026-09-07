@@ -91,7 +91,7 @@ export default function AuthLayout({
 
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.18] mb-3">
             Turn long videos into{" "}
-            <span className="bg-gradient-to-r from-primary via-emerald-400 to-secondary bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
               viral clips
             </span>{" "}
             in minutes.
@@ -128,7 +128,7 @@ export default function AuthLayout({
           <div className="flex -space-x-2 shrink-0">
             <span className="h-7 w-7 rounded-full ring-2 ring-background bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">JD</span>
             <span className="h-7 w-7 rounded-full ring-2 ring-background bg-secondary/20 flex items-center justify-center text-[10px] font-bold text-secondary">MK</span>
-            <span className="h-7 w-7 rounded-full ring-2 ring-background bg-emerald-500/20 flex items-center justify-center text-[10px] font-bold text-emerald-400">SL</span>
+            <span className="h-7 w-7 rounded-full ring-2 ring-background bg-muted flex items-center justify-center text-[10px] font-bold text-foreground">SL</span>
           </div>
           <span>Join 10,000+ creators scaling their short-form content.</span>
         </div>

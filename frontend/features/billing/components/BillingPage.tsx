@@ -492,7 +492,9 @@ export function BillingPage() {
   }, [showSuccess, showCanceled, dismissSuccess, dismissCancel]);
 
   const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center">
+    <div className="flex-1 min-w-0 flex items-center justify-between">
+      <h1 className="text-sm font-medium text-foreground">Subscription</h1>
+
       {profile ? (
         <DashboardHeaderRight profile={profile} />
       ) : (

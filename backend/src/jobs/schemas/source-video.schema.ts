@@ -38,6 +38,12 @@ export class SourceVideo {
   @Prop()
   videoUploader: string; // channel name, from yt-dlp — free metadata, worth capturing
 
+  @Prop()
+  thumbnailUrl: string; // thumbnail image URL
+
+  @Prop()
+  videoDuration: number; // total duration in seconds
+
   // R2 object keys, NOT local paths — local paths are the job-level working copy used during
   // active processing; these keys are the durable, shared, permanent storage in R2.
   @Prop()
