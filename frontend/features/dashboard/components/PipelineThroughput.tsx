@@ -1,6 +1,6 @@
 "use client";
 
-import * as React from "react";
+import { AppCard } from "@/components/common/AppCard";
 import { UserProfile } from "@/features/auth/types";
 import { GaugeIcon, ZapIcon, CommandIcon } from "../icons";
 
@@ -17,7 +17,7 @@ export function PipelineThroughput({ profile, totalClips = 0 }: PipelineThroughp
   return (
     <div className="space-y-4 pt-2">
       {/* ── Metric Card ── */}
-      <div className="rounded-2xl border border-border/70 bg-card/60 p-4 sm:p-5 backdrop-blur-sm shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <AppCard className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Left: Speed summary */}
         <div className="flex items-center gap-3.5">
           <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shrink-0">
@@ -45,7 +45,7 @@ export function PipelineThroughput({ profile, totalClips = 0 }: PipelineThroughp
             <p className="text-[11px] text-muted-foreground font-medium">Monthly Ingests</p>
           </div>
         </div>
-      </div>
+      </AppCard>
 
       {/* ── Keyboard Shortcuts & System Status Footer ── */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground px-2 py-1">

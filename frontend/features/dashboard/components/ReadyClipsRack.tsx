@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Job, JobStatus, Clip, Highlight } from "@/features/jobs";
 import { AppButton } from "@/components/common";
+import { AppCard } from "@/components/common/AppCard";
 import { cn } from "@/lib/utils";
 import { getJobThumbnail, formatTimestamp } from "../utils";
 import {
@@ -62,7 +63,7 @@ export function ReadyClipsRack({ jobs }: ReadyClipsRackProps) {
   }
 
   return (
-    <div className="flex flex-col h-full rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-sm space-y-4">
+    <AppCard className="flex flex-col h-full space-y-4" useDefaultClasses={false}>
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -171,6 +172,6 @@ export function ReadyClipsRack({ jobs }: ReadyClipsRackProps) {
         <span className="flex-1 text-center">Open Studio Clip Editor</span>
         <ArrowRightIcon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
       </AppButton>
-    </div>
+    </AppCard>
   );
 }

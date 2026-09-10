@@ -20,6 +20,9 @@ import {
   SparklesIcon,
 } from "../icons";
 
+import { AppCard } from "@/components/common/AppCard";
+import { Badge } from "@/components/ui/badge";
+
 interface JobCardListProps {
   job: Job;
 }
@@ -36,14 +39,14 @@ export function JobCardList({ job }: JobCardListProps) {
   const isFailed = job.status === JobStatus.FAILED;
 
   const handleRowClick = () => {
-    router.push(`/jobs/${job._id || job.id}`);
+    router.push(`/my-clips/${job._id || job.id}`);
   };
 
   return (
-    <div
+    <AppCard
       onClick={handleRowClick}
       className={cn(
-        "group relative flex items-center justify-between gap-4 p-3 sm:p-4 rounded-xl border border-border/70 bg-card/70 hover:bg-accent/40 hover:border-primary/30 transition-all duration-200 cursor-pointer",
+        "group relative flex items-center justify-between gap-4 hover:border-primary/40 hover:shadow-sm transition-all duration-200 cursor-pointer rounded-lg",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
       )}
     >
@@ -102,24 +105,24 @@ export function JobCardList({ job }: JobCardListProps) {
       <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
         {/* Status Pill */}
         {isCompleted ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+          <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             Ready
-          </span>
+          </Badge>
         ) : isProcessing ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-chart-4/15 text-chart-4 border border-chart-4/25">
+          <Badge variant="secondary" className="bg-chart-4/15 text-chart-4 border-chart-4/25 text-[11px] font-semibold gap-1">
             <ClockIcon className="h-3 w-3 animate-spin" />
             Processing
-          </span>
+          </Badge>
         ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20">
+          <Badge variant="destructive" className="text-[11px] font-semibold gap-1">
             Failed
-          </span>
+          </Badge>
         )}
 
         {/* Action Menu with delete confirmation */}
         <JobActionsMenu job={job} menuPlacement="bottom" />
       </div>
-    </div>
+    </AppCard>
   );
 }

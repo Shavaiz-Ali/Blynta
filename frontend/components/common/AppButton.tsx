@@ -45,7 +45,7 @@ const appVariantToShadcn: Partial<Record<
 
 export interface AppButtonProps
   extends Omit<ShadcnButtonProps, "variant">,
-    VariantProps<typeof appButtonVariants> {
+  VariantProps<typeof appButtonVariants> {
   isLoading?: boolean;
   icon?: React.ReactNode;
   iconPosition?: "left" | "right";
@@ -122,8 +122,8 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
       size === "xs" || size === "icon-xs"
         ? "xs"
         : size === "lg" || size === "icon-lg"
-        ? "md"
-        : "sm";
+          ? "md"
+          : "sm";
 
     return (
       <Button
@@ -132,7 +132,7 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
         variant={shadcnVariant}
         size={size}
         disabled={isDisabled}
-        className={cn(appButtonVariants({ variant }), className)}
+        className={cn(appButtonVariants({ variant }), "cursor-pointer", className)}
         {...props}
       >
         {showSpinner ? (

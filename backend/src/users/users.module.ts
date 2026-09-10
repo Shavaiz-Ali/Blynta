@@ -5,6 +5,7 @@ import { UsersController } from './users.controller';
 import { User, UserSchema } from './schemas/user.schema';
 import { MailModule } from 'src/mail/mail.module';
 import { ReferralReward, ReferralRewardSchema } from './schemas/referral-reward.schema';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [MongooseModule.forFeature([{ name: User.name, schema: UserSchema },
@@ -12,7 +13,8 @@ import { ReferralReward, ReferralRewardSchema } from './schemas/referral-reward.
   ],
 
   ),
-    MailModule],
+    MailModule,
+    NotificationsModule],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],

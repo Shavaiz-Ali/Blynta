@@ -1,4 +1,4 @@
-import * as React from "react";
+import { AppCard } from "@/components/common/AppCard";
 import type { Job } from "@/features/jobs";
 import { AlertTriangleIcon } from "../icons";
 import { getFailedJobs, getJobDisplayTitle, platformIcon, truncateUrl } from "../utils";
@@ -7,7 +7,7 @@ export function AttentionNeeded({ jobs }: { jobs: Job[] }) {
   const failed = getFailedJobs(jobs);
   if (failed.length === 0) return null;
   return (
-    <div className="rounded-2xl border border-destructive/30 bg-card shadow-sm overflow-hidden">
+    <AppCard className="p-0 border-destructive/30 overflow-hidden">
       <div className="flex items-center gap-2 px-5 py-4 bg-destructive/5 border-b border-destructive/20">
         <AlertTriangleIcon className="h-4 w-4 text-destructive" />
         <h4 className="font-semibold text-sm text-foreground">
@@ -32,6 +32,6 @@ export function AttentionNeeded({ jobs }: { jobs: Job[] }) {
           </li>
         ))}
       </ul>
-    </div>
+    </AppCard>
   );
 }

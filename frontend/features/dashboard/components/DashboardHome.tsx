@@ -11,11 +11,9 @@ import { DashboardHeaderRight } from "./DashboardHeaderRight";
 import { UpgradeBanner } from "./UpgradeBanner";
 import { HeroInput } from "./HeroInput";
 import { ActivePipelineBanner } from "./ActivePipelineBanner";
-import { ReadyClipsRack } from "./ReadyClipsRack";
 import { JobsCard } from "./JobsCard";
 import { JobsSkeleton } from "./JobsSkeleton";
 import { AttentionNeeded } from "./AttentionNeeded";
-import { PipelineThroughput } from "./PipelineThroughput";
 import { AlertTriangleIcon } from "../icons";
 import { countCompletedClips } from "../utils";
 
@@ -57,62 +55,61 @@ export function DashboardHome() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-5 sm:py-6 space-y-6 max-w-6xl mx-auto">
-        {/* ── Top Upgrade Short Banner (if on free tier) ── */}
-        {!profileLoading && <UpgradeBanner plan={profile?.plan ?? "free"} />}
 
-        {/* ── High-Impact Hero & Smart Input ── */}
-        <HeroInput />
+      {/* ── Top Upgrade Short Banner (if on free tier) ── */}
+      {!profileLoading && <UpgradeBanner plan={profile?.plan ?? "free"} />}
 
-        {/* ── Active Real-time Pipeline Progress Banner ── */}
-        {!jobsLoading && <ActivePipelineBanner jobs={jobs} />}
+      {/* ── High-Impact Hero & Smart Input ── */}
+      <HeroInput />
 
-        {/* ── Attention needed (failed jobs banner if any) ── */}
-        {!jobsLoading && <AttentionNeeded jobs={jobs} />}
+      {/* ── Active Real-time Pipeline Progress Banner ── */}
+      {!jobsLoading && <ActivePipelineBanner jobs={jobs} />}
 
-        {/* ── Split Layout: Archives (Main) & Ready Clips Showcase (Side) ── */}
-        <div className="min-w-0">
-          {jobsLoading ? (
-            <JobsSkeleton />
-          ) : jobsError ? (
-            <div className="rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm text-center">
-              <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
-              <p className="text-sm font-semibold text-foreground">
-                Couldn&apos;t load your clips
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {(jobsError as any)?.message ||
-                  "Please refresh the page to try again."}
-              </p>
-              <AppButton
-                variant="outline"
-                size="sm"
-                className="mt-4"
-                onClick={() => router.refresh()}
-              >
-                Refresh
-              </AppButton>
+      {/* ── Attention needed (failed jobs banner if any) ── */}
+      {!jobsLoading && <AttentionNeeded jobs={jobs} />}
+
+      {/* ── Split Layout: Archives (Main) & Ready Clips Showcase (Side) ── */}
+      <div className="min-w-0">
+        {jobsLoading ? (
+          <JobsSkeleton />
+        ) : jobsError ? (
+          <div className="rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm text-center">
+            <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
+            <p className="text-sm font-semibold text-foreground">
+              Couldn&apos;t load your clips
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {(jobsError as any)?.message ||
+                "Please refresh the page to try again."}
+            </p>
+            <AppButton
+              variant="outline"
+              size="sm"
+              className="mt-4"
+              onClick={() => router.refresh()}
+            >
+              Refresh
+            </AppButton>
+          </div>
+        ) : hasCompletedClips ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left / Main Archives Column */}
+            <div className="lg:col-span-12 min-w-0">
+              <JobsCard jobs={jobs} />
             </div>
-          ) : hasCompletedClips ? (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Left / Main Archives Column */}
-              <div className="lg:col-span-12 min-w-0">
-                <JobsCard jobs={jobs} />
-              </div>
 
-              {/* Right / Ready Viral Clips Column */}
-              {/* <div className="lg:col-span-4 min-w-0 sticky top-20">
+            {/* Right / Ready Viral Clips Column */}
+            {/* <div className="lg:col-span-4 min-w-0 sticky top-20">
                 <ReadyClipsRack jobs={jobs} />
               </div> */}
-            </div>
-          ) : (
-            <JobsCard jobs={jobs} />
-          )}
-        </div>
-
-        {/* ── Pipeline Throughput & Keyboard Status Footer ── */}
-        {/* <PipelineThroughput profile={profile} totalClips={totalClipsGenerated} /> */}
+          </div>
+        ) : (
+          <JobsCard jobs={jobs} />
+        )}
       </div>
+
+      {/* ── Pipeline Throughput & Keyboard Status Footer ── */}
+      {/* <PipelineThroughput profile={profile} totalClips={totalClipsGenerated} /> */}
 
       {profile ? (
         <WelcomeDialog

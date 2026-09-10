@@ -48,10 +48,12 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
     if (!job?.clips) return;
     const clipParam = searchParams.get("clip");
     if (clipParam) {
-      const idx = job.clips.findIndex(
-        (c) => getClipId(c) === clipParam || (c as any).id === clipParam
-      );
-      if (idx >= 0) setActiveClipIndex(idx);
+      const idx = job.clips.findIndex((c) => getClipId(c) === clipParam);
+      if (idx >= 0) {
+        requestAnimationFrame(() => {
+          setActiveClipIndex(idx);
+        });
+      }
     }
   }, [job?.clips, searchParams]);
 
@@ -109,8 +111,8 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
           setDeleteOpen(false);
           setActiveClipIndex(0);
         },
-        onError: (err: any) => {
-          toast.error(err?.message || "Failed to delete clip.");
+        onError: (err: Error) => {
+          toast.error(err.message || "Failed to delete clip.");
           setDeleteOpen(false);
         },
       }
@@ -119,86 +121,84 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6">
-        {/* Processing State: Show only when processing AND no completed clips are ready yet */}
-        {isJobProcessing && completedClips.length === 0 && <JobProcessingView job={job} />}
+      {/* Processing State: Show only when processing AND no completed clips are ready yet */}
+      {isJobProcessing && completedClips.length === 0 && <JobProcessingView job={job} />}
 
-        {/* Failed State Card */}
-        {isJobFailed && completedClips.length === 0 && <FailedStateCard job={job} />}
+      {/* Failed State Card */}
+      {isJobFailed && completedClips.length === 0 && <FailedStateCard job={job} />}
 
-        {/* Studio View: Show as soon as clips start getting generated or job completes */}
-        {completedClips.length > 0 && activeClip && (
-          <div className="space-y-6">
-            {/* Top Bar with Clip Selector Tabs */}
-            <StudioTopBar
-              job={job}
-              activeClipIndex={safeClipIndex}
-              onSelectClip={(idx) => setActiveClipIndex(idx)}
-            />
+      {/* Studio View: Show as soon as clips start getting generated or job completes */}
+      {completedClips.length > 0 && activeClip && (
+        <div className="space-y-6">
+          {/* Top Bar with Clip Selector Tabs */}
+          <StudioTopBar
+            job={job}
+            activeClipIndex={safeClipIndex}
+            onSelectClip={(idx) => setActiveClipIndex(idx)}
+          />
 
-            {/* Two-Column Studio Grid Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
-              {/* Left: Video Player + Caption Styling card beneath it */}
-              <div className="lg:col-span-5 order-1 flex flex-col items-center gap-4">
-                <StudioCenterPanel
-                  jobId={getJobId(job)}
-                  clip={activeClip}
-                  job={job}
-                  onDeleteClip={() => setDeleteOpen(true)}
-                />
-                {/* Caption Styling sits below the player to fill the left column height */}
-                <div className="w-full max-w-[420px]">
-                  <CaptionStylingCard />
-                </div>
-              </div>
-
-              {/* Right: Viral Intelligence + Clip Details stacked */}
-              <div className="lg:col-span-7 order-2 flex flex-col gap-4 min-w-0">
-                <StudioLeftPanel
-                  job={job}
-                  activeHighlight={activeHighlight}
-                  activeClip={activeClip}
-                />
-                <StudioRightPanel
-                  job={job}
-                  clip={activeClip}
-                  highlight={activeHighlight}
-                  clipIndex={safeClipIndex}
-                  onDeleteClip={() => setDeleteOpen(true)}
-                />
+          {/* Two-Column Studio Grid Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+            {/* Left: Video Player + Caption Styling card beneath it */}
+            <div className="lg:col-span-5 order-1 flex flex-col items-center gap-4">
+              <StudioCenterPanel
+                jobId={getJobId(job)}
+                clip={activeClip}
+                job={job}
+                onDeleteClip={() => setDeleteOpen(true)}
+              />
+              {/* Caption Styling sits below the player to fill the left column height */}
+              <div className="w-full max-w-[420px]">
+                <CaptionStylingCard />
               </div>
             </div>
 
-            {/* AI SEO & Social Growth Kit (Description, Keywords, Hashtags) */}
-            <VideoMetadataKit
-              job={job}
-              activeHighlight={activeHighlight}
-              clipIndex={safeClipIndex}
-            />
+            {/* Right: Viral Intelligence + Clip Details stacked */}
+            <div className="lg:col-span-7 order-2 flex flex-col gap-4 min-w-0">
+              <StudioLeftPanel
+                job={job}
+                activeHighlight={activeHighlight}
+                activeClip={activeClip}
+              />
+              <StudioRightPanel
+                job={job}
+                clip={activeClip}
+                highlight={activeHighlight}
+                clipIndex={safeClipIndex}
+                onDeleteClip={() => setDeleteOpen(true)}
+              />
+            </div>
           </div>
-        )}
 
-        {/* Completed job but 0 completed clips */}
-        {isJobComplete && completedClips.length === 0 && (
-          <div className="rounded-2xl border border-border bg-card p-8 text-center space-y-3">
-            <FilmIcon className="h-10 w-10 text-muted-foreground/40 mx-auto" />
-            <h3 className="text-base font-semibold text-foreground">
-              No clips generated for this job
-            </h3>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              The AI was unable to detect any high-confidence viral moments in this video.
-            </p>
-            <AppButton
-              variant="outline"
-              size="sm"
-              onClick={() => router.push("/dashboard")}
-              className="mt-2"
-            >
-              Try another video
-            </AppButton>
-          </div>
-        )}
-      </div>
+          {/* AI SEO & Social Growth Kit (Description, Keywords, Hashtags) */}
+          <VideoMetadataKit
+            job={job}
+            activeHighlight={activeHighlight}
+            clipIndex={safeClipIndex}
+          />
+        </div>
+      )}
+
+      {/* Completed job but 0 completed clips */}
+      {isJobComplete && completedClips.length === 0 && (
+        <div className="rounded-2xl border border-border bg-card p-8 text-center space-y-3">
+          <FilmIcon className="h-10 w-10 text-muted-foreground/40 mx-auto" />
+          <h3 className="text-base font-semibold text-foreground">
+            No clips generated for this job
+          </h3>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            The AI was unable to detect any high-confidence viral moments in this video.
+          </p>
+          <AppButton
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/dashboard")}
+            className="mt-2"
+          >
+            Try another video
+          </AppButton>
+        </div>
+      )}
 
       {/* Delete Clip Confirmation Dialog */}
       <AppDialog

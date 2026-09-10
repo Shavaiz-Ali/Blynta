@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { JobDetailContent } from "@/features/jobs/components/JobDetail";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +14,6 @@ export default async function JobDetailPage({
   }
 
   const { id } = await params;
-
-  return <JobDetailContent jobId={id} />;
+  redirect(`/my-clips/${id}`);
 }
 

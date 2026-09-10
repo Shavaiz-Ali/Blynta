@@ -22,6 +22,9 @@ import {
   ClockIcon,
 } from "../icons";
 
+import { AppCard } from "@/components/common/AppCard";
+import { Badge } from "@/components/ui/badge";
+
 interface JobCardGridProps {
   job: Job;
 }
@@ -38,14 +41,14 @@ export function JobCardGrid({ job }: JobCardGridProps) {
   const isFailed = job.status === JobStatus.FAILED;
 
   const handleCardClick = () => {
-    router.push(`/jobs/${job._id || job.id}`);
+    router.push(`/my-clips/${job._id || job.id}`);
   };
 
   return (
-    <div
+    <AppCard
       onClick={handleCardClick}
       className={cn(
-        "group relative flex flex-col rounded-2xl border border-border/80 bg-card overflow-hidden transition-all duration-300",
+        "group relative flex flex-col overflow-hidden transition-all duration-300 p-0 rounded-lg",
         "hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 cursor-pointer text-left",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
       )}
@@ -121,25 +124,25 @@ export function JobCardGrid({ job }: JobCardGridProps) {
         <div className="pt-2 border-t border-border/50 flex items-center justify-between gap-2">
           {/* Clips Extracted Pill / Processing status */}
           {isCompleted ? (
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-[11px] font-semibold">
+            <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold gap-1">
               <SparklesIcon className="h-3 w-3" />
               <span>{clipsCount} {clipsCount === 1 ? "clip" : "clips"} generated</span>
-            </div>
+            </Badge>
           ) : isProcessing ? (
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-chart-4/15 text-chart-4 border border-chart-4/25 text-[11px] font-semibold">
+            <Badge variant="secondary" className="bg-chart-4/15 text-chart-4 border-chart-4/25 text-[11px] font-semibold gap-1">
               <ClockIcon className="h-3 w-3 animate-spin" />
               <span>Processing...</span>
-            </div>
+            </Badge>
           ) : (
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20 text-[11px] font-semibold">
+            <Badge variant="destructive" className="text-[11px] font-semibold gap-1">
               <span>Failed</span>
-            </div>
+            </Badge>
           )}
 
           {/* Three dot context menu with delete confirmation */}
           <JobActionsMenu job={job} menuPlacement="top" />
         </div>
       </div>
-    </div>
+    </AppCard>
   );
 }

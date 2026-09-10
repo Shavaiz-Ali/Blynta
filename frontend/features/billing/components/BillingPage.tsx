@@ -455,9 +455,9 @@ export function BillingPage() {
 
   const creditsResetText = profile?.creditsResetAt
     ? new Date(profile.creditsResetAt).toLocaleDateString(undefined, {
-        month: "short",
-        day: "numeric",
-      })
+      month: "short",
+      day: "numeric",
+    })
     : "Resets monthly";
 
   const currentPlan: UserPlan = (profile?.plan as UserPlan) ?? "free";
@@ -513,84 +513,82 @@ export function BillingPage() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6">
-        {/* ── Feedback banner (success / canceled) ── */}
-        {showSuccess && !dismissSuccess && (
-          <FeedbackBanner
-            variant="success"
-            onDismiss={() => setDismissSuccess(true)}
-          />
-        )}
-        {showCanceled && !dismissCancel && (
-          <FeedbackBanner
-            variant="canceled"
-            onDismiss={() => setDismissCancel(true)}
-          />
-        )}
+      {/* ── Feedback banner (success / canceled) ── */}
+      {showSuccess && !dismissSuccess && (
+        <FeedbackBanner
+          variant="success"
+          onDismiss={() => setDismissSuccess(true)}
+        />
+      )}
+      {showCanceled && !dismissCancel && (
+        <FeedbackBanner
+          variant="canceled"
+          onDismiss={() => setDismissCancel(true)}
+        />
+      )}
 
-        {/* ── Page heading ── */}
-        <div className="space-y-1.5">
-          {profileLoading ? (
-            <div className="space-y-1.5">
-              <div className="h-8 w-56 bg-muted rounded-lg animate-pulse" />
-              <div className="h-4 w-72 bg-muted rounded-md animate-pulse" />
-            </div>
-          ) : (
-            <>
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-                Billing &amp; Plan
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Manage your subscription, view remaining credits, and upgrade anytime.
-              </p>
-            </>
-          )}
-        </div>
-
-        {/* ── Current plan / credits summary ── */}
+      {/* ── Page heading ── */}
+      <div className="space-y-1.5">
         {profileLoading ? (
-          <CurrentPlanBarSkeleton />
+          <div className="space-y-1.5">
+            <div className="h-8 w-56 bg-muted rounded-lg animate-pulse" />
+            <div className="h-4 w-72 bg-muted rounded-md animate-pulse" />
+          </div>
         ) : (
-          <CurrentPlanBar
-            currentPlan={currentPlan}
-            creditsBalance={profile?.creditsBalance ?? 0}
-            creditsResetText={creditsResetText}
-            clipsGenerated={clipsGenerated}
-          />
+          <>
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Billing &amp; Plan
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Manage your subscription, view remaining credits, and upgrade anytime.
+            </p>
+          </>
         )}
+      </div>
 
-        {/* ── Plan cards grid ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-          {profileLoading
-            ? [0, 1, 2].map((i) => <PlanCardSkeleton key={i} />)
-            : DISPLAY_PLANS.map((plan) => (
-                <PlanCard
-                  key={plan.id}
-                  plan={plan}
-                  currentPlan={currentPlan}
-                  isLoading={createCheckout.isPending}
-                  onUpgrade={handleUpgrade}
-                />
-              ))}
-        </div>
+      {/* ── Current plan / credits summary ── */}
+      {profileLoading ? (
+        <CurrentPlanBarSkeleton />
+      ) : (
+        <CurrentPlanBar
+          currentPlan={currentPlan}
+          creditsBalance={profile?.creditsBalance ?? 0}
+          creditsResetText={creditsResetText}
+          clipsGenerated={clipsGenerated}
+        />
+      )}
 
-        {/* ── Footer note ── */}
-        <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <p>
-            All charges are in USD and processed securely by Stripe. Monthly
-            subscriptions renew automatically; cancel anytime from this page.
-          </p>
-          <p>
-            Need a custom volume plan?{" "}
-            <button
-              type="button"
-              onClick={() => router.push("/settings")}
-              className="font-semibold text-foreground underline-offset-2 hover:underline"
-            >
-              Contact support
-            </button>
-          </p>
-        </div>
+      {/* ── Plan cards grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        {profileLoading
+          ? [0, 1, 2].map((i) => <PlanCardSkeleton key={i} />)
+          : DISPLAY_PLANS.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              currentPlan={currentPlan}
+              isLoading={createCheckout.isPending}
+              onUpgrade={handleUpgrade}
+            />
+          ))}
+      </div>
+
+      {/* ── Footer note ── */}
+      <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <p>
+          All charges are in USD and processed securely by Stripe. Monthly
+          subscriptions renew automatically; cancel anytime from this page.
+        </p>
+        <p>
+          Need a custom volume plan?{" "}
+          <button
+            type="button"
+            onClick={() => router.push("/settings")}
+            className="font-semibold text-foreground underline-offset-2 hover:underline"
+          >
+            Contact support
+          </button>
+        </p>
       </div>
     </DashboardLayout>
   );

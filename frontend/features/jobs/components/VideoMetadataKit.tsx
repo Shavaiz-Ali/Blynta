@@ -49,16 +49,19 @@ export function VideoMetadataKit({
     return [];
   }, [rawKeywords, activeHighlight?.tags]);
 
+  const highlightTags = activeHighlight?.tags;
+  const jobHashtags = job.hashtags;
+
   // Parse hashtags: string array or extract from tags
   const hashtagsList: string[] = React.useMemo(() => {
-    if (job.hashtags && job.hashtags.length > 0) {
-      return job.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`));
+    if (jobHashtags && jobHashtags.length > 0) {
+      return jobHashtags.map((h) => (h.startsWith("#") ? h : `#${h}`));
     }
-    if (activeHighlight?.tags && activeHighlight.tags.length > 0) {
-      return activeHighlight.tags.map((t) => (t.startsWith("#") ? t : `#${t}`));
+    if (highlightTags && highlightTags.length > 0) {
+      return highlightTags.map((t) => (t.startsWith("#") ? t : `#${t}`));
     }
     return [];
-  }, [job.hashtags, activeHighlight?.tags]);
+  }, [jobHashtags, highlightTags]);
 
   const videoDescription = job.videoDescription?.trim() || "";
   const videoTitle = job.videoTitle?.trim() || "";

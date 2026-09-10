@@ -11,6 +11,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+export type AppSelectSize = "sm" | "default" | "lg";
+
 export interface AppSelectOption {
   value: string;
   label: React.ReactNode;
@@ -30,6 +32,7 @@ export interface AppSelectProps {
   onValueChange?: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  size?: AppSelectSize;
   className?: string;
   triggerClassName?: string;
   contentClassName?: string;
@@ -37,6 +40,12 @@ export interface AppSelectProps {
   wrapperClassName?: string;
   children?: React.ReactNode;
 }
+
+const sizeTriggerClasses: Record<AppSelectSize, string> = {
+  sm: "h-8 text-xs px-2.5 rounded-md",
+  default: "h-9 text-sm px-3 rounded-md",
+  lg: "h-10 text-sm px-3.5 rounded-md",
+};
 
 export function AppSelect({
   id: idProp,
@@ -50,6 +59,7 @@ export function AppSelect({
   onValueChange,
   placeholder = "Select an option",
   disabled,
+  size = "default",
   className,
   triggerClassName,
   contentClassName,
@@ -68,7 +78,7 @@ export function AppSelect({
         <Label
           htmlFor={selectId}
           className={cn(
-            "text-sm font-medium leading-none text-foreground",
+            "text-xs font-medium text-foreground",
             error && "text-destructive",
             labelClassName
           )}
@@ -81,22 +91,26 @@ export function AppSelect({
       <Select
         value={value}
         defaultValue={defaultValue}
-        onValueChange={(val: any) => onValueChange?.(val)}
+        onValueChange={(val: string | null) => {
+          if (val !== null) onValueChange?.(val);
+        }}
         disabled={disabled}
       >
         <SelectTrigger
           id={selectId}
           aria-invalid={!!error}
-          aria-describedby={error ? errorId : helperText ? helperId : undefined}
+          aria-describedby={error ? errorId : helperId ? helperId : undefined}
           className={cn(
-            error && "border-destructive focus-visible:ring-destructive/40",
+            sizeTriggerClasses[size],
+            "border-input bg-background/50 dark:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring shadow-xs",
+            error && "border-destructive focus-visible:ring-destructive",
             triggerClassName,
             className
           )}
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
-        <SelectContent className={contentClassName}>
+        <SelectContent className={cn("rounded-md border-border bg-popover text-popover-foreground shadow-md", contentClassName)}>
           {children
             ? children
             : options?.map((opt) => (
@@ -104,6 +118,7 @@ export function AppSelect({
                   key={opt.value}
                   value={opt.value}
                   disabled={opt.disabled}
+                  className="rounded-sm"
                 >
                   <div className="flex flex-col text-left py-0.5">
                     <span className="text-sm font-medium text-foreground">

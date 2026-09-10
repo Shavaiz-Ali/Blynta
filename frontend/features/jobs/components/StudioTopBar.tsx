@@ -20,6 +20,7 @@ import {
   CalendarIcon,
 } from "@/features/dashboard/icons";
 import { AppButton } from "@/components/common/AppButton";
+import { AppTabs } from "@/components/common/AppTabs";
 import { downloadTranscriptAsTxt } from "./TranscriptDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -148,45 +149,29 @@ export function StudioTopBar({
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pt-1">
           {/* Left: Horizontal Clip Carousel */}
           <div className="flex items-center gap-2 overflow-x-auto pb-0.5 max-w-full">
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-muted/40 border border-border/60">
-              {completedClips.map((c, idx) => {
+            <AppTabs
+              value={String(activeClipIndex)}
+              onValueChange={(val) => onSelectClip(Number(val))}
+              tabs={completedClips.map((c, idx) => {
                 const highlight = job.highlights?.[idx];
-                const isSelected = activeClipIndex === idx;
                 const score =
                   typeof highlight?.score === "number"
                     ? Math.round(highlight.score * 100)
                     : null;
-
-                return (
-                  <button
-                    key={getClipId(c) || idx}
-                    type="button"
-                    onClick={() => onSelectClip(idx)}
-                    className={cn(
-                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 cursor-pointer",
-                      isSelected
-                        ? "bg-primary text-primary-foreground shadow-xs"
-                        : "text-muted-foreground hover:text-foreground hover:bg-card/60"
-                    )}
-                  >
-                    <FilmIcon className="h-3.5 w-3.5 shrink-0" />
-                    <span>Clip {idx + 1}</span>
-                    {score !== null && (
-                      <span
-                        className={cn(
-                          "text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold",
-                          isSelected
-                            ? "bg-primary-foreground/20 text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        )}
-                      >
+                return {
+                  value: String(idx),
+                  icon: <FilmIcon className="h-3.5 w-3.5 shrink-0" />,
+                  label: `Clip ${idx + 1}`,
+                  badge:
+                    score !== null ? (
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-md font-bold bg-muted text-muted-foreground">
                         {score}%
                       </span>
-                    )}
-                  </button>
-                );
+                    ) : undefined,
+                };
               })}
-            </div>
+              className="w-auto"
+            />
           </div>
 
           {/* Right: Share & Schedule Actions */}

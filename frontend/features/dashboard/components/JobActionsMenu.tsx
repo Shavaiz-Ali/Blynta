@@ -74,7 +74,7 @@ export function JobActionsMenu({
             <AppButton
               variant="ghost"
               size="icon"
-              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 cursor-pointer"
               aria-label="More options"
             >
               <MoreVerticalIcon className="h-4 w-4" />

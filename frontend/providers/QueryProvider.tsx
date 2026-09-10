@@ -15,8 +15,11 @@ function makeQueryClient(): QueryClient {
       queries: {
         staleTime: 1000 * 5, // 5 seconds
         gcTime: 1000 * 60 * 5, // 5 minutes
-        retry: (failureCount, error: any) => {
-          const status = (error as any)?.status ?? undefined;
+        retry: (failureCount, error) => {
+          const status =
+            (error as Error & { status?: number; response?: { status?: number } })?.status ??
+            (error as Error & { response?: { status?: number } })?.response?.status ??
+            undefined;
           if (status && status >= 400 && status < 500) return false;
           return failureCount < 2;
         },

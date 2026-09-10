@@ -72,8 +72,9 @@ export function StudioRightPanel({
       a.click();
       a.remove();
       toast.success("Clip download started!");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to download clip.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to download clip.";
+      toast.error(msg);
     } finally {
       setDownloading(false);
     }

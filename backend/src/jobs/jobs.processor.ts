@@ -20,6 +20,11 @@ import { SourceVideoService } from '../media/services/source-video.service';
 import { R2Service } from '../storage/r2.service';
 import { resolveStylePreset, DEFAULT_STYLE_PRESET_KEY } from '../media/style-presets';
 import { resolveEditorStyle } from '../media/editor-styles';
+import {
+  NotificationCategory,
+  NotificationType,
+} from '../notifications/schemas/notification.schema';
+import { NotificationsService } from '../notifications/notifications.service';
 
 type ClipDraft = {
   highlight: HighlightDto;
@@ -50,6 +55,7 @@ export class JobsProcessor extends WorkerHost {
     private clipCuttingService: ClipCuttingService,
     private sourceVideoService: SourceVideoService,
     private r2Service: R2Service,
+    private notificationsService: NotificationsService,
   ) {
     super();
   }
@@ -573,16 +579,60 @@ export class JobsProcessor extends WorkerHost {
       }
 
       const anyClipSucceeded = clipDocs.some((c) => c.status === JobStatus.COMPLETED);
+      const successfulClipCount = clipDocs.filter(
+        (c) => c.status === JobStatus.COMPLETED,
+      ).length;
 
       // --- Stage 5: Complete ---
       this.logger.log(`[${jobId}] Stage 5/5: Finalizing`);
-      await this.jobsService.updateJob(jobId, {
+      const finalJob = await this.jobsService.updateJob(jobId, {
         status: anyClipSucceeded ? JobStatus.COMPLETED : JobStatus.FAILED,
         clips: clipDocs, // redundant with the last loop iteration's write, kept for clarity/safety
         ...(anyClipSucceeded
           ? {}
           : { errorMessage: 'All clips failed to cut', errorStage: 'cutting_clips' }),
       });
+
+      // Queue idempotent in-app notifications via BullMQ (never inline)
+      if (finalJob) {
+        try {
+          if (anyClipSucceeded) {
+            await this.notificationsService.queueCreateIfNotExists({
+              userId: finalJob.userId,
+              type: NotificationType.SUCCESS,
+              category: NotificationCategory.JOB,
+              title: 'Your clips are ready',
+              message:
+                successfulClipCount === 1
+                  ? '1 clip was successfully generated.'
+                  : `${successfulClipCount} clips were successfully generated.`,
+              actionUrl: `/dashboard/jobs/${jobId}`,
+              actionLabel: 'View clips',
+              entityType: 'job',
+              entityId: jobId,
+              dedupeKey: `job:${jobId}:completed`,
+            });
+          } else {
+            await this.notificationsService.queueCreateIfNotExists({
+              userId: finalJob.userId,
+              type: NotificationType.ERROR,
+              category: NotificationCategory.JOB,
+              title: 'Clip generation failed',
+              message:
+                'We were unable to generate clips from your video. Please try again.',
+              actionUrl: `/dashboard/jobs/${jobId}`,
+              actionLabel: 'View job',
+              entityType: 'job',
+              entityId: jobId,
+              dedupeKey: `job:${jobId}:failed`,
+            });
+          }
+        } catch (notifErr) {
+          this.logger.warn(
+            `[${jobId}] Failed to queue ${anyClipSucceeded ? 'success' : 'failure'} notification: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
+          );
+        }
+      }
 
       this.logger.log(
         `[${jobId}] Pipeline finished (status=${anyClipSucceeded ? 'COMPLETED' : 'FAILED'})`,
@@ -604,11 +654,33 @@ export class JobsProcessor extends WorkerHost {
         }
       } catch { }
 
-      await this.jobsService.updateJob(jobId, {
+      const failedJob = await this.jobsService.updateJob(jobId, {
         status: JobStatus.FAILED,
         errorMessage: msg,
         errorStage: stage,
       });
+
+      if (failedJob) {
+        try {
+          await this.notificationsService.queueCreateIfNotExists({
+            userId: failedJob.userId,
+            type: NotificationType.ERROR,
+            category: NotificationCategory.JOB,
+            title: 'Clip generation failed',
+            message:
+              'We were unable to generate clips from your video. Please try again.',
+            actionUrl: `/dashboard/jobs/${jobId}`,
+            actionLabel: 'View job',
+            entityType: 'job',
+            entityId: jobId,
+            dedupeKey: `job:${jobId}:failed`,
+          });
+        } catch (notifErr) {
+          this.logger.warn(
+            `[${jobId}] Failed to queue failure notification: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
+          );
+        }
+      }
     } finally {
       // -------------------------------------------------------------------------
       // Local temp cleanup — only runs on COMPLETED jobs.

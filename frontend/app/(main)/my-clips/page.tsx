@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { MyClipsClient } from "@/features/dashboard/components/MyClipsClient";
+import { ClipsLibrary } from "@/features/jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -10,5 +10,5 @@ export default async function MyClipsPage() {
     redirect("/login");
   }
 
-  return <MyClipsClient />;
+  return <ClipsLibrary />;
 }

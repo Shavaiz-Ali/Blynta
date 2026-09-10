@@ -22,8 +22,6 @@ import {
   SettingsIcon,
   FolderIcon,
   Share2Icon,
-  ChevronRightIcon,
-  ZapIcon,
 } from "../icons";
 
 /* -------------------------------------------------------------------------- */
@@ -131,7 +129,7 @@ function NavItem({
       <Comp
         className={cn(
           "h-4 w-4 shrink-0 transition-colors",
-          isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground"
+          isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-sidebar-accent-foreground!"
         )}
       />
       {!isCollapsed && (
@@ -163,7 +161,7 @@ function NavItem({
       ? "opacity-40 cursor-not-allowed text-muted-foreground"
       : isActive
         ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground cursor-pointer"
+        : "text-muted-foreground hover:bg-sidebar-accent! dark:hover:text-foreground hover:text-sidebar-accent-foreground! cursor-pointer"
   );
 
   const element = item.disabled ? (
@@ -240,37 +238,6 @@ function SidebarContent({
         </Link>
       </div>
 
-      {/* ── Quick Create Action Pill ── */}
-      <div className={cn("shrink-0 px-2.5 pt-1 pb-1")}>
-        {isCollapsed ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Link
-                  href="/dashboard"
-                  onClick={onNavigate}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs transition-colors mx-auto"
-                >
-                  <ZapIcon className="h-4 w-4" />
-                </Link>
-              }
-            />
-            <TooltipContent side="right" className="text-xs">
-              Quick Create
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <Link
-            href="/dashboard"
-            onClick={onNavigate}
-            className="flex items-center gap-2 w-full h-9 px-3 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold shadow-xs transition-all"
-          >
-            <ZapIcon className="h-4 w-4 shrink-0" />
-            <span>Quick Create</span>
-          </Link>
-        )}
-      </div>
-
       <div className="px-2.5 py-0.5">
         <Separator className="bg-border/50" />
       </div>
@@ -278,7 +245,7 @@ function SidebarContent({
       {/* ── Grouped Navigation ── */}
       <nav className="flex-1 flex flex-col gap-3 px-2.5">
         {navGroups.map((group) => (
-          <div key={group.title} className="flex flex-col gap-1">
+          <div key={group.title} className="flex flex-col gap-2">
             {!isCollapsed && (
               <p className="px-3 pt-2 pb-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
                 {group.title}
@@ -441,7 +408,7 @@ export function DashboardLayout({ children, headerContent }: DashboardLayoutProp
           </div>
         </header>
 
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0 w-full px-6 sm:px-8 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto">{children}</main>
       </div>
 
       {/* Invite Members Modal */}

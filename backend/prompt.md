@@ -1,340 +1,1654 @@
-BACKEND PROMPT — Core video clipping pipeline (yt-dlp → Whisper → LLM highlight detection → ffmpeg), with transcription and captioning built as standalone reusable services
+# Blynta — Production-Grade Notification System
 
-CONTEXT:
-- NestJS backend, existing modules: UsersModule, AuthModule, JobsModule, MailModule, BillingModule (Stripe) — follow their existing conventions (schema/service/controller/module pattern, ConfigService for all secrets, Logger for structured logging).
-- Job schema exists at src/jobs/schemas/job.schema.ts with JobStatus enum (PENDING, TRANSCRIBING, DETECTING_HIGHLIGHTS, CUTTING_CLIPS, COMPLETED, FAILED), TranscriptSegment, Highlight, and Clip subdocuments — READ this file first, extend only if a field is genuinely missing (see Task 1).
-- BullMQ + Redis already configured — follow the exact registerQueue/Processor pattern already used in src/mail/mail.processor.ts (read it as your reference for queue/processor structure).
-- UsersService.deductCredit(userId) already exists (atomic $inc with balance check) — reuse it, do not reimplement.
-- Storage: VPS LOCAL DISK for this task (e.g. /var/blynta/storage/) — not Cloudinary/S3/R2, deferred to a later task.
-- Budget constraint: only ONE paid API call exists in this entire pipeline — the highlight-detection LLM call (Task 6). Video download, transcription, and clip cutting/caption burning must be fully self-hosted/free (yt-dlp, whisper.cpp, ffmpeg).
+You are working inside the existing **Blynta** application.
 
-===========================================
-ARCHITECTURAL REQUIREMENT — read before starting
-===========================================
+Your task is to design, implement, and integrate the **complete notification system from backend to frontend**.
 
-Transcription and caption generation must NOT be built as private logic buried inside a single "process the job" method. Build them as INDEPENDENT, STANDALONE SERVICES with their own clear input/output contracts, so they can be:
-(a) reused inside this job pipeline, AND
-(b) exposed later as standalone features/tools in their own right (e.g. a future "just transcribe this video" tool, or a future "just add captions to my existing video" tool, unrelated to the clip-highlight pipeline).
+The most important rule is:
 
-Concretely this means:
-- TranscriptionService's public method must take ONLY an audio file path and return ONLY a transcript — it must know nothing about Jobs, MongoDB, or the clipping pipeline. It is a pure "audio in, transcript out" service.
-- CaptionBurningService's public method must take ONLY a video file path + a transcript (or a subset of transcript segments) and return ONLY a captioned video file path — it must know nothing about Jobs, highlights, or credits. It is a pure "video + transcript in, captioned video out" service.
-- The JobsModule's own processor/orchestration code is what WIRES these together with job-specific concerns (updating Job.status, saving Job.transcript, deducting credits) — that orchestration logic lives in the processor, NOT inside the reusable services themselves.
-- This mirrors clean separation of concerns: reusable domain services vs. job-specific orchestration.
+> **DO NOT rewrite, replace, or unnecessarily refactor existing working functionality.**
+>
+> Inspect the existing codebase first and integrate the notification system into the architecture that already exists.
 
-===========================================
-TASK 1 — Schema additions
-===========================================
+The goal is to build a clean, production-grade notification system that fits the current Blynta architecture without overengineering it.
 
-Read src/jobs/schemas/job.schema.ts fully first. Add these fields only if not already present (use existing names if they already exist, tell me what you found instead of duplicating):
+---
 
-On Job:
-  @Prop() localVideoPath: string;      // e.g. /var/blynta/storage/jobs/<jobId>/source.mp4
-  @Prop() localAudioPath: string;      // e.g. /var/blynta/storage/jobs/<jobId>/audio.wav
-  @Prop() customPrompt: string;        // optional, Pro/Business only — see Task 6
-  @Prop({ default: 'default' }) aiModel: string; // 'default' for free tier, specific model string for paid tiers — see Task 6
+# 1. Existing Blynta Architecture
 
-On the Clip subdocument:
-  @Prop() localFilePath: string;       // e.g. /var/blynta/storage/jobs/<jobId>/clips/clip-1.mp4
-  @Prop() captionedFilePath: string;   // path AFTER caption burning — separate from the raw cut clip, see Task 7
-  @Prop() downloadUrl: string;         // URL the frontend uses to fetch/stream this clip — see Task 8
+## Backend
 
-===========================================
-TASK 2 — System tools setup (document as VPS setup instructions, do not npm-install these)
-===========================================
+The backend is:
 
-- yt-dlp: pip install -U yt-dlp — verify with yt-dlp --version
-- ffmpeg: sudo apt install ffmpeg — verify with ffmpeg -version
-- whisper.cpp: build from source (https://github.com/ggerganov/whisper.cpp), using the multilingual "base" GGML model (NOT base.en — our audience needs Hinglish/Urdu/English support, per product positioning). Document exact build commands, and tell me the resulting binary path (verify against whisper.cpp's current README — the binary name/location has changed across versions, e.g. ./main vs ./build/bin/whisper-cli — do not guess an outdated path, flag this explicitly as something to verify once built).
+* NestJS
+* MongoDB
+* Mongoose
+* Redis
+* BullMQ
+* JWT authentication
+* Resend for email
+* Cloudflare R2 for storage
 
-Node packages:
-- npm install fluent-ffmpeg (programmatic ffmpeg command building, safer than hand-built shell strings)
-- npm install -D @types/fluent-ffmpeg
-- npm install openai (OpenAI-compatible SDK, used ONLY in Task 6 for the highlight-detection LLM call)
+Relevant existing backend structure:
 
-===========================================
-TASK 3 — VideoDownloadService (standalone: yt-dlp + audio extraction)
-===========================================
+```text
+backend/
+├── src/
+│   ├── auth/
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   ├── auth-provider-config.service.ts
+│   │   ├── auth.controller.ts
+│   │   ├── auth.module.ts
+│   │   ├── auth.service.ts
+│   │   └── jwt.strategy.ts
+│   │
+│   ├── billing/
+│   │   ├── dto/
+│   │   ├── billing.controller.ts
+│   │   ├── billing.module.ts
+│   │   └── billing.service.ts
+│   │
+│   ├── jobs/
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   │   ├── job.schema.ts
+│   │   │   └── source-video.schema.ts
+│   │   ├── jobs-reconciliation.service.ts
+│   │   ├── jobs.constants.ts
+│   │   ├── jobs.controller.ts
+│   │   ├── jobs.module.ts
+│   │   ├── jobs.processor.ts
+│   │   └── jobs.service.ts
+│   │
+│   ├── mail/
+│   │   ├── templates/
+│   │   │   └── mail.templates.ts
+│   │   ├── mail.constants.ts
+│   │   ├── mail.module.ts
+│   │   ├── mail.processor.ts
+│   │   └── mail.service.ts
+│   │
+│   ├── media/
+│   │   ├── services/
+│   │   ├── prompts/
+│   │   ├── media.module.ts
+│   │   └── ...
+│   │
+│   ├── redis/
+│   ├── storage/
+│   ├── stripe/
+│   ├── users/
+│   │   ├── dto/
+│   │   ├── schemas/
+│   │   │   ├── referral-reward.schema.ts
+│   │   │   └── user.schema.ts
+│   │   ├── users.controller.ts
+│   │   ├── users.module.ts
+│   │   └── users.service.ts
+│   │
+│   ├── app.module.ts
+│   └── worker.ts
+```
 
-Create src/media/services/video-download.service.ts (new top-level "media" module — see Task 9 for why this lives outside JobsModule):
+The existing application already has:
 
-@Injectable()
-export class VideoDownloadService {
-  private readonly logger = new Logger(VideoDownloadService.name);
-  constructor(private configService: ConfigService) {}
+* Authentication
+* Users
+* Jobs
+* Billing
+* Referral system
+* Email system using Resend
+* Background processing with BullMQ
+* Redis
+* MongoDB
 
-  // Pure function: takes a URL and an output directory, returns file paths. Knows NOTHING about Jobs.
-  async downloadVideo(sourceUrl: string, outputDir: string): Promise<{ videoPath: string; audioPath: string }> {
-    await fs.promises.mkdir(outputDir, { recursive: true });
-    const videoPath = path.join(outputDir, 'source.mp4');
-    const audioPath = path.join(outputDir, 'audio.wav');
+Do not create duplicate implementations of any of these.
 
-    await this.runCommand('yt-dlp', [
-      '-f', 'bestvideo[height<=1080]+bestaudio/best[height<=1080]',
-      '--merge-output-format', 'mp4',
-      '-o', videoPath,
-      sourceUrl,
-    ]);
+---
 
-    await this.runCommand('ffmpeg', [
-      '-i', videoPath,
-      '-ar', '16000',
-      '-ac', '1',
-      '-c:a', 'pcm_s16le',
-      audioPath,
-    ]);
+# 2. Notification Schema Already Designed
 
-    return { videoPath, audioPath };
-  }
+A notification schema has already been designed.
 
-  private runCommand(command: string, args: string[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const proc = spawn(command, args);
-      let stderr = '';
-      proc.stderr.on('data', (d) => (stderr += d.toString()));
-      proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(`${command} exited with code ${code}: ${stderr.slice(-500)}`));
-      });
-    });
-  }
+Use the existing schema if it is already present. If it needs minor adjustments for the implementation, preserve its overall design and explain any necessary changes before making large changes.
+
+Expected schema:
+
+```ts
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+
+export type NotificationDocument = HydratedDocument<Notification>;
+
+export enum NotificationType {
+  INFO = 'info',
+  SUCCESS = 'success',
+  WARNING = 'warning',
+  ERROR = 'error',
 }
 
-Use Node's built-in child_process.spawn and fs/path — no extra dependencies here. Errors (private/deleted/age-restricted video) must throw clear messages that calling code can catch and translate into a FAILED job status.
-
-===========================================
-TASK 4 — TranscriptionService (standalone: whisper.cpp wrapper)
-===========================================
-
-Create src/media/services/transcription.service.ts:
-
-export interface TranscriptSegmentDto {
-  startTime: number; // seconds
-  endTime: number;   // seconds
-  text: string;
+export enum NotificationCategory {
+  SYSTEM = 'system',
+  JOB = 'job',
+  BILLING = 'billing',
+  CREDIT = 'credit',
+  REFERRAL = 'referral',
+  ACCOUNT = 'account',
 }
 
-@Injectable()
-export class TranscriptionService {
-  private readonly logger = new Logger(TranscriptionService.name);
-  private readonly whisperBinaryPath: string;
-  private readonly whisperModelPath: string;
-
-  constructor(private configService: ConfigService) {
-    this.whisperBinaryPath = this.configService.get<string>('WHISPER_BINARY_PATH');
-    this.whisperModelPath = this.configService.get<string>('WHISPER_MODEL_PATH');
-  }
-
-  // Pure function: audio file path in, transcript segments out. Knows NOTHING about Jobs or MongoDB.
-  // This must be independently callable/testable — e.g. `transcriptionService.transcribe('/tmp/some-audio.wav')`
-  // should work standalone, with no Job context required, so it can later power a standalone "transcribe this file" tool.
-  async transcribe(audioPath: string): Promise<TranscriptSegmentDto[]> {
-    const outputBase = audioPath.replace(/\.wav$/, '');
-
-    await this.runWhisper([
-      '-m', this.whisperModelPath,
-      '-f', audioPath,
-      '-oj',
-      '-of', outputBase,
-      '-l', 'auto',
-    ]);
-
-    const rawJson = await fs.promises.readFile(`${outputBase}.json`, 'utf-8');
-    const parsed = JSON.parse(rawJson);
-
-    // VERIFY this mapping against the ACTUAL installed whisper.cpp version's JSON output —
-    // field names (offsets.from/to vs t0/t1, ms vs centiseconds, "text" field name) vary by version.
-    // Do not assume the shape below is correct without checking real output first.
-    return parsed.transcription.map((seg: any) => ({
-      startTime: seg.offsets.from / 1000,
-      endTime: seg.offsets.to / 1000,
-      text: seg.text.trim(),
-    }));
-  }
-
-  private runWhisper(args: string[]): Promise<void> {
-    // identical spawn-based pattern to VideoDownloadService.runCommand — implement the same way
-  }
+export enum NotificationChannel {
+  IN_APP = 'in_app',
+  EMAIL = 'email',
 }
 
-IMPORTANT: run whisper.cpp manually on a test file first (I will do this on the VPS) and share the real JSON structure if it differs from the assumption above — do not invent field names.
-
-===========================================
-TASK 5 — CaptionBurningService (standalone: ffmpeg caption overlay)
-===========================================
-
-Create src/media/services/caption-burning.service.ts:
-
-@Injectable()
-export class CaptionBurningService {
-  private readonly logger = new Logger(CaptionBurningService.name);
-
-  // Pure function: a video file + transcript segments (already time-offset to match the clip's own 0-based timeline,
-  // NOT the original video's timeline — the caller is responsible for offsetting timestamps before calling this,
-  // since this service has no concept of "the original video" at all) in, a captioned video file path out.
-  // Knows NOTHING about Jobs, Highlights, or credits.
-  async burnCaptions(
-    inputVideoPath: string,
-    segments: TranscriptSegmentDto[],
-    outputVideoPath: string,
-  ): Promise<string> {
-    const srtPath = inputVideoPath.replace(/\.mp4$/, '.srt');
-    const srtContent = this.buildSrt(segments);
-    await fs.promises.writeFile(srtPath, srtContent, 'utf-8');
-
-    await this.burnWithFfmpeg(inputVideoPath, srtPath, outputVideoPath);
-    return outputVideoPath;
-  }
-
-  // Converts segments into standard SRT subtitle format:
-  // 1
-  // 00:00:00,000 --> 00:00:03,500
-  // Text of the first segment
-  private buildSrt(segments: TranscriptSegmentDto[]): string {
-    return segments
-      .map((seg, i) => {
-        const start = this.formatSrtTime(seg.startTime);
-        const end = this.formatSrtTime(seg.endTime);
-        return `${i + 1}\n${start} --> ${end}\n${seg.text}\n`;
-      })
-      .join('\n');
-  }
-
-  private formatSrtTime(totalSeconds: number): string {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = Math.floor(totalSeconds % 60);
-    const ms = Math.floor((totalSeconds % 1) * 1000);
-    const pad = (n: number, len = 2) => String(n).padStart(len, '0');
-    return `${pad(h)}:${pad(m)}:${pad(s)},${pad(ms, 3)}`;
-  }
-
-  private burnWithFfmpeg(videoPath: string, srtPath: string, outputPath: string): Promise<void> {
-    // Use fluent-ffmpeg here, applying the subtitles filter, e.g.:
-    // ffmpeg(videoPath).outputOptions([`-vf subtitles=${srtPath}:force_style='FontSize=24,PrimaryColour=&HFFFFFF&'`]).save(outputPath)
-    // Verify fluent-ffmpeg's exact API for applying a complex filter string like this — check its README/types
-    // rather than assuming a method name, since filter syntax via fluent-ffmpeg can be finicky with escaping.
-  }
+export enum NotificationStatus {
+  UNREAD = 'unread',
+  READ = 'read',
 }
 
-===========================================
-TASK 6 — HighlightDetectionService (the one paid API call)
-===========================================
+@Schema({
+  timestamps: true,
+  collection: 'notifications',
+})
+export class Notification {
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
+  userId: Types.ObjectId;
 
-Create src/media/services/highlight-detection.service.ts:
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationType),
+    required: true,
+  })
+  type: NotificationType;
 
-export interface HighlightDto {
-  startTime: number;
-  endTime: number;
-  reason: string;
-  score: number; // 0 to 1
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationCategory),
+    required: true,
+    index: true,
+  })
+  category: NotificationCategory;
+
+  @Prop({
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 200,
+  })
+  title: string;
+
+  @Prop({
+    type: String,
+    required: true,
+    trim: true,
+    maxlength: 1000,
+  })
+  message: string;
+
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationChannel),
+    required: true,
+    default: NotificationChannel.IN_APP,
+  })
+  channel: NotificationChannel;
+
+  @Prop({
+    type: String,
+    enum: Object.values(NotificationStatus),
+    default: NotificationStatus.UNREAD,
+    required: true,
+    index: true,
+  })
+  status: NotificationStatus;
+
+  @Prop({
+    type: String,
+    required: false,
+    trim: true,
+    maxlength: 500,
+  })
+  actionUrl?: string;
+
+  @Prop({
+    type: String,
+    required: false,
+    trim: true,
+    maxlength: 100,
+  })
+  actionLabel?: string;
+
+  @Prop({
+    type: String,
+    required: false,
+    trim: true,
+    maxlength: 100,
+  })
+  entityType?: string;
+
+  @Prop({
+    type: Types.ObjectId,
+    required: false,
+  })
+  entityId?: Types.ObjectId;
+
+  @Prop({
+    type: Object,
+    required: false,
+    default: undefined,
+  })
+  metadata?: Record<string, unknown>;
+
+  @Prop({
+    type: Date,
+    required: false,
+    index: true,
+  })
+  readAt?: Date;
+
+  @Prop({
+    type: Date,
+    required: false,
+    index: true,
+  })
+  expiresAt?: Date;
 }
 
-@Injectable()
-export class HighlightDetectionService {
-  private readonly logger = new Logger(HighlightDetectionService.name);
-  private client: OpenAI;
+export const NotificationSchema =
+  SchemaFactory.createForClass(Notification);
 
-  constructor(private configService: ConfigService) {
-    this.client = new OpenAI({ apiKey: this.configService.get<string>('LLM_API_KEY') });
-  }
+NotificationSchema.index({
+  userId: 1,
+  status: 1,
+  createdAt: -1,
+});
 
-  // Pure function: transcript segments in, ranked highlight timestamps out. No Job/Mongo knowledge.
-  async detectHighlights(
-    segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string },
-  ): Promise<HighlightDto[]> {
-    const model = options?.model || this.configService.get<string>('LLM_DEFAULT_MODEL', 'gpt-4o-mini');
-    const transcriptText = segments.map((s) => `[${s.startTime.toFixed(1)}s] ${s.text}`).join('\n');
+NotificationSchema.index({
+  userId: 1,
+  createdAt: -1,
+});
 
-    const systemPrompt = `You are a video editor's assistant. Given a timestamped transcript, identify the 3-5 most engaging, self-contained moments suitable for short vertical clips (15-60 seconds each). Return ONLY valid JSON matching this exact shape, no other text:
-[{"startTime": number, "endTime": number, "reason": "short string explaining why", "score": number between 0 and 1}]`;
+NotificationSchema.index({
+  expiresAt: 1,
+});
+```
 
-    const userPrompt = options?.customPrompt
-      ? `${options.customPrompt}\n\nTranscript:\n${transcriptText}`
-      : `Transcript:\n${transcriptText}`;
+The indexes are intentional.
 
-    const response = await this.client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: { type: 'json_object' }, // VERIFY this exact param name/support against the model chosen — not all models support forced JSON mode identically, check current OpenAI SDK docs for the model you actually configure
-    });
+For example:
 
-    const raw = response.choices[0]?.message?.content;
-    if (!raw) throw new Error('LLM returned no content for highlight detection');
+```ts
+NotificationSchema.index({
+  userId: 1,
+  status: 1,
+  createdAt: -1,
+});
+```
 
-    // The model may wrap the array in an object (e.g. { "highlights": [...] }) depending on prompt/JSON mode behavior —
-    // handle both a bare array and a wrapped object defensively, log the raw response if parsing fails so we can debug real output shape.
-    let parsed: any;
-    try {
-      parsed = JSON.parse(raw);
-    } catch (e) {
-      this.logger.error(`Failed to parse LLM response as JSON: ${raw}`);
-      throw new Error('LLM returned invalid JSON for highlight detection');
+supports queries such as:
+
+```ts
+Notification.find({
+  userId,
+  status: NotificationStatus.UNREAD,
+}).sort({
+  createdAt: -1,
+});
+```
+
+Do not remove these indexes without a concrete reason.
+
+---
+
+# 3. Important Notification Architecture
+
+Understand this distinction before implementing anything:
+
+```text
+Notification
+     ↓
+User-facing notification state
+     ↓
+MongoDB
+```
+
+is different from:
+
+```text
+Email
+     ↓
+Delivery mechanism
+     ↓
+Resend
+```
+
+A notification should not depend on Resend.
+
+For example:
+
+```text
+Job completed
+      │
+      ├── Create in-app notification
+      │
+      └── Send email through existing MailService
+```
+
+If Resend fails, the in-app notification should still exist.
+
+Do NOT turn the notification collection into an email delivery log.
+
+The existing `mail` module remains responsible for email delivery.
+
+---
+
+# 4. Create Notifications Module
+
+Create:
+
+```text
+src/notifications/
+├── dto/
+│   ├── list-notifications.dto.ts
+│   └── ...
+├── schemas/
+│   └── notification.schema.ts
+├── notifications.controller.ts
+├── notifications.service.ts
+└── notifications.module.ts
+```
+
+Do not create unnecessary files.
+
+---
+
+# 5. Notifications Module
+
+Register the Mongoose model using the existing project conventions.
+
+Conceptually:
+
+```ts
+@Module({
+  imports: [
+    MongooseModule.forFeature([
+      {
+        name: Notification.name,
+        schema: NotificationSchema,
+      },
+    ]),
+  ],
+  controllers: [NotificationsController],
+  providers: [NotificationsService],
+  exports: [NotificationsService],
+})
+export class NotificationsModule {}
+```
+
+The service MUST be exported because other modules will need to create notifications.
+
+For example:
+
+```text
+JobsService
+    ↓
+NotificationsService
+    ↓
+create(...)
+```
+
+and:
+
+```text
+BillingService
+    ↓
+NotificationsService
+    ↓
+create(...)
+```
+
+Register `NotificationsModule` in `AppModule` following the project's existing module-import style.
+
+---
+
+# 6. Notifications Service
+
+Build a clean `NotificationsService`.
+
+It should be responsible for notification business logic.
+
+At minimum implement:
+
+```text
+create()
+findForUser()
+getUnreadCount()
+markAsRead()
+markAllAsRead()
+delete()
+```
+
+The exact method signatures should follow the existing project's NestJS/Mongoose conventions.
+
+---
+
+# 7. Creating a Notification
+
+The service should allow internal application services to create notifications.
+
+Example:
+
+```ts
+await this.notificationsService.create({
+  userId,
+  type: NotificationType.SUCCESS,
+  category: NotificationCategory.JOB,
+  title: 'Your clips are ready',
+  message: '7 clips were successfully generated.',
+  actionUrl: `/dashboard/jobs/${jobId}`,
+  actionLabel: 'View clips',
+  entityType: 'job',
+  entityId: jobId,
+});
+```
+
+Another example:
+
+```ts
+await this.notificationsService.create({
+  userId,
+  type: NotificationType.SUCCESS,
+  category: NotificationCategory.CREDIT,
+  title: 'Credits added',
+  message: 'You received 1 bonus credit.',
+  actionUrl: '/dashboard',
+  actionLabel: 'Go to dashboard',
+  entityType: 'credit',
+});
+```
+
+Another example:
+
+```ts
+await this.notificationsService.create({
+  userId,
+  type: NotificationType.INFO,
+  category: NotificationCategory.BILLING,
+  title: 'Subscription updated',
+  message: 'Your Pro subscription is now active.',
+  actionUrl: '/dashboard/billing',
+  actionLabel: 'View billing',
+});
+```
+
+---
+
+# 8. User Isolation Is Critical
+
+Never allow the frontend to provide an arbitrary `userId` when retrieving or modifying notifications.
+
+Bad:
+
+```http
+GET /notifications?userId=123
+```
+
+Good:
+
+```text
+JWT
+ ↓
+authenticated user
+ ↓
+request.user.userId
+ ↓
+NotificationsService
+ ↓
+Notification.find({ userId })
+```
+
+A user must only be able to:
+
+* retrieve their own notifications
+* read their own notifications
+* delete their own notifications
+* mark their own notifications as read
+
+A request such as:
+
+```http
+PATCH /notifications/:notificationId/read
+```
+
+must verify that the notification belongs to the authenticated user.
+
+Do not rely only on:
+
+```ts
+findById(notificationId)
+```
+
+Instead use a user-scoped query, for example conceptually:
+
+```ts
+findOne({
+  _id: notificationId,
+  userId,
+});
+```
+
+This prevents IDOR/security issues.
+
+Use the existing authentication guard/decorator pattern already present in the project rather than inventing another authentication mechanism.
+
+---
+
+# 9. Controller API
+
+Implement a clean REST API.
+
+Recommended endpoints:
+
+```text
+GET    /notifications
+GET    /notifications/unread-count
+PATCH  /notifications/:id/read
+PATCH  /notifications/read-all
+DELETE /notifications/:id
+```
+
+Do not create a public endpoint that lets the frontend arbitrarily create notifications.
+
+There should NOT be:
+
+```text
+POST /notifications
+```
+
+for normal users.
+
+Notifications should be generated by backend business logic.
+
+---
+
+# 10. List Notifications
+
+Support pagination.
+
+Example:
+
+```http
+GET /notifications?page=1&limit=20
+```
+
+Response should contain enough information for the frontend to build pagination/infinite loading.
+
+For example:
+
+```json
+{
+  "data": [
+    {
+      "_id": "...",
+      "type": "success",
+      "category": "job",
+      "title": "Your clips are ready",
+      "message": "7 clips were successfully generated.",
+      "status": "unread",
+      "actionUrl": "/dashboard/jobs/123",
+      "actionLabel": "View clips",
+      "createdAt": "2026-09-09T10:00:00.000Z"
     }
-    return Array.isArray(parsed) ? parsed : parsed.highlights || parsed.data || [];
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 20,
+    "total": 42,
+    "totalPages": 3
   }
 }
+```
 
-Plan-gating logic (which model/customPrompt a user is allowed to use) belongs in the JobsModule orchestration layer (Task 9), NOT inside this service — this service just accepts whatever model/customPrompt it's given and trusts the caller to have already validated plan permissions.
+Follow the existing backend response interceptor/response format if the project already standardizes responses.
 
-===========================================
-TASK 7 — ClipCuttingService (standalone: ffmpeg cut + vertical crop)
-===========================================
+Do NOT blindly introduce a new response format if one already exists.
 
-Create src/media/services/clip-cutting.service.ts:
+---
 
-@Injectable()
-export class ClipCuttingService {
-  // Pure function: source video + a start/end time range in, a cut+cropped vertical clip file out.
-  async cutClip(
-    sourceVideoPath: string,
-    startTime: number,
-    endTime: number,
-    outputPath: string,
-  ): Promise<string> {
-    // Use fluent-ffmpeg: seek to startTime, set duration to (endTime - startTime),
-    // apply a crop+scale filter to convert to 9:16 vertical (e.g. crop=ih*9/16:ih,scale=1080:1920 —
-    // verify this exact filter chain produces correct output by testing manually, center-cropping is a
-    // reasonable default but note this doesn't do smart subject-tracking — that's a future enhancement, not in scope here).
-    // Save to outputPath.
-  }
+# 11. Unread Count
+
+Implement:
+
+```http
+GET /notifications/unread-count
+```
+
+Example response:
+
+```json
+{
+  "count": 5
 }
+```
 
-===========================================
-TASK 8 — Serving clip files to the frontend
-===========================================
+This endpoint will be used by the frontend notification bell.
 
-Add a simple static file serving route or a dedicated download endpoint (your call, justify which): either (a) NestJS serve-static module pointing at the storage directory with a public /media/ prefix, protected by checking the requesting user owns the job (don't just expose the whole storage folder publicly — verify job ownership before serving, similar to the existing getJobById ownership check pattern), or (b) a GET /jobs/:jobId/clips/:clipId/download endpoint that streams the file with proper ownership checks, reusing the existing JobsService.getJobById ownership-check pattern. Recommend option (b) since it's consistent with existing auth patterns already in this codebase — implement it using NestJS's StreamableFile response type.
+Use MongoDB's efficient counting mechanism.
 
-===========================================
-TASK 9 — Orchestration: wiring it together in JobsModule
-===========================================
+Do not retrieve all notifications just to count unread notifications.
 
-Create a new top-level MediaModule (src/media/media.module.ts) that provides VideoDownloadService, TranscriptionService, CaptionBurningService, HighlightDetectionService, ClipCuttingService, and EXPORTS all of them — this module has no Job/Mongo knowledge at all, it's purely reusable media-processing tools.
+---
 
-In JobsModule, import MediaModule. Create src/jobs/jobs.processor.ts (a BullMQ Processor, following the exact pattern in src/mail/mail.processor.ts) that:
-1. Injects JobsService (for status updates) and all five MediaModule services.
-2. Injects UsersService (for deductCredit and plan-checking).
-3. On processing a 'clip-video' job (queued from JobsService.createJob — add this queue call following the same registerQueue pattern as the 'mail' queue), runs this exact sequence, updating Job.status at each step:
-   a. Set status PENDING → call VideoDownloadService.downloadVideo, save localVideoPath/localAudioPath
-   b. Set status TRANSCRIBING → call TranscriptionService.transcribe(localAudioPath), save the result to Job.transcript
-   c. Set status DETECTING_HIGHLIGHTS → look up the user's plan; if FREE, call HighlightDetectionService.detectHighlights(transcript) with no custom options; if PRO/BUSINESS, pass job.customPrompt and job.aiModel if the user provided them (validate aiModel against an allowlist of permitted paid models — do not let users pass an arbitrary string to the LLM API unchecked). Save results to Job.highlights.
-   d. Set status CUTTING_CLIPS → for each highlight, call ClipCuttingService.cutClip to produce the raw vertical clip, then call CaptionBurningService.burnCaptions using the subset of transcript segments whose timestamps fall within that highlight's range (offset them to start at 0 relative to the clip, since CaptionBurningService expects clip-relative timestamps per Task 5's note). Save each result as a Clip subdocument with localFilePath, captionedFilePath, and a downloadUrl pointing at the Task 8 endpoint.
-   e. Set status COMPLETED. If any step throws, catch it, set status FAILED with a descriptive errorMessage and errorStage (matching the existing schema field), and log the full error server-side.
-4. Credit deduction: call UsersService.deductCredit(userId) at job creation time (in JobsService.createJob, before queuing), not after processing completes — consistent with "this job costs 1 credit to attempt," not "1 credit only if it succeeds" (flag this choice explicitly in your summary — I want to confirm this matches my intent, since the alternative — refunding credits on failure — is also reasonable and worth discussing, but implement pre-deduction for now as the simpler default).
+# 12. Mark One Notification as Read
 
-CONSTRAINTS:
-- Every file path used anywhere in this pipeline must be built with Node's path module, never string concatenation, to avoid path bugs.
-- Every external command execution (yt-dlp, ffmpeg, whisper.cpp) must go through the same spawn-based pattern with proper error capture — do not use exec() with string-interpolated shell commands, which is a command-injection risk given sourceUrl is user input.
-- Add cleanup logic (or at least a TODO comment with a clear plan) for deleting a job's local files after some retention period — we are on limited VPS disk, unbounded accumulation will fill the disk. Don't build the actual cleanup cron in this task, just flag it clearly as necessary follow-up work.
-- Do not touch AuthModule, BillingModule, or MailModule.
+Implement:
 
-At the end, give me:
-1. Final directory structure of src/media/ and the modified src/jobs/.
-2. Confirmation of the credit-deduction timing decision (Task 9.4) and whether you implemented it as specified or flagged a concern.
-3. A clear list of everything that needs manual verification on the actual VPS before this can be trusted (whisper.cpp output shape, ffmpeg filter chain correctness, binary paths) — since several parts of this prompt explicitly called out assumptions that need real-world confirmation, not blind trust.
-4. Confirmation that TranscriptionService, CaptionBurningService, and the other MediaModule services are genuinely callable independently of any Job context, proving the reusability requirement was met.
+```http
+PATCH /notifications/:id/read
+```
+
+When successful:
+
+```text
+status = READ
+readAt = current date
+```
+
+For example:
+
+```ts
+{
+  status: NotificationStatus.READ,
+  readAt: new Date(),
+}
+```
+
+The operation should be safe to call multiple times.
+
+If the notification is already read, it should not cause an error unnecessarily.
+
+---
+
+# 13. Mark All as Read
+
+Implement:
+
+```http
+PATCH /notifications/read-all
+```
+
+Only update the authenticated user's unread notifications.
+
+Conceptually:
+
+```ts
+updateMany(
+  {
+    userId,
+    status: NotificationStatus.UNREAD,
+  },
+  {
+    $set: {
+      status: NotificationStatus.READ,
+      readAt: new Date(),
+    },
+  },
+);
+```
+
+Do not update notifications belonging to another user.
+
+---
+
+# 14. Delete Notification
+
+Implement:
+
+```http
+DELETE /notifications/:id
+```
+
+Again, make the query user-scoped:
+
+```ts
+{
+  _id: notificationId,
+  userId,
+}
+```
+
+Do not allow deletion of another user's notification.
+
+---
+
+# 15. Action URLs
+
+Notifications are clickable.
+
+Example:
+
+```ts
+actionUrl: `/dashboard/jobs/${jobId}`,
+actionLabel: 'View clips',
+```
+
+Use relative internal URLs whenever possible.
+
+Examples:
+
+```text
+/dashboard/jobs/123
+/dashboard/billing
+/dashboard/referrals
+/settings
+```
+
+Do not hardcode production domains such as:
+
+```text
+https://blynta.com/dashboard/jobs/123
+```
+
+because the application should work correctly in:
+
+* local development
+* staging
+* production
+
+The frontend should render the action using the existing Next.js routing approach.
+
+---
+
+# 16. Frontend Integration
+
+First inspect the existing frontend structure and conventions.
+
+Do not create a second API client if one already exists.
+
+The existing frontend uses:
+
+* Next.js App Router
+* TanStack Query
+* shared Axios/authenticated Axios patterns
+* NextAuth as the frontend session layer
+
+Use the existing API abstraction.
+
+Create notification API/query functionality following the same style as existing features.
+
+Conceptually:
+
+```text
+frontend
+├── notifications API
+├── notification query hooks
+└── notification UI
+```
+
+Use TanStack Query if that is how the existing application fetches server state.
+
+---
+
+# 17. Notification Bell / UI
+
+Find the existing dashboard/header/navigation area where a notification bell belongs.
+
+If a notification UI already exists, improve/integrate it instead of creating a duplicate.
+
+The notification UI should support:
+
+```text
+Notification Bell
+      ↓
+Unread badge
+      ↓
+Notification dropdown/popover
+      ↓
+List notifications
+      ↓
+Click notification
+      ↓
+Mark as read
+      ↓
+Navigate using actionUrl
+```
+
+Example notification:
+
+```text
+┌─────────────────────────────────────┐
+│ ✓  Your clips are ready             │
+│    7 clips were successfully        │
+│    generated.                       │
+│                                     │
+│    View clips →                     │
+│    5 minutes ago                    │
+└─────────────────────────────────────┘
+```
+
+Unread notifications should have a visually clear but subtle distinction.
+
+Do not redesign the entire dashboard.
+
+---
+
+# 18. Frontend Behavior
+
+When opening the notification dropdown:
+
+```text
+GET /notifications
+```
+
+When displaying the badge:
+
+```text
+GET /notifications/unread-count
+```
+
+When clicking an unread notification:
+
+```text
+PATCH /notifications/:id/read
+```
+
+then:
+
+```text
+router.push(notification.actionUrl)
+```
+
+If `actionUrl` is missing:
+
+```text
+do not attempt navigation
+```
+
+If `actionLabel` is missing, the notification can still be clickable if the notification itself has an action URL.
+
+---
+
+# 19. Query Caching
+
+Use TanStack Query according to the existing project's patterns.
+
+After:
+
+```text
+mark notification as read
+```
+
+the frontend should update/invalidate the relevant:
+
+```text
+notifications query
+unread count query
+```
+
+After:
+
+```text
+mark all as read
+```
+
+invalidate/update:
+
+```text
+notifications
+unread count
+```
+
+Avoid unnecessary full-page reloads.
+
+---
+
+# 20. Backend Integration — Jobs
+
+This is one of the most important integrations.
+
+Inspect the existing job processing lifecycle.
+
+The current lifecycle is approximately:
+
+```text
+pending
+  ↓
+transcribing
+  ↓
+detecting_highlights
+  ↓
+cutting_clips
+  ↓
+completed / failed
+```
+
+Do NOT automatically create a notification for every processing stage.
+
+That would create notification spam.
+
+At minimum create notifications for:
+
+### Successful job
+
+When a job successfully completes:
+
+```ts
+await this.notificationsService.create({
+  userId: job.userId,
+  type: NotificationType.SUCCESS,
+  category: NotificationCategory.JOB,
+  title: 'Your clips are ready',
+  message: `${clipCount} clips were successfully generated.`,
+  actionUrl: `/dashboard/jobs/${job._id}`,
+  actionLabel: 'View clips',
+  entityType: 'job',
+  entityId: job._id,
+});
+```
+
+Use the actual available job/clip information instead of assuming field names.
+
+### Failed job
+
+When a job permanently fails:
+
+```ts
+await this.notificationsService.create({
+  userId: job.userId,
+  type: NotificationType.ERROR,
+  category: NotificationCategory.JOB,
+  title: 'Clip generation failed',
+  message: 'We were unable to generate clips from your video. Please try again.',
+  actionUrl: `/dashboard/jobs/${job._id}`,
+  actionLabel: 'View job',
+  entityType: 'job',
+  entityId: job._id,
+});
+```
+
+Do not expose internal stack traces, ffmpeg errors, API keys, or technical failure details to users.
+
+---
+
+# 21. Idempotency / Duplicate Notifications
+
+This is important because jobs use BullMQ and can be retried.
+
+A job may execute more than once.
+
+Do not blindly create duplicate "Your clips are ready" notifications on every retry.
+
+Inspect the existing job state and processing logic.
+
+Implement the simplest safe solution compatible with the existing schema.
+
+For example, before creating a completion notification, check whether an equivalent notification already exists for that job.
+
+Conceptually:
+
+```ts
+findOne({
+  userId,
+  category: NotificationCategory.JOB,
+  entityType: 'job',
+  entityId: job._id,
+  // appropriate notification identity/type
+});
+```
+
+If one already exists, don't create another.
+
+Do NOT add a complicated event-sourcing or distributed-idempotency system unless the existing architecture genuinely requires it.
+
+---
+
+# 22. Referral Notifications
+
+Inspect the existing referral implementation.
+
+When a referral reward is successfully granted, create appropriate notifications.
+
+Example for the referrer:
+
+```ts
+await this.notificationsService.create({
+  userId: referrerId,
+  type: NotificationType.SUCCESS,
+  category: NotificationCategory.REFERRAL,
+  title: 'Referral reward received',
+  message: 'You received 1 bonus credit from your referral.',
+  actionUrl: '/dashboard/referrals',
+  actionLabel: 'View referrals',
+  entityType: 'referral',
+});
+```
+
+Example for the referred user if appropriate:
+
+```ts
+await this.notificationsService.create({
+  userId: referredUserId,
+  type: NotificationType.SUCCESS,
+  category: NotificationCategory.REFERRAL,
+  title: 'Referral bonus added',
+  message: 'You received 1 bonus credit from your referral.',
+  actionUrl: '/dashboard',
+  actionLabel: 'View dashboard',
+});
+```
+
+Use the actual existing referral business rules.
+
+Do not change referral eligibility/reward logic.
+
+---
+
+# 23. Billing Notifications
+
+Inspect the current billing implementation.
+
+When subscription/payment state changes, notifications may be created for important events such as:
+
+```text
+subscription activated
+subscription upgraded
+subscription cancelled
+payment failed
+```
+
+Example:
+
+```ts
+await this.notificationsService.create({
+  userId,
+  type: NotificationType.SUCCESS,
+  category: NotificationCategory.BILLING,
+  title: 'Pro plan activated',
+  message: 'Your Pro subscription is now active.',
+  actionUrl: '/dashboard/billing',
+  actionLabel: 'View billing',
+});
+```
+
+For payment failure:
+
+```ts
+await this.notificationsService.create({
+  userId,
+  type: NotificationType.ERROR,
+  category: NotificationCategory.BILLING,
+  title: 'Payment failed',
+  message: 'We could not process your latest payment. Please update your billing information.',
+  actionUrl: '/dashboard/billing',
+  actionLabel: 'Update billing',
+});
+```
+
+Do not modify existing billing provider logic.
+
+Also remember that the billing provider may change from Stripe to a Merchant of Record provider, so keep notification logic **provider-agnostic**.
+
+Do not create notification types such as:
+
+```text
+STRIPE_PAYMENT_FAILED
+```
+
+Use:
+
+```text
+BILLING
+```
+
+instead.
+
+---
+
+# 24. Email Integration
+
+There is already a:
+
+```text
+src/mail/
+```
+
+module using Resend.
+
+Inspect:
+
+```text
+mail.service.ts
+mail.processor.ts
+mail.templates.ts
+mail.constants.ts
+```
+
+before modifying anything.
+
+Do not create another Resend service.
+
+The notification system should coexist with the existing mail system.
+
+For an important event:
+
+```text
+Job completed
+      │
+      ├── NotificationService.create()
+      │        ↓
+      │     MongoDB
+      │
+      └── MailService / existing email flow
+               ↓
+             Resend
+```
+
+Keep these responsibilities separate.
+
+If the existing mail system already supports queued email through BullMQ, use that system.
+
+Do not bypass the existing queue architecture just to send notification emails.
+
+---
+
+# 25. Email vs In-App
+
+Do not assume every notification must send an email.
+
+For example:
+
+```text
+Job processing started
+→ no email
+
+Job completed
+→ in-app notification
+→ potentially email
+
+Job failed
+→ in-app notification
+→ potentially email
+
+Subscription activated
+→ in-app notification
+→ email
+
+Referral reward
+→ in-app notification
+→ potentially email
+```
+
+Follow existing product behavior and avoid email spam.
+
+Do not introduce a large notification-preferences system unless one already exists.
+
+---
+
+# 26. Notification Channel Consideration
+
+The schema currently contains:
+
+```ts
+channel: NotificationChannel;
+```
+
+with:
+
+```ts
+IN_APP = 'in_app'
+EMAIL = 'email'
+```
+
+Do not incorrectly treat this as an email delivery record.
+
+If the existing architecture reveals that a single notification event needs to support both:
+
+```text
+in-app + email
+```
+
+without duplicating the notification itself, keep the notification as the user-facing event and let the existing mail system handle email delivery separately.
+
+If you believe the current `channel` field creates a real architectural problem, do not silently redesign it.
+
+Explain the issue and make the smallest production-safe adjustment.
+
+---
+
+# 27. Expiration
+
+The schema has:
+
+```ts
+expiresAt?: Date;
+```
+
+Do not implement complicated expiration behavior unless it is actually needed.
+
+If MongoDB TTL behavior is desired, inspect the current requirements first.
+
+Do not automatically add a TTL index that could unexpectedly delete user-visible notifications.
+
+A notification should not disappear merely because an arbitrary expiration date was added unless that behavior is explicitly intended.
+
+---
+
+# 28. Notification Categories
+
+Use the existing enum:
+
+```ts
+SYSTEM
+JOB
+BILLING
+CREDIT
+REFERRAL
+ACCOUNT
+```
+
+Do not create dozens of categories.
+
+Examples:
+
+```text
+JOB
+  Your clips are ready
+  Clip generation failed
+
+BILLING
+  Pro plan activated
+  Payment failed
+
+CREDIT
+  Credits added
+  Credits depleted
+
+REFERRAL
+  Referral reward received
+
+ACCOUNT
+  Email verified
+  Password changed
+
+SYSTEM
+  Maintenance
+  Important system announcement
+```
+
+---
+
+# 29. Notification Type
+
+Use:
+
+```ts
+INFO
+SUCCESS
+WARNING
+ERROR
+```
+
+Do not create:
+
+```text
+JOB_COMPLETED
+PAYMENT_FAILED
+REFERRAL_SUCCESS
+```
+
+as notification types.
+
+The event meaning belongs to the category/title/message/entity.
+
+---
+
+# 30. API Validation
+
+Use the existing DTO and validation conventions.
+
+For example:
+
+```ts
+class ListNotificationsDto {
+  page?: number;
+  limit?: number;
+  status?: NotificationStatus;
+  category?: NotificationCategory;
+}
+```
+
+Apply sensible limits.
+
+For example, don't allow:
+
+```text
+limit=100000
+```
+
+A reasonable maximum such as:
+
+```text
+50
+```
+
+or whatever convention the existing API uses is sufficient.
+
+Follow the project's existing `ValidationPipe` and DTO style.
+
+---
+
+# 31. Error Handling
+
+Follow the existing exception/filter architecture.
+
+Do not introduce a new error-handling framework.
+
+For example:
+
+```text
+notification not found
+```
+
+should be handled consistently with the rest of the API.
+
+Do not reveal database errors to users.
+
+---
+
+# 32. Performance
+
+The notification system must remain efficient.
+
+Use the existing indexes:
+
+```ts
+NotificationSchema.index({
+  userId: 1,
+  status: 1,
+  createdAt: -1,
+});
+
+NotificationSchema.index({
+  userId: 1,
+  createdAt: -1,
+});
+
+NotificationSchema.index({
+  expiresAt: 1,
+});
+```
+
+Notification list queries should:
+
+```text
+filter by userId
+sort by createdAt
+paginate
+```
+
+Unread count should use a database count operation.
+
+Mark-all-read should use:
+
+```text
+updateMany
+```
+
+rather than fetching every notification first.
+
+---
+
+# 33. Security Checklist
+
+Verify:
+
+* Users can only read their own notifications.
+* Users can only mark their own notifications as read.
+* Users can only delete their own notifications.
+* No arbitrary `userId` from client input is trusted.
+* Notification creation is internal/backend-controlled.
+* Internal errors are not exposed to users.
+* Notification metadata does not leak secrets.
+* Action URLs do not expose credentials/tokens.
+* No sensitive provider/API information is placed into notification messages.
+
+---
+
+# 34. Do Not Overengineer
+
+Do NOT introduce:
+
+```text
+Kafka
+RabbitMQ
+Event sourcing
+ClickHouse
+microservices
+separate notification database
+complex preference engine
+generic workflow engine
+```
+
+unless the existing application already uses them.
+
+Blynta is currently a NestJS + MongoDB + Redis/BullMQ application.
+
+Keep the notification system appropriate for that architecture.
+
+---
+
+# 35. Implementation Process
+
+Before changing code:
+
+### Step 1 — Inspect
+
+Inspect:
+
+```text
+auth
+users
+jobs
+billing
+mail
+frontend authentication
+frontend API client
+frontend TanStack Query usage
+dashboard/header/navigation
+```
+
+Understand the existing conventions.
+
+### Step 2 — Compare
+
+Determine:
+
+* How authenticated user IDs are accessed.
+* How controllers are protected.
+* How DTOs are written.
+* How MongoDB models are registered.
+* How services are structured.
+* How API responses are formatted.
+* How errors are handled.
+* How frontend API requests are implemented.
+* How TanStack Query hooks are organized.
+* Where the notification bell should live.
+
+### Step 3 — Implement
+
+Implement the notification system using those conventions.
+
+### Step 4 — Integrate
+
+Integrate with:
+
+```text
+Jobs
+Billing
+Referrals
+Mail
+Frontend dashboard
+```
+
+only where appropriate.
+
+### Step 5 — Test
+
+Run:
+
+```text
+TypeScript/build checks
+ESLint
+existing backend tests
+existing frontend checks
+```
+
+and add focused tests for the notification functionality.
+
+---
+
+# 36. Important — Preserve Existing Behavior
+
+Do NOT:
+
+* rewrite authentication
+* rewrite the mail system
+* rewrite billing
+* rewrite jobs
+* rewrite the referral system
+* change existing API response formats unnecessarily
+* change existing frontend design unnecessarily
+* replace TanStack Query
+* replace Axios
+* introduce another state-management system
+* change database models unrelated to notifications
+
+If an existing implementation already solves something correctly, reuse it.
+
+---
+
+# 37. Expected Final Architecture
+
+The desired architecture should look approximately like:
+
+```text
+                    ┌─────────────────────┐
+                    │   JobsService       │
+                    └──────────┬──────────┘
+                               │
+                               │ create()
+                               ▼
+                    ┌─────────────────────┐
+                    │ NotificationsService│
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ MongoDB             │
+                    │ notifications       │
+                    └──────────┬──────────┘
+                               │
+                               │ API
+                               ▼
+                    ┌─────────────────────┐
+                    │ Next.js Frontend    │
+                    │ TanStack Query      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                       Notification Bell
+
+
+                    Important email event
+                               │
+                               ▼
+                       Existing MailService
+                               │
+                               ▼
+                            Resend
+```
+
+The key separation is:
+
+```text
+NotificationService
+        ≠
+MailService
+```
+
+---
+
+# 38. Deliverables
+
+After implementation, provide a concise summary containing:
+
+### Backend
+
+```text
+Files created
+Files modified
+New API endpoints
+Notification service methods
+```
+
+### Frontend
+
+```text
+Files created
+Files modified
+Notification UI location
+Query/hooks added
+```
+
+### Integrations
+
+Clearly state which events now generate notifications:
+
+```text
+Jobs:
+- completed
+- failed
+
+Billing:
+- ...
+
+Referrals:
+- ...
+
+Account:
+- ...
+```
+
+### Testing
+
+Report:
+
+```text
+Build: PASS/FAIL
+Lint: PASS/FAIL
+Tests: PASS/FAIL
+```
+
+If something fails, explain the exact reason instead of hiding it.
+
+---
+
+# Final instruction
+
+**First inspect the entire relevant existing implementation. Then implement the notification system.**
+
+Do not blindly follow this prompt if the existing codebase already has a better-established convention.
+
+The goal is not to make the largest possible notification system.
+
+The goal is:
+
+> **A secure, production-grade, maintainable notification system that naturally fits into the existing Blynta application and does not break existing functionality.**
+
+Make the smallest set of changes required to achieve this correctly.

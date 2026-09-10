@@ -14,6 +14,7 @@ import { AppService } from './app.service';
 import { StripeModule } from './stripe/stripe.module';
 import { BillingModule } from './billing/billing.module';
 import { CommonModule } from './common/common.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 const logger = new Logger('MongooseModule');
 
@@ -22,6 +23,7 @@ const logger = new Logger('MongooseModule');
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     CommonModule,
+    NotificationsModule,
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({

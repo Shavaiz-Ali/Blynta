@@ -6,6 +6,8 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff, Check } from "lucide-react";
 
+export type AppInputSize = "sm" | "default" | "lg";
+
 export interface AppInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> {
   label?: string;
@@ -13,9 +15,17 @@ export interface AppInputProps
   helperText?: string;
   required?: boolean;
   success?: boolean;
+  size?: AppInputSize;
   labelClassName?: string;
   wrapperClassName?: string;
+  prefixIcon?: React.ReactNode;
 }
+
+const sizeClasses: Record<AppInputSize, string> = {
+  sm: "h-8 text-xs px-2.5 rounded-md",
+  default: "h-9 text-sm px-3 rounded-md",
+  lg: "h-10 text-sm px-3.5 rounded-md",
+};
 
 const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
   (
@@ -25,11 +35,13 @@ const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
       helperText,
       required,
       success,
+      size = "default",
       labelClassName,
       wrapperClassName,
       className,
       id: idProp,
       type = "text",
+      prefixIcon,
       ...props
     },
     ref
@@ -43,13 +55,16 @@ const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
     const isPassword = type === "password";
     const inputType = isPassword ? (showPassword ? "text" : "password") : type;
 
+    const hasRightAdornment = isPassword || success;
+    const hasLeftAdornment = !!prefixIcon;
+
     return (
       <div className={cn("flex w-full flex-col gap-1.5", wrapperClassName)}>
         {label ? (
           <Label
             htmlFor={inputId}
             className={cn(
-              "text-sm font-medium leading-none text-foreground",
+              "text-xs font-medium text-foreground",
               error && "text-destructive",
               labelClassName
             )}
@@ -61,6 +76,13 @@ const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
           </Label>
         ) : null}
         <div className="relative flex items-center w-full">
+          {/* Left prefix icon */}
+          {hasLeftAdornment && (
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 flex items-center text-muted-foreground">
+              {prefixIcon}
+            </span>
+          )}
+
           <Input
             id={inputId}
             ref={ref}
@@ -68,13 +90,15 @@ const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
             aria-invalid={!!error}
             aria-describedby={error ? errorId : helperText ? helperId : undefined}
             className={cn(
-              "h-10 transition-colors bg-card/60 border-border/80 focus-visible:ring-primary/50 text-foreground placeholder:text-muted-foreground/60",
-              isPassword || success ? "pr-10" : "",
+              "transition-colors border-input bg-background/50 dark:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring text-foreground placeholder:text-muted-foreground/60 shadow-xs",
+              sizeClasses[size],
+              hasLeftAdornment && (size === "sm" ? "pl-8" : "pl-9"),
+              hasRightAdornment && "pr-9",
               error &&
-                "border-destructive focus-visible:ring-destructive/50 focus-visible:border-destructive",
+                "border-destructive focus-visible:ring-destructive focus-visible:border-destructive",
               success &&
                 !error &&
-                "border-emerald-500/80 focus-visible:ring-emerald-500/50 focus-visible:border-emerald-500",
+                "border-emerald-500/80 focus-visible:ring-emerald-500 focus-visible:border-emerald-500",
               className
             )}
             {...props}
@@ -86,7 +110,7 @@ const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
               type="button"
               tabIndex={-1}
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-3 text-muted-foreground hover:text-foreground focus:outline-none transition-colors p-1 rounded-md"
+              className="absolute right-2.5 text-muted-foreground hover:text-foreground focus:outline-none transition-colors p-1 rounded-md"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? (
@@ -99,7 +123,7 @@ const AppInput = React.forwardRef<HTMLInputElement, AppInputProps>(
 
           {/* Success Checkmark */}
           {success && !isPassword && (
-            <Check className="pointer-events-none absolute right-3 h-4 w-4 text-emerald-500 stroke-[2.5]" />
+            <Check className="pointer-events-none absolute right-2.5 h-4 w-4 text-emerald-500 stroke-[2.5]" />
           )}
         </div>
         {error ? (

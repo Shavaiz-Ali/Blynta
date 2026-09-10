@@ -10,6 +10,7 @@ import { JOBS_QUEUE } from './jobs.constants';
 import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
 import { StorageModule } from '../storage/storage.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { StorageModule } from '../storage/storage.module';
     UsersModule,
     MediaModule,
     StorageModule,
+    NotificationsModule,
   ],
   controllers: [JobsController],
   providers: [JobsService, JobsProcessor, JobsReconciliationService],

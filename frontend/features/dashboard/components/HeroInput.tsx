@@ -19,6 +19,7 @@ import {
 } from "../icons";
 import { AppSelect, type AppSelectOption } from "@/components/common/AppSelect";
 import { AppButton } from "@/components/common/AppButton";
+import { AppCard } from "@/components/common/AppCard";
 import { useRouter } from "next/navigation";
 
 /* -------------------------------------------------------------------------- */
@@ -177,7 +178,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       )}
 
       {/* ── Creation Card Surface ── */}
-      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 shadow-sm space-y-5">
+      <AppCard useDefaultClasses={false}>
         {/* Header inside creation surface */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <div>
@@ -195,10 +196,10 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         </div>
 
         {/* ── URL Input & Submit Capsule ── */}
-        <form onSubmit={handleSubmit} className="space-y-2">
+        <form onSubmit={handleSubmit} className="space-y-2 mt-5">
           <div
             className={cn(
-              "flex flex-col sm:flex-row items-stretch sm:items-center rounded-xl border bg-background p-1.5 gap-2 transition-all duration-200",
+              "flex flex-col sm:flex-row items-stretch sm:items-center rounded-lg border bg-background p-1.5 gap-2 transition-all duration-200",
               "focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/15",
               fieldError ? "border-destructive/60 ring-1 ring-destructive/20" : "border-border"
             )}
@@ -397,7 +398,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             </div>
           </div>
         )}
-      </div>
+      </AppCard>
     </div>
   );
 }

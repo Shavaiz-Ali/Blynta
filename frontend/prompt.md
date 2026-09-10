@@ -1,2022 +1,1211 @@
-BLYNTA — COMPLETE UI/UX REDESIGN + FRONTEND ARCHITECTURE REFACTOR
-# BLYNTA — COMPLETE PRODUCT UI/UX REDESIGN
-
-You are acting as a:
-
-- Senior Product Designer
-- Senior UI/UX Designer
-- Senior React / Next.js Engineer
-- Senior Frontend Architect
-- Design Systems Engineer
-
-You are working on an existing SaaS application called **Blynta**.
-
-Blynta is an AI-powered video clipping platform that converts long-form content such as:
-
-- YouTube videos
-- Podcasts
-- Interviews
-- Streams
-- Lectures
-- Other long-form videos
-
-into short-form clips.
-
-The application already has working functionality.
-
-Your task is to perform a **complete end-to-end UI/UX redesign and frontend architecture cleanup** while preserving existing functionality.
-
----
-
-# 🚨 CRITICAL RULES — READ BEFORE TOUCHING THE CODE
-
-## 1. THIS IS A REDESIGN, NOT A REWRITE OF BUSINESS LOGIC
-
-The goal is to redesign the application.
-
-DO NOT unnecessarily rewrite:
-
-- API logic
-- authentication logic
-- React Query logic
-- NextAuth
-- backend integration
-- data models
-- business logic
-- video processing logic
-- job processing
-- billing logic
-- existing working functionality
-
-If existing functionality works, preserve it.
-
-Change the presentation, structure, component organization, and UX where necessary.
-
----
-
-# 2. `global.css` AND `layout.tsx` ARE THE SOURCE OF TRUTH
-
-Before making ANY UI changes, inspect:
-
-- `app/globals.css`
-- `app/layout.tsx`
-
-Also inspect any providers/theme files used by `layout.tsx`.
-
-These files define the existing application's:
-
-- theme
-- CSS variables
-- colors
-- fonts
-- global styles
-- dark/light mode
-- providers
-- typography foundations
-- global application behavior
-
-### DO NOT create a second theme system.
-
-Do NOT introduce another unrelated:
-
-- color palette
-- font system
-- theme provider
-- CSS variable system
-- global background system
-- typography system
-
-unless there is a genuine architectural reason.
-
-The redesigned application MUST use the existing theme infrastructure from:
-
-`global.css`
-
-and
-
-`layout.tsx`.
-
----
-
-# 3. DO NOT BREAK THE EXISTING THEME
-
-If `global.css` already defines variables such as:
-
-```css
---background
---foreground
---primary
---secondary
---muted
---border
---card
-
-or similar variables:
-
-USE THEM.
-
-Do not hardcode completely different colors throughout components.
-
-Prefer:
-
-bg-background
-text-foreground
-border-border
-bg-card
-text-muted-foreground
-bg-primary
-text-primary-foreground
-
-where appropriate.
-
-If the existing design tokens need refinement, update the centralized theme variables rather than scattering hardcoded values across the application.
-
-The goal is a coherent design system.
-
-4. SHADCN/UI IS THE DEFAULT UI COMPONENT SYSTEM
-
-The project already uses shadcn/ui.
-
-You MUST use shadcn/ui components whenever an appropriate component exists.
-
-Examples:
-
-Button
-Input
-Textarea
-Select
-DropdownMenu
-Dialog
-Sheet
-Tabs
-Tooltip
-Popover
-Command
-Badge
-Card
-Separator
-Skeleton
-Avatar
-Alert
-Toast / Sonner
-Progress
-ScrollArea
-Checkbox
-RadioGroup
-Switch
-Slider
-Table
-Breadcrumb
-Pagination
-etc.
-5. IF A REQUIRED SHADCN COMPONENT IS MISSING
-
-DO NOT immediately build a custom component.
-
-First check whether the required shadcn/ui component can be added.
-
-If it is missing:
-
-Install/add the appropriate shadcn component.
-Use that component.
-Customize it through className/variants where appropriate.
-Keep the styling consistent with the existing theme.
-
-For example:
-
-If you need a Sheet but it doesn't exist:
-
-ADD the shadcn Sheet component.
-
-Do NOT create:
-
-CustomMobileSidebar.tsx
-
-with manually implemented dialog/drawer behavior unless there is a genuine reason.
-
-The same applies to:
-
-dialogs
-dropdowns
-tooltips
-tabs
-inputs
-selects
-popovers
-command menus
-etc.
-6. DO NOT CREATE A SECOND COMPONENT LIBRARY
-
-Do not introduce another UI library unless the existing application genuinely requires it.
-
-Do not replace shadcn with:
-
-Material UI
-Chakra
-Ant Design
-Mantine
-Bootstrap
-random component libraries
-
-Blynta should have ONE coherent UI system.
-
-Primary UI foundation:
-
-shadcn/ui + Tailwind + existing global.css theme
-
-7. THE FOLDER STRUCTURE PROVIDED IS AN ARCHITECTURAL EXAMPLE
-
-The folder structure shown to you is NOT the business-domain structure to copy.
-
-It is only an example of how the project should be organized.
-
-DO NOT create unrelated features just because they exist in the example.
-
-For example, if an example contains:
-
-jobs
-freelancers
-contracts
-payments
-reviews
-
-do NOT assume Blynta needs those.
-
-Instead:
-
-Apply the same architectural principles to Blynta's ACTUAL features.
-
-FIRST TASK — AUDIT THE EXISTING PROJECT
-
-Before editing anything, inspect the existing frontend.
-
-Understand:
-
-current routes
-current layouts
-global.css
-layout.tsx
-providers
-theme
-components
-features
-API layer
-React Query
-authentication
-existing dashboard
-jobs
-clips
-billing
-video player
-editor
-processing states
-existing responsive behavior
-
-Do not start changing files before understanding the current architecture.
-
-CURRENT BLYNTA FUNCTIONALITY
-
-The application currently contains functionality around:
-
-Authentication
-Login
-Signup
-Forgot password
-OTP verification
-Dashboard
-Video/job processing
-My Clips
-Billing
-Credits
-Subscription
-Video player
-Video controls
-Captions
+MASTER PROMPT — Redesign Single Clip Details Page Without Losing Any Existing Features
+
+I want you to completely redesign the Individual Generated Clip Details page in my Blynta application.
+
+This is primarily a UX/UI redesign and information architecture improvement, but you may also modify the backend/API where required.
+
+CRITICAL REQUIREMENT
+
+DO NOT REMOVE, HIDE, OR DROP ANY EXISTING FUNCTIONALITY FROM THE CURRENT CLIP DETAILS FLOW.
+
+The previous redesign attempts improved the visual hierarchy but accidentally removed or minimized important features that already existed.
+
+Before changing anything, inspect the current implementation and all existing clip-related components/API responses and create a complete inventory of what the user can currently see and do.
+
+The new design must preserve all existing functionality while presenting it in a much more intuitive and professional way.
+
+Product Context
+
+Blynta is an AI video clipping platform.
+
+The user workflow is:
+
+Long-form/source video
+        ↓
+AI analyzes video
+        ↓
+AI generates multiple short clips
+        ↓
+User opens one generated clip
+        ↓
+User reviews the clip
+        ↓
+User reviews AI analysis
+        ↓
+User copies generated social/SEO content
+        ↓
+User downloads / shares / schedules the clip
+        ↓
+Future: user edits/customizes the clip
+
+The individual clip page is therefore not just a video player.
+
+It is a content publishing workspace.
+
+It needs to help the user:
+
+Watch the clip.
+Understand why it was selected.
+Review the AI score.
+Review the generated title.
+Copy the description.
+Copy keywords.
+Copy hashtags/tags.
+See the source timestamp.
+Download the video.
+Share the clip.
+Schedule the clip/post.
+Navigate to other generated clips.
+Eventually customize/edit the clip.
+Understand which editing features are currently unavailable.
+IMPORTANT: Current Features Must Be Preserved
+
+The existing page already contains functionality/data around:
+
+Video
+Generated short video
+9:16 preview
+Playback
+Scrubbing
+Duration
+Source timestamp
+Auto-framing indicator
+Loop
+Fullscreen
+Playback speed
+Volume
+Clip information
+Clip title
+Description
+Source video
+Clip number
+Duration
+Start timestamp
+End timestamp
+Aspect ratio
+Processing status
+AI analysis
+AI Viral Score
+Viral score out of 100
+Impact level
+Hook type/style
+Why this clip works
+Opening retention hook
+Generated content
+Generated title
+Generated description
+SEO keywords
+Trending hashtags
+Tags
+Copy buttons / Copy All functionality
+Publishing/actions
+Download MP4
+Share
+Schedule Post
+More/actions menu
+Delete where currently supported
+Future editing
+Aspect ratio
 Caption styling
-Transcript
-AI highlight detection
-Clip generation
-Processing pipeline
-Video metadata
-User/account
-Theme
-API/query infrastructure
+Typography
+Fonts
+Animations
+B-roll
+Branding
+Watermark
+Other Studio features
 
-Preserve these capabilities.
+Some editing functionality is intentionally not implemented yet, so those controls should remain disabled / "Coming Soon".
 
-DESIGN GOAL
+None of the existing publishing/content-generation functionality should disappear in the redesign.
 
-Transform Blynta into a:
+FIRST: Audit the Existing Implementation
 
-Premium AI video creation workspace.
+Before writing the new UI, inspect:
 
-It should feel like a serious professional SaaS product.
+features/jobs/components/
 
-The experience should be inspired by the quality and usability of products such as:
+especially:
 
-Linear
-Vercel
-Descript
-Riverside
-OpusClip
-Framer
+JobDetail.tsx
+StudioCenterPanel.tsx
+StudioLeftPanel.tsx
+StudioRightPanel.tsx
+StudioVideoPlayer.tsx
+VideoMetadataKit.tsx
+ScoreGauge.tsx
+CaptionStylingCard.tsx
+TranscriptDialog.tsx
 
-DO NOT COPY THEIR DESIGNS.
+features/jobs/components/player/
+├── PlayerControls.tsx
+├── PlayerMenuDropdown.tsx
+├── PlayerOverlay.tsx
+├── PlayerScrubber.tsx
+├── PlayerTopBar.tsx
+├── StudioVideoPlayer.tsx
+└── ...
 
-Use them only as quality references.
+Also inspect:
 
-Blynta must have its own visual identity.
+queries.ts
+types.ts
+API functions
+backend job schemas
+backend source-video schema
+jobs controller
+jobs service
+media services
+storage/R2 handling
+any existing scheduling/share functionality
+any existing AI SEO/social content generation
 
-DESIGN PERSONALITY
+Create a mental/technical inventory of:
 
-Blynta should feel:
+Feature
+Where it is implemented
+API/data source
+Current interaction
+Should preserve?
 
-Premium
-Modern
-Intelligent
-Creative
-Fast
-Focused
-Professional
-Technical but approachable
-Powerful but simple
+Then redesign the page.
 
-Avoid making it look like:
+THE NEW PAGE SHOULD BE A "CLIP WORKSPACE"
 
-an admin dashboard
-a generic AI wrapper
-a template dashboard
-a crypto application
-a gaming interface
-an overly futuristic neon product
-CURRENT UI PROBLEM
+Do not think of the page as:
 
-The current interface has several UX problems.
+Video + several cards.
 
-The dashboard feels:
+Think of it as:
 
-too empty
-overly dark/flat
-overly dependent on bordered cards
-weak in visual hierarchy
-too much like a marketing landing page
-not focused enough on the creation workflow
-visually repetitive
-inconsistent in spacing/density
-not distinctive enough as a video creation product
+A workspace for reviewing, preparing, and publishing an AI-generated short.
 
-DO NOT solve this by simply:
+The page should have a strong hierarchy.
 
-changing colors
-increasing border radius
-adding gradients
-adding shadows
-adding more cards
-making everything bigger
+Recommended Information Architecture
 
-Instead rethink the information architecture.
+The page should roughly become:
 
-CORE UX PRINCIPLE
+┌──────────────────────────────────────────────────────────────┐
+│ Clips / Source Video / Clip                                  │
+│                                                              │
+│ Mind-Blowing Magic Trick 🤯                                  │
+│                                                              │
+│                                  Share  Schedule  Download    │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│                       VIDEO WORKSPACE                         │
+│                                                              │
+│                    ┌─────────────┐                            │
+│                    │             │                            │
+│                    │   9:16     │                            │
+│                    │   VIDEO     │                            │
+│                    │             │                            │
+│                    └─────────────┘                            │
+│                                                              │
+│                 49:40 → 50:38 · 58 sec                       │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│ AI INSIGHTS                                                  │
+│                                                              │
+│ 96/100     Strong Retention Hook     Curiosity Hook           │
+│                                                              │
+│ Why this clip works                                          │
+│ ...                                                          │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│ SOCIAL CONTENT                                               │
+│                                                              │
+│ Title                                                        │
+│ [generated title........................] [Copy]             │
+│                                                              │
+│ Description                                                  │
+│ [generated description...................] [Copy]             │
+│                                                              │
+│ Keywords                                                     │
+│ [magic] [mentalism] [mindblown] [Copy All]                  │
+│                                                              │
+│ Hashtags                                                     │
+│ [#magic] [#mentalism] [#illusion] [Copy All]                │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│ CUSTOMIZE                                                   │
+│                                                              │
+│ Aspect Ratio                                                 │
+│ [9:16] [1:1] [16:9]                                          │
+│                                                              │
+│ Captions       Coming Soon                                  │
+│ Typography     Coming Soon                                  │
+│ Animations     Coming Soon                                  │
+│ Branding       Coming Soon                                  │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 
-Every page should have ONE obvious primary action.
+This is only the information architecture.
 
-Examples:
+Do not blindly copy this exact layout.
 
-Dashboard:
-→ Create Clips
+Use your design judgment to make it look polished.
 
-My Clips:
-→ Open / Edit Clip
+1. Header
 
-Job:
-→ Review / Edit Generated Clips
-
-Billing:
-→ Manage Plan / Upgrade
-
-Settings:
-→ Save Changes
-
-Do not make 5–10 buttons compete for attention.
-
-GLOBAL DESIGN SYSTEM
-
-Create a consistent visual system using the existing global.css tokens.
-
-Use:
-
-existing fonts
-existing CSS variables
-existing theme
-existing dark/light infrastructure
-
-If improvements are needed, make them centrally.
-
-COLOR SYSTEM
-
-Do NOT invent a completely new palette without inspecting global.css.
-
-The existing theme is the foundation.
-
-Use:
-
-background
-foreground
-card
-muted
-muted-foreground
-primary
-primary-foreground
-secondary
-border
-destructive
-
-and any other existing semantic tokens.
-
-The accent color should be used intentionally.
-
-Do not turn every active element bright blue.
-
-Use hierarchy:
-
-Primary action → strongest emphasis
-
-Secondary action → subtle
-
-Tertiary action → minimal
-
-DARK MODE
-
-Blynta is a dark-first product.
-
-However:
-
-DO NOT use pure black for everything.
-
-Use layered surfaces from the existing theme.
-
-For example conceptually:
-
-Background
-↓
-Surface
-↓
-Elevated Surface
-↓
-Interactive Surface
-
-Use subtle borders and contrast.
-
-Avoid excessive glow.
-
-Avoid excessive gradients.
-
-TYPOGRAPHY
-
-Use the font system already configured by the project.
-
-DO NOT import another font just because it looks good.
-
-Typography should have clear hierarchy.
+Create a compact, professional header.
 
 Example:
 
-Page heading:
-32–40px
+← Clips / India's Got Latent S2 EP6
 
-Section heading:
-20–24px
+Mind-Blowing Magic Trick 🤯
 
-Card heading:
-15–18px
+                    Share
+                    Schedule
+                    Download MP4
+                    •••
 
-Body:
-14–15px
+The source video should remain accessible.
 
-Metadata:
-12–13px
+The breadcrumb should not consume excessive vertical space.
 
-Do not make everything oversized.
+2. Video Is Still the Hero
 
-Professional creative applications need information density.
+The video is the primary object.
 
-SPACING
+It should be the largest visual element on the page.
 
-Use a consistent spacing scale.
+Use the existing video player.
 
-Prefer:
+Preserve all current player functionality.
 
-4
-8
-12
-16
-20
-24
-32
-40
-48
-64
+The user should be able to:
 
-Avoid arbitrary spacing values everywhere.
+play
+pause
+scrub
+change volume
+change playback speed
+loop
+fullscreen
+see duration
 
-BORDER RADIUS
+Do not remove controls just to make the UI cleaner.
 
-Use restrained rounding.
+"Cleaner" means better organization, not fewer capabilities.
 
-Do NOT make every element a giant pill.
+3. Clip Navigation
 
-Use:
+The user should be able to move between generated clips without constantly returning to the source-video page.
 
-small radius for controls
-medium radius for cards
-larger radius only for major surfaces
-SHADOWS
+Add:
 
-Use shadows sparingly.
+‹ Previous       Clip 1 of 6       Next ›
 
-Prioritize:
+or an equivalent interaction.
 
-spacing
-contrast
-borders
-surface elevation
+Optionally provide a compact thumbnail strip:
 
-rather than large shadows.
+[01] [02] [03] [04] [05] [06]
 
-ICONS
+Current clip should be visually selected.
 
-Use one icon system.
+This is especially important because users will likely review multiple AI-generated clips from the same source video.
 
-Prefer the existing Lucide/shadcn icon approach if already installed.
+4. Quick Clip Metadata
 
-Do not mix:
+Near the video, show:
 
-random SVG icons
-emoji
-multiple icon libraries
-inconsistent icon styles
+58 sec
+49:40 → 50:38
+9:16
+AI Auto-Framed
 
-Icons should have consistent:
+Do not turn every item into a giant card.
 
-stroke width
-size
-alignment
-APPLICATION SHELL
+Use compact metadata.
 
-Redesign the entire application shell.
+5. AI Viral Score
 
-The shell should include:
+Keep the AI Viral Score.
 
-Sidebar
-Top navigation
-Main content
-responsive mobile navigation
+The current data:
 
-But determine the exact layout based on UX.
+96 / 100
 
-Do not blindly preserve the current layout.
+should remain.
 
-SIDEBAR
-
-Redesign the sidebar from scratch.
-
-It should feel like a professional creative workspace.
-
-Potential organization:
-
-WORKSPACE
-
-Home
-My Clips
-Projects / Jobs
-Assets
-
-PUBLISH
-
-Calendar
-Social Accounts
-
-ACCOUNT
-
-Billing
-Settings
-
-IMPORTANT:
-
-Only include routes/features that actually exist.
-
-Do not create fake functionality.
-
-Use grouped navigation.
-
-The active route should be obvious without looking like a huge bright blue rectangle.
-
-Prefer:
-
-subtle active surface
-accent indicator
-appropriate icon
-strong text
-SIDEBAR RESPONSIVENESS
-
-Desktop:
-
-approximately 220–260px
-clean navigation
-workspace identity
-user/account area
-
-Collapsed:
-
-icon navigation
-tooltips
-no broken labels
-
-Mobile:
-
-use shadcn Sheet
-sidebar becomes a drawer
-accessible menu trigger
-no horizontal overflow
-TOP BAR
-
-Redesign the top bar.
-
-It should contain useful information only.
-
-Possible items:
-
-current page
-breadcrumb
-credits
-notifications
-theme toggle
-user menu
-
-Do not overload the header.
-
-CREDITS
-
-Credits are a core product concept.
-
-Make the credit indicator feel intentional.
+But present it elegantly.
 
 Example:
 
-⚡ 35 Credits
+AI VIRAL SCORE
 
-Clicking it could reveal:
+96 / 100
 
-Current credits
-Usage
-Plan
-Upgrade
+High Impact
+Strong Retention Hook
 
-Use a shadcn Popover/DropdownMenu if appropriate.
+The score can use a ring/gauge/progress visualization.
 
-Do not make credits look like a random badge.
+Do not let this section visually overpower the video.
 
-USER MENU
+6. Why This Clip Works
 
-Use shadcn DropdownMenu.
+Preserve the AI explanation.
 
 Show:
 
-Avatar
-Name
-Plan
+Why this clip works
 
-Menu:
+A mind-blowing magic trick involving a drawn cross
+appearing in someone's closed palm leaves everyone stunned.
 
-Account
-Settings
-Billing
-Theme
-Logout
+Also preserve:
 
-Only include real actions.
+Opening Retention Hook
 
-HOME / DASHBOARD
+"Mind-Blowing Magic Trick 🤯"
 
-This is one of the most important redesigns.
+And:
 
-The current dashboard behaves too much like a marketing landing page.
+Hook Type
 
-This is an APPLICATION.
+Curiosity Hook
 
-The primary goal is:
+These should be grouped into a coherent AI Insights section.
 
-Help the user create clips immediately.
+7. SOCIAL CONTENT — DO NOT REMOVE THIS
 
-NEW DASHBOARD UX
+This is one of the most important existing features.
 
-The first screen should communicate:
+The AI generates content that the user can use when publishing the short.
 
-What can I do?
+The redesigned page MUST retain it.
 
-→ Create clips.
+Create a dedicated:
 
-A possible structure:
+Social Content
 
-Greeting / Context
+section.
 
-Good afternoon, Shavaiz
+It should include:
 
-Turn your long-form content into short-form clips.
-
-CREATE WORKSPACE
-
-Paste a video URL
-
-[ 🔗 Paste YouTube, Vimeo, podcast URL... ]
-
-                   [ Generate Clips ]
-
-OR
-
-[ Upload Video ]
-
-OPTIONS
-
-Highlight style
-
-[ Simple ] [ Funny ] [ Emotional ] [ Motivational ]
-
-RECENT PROJECTS
-
-Recent videos
-
-[ Project ] [ Project ] [ Project ]
-
-This is only a UX direction.
-
-Use your own professional judgment to create the best layout.
-
-CREATE AREA
-
-The creation input should become the hero of the actual application.
-
-It should feel like:
-
-"Start creating"
-
-not:
-
-"Marketing headline."
-
-Design it as a polished workspace.
-
-Possible states:
-
-EMPTY
-
-Paste URL
-Upload Video
-
-READY
-
-Video thumbnail
 Title
-Duration
-Source
-Generate Clips
+Title
 
-PROCESSING
+Mind-Blowing Magic Trick 🤯
 
-Analyzing
-Transcribing
-Finding highlights
-Generating clips
+[ Copy ]
 
-COMPLETED
+The generated title should be easy to copy.
 
-6 clips generated
-View Clips
+Description
+Description
 
-ERROR
+Watch the exact moment a mentalism trick leaves
+the panel completely speechless as a drawn cross
+appears on Rakhi Sawant's hand.
 
-Processing failed
-Retry
+[ Copy ]
 
-Use real application states.
+Use a clean text area/preview.
 
-Do not invent backend data.
+Don't truncate useful content unnecessarily.
 
-RECENT PROJECTS
+If the description is long, allow expansion.
 
-Redesign project cards.
+SEO Keywords
+SEO Keywords
 
-Each card should clearly communicate:
+magic
+mentalism
+mindblown
+illusion
+rakhi-sawant
 
-thumbnail
-title
-source
-duration
-status
-created date
-number of clips
-available actions
+[ Copy All ]
 
-The thumbnail should be the primary visual anchor.
+Each keyword can be a pill/tag.
 
-Support:
+Trending Hashtags
+Trending Hashtags
 
-Grid
-List
+#magic
+#mentalism
+#mindblown
+#illusion
+#rakhi-sawant
 
-Use shadcn controls where appropriate.
+[ Copy All ]
+Copy UX
 
-MY CLIPS
+Make copying extremely easy.
 
-Redesign My Clips into a professional content library.
+When the user clicks:
 
-Header:
+Copy
 
-My Clips
+show a temporary state:
 
-[ Search ] [ Filter ] [ Sort ]
+✓ Copied
 
-Content:
+Use toast feedback where appropriate.
 
-Video/clip cards.
+Do not navigate away.
 
-Each item should show:
+Do not open unnecessary dialogs.
 
-preview
-title
-duration
-status
-source
-date
-actions
+8. Do Not Mix Keywords and Hashtags
 
-Use shadcn:
+Keep these conceptually separate:
 
-Input
-DropdownMenu
-Select
-Tabs
-Badge
-Dialog
-etc.
+SEO Keywords
 
-where appropriate.
+magic
+mentalism
+mindblown
+illusion
 
-JOB / VIDEO DETAIL
+and:
 
-The existing project already has video/editor-related components.
+Trending Hashtags
 
-Inspect and preserve functionality such as:
+#magic
+#mentalism
+#mindblown
+#illusion
 
-StudioVideoPlayer
-PlayerControls
-PlayerOverlay
-PlayerScrubber
-PlayerTopBar
-PipelineStepper
-CaptionStylingCard
-TranscriptDialog
-ScoreGauge
-VideoMetadataKit
-StudioLeftPanel
-StudioCenterPanel
-StudioRightPanel
+If the backend already distinguishes them, preserve that distinction.
 
-Do NOT throw away working functionality simply because the UI is being redesigned.
+Do not rename data just for visual reasons.
 
-Reorganize the UX around a professional video workspace.
+9. Publishing Actions
 
-VIDEO STUDIO
+The previous flow included publishing-related actions.
 
-The video editor should feel like a creative production environment.
+These MUST remain accessible.
 
-Conceptually:
-
-┌─────────────────────────────────────────────┐
-│ Project Name Status │
-├──────────────┬──────────────────────────────┤
-│ Clips / │ │
-│ Highlights │ VIDEO PLAYER │
-│ │ │
-│ │ │
-├──────────────┴──────────────────────────────┤
-│ Timeline / Transcript / Captions │
-├─────────────────────────────────────────────┤
-│ Contextual settings │
-└─────────────────────────────────────────────┘
-
-Do not copy this literally.
-
-Use it as UX guidance.
-
-The video should be the visual focus.
-
-VIDEO PLAYER
-
-Redesign the player using the existing functionality.
-
-Controls should include only what actually exists.
-
-Potential:
-
-play/pause
-timeline
-duration
-volume
-fullscreen
-settings
-
-Use a professional control hierarchy.
-
-Do not make controls visually heavier than the video.
-
-PROCESSING UI
-
-Do NOT use a generic loading spinner as the primary processing experience.
-
-Blynta's AI processing is a core product experience.
-
-Show meaningful stages.
-
-Example:
-
-Analyzing video
-
-✓ Downloading
-✓ Transcribing
-● Finding highlights
-○ Generating clips
-○ Applying captions
-
-Use actual backend state whenever available.
-
-DO NOT invent fake progress percentages.
-
-GENERATED CLIPS
-
-Generated clips should feel like the reward of the workflow.
-
-Each clip should communicate:
-
-preview
-title
-duration
-score if available
-status
-relevant metadata
-actions
-
-If AI metadata exists, make it visually meaningful.
-
-Do not fabricate:
-
-scores
-labels
-analytics
-AI insights
-BILLING
-
-Redesign billing using the same design system.
-
-Show clearly:
-
-Current plan
-Credits
-Usage
-Renewal
-Upgrade
-
-Use shadcn components.
-
-Do not make the page look like a generic pricing website.
-
-The user should immediately understand:
-
-"What do I have?"
-
-"What am I using?"
-
-"What happens if I upgrade?"
-
-AUTHENTICATION
-
-Redesign:
-
-Login
-Signup
-Forgot password
-OTP verification
-
-Keep authentication logic unchanged.
-
-Improve:
-
-visual hierarchy
-form spacing
-validation states
-error messages
-loading states
-responsiveness
-
-Use shadcn:
-
-Input
-Button
-Label
-Dialog
-Separator
-etc.
-
-where appropriate.
-
-Do not overdesign authentication.
-
-RESPONSIVE DESIGN
-
-This is a real responsive redesign.
-
-Do not simply hide things at breakpoints.
-
-Design for:
-
-375px
-390px
-768px
-1024px
-1280px
-1440px
-1920px
-
-Mobile should have its own UX decisions.
-
-Pay particular attention to:
-
-video player
-clip cards
-dashboard create flow
-sidebar
-dialogs
-dropdowns
-forms
-tables
-navigation
-
-No:
-
-horizontal overflow
-clipped controls
-tiny buttons
-broken layouts
-unusable editor
-ACCESSIBILITY
-
-All redesigned components should support:
-
-keyboard navigation
-focus states
-accessible labels
-semantic HTML
-aria attributes where required
-sufficient contrast
-disabled/loading states
-accessible dialogs
-accessible dropdowns
-
-Do not use color alone to communicate state.
-
-Use icons/text when appropriate.
-
-LOADING STATES
-
-Every data-driven page needs proper loading states.
-
-Use shadcn Skeleton where appropriate.
-
-Examples:
-
-Dashboard skeleton
-Project card skeleton
-Clip skeleton
-Billing skeleton
-Job detail skeleton
-
-Do not display large spinners for entire pages unless necessary.
-
-ERROR STATES
-
-Every important page/action needs a useful error state.
-
-Example:
-
-Unable to load projects.
-
-[ Try again ]
-
-Do not expose raw backend errors directly to users.
-
-EMPTY STATES
-
-Create polished empty states.
-
-Examples:
-
-No projects yet
-
-No clips yet
-
-No assets
-
-No scheduled posts
-
-No results
-
-Each should contain:
-
-icon
-short explanation
-primary action
-
-Keep them compact.
-
-TOASTS / FEEDBACK
-
-Use the existing shadcn-compatible toast system / Sonner if already configured.
-
-Use it for:
-
-successful actions
-failed actions
-copy actions
-saves
-deletes
-upgrades
-etc.
-
-Do not create custom toast systems.
-
-DIALOGS / DRAWERS
-
-Use shadcn:
-
-Dialog
-Sheet
-AlertDialog
-Popover
-
-instead of creating custom implementations.
-
-Dialogs should:
-
-have proper titles
-have clear actions
-support keyboard escape
-have correct focus management
-BUTTON SYSTEM
-
-Use shadcn Button.
-
-Do not create multiple unrelated button components.
-
-Use variants:
-
-default
-secondary
-outline
-ghost
-destructive
-etc.
-
-Create custom variants only when genuinely necessary.
-
-Avoid:
-
-giant buttons
-excessive pills
-multiple primary buttons in one section
-CARDS
-
-Do not put everything inside cards.
-
-This is extremely important.
-
-The current UI relies too heavily on bordered containers.
-
-Use cards only when they improve grouping.
-
-Use:
-
-whitespace
-section hierarchy
-dividers
-surface changes
-
-where a card is unnecessary.
-
-TABLES
-
-If a page needs structured tabular information:
-
-Use shadcn Table.
-
-Do not create a custom table unless required.
-
-FORMS
-
-Use shadcn form primitives where appropriate.
-
-Maintain:
-
-consistent labels
-error messages
-helper text
-loading states
-disabled states
-keyboard behavior
-COMPONENT ARCHITECTURE
-
-The existing project contains many components under:
-
-features/dashboard
-features/jobs
-features/auth
-features/billing
-
-Inspect them carefully.
-
-Refactor them toward feature ownership.
-
-The general architecture should be:
-
-app/
-routing
-layouts
-page composition
-
-features/
-business functionality
-
-components/
-shared UI/layout
-
-lib/
-infrastructure/utilities
-
-providers/
-application providers
-
-types/
-shared types
-
-TARGET ARCHITECTURE
-
-Use the following PRINCIPLE:
-
-src/
-├── app/
-│ ├── (auth)/
-│ ├── (main)/
-│ ├── api/
-│ ├── layout.tsx
-│ └── globals.css
-│
-├── features/
-│ ├── auth/
-│ ├── dashboard/
-│ ├── jobs/
-│ ├── clips/
-│ ├── editor/
-│ ├── billing/
-│ └── other-real-blynta-features/
-│
-├── components/
-│ ├── ui/
-│ ├── layout/
-│ └── common/
-│
-├── lib/
-├── providers/
-├── types/
-└── config/
-
-IMPORTANT:
-
-This is a pattern.
-
-Do NOT force every existing component into these exact folders if it doesn't make sense.
-
-The actual application domain determines the final structure.
-
-ROUTING RULE
-
-app/ should primarily contain:
-
-routes
-layouts
-loading states
-error states
-page composition
-
-Business functionality should live in features/.
-
-Avoid putting complex business logic directly inside:
-
-app/**/page.tsx
-
-FEATURE RULE
-
-A feature should own its:
-
-components
-hooks
-API calls
-query keys
-types
-feature-specific utilities
-
-For example:
-
-features/jobs/
-
-components/
-hooks/
-api/
-queryKeys.ts
-types.ts
-
-Do the same for actual Blynta domains.
-
-SHARED COMPONENT RULE
-
-Only put something inside:
-
-components/
-
-if it is genuinely shared across multiple features.
-
-Examples:
-
-components/ui/
-→ shadcn primitives
-
-components/layout/
-→ Sidebar
-→ TopBar
-→ AppShell
-
-components/common/
-→ shared reusable business-agnostic components
-
-Do not put feature-specific components here.
-
-DO NOT OVER-ENGINEER
-
-This is extremely important.
-
-Do not create:
-
-unnecessary abstractions
-excessive hooks
-excessive wrapper components
-meaningless index.ts files
-generic components used only once
-complicated state architecture
-unnecessary design-system abstractions
-
-Use senior-level engineering judgment.
-
-The architecture should be:
-
-Clean
-Predictable
-Maintainable
-Simple
-
-PRESERVE EXISTING LOGIC
-
-Before moving a component:
-
-Understand:
-
-imports
-API calls
-hooks
-query keys
-props
-state
-server/client boundaries
-
-Do not break functionality during refactoring.
-
-If a component is moved, update imports correctly.
-
-SERVER / CLIENT COMPONENTS
-
-Respect Next.js App Router architecture.
-
-Do not turn everything into:
-
-"use client"
-
-just to make implementation easier.
-
-Keep components server-side when possible.
-
-Only use client components where interaction/state/browser APIs require them.
-
-DATA FETCHING
-
-Preserve the current React Query architecture if already working.
-
-Do not replace it with another data fetching library.
+Share
 
 Keep:
 
-query keys
-mutations
-caching
-invalidation
+Share
 
-organized by feature.
+Use the existing share implementation if one exists.
 
-AUTHENTICATION
+If it currently creates/copies a share link, preserve that.
 
-Do not rewrite authentication just for the redesign.
+10. Schedule Post
 
-Inspect:
+Do not remove Schedule Post.
 
-NextAuth
-auth providers
-middleware/proxy
-session handling
-authenticated API requests
+This is an important publishing action.
 
-Preserve all behavior.
+The user should be able to initiate scheduling from the clip page.
 
-PERFORMANCE
+Example:
 
-The redesign must not unnecessarily hurt performance.
+[ Schedule Post ]
 
-Avoid:
+Opening it should provide the existing scheduling flow if implemented.
 
-giant client components
-unnecessary re-renders
-excessive JavaScript
-unnecessary dependencies
-loading entire pages as client components
+If scheduling is currently partially implemented:
 
-Images should use the existing Next.js image strategy where appropriate.
+preserve existing functionality
+improve its UI
+do not replace it with a fake button
 
-VISUAL CONSISTENCY
+If the backend requires changes, update the backend appropriately.
 
-Every page must feel like the same product.
+Potential UI:
 
-The following must be consistent:
+Schedule Post
 
-typography
-colors
-spacing
-borders
-radius
-buttons
-inputs
-dropdowns
-dialogs
-tabs
-badges
-icons
-empty states
-loading states
-error states
+Platform
+[ YouTube ▼ ]
 
-Do not redesign each page independently.
+Date
+[ Sep 10, 2026 ]
 
-Create one coherent product.
+Time
+[ 08:00 PM ]
 
-IMPORTANT: DO NOT MAKE RANDOM DESIGN CHANGES
+Caption
+[ generated description... ]
 
-Do not:
+Hashtags
+[ ... ]
 
-randomly change colors
-randomly add gradients
-randomly change fonts
-randomly add animations
-randomly add cards
-randomly add shadows
-randomly add illustrations
-randomly change copy
+             Cancel    Schedule Post
 
-Every design decision should have a UX reason.
+Only expose platforms/features actually supported by the existing backend.
 
-ANIMATION
+Do not invent social integrations.
 
-Use subtle animation where it improves usability.
+11. Download MP4
 
-Examples:
+Keep:
 
-sidebar transitions
-dialog transitions
-dropdown transitions
-loading states
-clip generation feedback
-hover states
+Download MP4
 
-Avoid excessive animation.
+This should remain one of the primary actions.
 
-Do not make the application feel like a marketing website.
+Use the existing storage/video URL implementation.
 
-MICROINTERACTIONS
+Do not break R2/storage URLs.
 
-Add useful microinteractions:
+12. More Menu
 
-button hover
-active navigation
-copy confirmation
-save confirmation
-processing transitions
-upload feedback
-selected states
+Move less frequently used actions into:
 
-Keep them subtle.
+•••
 
-DESIGN FOR REAL CONTENT
+Potential existing actions:
 
-Do not only design for perfect dummy content.
+Delete
+Copy link
+Other supported actions
 
-Consider:
+Do not put important actions like Download behind the menu.
 
-very long titles
-missing thumbnails
-failed videos
-long durations
-many clips
-no clips
-hundreds of projects
-different statuses
-slow API responses
+13. Social / Publishing Section Should Feel Like a Publishing Workspace
 
-The UI must remain usable.
+The user should be able to mentally understand:
 
-DATA SAFETY
+VIDEO
+   ↓
+AI ANALYSIS
+   ↓
+READY-TO-PUBLISH CONTENT
+   ↓
+PUBLISH / SCHEDULE
 
-Do not invent data.
+This is the key UX.
 
-If existing APIs return:
+The generated title, description, keywords and hashtags aren't random metadata.
 
-6 clips
+They are content prepared for publishing.
 
-show 6.
+Design them accordingly.
 
-If they return:
+14. Consider a "Ready to Publish" Section
 
-35 credits
+A strong UX option is:
 
-show 35.
+READY TO PUBLISH
 
-If a field doesn't exist:
+Your AI-generated content is ready.
 
-do not fabricate it.
+Title                  [ Copy ]
+Description            [ Copy ]
+Keywords               [ Copy All ]
+Hashtags               [ Copy All ]
 
-BEFORE CODING
+[ Schedule Post ]
+[ Download MP4 ]
 
-Perform this sequence:
+This could be the most useful section after AI analysis.
 
-STEP 1
-Inspect entire frontend structure.
+Use this concept if it improves the page.
 
-STEP 2
-Read:
+15. Editing / Studio
 
-app/globals.css
-app/layout.tsx
-providers
-theme configuration
-components.json
+Editing functionality will be implemented later.
 
-STEP 3
-Understand the existing shadcn setup.
+Therefore create a clean future-facing:
 
-STEP 4
-Check which shadcn components are installed.
+Customize
 
-STEP 5
-Identify missing shadcn components required by the redesign.
+section.
 
-STEP 6
-Install/add missing shadcn components.
+Keep currently available functionality working.
 
-STEP 7
-Map the actual application domains.
+For unavailable features:
 
-STEP 8
-Create a redesign plan.
+Captions
+Animated subtitles
+                    Coming Soon
 
-STEP 9
-Refactor architecture where necessary.
+Typography
+Fonts, colors and styling
+                    Coming Soon
 
-STEP 10
-Implement the new design.
+Animations
+Motion effects and B-roll
+                    Coming Soon
 
-STEP 11
-Test every route.
+Branding
+Logo / intro / outro
+                    Coming Soon
 
-STEP 12
-Fix responsive issues.
+These should be visually disabled.
 
-STEP 13
-Fix TypeScript errors.
+Do not make them appear broken.
 
-STEP 14
-Fix lint/build errors.
+16. Aspect Ratio
 
-DO NOT MODIFY GLOBAL THEME UNNECESSARILY
+If aspect ratio functionality currently works, preserve it.
 
-Before changing global.css, determine what it currently provides.
+Example:
 
-If the existing theme is good enough:
+Aspect Ratio
 
-KEEP IT.
+[ 9:16 ]    [ 1:1 ]    [ 16:9 ]
 
-If changes are needed:
+If only 9:16 currently works:
 
-make them centralized and semantic.
+[ 9:16 ]
 
-Do not spread theme values across individual components.
+1:1       Coming Soon
+16:9      Coming Soon
 
-DO NOT MODIFY layout.tsx UNNECESSARILY
+Do not create frontend controls for functionality the backend cannot actually perform.
 
-layout.tsx is foundational.
+17. Transcript
 
-Preserve:
+If the existing flow provides a Transcript action/dialog, keep it.
 
-providers
-metadata
-fonts
-theme
-authentication context
-query providers
-global application configuration
+For example:
 
-Only modify it if the redesign genuinely requires it.
+[ Transcript ]
 
-SHADCN INSTALLATION RULE
+It can open a dialog/drawer containing the transcript.
 
-If a component is missing, use the project's shadcn CLI/configuration to add it.
+Do not remove the transcript just because it isn't part of the primary visual hierarchy.
 
-Examples:
+It belongs under secondary/supporting actions.
 
-If missing:
+18. Existing Caption Styling
 
-Sheet
-→ add Sheet
+If caption styling currently exists but editing is disabled, preserve the feature representation.
 
-If missing:
+Do not delete:
 
-Command
-→ add Command
+Caption Styling
+Typography
+Keyword highlighting
+Animation style
 
-If missing:
+Instead make unavailable functionality clearly:
 
-Breadcrumb
-→ add Breadcrumb
+Coming Soon
+19. Responsive UX
 
-If missing:
+Desktop:
 
-Tabs
-→ add Tabs
+Header
+    ↓
+Video + primary information
+    ↓
+AI Insights
+    ↓
+Social Content
+    ↓
+Customize
 
-If missing:
+Mobile:
 
-Tooltip
-→ add Tooltip
+Back
+↓
+Title
+↓
+Video
+↓
+Quick metadata
+↓
+Actions
+↓
+AI Insights
+↓
+Social Content
+↓
+Customize
+↓
+Publishing
 
-etc.
+The mobile layout should not simply shrink the desktop version.
 
-Do not manually recreate standard shadcn components.
+20. Avoid Excessive Cards
 
-VISUAL QUALITY BAR
+This is still important.
 
-The final result should NOT look like:
+The current design has too many cards.
 
-"developer redesigned a dashboard."
+Do NOT turn:
 
-It should look like:
+Score
+Why clip works
+SEO
+Description
+Keywords
+Hashtags
+Customize
 
-"professional product team designed an AI video creation platform."
+into seven giant cards.
 
-Pay special attention to:
+Instead group related information.
 
-hierarchy
-whitespace
-information density
-alignment
-interaction states
-visual rhythm
-responsive behavior
-consistency
-MOST IMPORTANT UX QUESTION
+For example:
 
-At every page ask:
+AI INSIGHTS
+────────────────────────
 
-What is the user trying to accomplish here?
+Score
+Hook
+Why it works
+Opening hook
 
-Then make that action obvious.
+and:
 
-Do not design based on:
+READY TO PUBLISH
+────────────────────────
 
-"What components can I put on this page?"
+Title
+Description
+Keywords
+Hashtags
 
-Design based on:
+Copy actions
+Schedule
 
-"What does the user need to accomplish?"
+Use whitespace, dividers, typography and subtle backgrounds to create hierarchy.
 
-IMPLEMENTATION ORDER
+21. Visual Hierarchy
 
-Do not redesign everything randomly.
+Prioritize in this order:
 
-Use this order:
+Level 1 — Video
 
-PHASE 1 — FOUNDATION
+The generated short is the primary object.
 
-Inspect and establish:
+Level 2 — Clip identity/actions
 
-global.css
-layout.tsx
-theme
-typography
-shadcn
-spacing
-surfaces
-buttons
-inputs
-dialogs
-navigation
-PHASE 2 — APPLICATION SHELL
+Title, source, download, share, schedule.
 
-Redesign:
+Level 3 — AI insights
 
-sidebar
-top bar
-mobile navigation
-user menu
-credits
-global loading/error states
-PHASE 3 — DASHBOARD
+Score, hook, why it works.
 
-Redesign:
+Level 4 — Publishing content
 
-create workflow
-recent projects
-project cards
-empty states
-processing states
-PHASE 4 — CLIPS
+Title, description, keywords, hashtags.
 
-Redesign:
+Level 5 — Secondary information
 
-My Clips
-filters
-search
-sorting
-clip cards
-clip actions
-PHASE 5 — VIDEO/JOB WORKSPACE
+Transcript, timestamps, technical metadata.
 
-Redesign:
+Level 6 — Future editing
 
-video player
-project header
-processing state
-generated clips
-transcript
-captions
-settings
-editor layout
+Captions, typography, animations, branding.
 
-Preserve existing functionality.
+22. Don't Lose Existing Data
 
-PHASE 6 — BILLING
+Before finalizing the redesign, compare the new page against the old implementation.
 
-Redesign:
+Create a checklist:
 
-current plan
-credits
-usage
-plans
-upgrade flow
-PHASE 7 — AUTH
+[ ] Video playback
+[ ] Player controls
+[ ] Scrubbing
+[ ] Duration
+[ ] Source timestamp
+[ ] Title
+[ ] Description
+[ ] Viral score
+[ ] Hook type
+[ ] Why clip works
+[ ] Opening hook
+[ ] SEO keywords
+[ ] Trending hashtags
+[ ] Tags
+[ ] Copy title
+[ ] Copy description
+[ ] Copy keywords
+[ ] Copy hashtags
+[ ] Copy all
+[ ] Share
+[ ] Schedule post
+[ ] Download MP4
+[ ] Delete
+[ ] Transcript
+[ ] Aspect ratio
+[ ] Caption styling
+[ ] Typography
+[ ] Animations
+[ ] Branding
+[ ] Processing state
+[ ] Failed state
+[ ] Loading state
+[ ] Previous/next clip
 
-Redesign:
+Every feature that currently exists must either remain functional or be intentionally represented as "Coming Soon" if it is a future editing feature.
 
-login
-signup
-forgot password
-OTP
-PHASE 8 — RESPONSIVE
+23. Backend/API Audit
 
-Test:
+Because we're changing the frontend information architecture, inspect whether the backend currently exposes all required information.
 
-375px
-390px
-768px
-1024px
-1280px
-1440px
-1920px
+The individual clip response should provide the data needed for:
 
-PHASE 9 — CLEANUP
+Video
+Title
+Description
+AI score
+Hook
+Analysis
+Timestamp
+Keywords
+Hashtags
+Tags
+Source video
+Status
+Storage URL
+Thumbnail
 
-Remove:
+Do not make the frontend fetch an unnecessarily huge job object.
 
-obsolete dashboard components
-duplicate UI components
-duplicate theme logic
-unused imports
-dead CSS
-redundant styles
-old layout code
+If necessary, create/update a dedicated clip-detail response DTO.
 
-ONLY remove code after confirming it is no longer used.
+24. Scheduling Backend
 
-FINAL VALIDATION
+Inspect the current backend for any scheduling implementation.
 
-Before declaring the redesign complete:
+Search for:
 
-Run:
+schedule
+scheduled
+publish
+social
+post
+calendar
 
-TypeScript check
-ESLint
-production build
+If it exists:
 
-Then verify:
+preserve it
+connect it correctly
+improve the UI
 
-authentication
-dashboard
-create workflow
+If it does not exist:
+
+Do not build an entire social scheduling system just for this redesign.
+
+Instead create the UI architecture only if appropriate and clearly mark unavailable functionality as:
+
+Coming Soon
+25. Backend Architecture
+
+Do not create duplicate clip-processing logic.
+
+The existing backend already has:
+
 jobs
-clips
-video player
-processing states
-billing
-navigation
-dialogs
-dropdowns
-mobile navigation
-responsive layouts
+source-video
+media
+highlight detection
+transcription
+clip cutting
+caption burning
+storage
 
-No broken routes.
+Reuse the existing domain.
 
-No broken imports.
+Only modify:
 
-No TypeScript errors.
+schemas
+DTOs
+services
+controller endpoints
 
-No obvious console errors.
+when necessary for clean clip retrieval/publishing data.
 
-FINAL ARCHITECTURE CHECK
+26. API Design
 
-At the end, verify:
+The frontend should conceptually have access to:
 
-Theme
+GET /jobs/:jobId/clips
 
-Everything follows:
+for generated clips from a source video.
 
-global.css
+And:
 
-and
+GET /clips/:clipId
 
-layout.tsx
+for an individual clip.
 
-UI
+If the existing API design is better, keep it.
 
-Everything uses:
+Do not create endpoints just because these exact URLs look nice.
 
-shadcn/ui
+Follow the existing backend conventions.
 
-where an appropriate component exists.
+27. Security
 
-Missing UI
+Every clip request must verify ownership/access.
 
-Missing shadcn components were installed rather than unnecessarily recreated.
+A user must not be able to access another user's clip simply by changing:
 
-Features
+clipId
 
-Business functionality lives inside:
+Use the existing authorization/access-control patterns.
 
-features/
+28. React Query
 
-Routes
+Use the existing TanStack Query architecture.
 
-Routing lives inside:
+Create clean query boundaries such as:
 
-app/
+useSourceVideoClips()
+useClip()
 
-Shared UI
+if appropriate.
 
-Shared primitives live inside:
+Do not duplicate requests unnecessarily.
 
-components/ui
+After scheduling/deleting/updating something, invalidate only the appropriate queries.
 
-Shared application layout lives inside:
+29. Component Architecture
 
-components/layout
+Do not create one enormous:
 
-Logic
+ClipDetails.tsx
 
-Infrastructure lives inside:
+Instead create logical components.
 
-lib/
+For example:
 
-Providers
+ClipDetails
+├── ClipHeader
+├── ClipNavigation
+├── ClipVideoWorkspace
+├── ClipQuickStats
+├── AIInsights
+│   ├── ViralScore
+│   ├── HookInsight
+│   └── WhyItWorks
+├── PublishContent
+│   ├── GeneratedTitle
+│   ├── GeneratedDescription
+│   ├── SEOKeywords
+│   └── Hashtags
+├── PublishActions
+│   ├── Share
+│   ├── SchedulePost
+│   └── Download
+├── Transcript
+└── ClipCustomization
 
-Application providers live inside:
+Adapt this to the existing feature architecture.
 
-providers/
+Don't create duplicate components if equivalent components already exist.
 
-ABSOLUTE DON'Ts
+30. Copy UX
 
-DO NOT:
+Copying generated content should be extremely obvious.
 
-❌ create an unrelated theme
+For example:
 
-❌ introduce a new font without reason
+TITLE
 
-❌ bypass global.css
+Mind-Blowing Magic Trick 🤯
 
-❌ bypass layout.tsx
+                           Copy
 
-❌ create a custom component when shadcn already provides it
+After clicking:
 
-❌ install another UI framework
+✓ Copied
 
-❌ rewrite backend logic
+For multiple tags:
 
-❌ rewrite working API logic
+KEYWORDS
 
-❌ fabricate data
+[magic] [mentalism] [mindblown] [illusion]
 
-❌ create fake features
+                         Copy all
 
-❌ copy the example folder structure literally
+Use proper clipboard handling.
 
-❌ make every element a card
+31. Empty / Missing Data
 
-❌ make every element a pill
+If AI content isn't available:
 
-❌ use excessive gradients
+Description
 
-❌ use excessive glow
+No description generated yet.
 
-❌ use excessive animations
+Do not render broken UI.
 
-❌ create giant hero sections everywhere
+If keywords are missing, don't show:
 
-❌ turn every component into "use client"
+Keywords: undefined
 
-❌ create massive monolithic components
+Handle optional fields properly.
 
-❌ over-engineer the architecture
+32. Processing State
 
-❌ delete existing functionality because it is inconvenient
+If the clip is processing:
 
-FINAL EXPECTATION
+Generating your short...
 
-Do not think:
+We're preparing your video and AI insights.
 
-"I need to make the current dashboard prettier."
+Don't show incomplete publishing content as if it were ready.
 
-Think:
+33. Failed State
 
-"I need to redesign Blynta as a complete professional AI video creation product."
+If generation fails:
 
-The final product should have:
+We couldn't generate this clip.
 
-a coherent design system
-excellent visual hierarchy
-clear workflows
-professional video workspace UX
-strong responsive behavior
-consistent shadcn components
-clean feature-based architecture
-centralized theme management
-minimal visual clutter
-excellent usability
+[ Try again ]    [ Back to source video ]
 
-Most importantly:
+Only show Retry if the backend supports it.
 
-The UI should feel intentional.
+34. Design Quality
 
-Every spacing decision, component, button, surface, navigation item and interaction should have a reason.
+The visual language should remain consistent with Blynta:
 
-Build it like a senior product designer and senior frontend engineer are working together.
+dark premium UI
+navy/black background
+blue primary accent
+white typography
+subtle borders
+restrained shadows
+clear status badges
+polished hover states
+good spacing
 
+But do not overdo:
 
-### One thing I'd emphasize to the agent
+cards
+gradients
+glow
+rounded containers
+huge score graphics
 
-Your uploaded project already has the main structure under `frontend/app`, `frontend/components`, and `frontend/features`, including the existing dashboard/jobs/auth/billing areas. :contentReference[oaicite:0]{index=0} :contentReference[oaicite:1]{index=1}
+It should feel like a professional AI video/content publishing application.
 
-So I would **not** tell the agent to rebuild the whole frontend from zero. The better instruction is:
+35. Final User Journey
 
-**audit → establish design system → redesign shell → redesign pages → move components into proper feature ownership → remove obsolete code → validate.**
+The final UX should feel like this:
 
-That reduces the chance that the agent destroys working video/job functionality while chasing a new UI.
+                CLIP WORKSPACE
+                       │
+                       ▼
+                 Watch Video
+                       │
+                       ▼
+                Understand AI
+                       │
+              ┌────────┴────────┐
+              ▼                 ▼
+         AI Insights       Clip Details
+              │                 │
+              └────────┬────────┘
+                       ▼
+                READY TO PUBLISH
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+        Copy         Share       Schedule
+          │
+          ▼
+       Download
+                       │
+                       ▼
+                 Customize Later
 
-Also, the **shadcn requirement is now explicit**: if `Sheet`, `Tabs`, `Tooltip`, `Command`, `Breadcrumb`, etc. are missing, the agent should **add the official shadcn component and use it**, rather than inventing another custom implementation.
+The user should never wonder:
+
+"Where is the description?"
+
+or:
+
+"Where are my hashtags?"
+
+or:
+
+"How do I copy the keywords?"
+
+or:
+
+"Where did Schedule Post go?"
+
+All existing capabilities must remain discoverable.
+
+36. Most Important Rule
+
+Do not sacrifice functionality for visual simplicity.
+
+The goal is:
+
+OLD PAGE
+Many features + poor hierarchy
+        ↓
+        ↓
+NEW PAGE
+Same features + dramatically better hierarchy
+
+NOT:
+
+OLD PAGE
+Many features
+        ↓
+NEW PAGE
+Pretty UI + fewer features
+
+The redesign should make the existing functionality easier to discover and use, not remove it.
+
+37. Final Acceptance Criteria
+
+I will consider the redesign successful only if:
+
+UX
+Video is clearly the hero.
+Page doesn't feel like a stack of dashboard cards.
+Information hierarchy is immediately understandable.
+User can review multiple clips easily.
+Publishing content is easy to find.
+Copy actions are obvious.
+Schedule Post remains accessible.
+Share and Download remain accessible.
+AI analysis is easy to scan.
+Future editing features don't clutter the experience.
+Functionality
+Existing player functionality works.
+Existing AI data works.
+Description is available.
+Keywords are available.
+Hashtags/tags are available.
+Copy functionality works.
+Schedule functionality remains available where supported.
+Share works.
+Download works.
+Transcript works if currently supported.
+Existing processing/failed states work.
+Existing authorization remains intact.
+Technical
+No fake data.
+No hardcoded AI values.
+No unnecessary duplicate APIs.
+No unnecessary duplicate components.
+No any unless unavoidable.
+No broken TypeScript.
+No lint errors.
+No broken existing job-processing functionality.
+Final instruction
+
+Do not start by coding.
+
+First inspect the existing implementation and identify every existing feature/data point on the current clip details flow.
+
+Then redesign the page around:
+
+VIDEO → AI INSIGHTS → READY TO PUBLISH → PUBLISH ACTIONS → FUTURE CUSTOMIZATION
+
+while preserving 100% of the currently supported functionality.
+
+The objective is not simply to make the page prettier.
+
+The objective is to make the user think:
+
+"I can watch my clip, understand why it's good, copy everything I need for social media, schedule it, download it, and eventually edit it — all from this one workspace."

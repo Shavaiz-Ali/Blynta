@@ -2,9 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
-  Job,
   JobStatus,
   useJobs,
 } from "@/features/jobs";
@@ -12,7 +10,7 @@ import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
 import { AppButton } from "@/components/common/AppButton";
-import { AppDialog } from "@/components/common/AppDialog";
+import { AppTabs } from "@/components/common/AppTabs";
 import { JobsSkeleton } from "@/features/dashboard/components/JobsSkeleton";
 import { ViewModeToggle, ViewMode } from "@/features/dashboard/components/ViewModeToggle";
 import { JobCardGrid } from "@/features/dashboard/components/JobCardGrid";
@@ -24,7 +22,6 @@ import {
   YoutubeIcon,
   CheckCircleIcon,
   LightbulbIcon,
-  ClockIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "@/features/dashboard/icons";
@@ -153,164 +150,151 @@ export function MyClipsClient() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto">
-        {/* ── Header row with page title, Filter tabs & View toggle ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border/60">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              Media Archives & Clips<span className="text-primary">.</span>
-            </h1>
-            <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-              Browse your processed long-form videos and viral shorts.
-            </p>
-          </div>
-
-          {/* Right controls: Filter tabs + View Mode toggle */}
-          <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
-            {/* Filter Pills Tabs */}
-            <div className="flex items-center gap-1 p-1 bg-card/90 rounded-lg border border-border/80 shadow-2xs backdrop-blur-sm">
-              {FILTER_OPTIONS.map((opt) => {
-                const active = filter === opt.value;
-                return (
-                  <button
-                    key={opt.label}
-                    type="button"
-                    onClick={() => setFilter(opt.value)}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-medium rounded-md transition-all whitespace-nowrap cursor-pointer",
-                      active
-                        ? "bg-background text-foreground font-semibold border border-border/80 shadow-xs"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted/40 border border-transparent"
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* View Mode Toggle (Grid vs. List) */}
-            <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
-          </div>
+      {/* ── Header row with page title, Filter tabs & View toggle ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-border/60">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+            Media Archives & Clips<span className="text-primary">.</span>
+          </h1>
+          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
+            Browse your processed long-form videos and viral shorts.
+          </p>
         </div>
 
-        {/* ── Content area ── */}
-        {isLoading ? (
-          <JobsSkeleton />
-        ) : error ? (
-          <div className="rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm text-center">
-            <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
-            <p className="text-sm font-semibold text-foreground">
-              Couldn&apos;t load your clips
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {(error as any)?.message || "Please refresh the page to try again."}
-            </p>
-          </div>
-        ) : filter === "all" && total === 0 ? (
-          /* Zero jobs TOTAL (no filter) — onboarding empty state */
-          <div className="rounded-2xl border border-border/80 bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
-            <div className="px-6 py-12 flex flex-col items-center text-center">
-              <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 text-primary border border-primary/20">
-                <FilmIcon className="h-7 w-7" />
-              </div>
-              <h3 className="text-lg font-bold text-foreground">No media archives yet</h3>
-              <p className="mt-1 text-xs sm:text-sm text-muted-foreground max-w-sm">
-                Paste a video link on the{" "}
-                <button
-                  type="button"
-                  onClick={() => router.push("/dashboard")}
-                  className="text-primary underline hover:text-primary/80 transition-colors cursor-pointer"
-                >
-                  dashboard
-                </button>{" "}
-                to generate viral vertical clips automatically.
-              </p>
-              <EmptyStateTips />
-            </div>
-          </div>
-        ) : jobs.length === 0 ? (
-          /* Jobs filtered to zero (but jobs DO exist) — simple empty state */
-          <div className="rounded-2xl border border-border/80 bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
-            <div className="flex flex-col items-center py-12 px-6 text-center gap-3">
-              <FilmIcon className="h-10 w-10 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-foreground">
-                No{" "}
-                {FILTER_OPTIONS.find((f) => f.value === filter)?.label.toLowerCase()}{" "}
-                videos found
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Try switching to a different filter or check your search terms.
-              </p>
-              <AppButton
-                variant="outline"
-                size="sm"
-                onClick={() => setFilter("all")}
-                className="mt-1"
-              >
-                Show all archives
-              </AppButton>
-            </div>
-          </div>
-        ) : (
-          /* Has jobs */
-          <div className="space-y-6">
-            {/* Grid or List Display */}
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-                {jobs.map((job) => (
-                  <JobCardGrid
-                    key={job._id || job.id}
-                    job={job}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {jobs.map((job) => (
-                  <JobCardList
-                    key={job._id || job.id}
-                    job={job}
-                  />
-                ))}
-              </div>
-            )}
+        {/* Right controls: Filter tabs + View Mode toggle */}
+        <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto">
+          {/* Filter Pills Tabs */}
+          <AppTabs
+            value={filter}
+            onValueChange={(val) => setFilter(val as FilterValue)}
+            tabs={FILTER_OPTIONS.map((opt) => ({
+              value: opt.value,
+              label: opt.label,
+            }))}
+            className="w-auto"
+          />
 
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between p-4 rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm">
-                <p className="text-xs text-muted-foreground">
-                  Page <span className="font-semibold text-foreground">{page}</span> of{" "}
-                  <span className="font-semibold text-foreground">{totalPages}</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  <AppButton
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => p - 1)}
-                    icon={<ChevronLeftIcon className="h-4 w-4" />}
-                    className="h-8 px-3"
-                  >
-                    Prev
-                  </AppButton>
-                  <AppButton
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                    icon={<ChevronRightIcon className="h-4 w-4" />}
-                    iconPosition="right"
-                    className="h-8 px-3"
-                  >
-                    Next
-                  </AppButton>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          {/* View Mode Toggle (Grid vs. List) */}
+          <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
+        </div>
       </div>
+
+      {/* ── Content area ── */}
+      {isLoading ? (
+        <JobsSkeleton />
+      ) : error ? (
+        <div className="rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm text-center">
+          <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
+          <p className="text-sm font-semibold text-foreground">
+            Couldn&apos;t load your clips
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {(error as any)?.message || "Please refresh the page to try again."}
+          </p>
+        </div>
+      ) : filter === "all" && total === 0 ? (
+        /* Zero jobs TOTAL (no filter) — onboarding empty state */
+        <div className="rounded-2xl border border-border/80 bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
+          <div className="px-6 py-12 flex flex-col items-center text-center">
+            <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 text-primary border border-primary/20">
+              <FilmIcon className="h-7 w-7" />
+            </div>
+            <h3 className="text-lg font-bold text-foreground">No media archives yet</h3>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground max-w-sm">
+              Paste a video link on the{" "}
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="text-primary underline hover:text-primary/80 transition-colors cursor-pointer"
+              >
+                dashboard
+              </button>{" "}
+              to generate viral vertical clips automatically.
+            </p>
+            <EmptyStateTips />
+          </div>
+        </div>
+      ) : jobs.length === 0 ? (
+        /* Jobs filtered to zero (but jobs DO exist) — simple empty state */
+        <div className="rounded-2xl border border-border/80 bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
+          <div className="flex flex-col items-center py-12 px-6 text-center gap-3">
+            <FilmIcon className="h-10 w-10 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-foreground">
+              No{" "}
+              {FILTER_OPTIONS.find((f) => f.value === filter)?.label.toLowerCase()}{" "}
+              videos found
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Try switching to a different filter or check your search terms.
+            </p>
+            <AppButton
+              variant="outline"
+              size="sm"
+              onClick={() => setFilter("all")}
+              className="mt-1"
+            >
+              Show all archives
+            </AppButton>
+          </div>
+        </div>
+      ) : (
+        /* Has jobs */
+        <div className="space-y-6">
+          {/* Grid or List Display */}
+          {viewMode === "grid" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+              {jobs.map((job) => (
+                <JobCardGrid
+                  key={job._id || job.id}
+                  job={job}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {jobs.map((job) => (
+                <JobCardList
+                  key={job._id || job.id}
+                  job={job}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm">
+              <p className="text-xs text-muted-foreground">
+                Page <span className="font-semibold text-foreground">{page}</span> of{" "}
+                <span className="font-semibold text-foreground">{totalPages}</span>
+              </p>
+              <div className="flex items-center gap-2">
+                <AppButton
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  icon={<ChevronLeftIcon className="h-4 w-4" />}
+                  className="h-8 px-3"
+                >
+                  Prev
+                </AppButton>
+                <AppButton
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => p + 1)}
+                  icon={<ChevronRightIcon className="h-4 w-4" />}
+                  iconPosition="right"
+                  className="h-8 px-3"
+                >
+                  Next
+                </AppButton>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </DashboardLayout>
   );
 }

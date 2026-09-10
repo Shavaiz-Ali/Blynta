@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
 import { JobCardGrid } from "./JobCardGrid";
 import { JobCardList } from "./JobCardList";
+import { AppCard } from "@/components/common/AppCard";
 import {
   FilmIcon,
   ExternalLinkIcon,
@@ -85,8 +86,8 @@ export function JobsCard({ jobs }: { jobs: Job[] }) {
   /* ---- Empty state ---- */
   if (jobs.length === 0) {
     return (
-      <div className="rounded-2xl border border-border bg-card/60 shadow-sm overflow-hidden backdrop-blur-sm">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/70">
+      <AppCard className="p-0 overflow-hidden backdrop-blur-sm" useDefaultClasses={false}>
+        <div className="flex items-center justify-between border-b border-border/70">
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-foreground">Recent Projects</h3>
             <span className="text-xs font-mono font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
@@ -95,7 +96,7 @@ export function JobsCard({ jobs }: { jobs: Job[] }) {
           </div>
         </div>
         <div className="px-6 py-12 flex flex-col items-center text-center">
-          <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center mb-4 text-primary border border-primary/20">
+          <div className="h-14 w-14 rounded-lg bg-primary/10 flex items-center justify-center mb-4 text-primary border border-primary/20">
             <FilmIcon className="h-7 w-7" />
           </div>
           <h4 className="text-base font-bold text-foreground">No projects yet</h4>
@@ -105,7 +106,7 @@ export function JobsCard({ jobs }: { jobs: Job[] }) {
           </p>
           <EmptyStateTips />
         </div>
-      </div>
+      </AppCard>
     );
   }
 

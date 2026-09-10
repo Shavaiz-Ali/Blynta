@@ -9,22 +9,6 @@ import {
   Query,
 } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
-
-export {
-  SourcePlatform,
-  JobStatus,
-} from "./types";
-export type {
-  TranscriptSegment,
-  Highlight,
-  Clip,
-  StylePresetInfo,
-  CreateJobInput,
-  Job,
-  JobsListParams,
-  JobsListResult,
-} from "./types";
-
 import {
   SourcePlatform,
   JobStatus,
@@ -37,6 +21,21 @@ import {
   JobsListParams,
   JobsListResult,
 } from "./types";
+
+export {
+  SourcePlatform,
+  JobStatus,
+};
+export type {
+  TranscriptSegment,
+  Highlight,
+  Clip,
+  StylePresetInfo,
+  CreateJobInput,
+  Job,
+  JobsListParams,
+  JobsListResult,
+};
 
 /* -------------------------------------------------------------------------- */
 /*                              Query keys                                    */
@@ -137,11 +136,10 @@ export function useCreateJob(
       const { data } = await axiosClient.post<Job>("/jobs", body);
       return data;
     },
-    onSuccess: (...args: any[]) => {
-      const data = args[0] as Job;
+    onSuccess: (data, variables, context) => {
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
       queryClient.setQueryData(jobsQueryKeys.detail(data.id), data);
-      if (userOnSuccess) (userOnSuccess as any)(...args);
+      if (userOnSuccess) (userOnSuccess as (d: typeof data, v: typeof variables, c: typeof context) => void)(data, variables, context);
     },
     ...restOpts,
   });
@@ -266,12 +264,10 @@ export function useRetryJob(
       const { data } = await axiosClient.post<RetryJobResponse>(`/jobs/${jobId}/retry`);
       return data;
     },
-    onSuccess: (...args: any[]) => {
-      const data = args[0] as RetryJobResponse;
-      // Invalidate this specific job so useJob polling picks up the new PENDING status immediately.
+    onSuccess: (data, variables, context) => {
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.detail(data.jobId) });
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
-      if (userOnSuccess) (userOnSuccess as any)(...args);
+      if (userOnSuccess) (userOnSuccess as (d: typeof data, v: typeof variables, c: typeof context) => void)(data, variables, context);
     },
     ...restOpts,
   });
