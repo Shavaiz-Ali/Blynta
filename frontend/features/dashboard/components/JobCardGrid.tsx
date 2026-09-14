@@ -52,6 +52,8 @@ export function JobCardGrid({ job }: JobCardGridProps) {
         "hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 cursor-pointer text-left",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
       )}
+      useDefaultClasses={false}
+      contentClassName="p-0"
     >
       {/* ── 16:9 Thumbnail Container ── */}
       <div className="relative aspect-video w-full bg-muted/40 overflow-hidden select-none">

@@ -15,6 +15,7 @@ import { StripeModule } from './stripe/stripe.module';
 import { BillingModule } from './billing/billing.module';
 import { CommonModule } from './common/common.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ActivitiesModule } from './activities/activities.module';
 
 const logger = new Logger('MongooseModule');
 
@@ -24,6 +25,7 @@ const logger = new Logger('MongooseModule');
     ScheduleModule.forRoot(),
     CommonModule,
     NotificationsModule,
+    ActivitiesModule,
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -45,12 +47,19 @@ const logger = new Logger('MongooseModule');
     }),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        connection: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-        },
-      }),
+      useFactory: async (configService: ConfigService) => {
+        console.log('REDIS CONFIG:', {
+          host: configService.get<string>('REDIS_HOST'),
+          port: configService.get<number>('REDIS_PORT'),
+        });
+
+        return {
+          connection: {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
+          },
+        };
+      },
       inject: [ConfigService],
     }),
     MailModule,

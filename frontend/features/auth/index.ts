@@ -23,12 +23,32 @@ export {
 export type { GetEnabledProvidersOptions } from "./api";
 export {
   useCurrentUser,
+  useUpdateProfile,
+  useUploadAvatar,
+  useChangePassword,
   useMarkWelcomed,
+  useReferralStats,
+  useSendReferralInvite,
+  useSignup,
+  useVerifyOtp,
+  useResendOtp,
   invalidateCurrentUser,
   userQueryKeys,
 } from "./queries";
 export type {
+  UpdateProfileInput,
+  UpdateProfileResult,
+  UploadAvatarResult,
+  ChangePasswordInput,
+  ChangePasswordResult,
   MarkWelcomedResult,
+  ReferralStatsResult,
+  SendReferralInviteResult,
+  SignupInput,
+  SignupResult,
+  VerifyOtpInput,
+  VerifyOtpResult,
+  ResendOtpResult,
 } from "./queries";
 export type {
   AuthUser,
@@ -39,6 +59,7 @@ export type {
   EmailVerificationRequest,
   AuthProvider,
   UserProfile,
+  LinkedAccount,
   UserPlan,
   UserRole,
 } from "./types";

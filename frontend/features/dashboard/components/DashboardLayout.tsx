@@ -22,6 +22,8 @@ import {
   SettingsIcon,
   FolderIcon,
   Share2Icon,
+  UserIcon,
+  ActivityIcon,
 } from "../icons";
 
 /* -------------------------------------------------------------------------- */
@@ -92,8 +94,10 @@ export const navGroups: NavGroup[] = [
   {
     title: "Account",
     items: [
+      { label: "Profile", href: "/profile", icon: UserIcon },
+      { label: "Activity", href: "/activity", icon: ActivityIcon },
       { label: "Billing", href: "/billing", icon: CreditCardIcon },
-      { label: "Settings", href: "/settings", icon: SettingsIcon },
+      { label: "Settings", href: "/settings", icon: SettingsIcon, badge: "Soon", disabled: true },
     ],
   },
 ];

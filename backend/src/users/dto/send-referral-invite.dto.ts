@@ -1,6 +1,8 @@
-import { IsEmail } from 'class-validator';
+import { z } from 'zod';
+import { createZodDto } from 'nestjs-zod';
 
-export class SendReferralInviteDto {
-    @IsEmail()
-    email: string;
-}
+const SendReferralInviteSchema = z.object({
+  email: z.string().email(),
+});
+
+export class SendReferralInviteDto extends createZodDto(SendReferralInviteSchema) {}

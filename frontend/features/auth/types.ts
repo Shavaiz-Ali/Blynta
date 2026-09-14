@@ -20,6 +20,12 @@ export interface AuthUser {
   emailVerified?: boolean;
 }
 
+export interface LinkedAccount {
+  provider: AuthProvider;
+  providerId: string;
+  linkedAt?: string;
+}
+
 /**
  * Shape returned by GET /users/me (the NestJS backend profile endpoint),
  * unwrapped from the { success, data } envelope.
@@ -28,13 +34,15 @@ export interface UserProfile {
   id: string;
   email: string;
   name: string;
-  avatarUrl: string;
+  avatarUrl?: string | null;
   plan: UserPlan;
   creditsBalance: number;
   creditsResetAt: string;
   role: UserRole;
   isWelcomed: boolean;
-  referralCode: string
+  referralCode: string;
+  linkedAccounts?: LinkedAccount[];
+  createdAt?: string;
 }
 
 export interface AuthSession {

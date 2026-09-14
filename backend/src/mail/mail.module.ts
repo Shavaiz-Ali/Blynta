@@ -8,7 +8,7 @@ import { MAIL_QUEUE } from './mail.constants';
     imports: [
         BullModule.registerQueue({ name: MAIL_QUEUE }),
     ],
-    providers: [MailService, MailProcessor],
-    exports: [MailService],
+    providers: [MailService],
+    exports: [MailService, BullModule],
 })
 export class MailModule { }

@@ -145,7 +145,6 @@ export class Notification {
 
   @Prop({
     type: Date,
-    index: true,
   })
   expiresAt?: Date;
 }

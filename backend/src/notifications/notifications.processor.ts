@@ -16,6 +16,7 @@ import {
   stalledInterval: 15_000,
   maxStalledCount: 3,
 })
+
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
 

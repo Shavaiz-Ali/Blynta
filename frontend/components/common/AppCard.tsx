@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-export interface AppCardProps extends React.ComponentProps<typeof Card> {
+export interface AppCardProps extends Omit<React.ComponentProps<typeof Card>, "title"> {
   title?: React.ReactNode;
   description?: React.ReactNode;
   headerAction?: React.ReactNode;

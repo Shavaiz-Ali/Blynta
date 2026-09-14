@@ -17,6 +17,14 @@ import { JobAccessDeniedException } from '../common/exceptions';
 import { UsersService } from '../users/users.service';
 import { JOBS_QUEUE, JOBS_TYPES } from './jobs.constants';
 import { R2Service } from '../storage/r2.service';
+import { ActivitiesService } from '../activities/activities.service';
+import {
+  ActivityActorType,
+  ActivityCategory,
+  ActivitySeverity,
+  ActivityStatus,
+  ActivityType,
+} from '../activities/schemas/activity.schema';
 
 @Injectable()
 export class JobsService {
@@ -28,6 +36,7 @@ export class JobsService {
     private usersService: UsersService,
     private configService: ConfigService,
     private r2Service: R2Service,
+    private activitiesService: ActivitiesService,
   ) { }
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
@@ -49,6 +58,46 @@ export class JobsService {
     await this.jobsQueue.add(JOBS_TYPES.CLIP_VIDEO, {
       jobId: saved._id.toString(),
       userId,
+    });
+
+    // Activities for Job Creation and Credit Usage
+    await this.activitiesService.queueCreate({
+      userId: saved.userId,
+      type: ActivityType.JOB_CREATE,
+      category: ActivityCategory.JOB,
+      title: 'Clip generation started',
+      description: 'Your video is being processed.',
+      activityUrl: `/dashboard/jobs/${saved._id}`,
+      entityType: 'job',
+      entityId: saved._id,
+      actorType: ActivityActorType.USER,
+      actorId: saved.userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+      metadata: {
+        sourcePlatform: dto.sourcePlatform,
+        aiModel: dto.aiModel,
+        stylePreset: dto.stylePreset || 'default',
+      },
+    });
+
+    await this.activitiesService.queueCreate({
+      userId: saved.userId,
+      type: ActivityType.CREDIT_DEDUCT,
+      category: ActivityCategory.CREDIT,
+      title: 'Credit used',
+      description: '1 credit used for video clip generation.',
+      activityUrl: '/billing',
+      entityType: 'job',
+      entityId: saved._id,
+      actorType: ActivityActorType.USER,
+      actorId: saved.userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+      metadata: {
+        amount: 1,
+        jobId: saved._id.toString(),
+      },
     });
 
     return saved;
@@ -195,6 +244,22 @@ export class JobsService {
     }
 
     await this.jobModel.findByIdAndDelete(jobId).exec();
+
+    await this.activitiesService.queueCreate({
+      userId: job.userId,
+      type: ActivityType.JOB_DELETE,
+      category: ActivityCategory.JOB,
+      title: 'Job deleted',
+      description: 'Video processing job was deleted.',
+      activityUrl: '/dashboard',
+      entityType: 'job',
+      entityId: job._id,
+      actorType: ActivityActorType.USER,
+      actorId: userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+    });
+
     return { message: 'Job deleted successfully' };
   }
 
@@ -227,6 +292,22 @@ export class JobsService {
         { $pull: { clips: { _id: new Types.ObjectId(clipId) } } },
       )
       .exec();
+
+    await this.activitiesService.queueCreate({
+      userId: job.userId,
+      type: ActivityType.CLIP_DELETE,
+      category: ActivityCategory.JOB,
+      title: 'Clip deleted',
+      description: 'Clip was removed from job.',
+      activityUrl: `/dashboard/jobs/${jobId}`,
+      entityType: 'clip',
+      entityId: clipId,
+      actorType: ActivityActorType.USER,
+      actorId: userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+      metadata: { jobId, clipId },
+    });
 
     return { message: 'Clip deleted successfully' };
   }

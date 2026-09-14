@@ -10,6 +10,7 @@ import { AuthProviderConfigService } from './auth-provider-config.service';
 import { AuthProviderConfig, AuthProviderConfigSchema } from './schemas/auth-provider-config.schema';
 import { UsersModule } from '../users/users.module';
 import { MailModule } from 'src/mail/mail.module';
+import { ActivitiesModule } from '../activities/activities.module';
 
 const DEFAULT_JWT_EXPIRES_IN = '7d';
 
@@ -19,6 +20,7 @@ const DEFAULT_JWT_EXPIRES_IN = '7d';
     ConfigModule,
     UsersModule,
     MailModule,
+    ActivitiesModule,
     MongooseModule.forFeature([
       { name: AuthProviderConfig.name, schema: AuthProviderConfigSchema },
     ]),

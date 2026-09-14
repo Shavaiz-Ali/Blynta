@@ -1,44 +1,28 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { NestFactory } from '@nestjs/core';
 import { Logger } from '@nestjs/common';
-import { Job as BullJob } from 'bullmq';
-import {
-  NOTIFICATIONS_QUEUE,
-  NOTIFICATION_JOBS,
-} from './notifications.constants';
-import {
-  CreateNotificationInput,
-  NotificationsService,
-} from './notifications.service';
+import { NotificationsWorkerModule } from './notifications-worker.module';
+import { ProcessRegistryService } from '../common/services/process-registry.service';
 
-@Processor(NOTIFICATIONS_QUEUE, {
-  concurrency: 5,
-  lockDuration: 30_000,
-  stalledInterval: 15_000,
-  maxStalledCount: 3,
-})
-export class NotificationsProcessor extends WorkerHost {
-  private readonly logger = new Logger(NotificationsProcessor.name);
+async function bootstrapNotificationsWorker() {
+  const logger = new Logger('NotificationsWorkerBootstrap');
 
-  constructor(private notificationsService: NotificationsService) {
-    super();
-  }
+  // Bootstraps dedicated NotificationsWorkerModule (BullMQ notification processor, DB connection, config)
+  // without starting an HTTP web server or listening on a port.
+  const app = await NestFactory.createApplicationContext(NotificationsWorkerModule);
+  app.enableShutdownHooks();
 
-  async process(job: BullJob): Promise<void> {
-    switch (job.name) {
-      case NOTIFICATION_JOBS.CREATE: {
-        const input = job.data as CreateNotificationInput;
-        await this.notificationsService.create(input);
-        break;
-      }
+  const processRegistry = app.get(ProcessRegistryService);
 
-      case NOTIFICATION_JOBS.CREATE_IF_NOT_EXISTS: {
-        const input = job.data as CreateNotificationInput;
-        await this.notificationsService.createIfNotExists(input);
-        break;
-      }
+  const shutdown = async (signal: string) => {
+    logger.log(`Received ${signal}, shutting down notifications worker gracefully...`);
+    await processRegistry.killAll();
+    await app.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
-      default:
-        throw new Error(`Unknown notification job type: ${job.name}`);
-    }
-  }
+  logger.log('Notifications worker started — listening for jobs on the notifications queue.');
 }
+
+bootstrapNotificationsWorker();

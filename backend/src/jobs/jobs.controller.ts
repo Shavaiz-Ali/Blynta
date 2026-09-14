@@ -18,6 +18,14 @@ import { UsersService } from '../users/users.service';
 import { UserPlan } from '../users/schemas/user.schema';
 import { JobDocument } from './schemas/job.schema';
 import { STYLE_PRESETS } from '../media/style-presets';
+import { ActivitiesService } from '../activities/activities.service';
+import {
+  ActivityActorType,
+  ActivityCategory,
+  ActivitySeverity,
+  ActivityStatus,
+  ActivityType,
+} from '../activities/schemas/activity.schema';
 
 @Controller('jobs')
 @UseGuards(AuthGuard('jwt'))
@@ -26,6 +34,7 @@ export class JobsController {
     private jobsService: JobsService,
     private usersService: UsersService,
     private r2Service: R2Service,
+    private activitiesService: ActivitiesService,
   ) { }
 
   private shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
@@ -110,6 +119,23 @@ export class JobsController {
     );
 
     const signedUrl = await this.r2Service.getSignedDownloadUrl(clip.r2ObjectKey, 3600);
+
+    await this.activitiesService.queueCreate({
+      userId: req.user.userId,
+      type: ActivityType.CLIP_DOWNLOAD,
+      category: ActivityCategory.JOB,
+      title: 'Clip download requested',
+      description: 'A download link was generated for your clip.',
+      activityUrl: `/dashboard/jobs/${jobId}`,
+      entityType: 'clip',
+      entityId: clip._id,
+      actorType: ActivityActorType.USER,
+      actorId: req.user.userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+      metadata: { jobId, clipId },
+    });
+
     return { signedUrl };
   }
 

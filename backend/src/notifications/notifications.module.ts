@@ -15,7 +15,7 @@ import { NOTIFICATIONS_QUEUE } from './notifications.constants';
     BullModule.registerQueue({ name: NOTIFICATIONS_QUEUE }),
   ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationsProcessor],
-  exports: [NotificationsService],
+  providers: [NotificationsService],
+  exports: [NotificationsService, BullModule],
 })
 export class NotificationsModule {}

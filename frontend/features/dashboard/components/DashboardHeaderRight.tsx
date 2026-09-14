@@ -5,9 +5,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { AppButton } from "@/components/common/AppButton";
-import { BellIcon, ZapIcon } from "../icons";
+import { ZapIcon } from "../icons";
 import { UserDropdown } from "./UserDropdown";
+import { NotificationBell } from "@/features/notifications/components/NotificationBell";
 
 export function DashboardHeaderRight({ profile }: { profile: UserProfile }) {
   const credits = profile.creditsBalance ?? 0;
@@ -68,16 +68,7 @@ export function DashboardHeaderRight({ profile }: { profile: UserProfile }) {
       </Popover>
 
       {/* Notifications */}
-      <AppButton
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="relative h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60"
-        aria-label="Notifications"
-      >
-        <BellIcon className="h-4 w-4" />
-        <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
-      </AppButton>
+      <NotificationBell />
 
       <UserDropdown profile={profile} />
     </div>

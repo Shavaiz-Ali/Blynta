@@ -14,7 +14,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { SunIcon, MoonIcon, CheckIcon } from "../icons";
 import { cn } from "@/lib/utils";
@@ -49,7 +49,14 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
             {planLabel} plan
           </span>
         </div>
-        <Avatar className="h-8 w-8 rounded-lg">
+        <Avatar className="h-8 w-8 rounded-lg overflow-hidden">
+          {profile.avatarUrl && (
+            <AvatarImage
+              src={profile.avatarUrl}
+              alt={profile.name || "User"}
+              className="object-cover"
+            />
+          )}
           <AvatarFallback className="rounded-lg bg-primary/15 text-primary text-xs font-bold">
             {initials}
           </AvatarFallback>
@@ -82,7 +89,7 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem render={<Link href="/settings" />} className="rounded-lg text-xs cursor-pointer">
+        <DropdownMenuItem render={<Link href="/profile" />} className="rounded-lg text-xs cursor-pointer">
           Profile
         </DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/settings" />} className="rounded-lg text-xs cursor-pointer">

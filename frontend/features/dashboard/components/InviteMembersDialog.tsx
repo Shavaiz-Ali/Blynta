@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { AppDialog } from "@/components/common/AppDialog";
 import { AppButton } from "@/components/common/AppButton";
 import { AppInput } from "@/components/common/AppInput";
-import { UserPlusIcon, CheckCircleIcon } from "../icons";
-import { useCurrentUser } from "@/features/auth";
+import { AppSpinner } from "@/components/common/AppSpinner";
+import { UserPlusIcon, CheckCircleIcon, CopyIcon, GiftIcon } from "../icons";
+import { useCurrentUser, useSendReferralInvite } from "@/features/auth";
 
 export interface InviteMembersDialogProps {
   open: boolean;
@@ -15,31 +16,44 @@ export interface InviteMembersDialogProps {
 
 export function InviteMembersDialog({ open, onOpenChange }: InviteMembersDialogProps) {
   const [email, setEmail] = React.useState("");
-  const [role, setRole] = React.useState<"member" | "admin">("member");
   const [copied, setCopied] = React.useState(false);
-  const [sent, setSent] = React.useState(false);
-  const { data: profile } = useCurrentUser();
+  const { data: profile, isLoading: isProfileLoading } = useCurrentUser();
 
-  console.log(profile)
+  const sendInviteMutation = useSendReferralInvite({
+    onSuccess: () => {
+      toast.success(`Invitation email sent to ${email.trim()}!`);
+      setEmail("");
+      onOpenChange(false);
+    },
+    onError: (err: any) => {
+      const message = err?.message || "Failed to send invitation. Please try again.";
+      toast.error(message);
+    },
+  });
 
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const referralLink = profile?.referralCode
+    ? `${origin}/signup?ref=${profile.referralCode}`
+    : "";
+
+  const isLinkLoading = isProfileLoading || !referralLink;
 
   function handleSendInvite(e?: React.FormEvent) {
     e?.preventDefault();
-    if (!email.trim()) return;
-    setSent(true);
-    toast.success(`Invitation sent to ${email.trim()}!`);
-    setTimeout(() => {
-      setSent(false);
-      setEmail("");
-      onOpenChange(false);
-    }, 1500);
+    const targetEmail = email.trim();
+    if (!targetEmail) return;
+
+    sendInviteMutation.mutate(targetEmail);
   }
 
   function handleCopyLink() {
-    const inviteLink = `${window.location.origin}/signup?invite=team_blynta_workspace`;
-    navigator.clipboard.writeText(inviteLink);
+    if (isLinkLoading || !referralLink) {
+      toast.error("Generating your referral link. Please wait a moment...");
+      return;
+    }
+    navigator.clipboard.writeText(referralLink);
     setCopied(true);
-    toast.success("Workspace invite link copied to clipboard!");
+    toast.success("Referral invite link copied to clipboard!");
     setTimeout(() => setCopied(false), 2000);
   }
 
@@ -48,83 +62,96 @@ export function InviteMembersDialog({ open, onOpenChange }: InviteMembersDialogP
       open={open}
       onOpenChange={onOpenChange}
       size="md"
-      title="Invite Team Members"
-      description="Collaborate with your team on video clips, templates, and social publishing."
+      title="Invite & Earn Bonus Credits"
+      description="Invite fellow creators to Blynta and earn extra video generation credits."
       footer={
         <div className="flex w-full justify-between items-center gap-2">
           <AppButton
             variant="outline"
             size="sm"
+            type="button"
             onClick={handleCopyLink}
-            icon={copied ? <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500" /> : undefined}
+            disabled={isLinkLoading}
+            icon={
+              isLinkLoading ? (
+                <AppSpinner size="xs" />
+              ) : copied ? (
+                <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500" />
+              ) : (
+                <CopyIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              )
+            }
           >
-            {copied ? "Link Copied!" : "Copy Invite Link"}
+            {isLinkLoading ? "Loading link..." : copied ? "Link Copied!" : "Copy Link"}
           </AppButton>
           <AppButton
             size="sm"
+            type="button"
             onClick={handleSendInvite}
-            disabled={!email.trim() || sent}
+            isLoading={sendInviteMutation.isPending}
+            disabled={!email.trim() || sendInviteMutation.isPending}
             icon={<UserPlusIcon className="h-3.5 w-3.5" />}
           >
-            {sent ? "Sent!" : "Send Invite"}
+            Send Invite
           </AppButton>
         </div>
       }
     >
       <form onSubmit={handleSendInvite} className="flex flex-col gap-4 py-2">
+        {/* ── Bonus Credits Banner ── */}
+        <div className="flex items-start gap-3 rounded-xl bg-primary/10 border border-primary/20 p-3 text-xs">
+          <GiftIcon className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <p className="font-semibold text-foreground">
+              Give 2 credits, get 3 credits
+            </p>
+            <p className="text-muted-foreground leading-relaxed">
+              When someone signs up using your link, you'll earn <strong>3 bonus credits</strong> and they'll get <strong>2 bonus credits</strong> to create clips.
+            </p>
+          </div>
+        </div>
+
+        {/* ── Email Invite Input ── */}
         <AppInput
-          label="Email Address"
+          label="Send an email invite"
           placeholder="colleague@company.com"
+          type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           autoFocus
         />
 
-        <AppInput
-          label="InviteLink"
-          placeholder="Copy invite link"
-          value={profile ? `${process.env.NEXT_PUBLIC_API_URL}/${profile.referralCode}` : ""}
-          onChange={(e) => setEmail(e.target.value)}
-          autoFocus
-        />
-
-
-        {/* <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-foreground">Role</label>
-          <div className="grid grid-cols-2 gap-2">
+        {/* ── Shareable Invite Link ── */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-foreground">
+            Or share your invite link
+          </label>
+          <div className="flex items-center gap-2 relative">
+            {isLinkLoading ? (
+              <div className="flex-1 flex items-center gap-2 h-9 rounded-lg border border-border/80 bg-muted/40 px-3 py-2 text-xs text-muted-foreground animate-pulse">
+                <AppSpinner size="xs" />
+                <span>Generating your referral link...</span>
+              </div>
+            ) : (
+              <input
+                type="text"
+                readOnly
+                value={referralLink}
+                className="flex-1 rounded-lg border border-border/80 bg-muted/40 px-3 py-2 text-xs text-muted-foreground font-mono focus:outline-hidden select-all"
+              />
+            )}
             <AppButton
               type="button"
-              variant={role === "member" ? "default" : "outline"}
-              onClick={() => setRole("member")}
-              className={`h-auto p-3 rounded-xl border text-left flex-col items-start justify-start font-normal transition-all ${
-                role === "member"
-                  ? "border-primary bg-primary/10 text-foreground hover:bg-primary/15"
-                  : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"
-              }`}
+              variant="secondary"
+              size="icon"
+              onClick={handleCopyLink}
+              disabled={isLinkLoading}
+              className="shrink-0 absolute z-10 top-1/2 -translate-y-1/2 right-3 h-7 w-7 flex justify-center items-center"
             >
-              <p className="text-xs font-bold">Member</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 font-normal">
-                Can create and edit clips
-              </p>
-            </AppButton>
-
-            <AppButton
-              type="button"
-              variant={role === "admin" ? "default" : "outline"}
-              onClick={() => setRole("admin")}
-              className={`h-auto p-3 rounded-xl border text-left flex-col items-start justify-start font-normal transition-all ${
-                role === "admin"
-                  ? "border-primary bg-primary/10 text-foreground hover:bg-primary/15"
-                  : "border-border bg-muted/30 text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              <p className="text-xs font-bold">Admin</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5 font-normal">
-                Full billing and workspace access
-              </p>
+              {isLinkLoading ? <AppSpinner size="xs" /> : copied ? <CheckCircleIcon className="mt-0.5  text-emerald-500" /> : <CopyIcon className="mt-0.5" />}
             </AppButton>
           </div>
-        </div> */}
+        </div>
       </form>
     </AppDialog>
   );

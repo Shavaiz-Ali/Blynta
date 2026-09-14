@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
@@ -13,14 +14,33 @@ import {
   UserPlan,
   PLAN_CREDITS,
 } from '../users/schemas/user.schema';
+import {
+  NotificationCategory,
+  NotificationType,
+} from '../notifications/schemas/notification.schema';
+import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { ActivitiesService } from '../activities/activities.service';
+import {
+  ActivityActorType,
+  ActivityCategory,
+  ActivitySeverity,
+  ActivityStatus,
+  ActivityType,
+} from '../activities/schemas/activity.schema';
 import type { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import Stripe from 'stripe';
 
 @Injectable()
 export class BillingService {
+  private readonly logger = new Logger(BillingService.name);
+
   constructor(
     private stripeService: StripeService,
     private configService: ConfigService,
+    private notificationsService: NotificationsService,
+    private mailService: MailService,
+    private activitiesService: ActivitiesService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
   ) {}
 
@@ -128,7 +148,7 @@ export class BillingService {
     const { stripeCustomerId, stripeSubscriptionId, plan } = params;
     const nextReset = this.nextMonth();
 
-    await this.userModel.updateOne(
+    const user = await this.userModel.findOneAndUpdate(
       { stripeCustomerId },
       {
         $set: {
@@ -138,17 +158,80 @@ export class BillingService {
           creditsResetAt: nextReset,
         },
       },
+      { new: true },
     );
+
+    if (user) {
+      try {
+        await this.notificationsService.queueCreateIfNotExists({
+          userId: user._id,
+          type: NotificationType.SUCCESS,
+          category: NotificationCategory.BILLING,
+          title: `Upgraded to ${plan.toUpperCase()}`,
+          message: `Your account has been upgraded to ${plan.toUpperCase()} with ${PLAN_CREDITS[plan]} credits.`,
+          actionUrl: '/billing',
+          actionLabel: 'View plan',
+          dedupeKey: `billing:upgrade:${stripeSubscriptionId}:${Date.now()}`,
+        });
+
+        if (user.email) {
+          await this.mailService.queueSubscriptionActivatedEmail(
+            user.email,
+            plan,
+            PLAN_CREDITS[plan],
+          );
+        }
+
+        // Activities for billing upgrade and credits granted
+        await this.activitiesService.queueCreateIfNotExists({
+          userId: user._id,
+          type: ActivityType.BILLING_SUBSCRIPTION_CREATE,
+          category: ActivityCategory.BILLING,
+          title: `Subscribed to ${plan.toUpperCase()}`,
+          description: `Upgraded to ${plan.toUpperCase()} plan with ${PLAN_CREDITS[plan]} monthly credits.`,
+          activityUrl: '/billing',
+          entityType: 'subscription',
+          entityId: user._id,
+          actorType: ActivityActorType.SYSTEM,
+          isSystem: true,
+          status: ActivityStatus.SUCCESS,
+          severity: ActivitySeverity.SUCCESS,
+          dedupeKey: `activity:billing:sub:${stripeSubscriptionId}`,
+          metadata: {
+            plan,
+            creditsGranted: PLAN_CREDITS[plan],
+            stripeSubscriptionId,
+          },
+        });
+
+        await this.activitiesService.queueCreateIfNotExists({
+          userId: user._id,
+          type: ActivityType.CREDIT_PURCHASE,
+          category: ActivityCategory.CREDIT,
+          title: 'Credits added',
+          description: `${PLAN_CREDITS[plan]} credits added with ${plan.toUpperCase()} plan.`,
+          activityUrl: '/billing',
+          entityType: 'subscription',
+          entityId: user._id,
+          actorType: ActivityActorType.SYSTEM,
+          isSystem: true,
+          status: ActivityStatus.SUCCESS,
+          severity: ActivitySeverity.SUCCESS,
+          dedupeKey: `activity:billing:credits:${stripeSubscriptionId}`,
+          metadata: {
+            amount: PLAN_CREDITS[plan],
+            plan,
+          },
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to dispatch billing notification/email/activity: ${err}`);
+      }
+    }
   }
 
   /**
    * Called from the webhook when a subscription is cancelled (or non-renewed).
    * We immediately downgrade back to FREE and clamp credits to FREE tier.
-   *
-   * Trade-off: simpler and fully auditable — user keeps free-tier credits only
-   * going forward. Alternative: preserve paid credits until creditsResetAt and
-   * downgrade at cycle end (requires storing "pending plan" state, more moving
-   * parts). We'll start simple; refine later if churn UX matters.
    */
   async revertSubscriptionToFree(params: {
     stripeSubscriptionId: string;
@@ -156,7 +239,7 @@ export class BillingService {
     const { stripeSubscriptionId } = params;
     const nextReset = this.nextMonth();
 
-    await this.userModel.updateOne(
+    const user = await this.userModel.findOneAndUpdate(
       { stripeSubscriptionId },
       {
         $set: {
@@ -166,6 +249,40 @@ export class BillingService {
           creditsResetAt: nextReset,
         },
       },
+      { new: true },
     );
+
+    if (user) {
+      try {
+        await this.notificationsService.queueCreateIfNotExists({
+          userId: user._id,
+          type: NotificationType.INFO,
+          category: NotificationCategory.BILLING,
+          title: 'Subscription ended',
+          message: 'Your plan has reverted to Free tier.',
+          actionUrl: '/billing',
+          actionLabel: 'Manage plan',
+          dedupeKey: `billing:revert:${stripeSubscriptionId}:${Date.now()}`,
+        });
+
+        await this.activitiesService.queueCreateIfNotExists({
+          userId: user._id,
+          type: ActivityType.BILLING_SUBSCRIPTION_CANCEL,
+          category: ActivityCategory.BILLING,
+          title: 'Subscription ended',
+          description: 'Your plan reverted to the Free tier.',
+          activityUrl: '/billing',
+          entityType: 'subscription',
+          entityId: user._id,
+          actorType: ActivityActorType.SYSTEM,
+          isSystem: true,
+          status: ActivityStatus.SUCCESS,
+          severity: ActivitySeverity.INFO,
+          dedupeKey: `activity:billing:cancel:${stripeSubscriptionId}`,
+        });
+      } catch (err) {
+        this.logger.warn(`Failed to dispatch billing cancel notification/activity: ${err}`);
+      }
+    }
   }
 }

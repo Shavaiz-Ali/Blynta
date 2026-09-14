@@ -25,6 +25,15 @@ import {
   NotificationType,
 } from '../notifications/schemas/notification.schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MailService } from '../mail/mail.service';
+import { ActivitiesService } from '../activities/activities.service';
+import {
+  ActivityActorType,
+  ActivityCategory,
+  ActivitySeverity,
+  ActivityStatus,
+  ActivityType,
+} from '../activities/schemas/activity.schema';
 
 type ClipDraft = {
   highlight: HighlightDto;
@@ -56,6 +65,8 @@ export class JobsProcessor extends WorkerHost {
     private sourceVideoService: SourceVideoService,
     private r2Service: R2Service,
     private notificationsService: NotificationsService,
+    private mailService: MailService,
+    private activitiesService: ActivitiesService,
   ) {
     super();
   }
@@ -91,6 +102,23 @@ export class JobsProcessor extends WorkerHost {
       // --- User & Plan resolution lookup ---
       const user = await this.usersService.findById(userId);
       if (!user) throw new Error(`User ${userId} not found`);
+
+      // Record Activity: Video processing started
+      await this.activitiesService.queueCreateIfNotExists({
+        userId: job.userId,
+        type: ActivityType.JOB_START,
+        category: ActivityCategory.JOB,
+        title: 'Video processing started',
+        description: 'AI model is analyzing highlights and cutting clips.',
+        activityUrl: `/dashboard/jobs/${jobId}`,
+        entityType: 'job',
+        entityId: jobId,
+        actorType: ActivityActorType.WORKER,
+        isSystem: true,
+        status: ActivityStatus.PENDING,
+        severity: ActivitySeverity.INFO,
+        dedupeKey: `activity:job:${jobId}:start`,
+      });
 
       // const resolution: '720p' | '1080p' =
       //   user.plan === UserPlan.PRO || user.plan === UserPlan.BUSINESS ? '1080p' : '720p';
@@ -593,7 +621,7 @@ export class JobsProcessor extends WorkerHost {
           : { errorMessage: 'All clips failed to cut', errorStage: 'cutting_clips' }),
       });
 
-      // Queue idempotent in-app notifications via BullMQ (never inline)
+      // Queue idempotent in-app notifications and emails via BullMQ (never inline)
       if (finalJob) {
         try {
           if (anyClipSucceeded) {
@@ -612,6 +640,38 @@ export class JobsProcessor extends WorkerHost {
               entityId: jobId,
               dedupeKey: `job:${jobId}:completed`,
             });
+
+            if (user.email) {
+              await this.mailService.queueJobCompletedEmail(
+                user.email,
+                finalJob.videoTitle || 'Your video',
+                successfulClipCount,
+                jobId,
+              );
+            }
+
+            // Record Activity: Job completed
+            await this.activitiesService.queueCreateIfNotExists({
+              userId: finalJob.userId,
+              type: ActivityType.JOB_COMPLETE,
+              category: ActivityCategory.JOB,
+              title: 'Clip generation completed',
+              description:
+                successfulClipCount === 1
+                  ? '1 clip was successfully generated.'
+                  : `${successfulClipCount} clips were successfully generated.`,
+              activityUrl: `/dashboard/jobs/${jobId}`,
+              entityType: 'job',
+              entityId: jobId,
+              actorType: ActivityActorType.WORKER,
+              isSystem: true,
+              status: ActivityStatus.SUCCESS,
+              severity: ActivitySeverity.SUCCESS,
+              dedupeKey: `activity:job:${jobId}:complete`,
+              metadata: {
+                clipCount: successfulClipCount,
+              },
+            });
           } else {
             await this.notificationsService.queueCreateIfNotExists({
               userId: finalJob.userId,
@@ -626,10 +686,35 @@ export class JobsProcessor extends WorkerHost {
               entityId: jobId,
               dedupeKey: `job:${jobId}:failed`,
             });
+
+            if (user.email) {
+              await this.mailService.queueJobFailedEmail(
+                user.email,
+                finalJob.videoTitle || 'Your video',
+                jobId,
+              );
+            }
+
+            // Record Activity: Job failed
+            await this.activitiesService.queueCreateIfNotExists({
+              userId: finalJob.userId,
+              type: ActivityType.JOB_FAIL,
+              category: ActivityCategory.JOB,
+              title: 'Clip generation failed',
+              description: 'We were unable to generate clips from your video.',
+              activityUrl: `/dashboard/jobs/${jobId}`,
+              entityType: 'job',
+              entityId: jobId,
+              actorType: ActivityActorType.WORKER,
+              isSystem: true,
+              status: ActivityStatus.FAILED,
+              severity: ActivitySeverity.ERROR,
+              dedupeKey: `activity:job:${jobId}:fail`,
+            });
           }
         } catch (notifErr) {
           this.logger.warn(
-            `[${jobId}] Failed to queue ${anyClipSucceeded ? 'success' : 'failure'} notification: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
+            `[${jobId}] Failed to queue ${anyClipSucceeded ? 'success' : 'failure'} notification/activity: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
           );
         }
       }
@@ -675,9 +760,38 @@ export class JobsProcessor extends WorkerHost {
             entityId: jobId,
             dedupeKey: `job:${jobId}:failed`,
           });
+
+          const user = await this.usersService.findById(failedJob.userId.toString());
+          if (user?.email) {
+            await this.mailService.queueJobFailedEmail(
+              user.email,
+              failedJob.videoTitle || 'Your video',
+              jobId,
+            );
+          }
+
+          // Record Activity: Job failed (exception handler)
+          await this.activitiesService.queueCreateIfNotExists({
+            userId: failedJob.userId,
+            type: ActivityType.JOB_FAIL,
+            category: ActivityCategory.JOB,
+            title: 'Clip generation failed',
+            description: 'We were unable to generate clips from your video.',
+            activityUrl: `/dashboard/jobs/${jobId}`,
+            entityType: 'job',
+            entityId: jobId,
+            actorType: ActivityActorType.WORKER,
+            isSystem: true,
+            status: ActivityStatus.FAILED,
+            severity: ActivitySeverity.ERROR,
+            dedupeKey: `activity:job:${jobId}:fail`,
+            metadata: {
+              errorStage: stage,
+            },
+          });
         } catch (notifErr) {
           this.logger.warn(
-            `[${jobId}] Failed to queue failure notification: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
+            `[${jobId}] Failed to queue failure notification/activity: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
           );
         }
       }

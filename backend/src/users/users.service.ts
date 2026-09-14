@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
@@ -11,8 +11,22 @@ import {
 import { ReferralReward, ReferralRewardDocument } from './schemas/referral-reward.schema';
 import { generateReferralCode } from './utils/generate-referral-code';
 import { REFERRAL_CONFIG } from './referral.constants';
+import { MailService } from '../mail/mail.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  NotificationCategory,
+  NotificationType,
+} from '../notifications/schemas/notification.schema';
 import { ConfigService } from '@nestjs/config';
-import { MailService } from 'src/mail/mail.service';
+import { R2Service } from '../storage/r2.service';
+import { ActivitiesService } from '../activities/activities.service';
+import {
+  ActivityActorType,
+  ActivityCategory,
+  ActivitySeverity,
+  ActivityStatus,
+  ActivityType,
+} from '../activities/schemas/activity.schema';
 
 @Injectable()
 export class UsersService {
@@ -22,7 +36,10 @@ export class UsersService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     @InjectModel(ReferralReward.name) private referralRewardModel: Model<ReferralRewardDocument>,
     private mailService: MailService,
+    private notificationsService: NotificationsService,
     private configService: ConfigService,
+    private r2Service: R2Service,
+    private activitiesService: ActivitiesService,
   ) { }
 
   private async generateUniqueReferralCode(): Promise<string> {
@@ -203,6 +220,69 @@ export class UsersService {
     );
   }
 
+  async updateAvatar(userId: string, fileBuffer: Buffer, mimeType: string): Promise<{ avatarUrl: string }> {
+    const user = await this.userModel.findById(userId).exec();
+    if (!user) throw new NotFoundException('User not found');
+
+    const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+    const objectKey = `avatars/${userId}-${Date.now()}.${extension}`;
+
+    await this.r2Service.uploadBuffer(fileBuffer, objectKey, mimeType);
+    const avatarUrl = await this.r2Service.getPublicOrSignedUrl(objectKey);
+
+    await this.userModel.updateOne({ _id: userId }, { avatarUrl });
+    this.logger.log(`Updated avatar for user ${userId}: ${avatarUrl}`);
+
+    await this.activitiesService.queueCreate({
+      userId,
+      type: ActivityType.AUTH_AVATAR_UPDATE,
+      category: ActivityCategory.ACCOUNT,
+      title: 'Profile picture updated',
+      description: 'Your profile picture was updated successfully.',
+      activityUrl: '/profile',
+      entityType: 'user',
+      entityId: userId,
+      actorType: ActivityActorType.USER,
+      actorId: userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+    });
+
+    return { avatarUrl };
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<{ message: string }> {
+    const user = await this.userModel.findById(userId).select('+password').exec();
+    if (!user || !user.password) {
+      throw new BadRequestException(
+        'This account does not have a password set. Password change is only available for accounts created with email/password.',
+      );
+    }
+    const isValid = await this.validatePassword(currentPassword, user.password);
+    if (!isValid) throw new UnauthorizedException('Current password is incorrect');
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.userModel.updateOne({ _id: userId }, { password: hashedPassword });
+    this.logger.log(`Changed password for user ${userId}`);
+
+    await this.activitiesService.queueCreate({
+      userId,
+      type: ActivityType.AUTH_PASSWORD_CHANGE,
+      category: ActivityCategory.ACCOUNT,
+      title: 'Password changed',
+      description: 'Your account password was updated.',
+      activityUrl: '/profile',
+      entityType: 'user',
+      entityId: userId,
+      actorType: ActivityActorType.USER,
+      actorId: userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.SUCCESS,
+    });
+
+    return { message: 'Password changed successfully' };
+  }
+
   async markWelcomed(userId: string): Promise<void> {
     await this.userModel.updateOne(
       { _id: userId, isWelcomed: false },
@@ -246,7 +326,7 @@ export class UsersService {
       throw err;
     }
 
-    await this.userModel.updateOne(
+    const updatedReferrer = await this.userModel.findOneAndUpdate(
       { _id: referrerId },
       {
         $inc: {
@@ -254,11 +334,83 @@ export class UsersService {
           successfulReferralCount: 1,
         },
       },
+      { new: true },
     );
     await this.userModel.updateOne(
       { _id: referredUserId },
       { $inc: { creditsBalance: REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS } },
     );
+
+    try {
+      // In-app notification for referrer
+      await this.notificationsService.queueCreateIfNotExists({
+        userId: referrerId,
+        type: NotificationType.SUCCESS,
+        category: NotificationCategory.REFERRAL,
+        title: `+${REFERRAL_CONFIG.REFERRER_CREDITS} Referral bonus credits`,
+        message: 'A creator you invited just joined Blynta! Your bonus credits have been applied.',
+        actionUrl: '/dashboard',
+        actionLabel: 'View credits',
+        dedupeKey: `referral:reward:${referrerId}:${referredUserId}`,
+      });
+
+      // In-app notification for referred user
+      await this.notificationsService.queueCreateIfNotExists({
+        userId: referredUserId,
+        type: NotificationType.SUCCESS,
+        category: NotificationCategory.REFERRAL,
+        title: `+${REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS} Welcome bonus credits`,
+        message: 'Welcome bonus credits have been added to your account for joining via an invite.',
+        actionUrl: '/dashboard',
+        actionLabel: 'View credits',
+        dedupeKey: `referral:welcome:${referredUserId}`,
+      });
+
+      // Email for referrer
+      if (updatedReferrer?.email) {
+        await this.mailService.queueReferralRewardEmail(
+          updatedReferrer.email,
+          REFERRAL_CONFIG.REFERRER_CREDITS,
+          updatedReferrer.creditsBalance,
+        );
+      }
+      // Activities for referral reward
+      await this.activitiesService.queueCreateIfNotExists({
+        userId: referrerId,
+        type: ActivityType.REFERRAL_REWARD_EARNED,
+        category: ActivityCategory.REFERRAL,
+        title: `+${REFERRAL_CONFIG.REFERRER_CREDITS} Referral bonus credits`,
+        description: 'A creator you invited joined Blynta! Referral bonus credits were awarded.',
+        activityUrl: '/profile',
+        entityType: 'user',
+        entityId: referrerId,
+        actorType: ActivityActorType.SYSTEM,
+        isSystem: true,
+        status: ActivityStatus.SUCCESS,
+        severity: ActivitySeverity.SUCCESS,
+        dedupeKey: `activity:referral:reward:${referrerId}:${referredUserId}`,
+        metadata: { creditsAwarded: REFERRAL_CONFIG.REFERRER_CREDITS, referredUserId },
+      });
+
+      await this.activitiesService.queueCreateIfNotExists({
+        userId: referredUserId,
+        type: ActivityType.CREDIT_BONUS,
+        category: ActivityCategory.CREDIT,
+        title: `+${REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS} Welcome bonus credits`,
+        description: 'Welcome bonus credits were added to your account for joining via an invite link.',
+        activityUrl: '/dashboard',
+        entityType: 'user',
+        entityId: referredUserId,
+        actorType: ActivityActorType.SYSTEM,
+        isSystem: true,
+        status: ActivityStatus.SUCCESS,
+        severity: ActivitySeverity.SUCCESS,
+        dedupeKey: `activity:referral:welcome:${referredUserId}`,
+        metadata: { creditsAwarded: REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS, referrerId },
+      });
+    } catch (notifErr) {
+      this.logger.warn(`Failed to dispatch referral reward notification/email/activity: ${notifErr}`);
+    }
   }
 
   async getReferralStats(userId: string): Promise<{
@@ -294,14 +446,37 @@ export class UsersService {
       throw new ConflictException('This person already has a Blynta account');
     }
 
-    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+    const frontendUrl = (
+      this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000') ||
+      'http://localhost:3000'
+    ).replace(/\/$/, '');
     const referralLink = `${frontendUrl}/signup?ref=${user.referralCode}`;
+
+    this.logger.log(
+      `Queueing referral invite email from user ${userId} (${user.email}) to ${inviteeEmail}`,
+    );
 
     await this.mailService.queueReferralInviteEmail(
       inviteeEmail,
       user.name || user.email,
       referralLink,
     );
+
+    await this.activitiesService.queueCreate({
+      userId,
+      type: ActivityType.REFERRAL_INVITE_SENT,
+      category: ActivityCategory.REFERRAL,
+      title: 'Referral invite sent',
+      description: `You sent a referral invite to ${inviteeEmail}.`,
+      activityUrl: '/profile',
+      entityType: 'user',
+      entityId: userId,
+      actorType: ActivityActorType.USER,
+      actorId: userId,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+      metadata: { inviteeEmail },
+    });
 
     return { message: 'Invite sent' };
   }

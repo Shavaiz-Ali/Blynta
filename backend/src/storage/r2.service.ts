@@ -35,6 +35,42 @@ export class R2Service {
   }
 
   /**
+   * Uploads an in-memory buffer directly to R2.
+   */
+  async uploadBuffer(
+    buffer: Buffer,
+    objectKey: string,
+    contentType = 'image/jpeg',
+  ): Promise<string> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: objectKey,
+        Body: buffer,
+        ContentType: contentType,
+      }),
+    );
+    this.logger.log(`Uploaded buffer (${buffer.length} bytes) to R2 as ${objectKey}`);
+    return objectKey;
+  }
+
+  /**
+   * Returns a direct public URL if R2_PUBLIC_DOMAIN is configured,
+   * otherwise generates a long-lived (7 days) signed download URL.
+   */
+  async getPublicOrSignedUrl(
+    objectKey: string,
+    expiresInSeconds = 7 * 24 * 3600,
+  ): Promise<string> {
+    const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
+    if (publicDomain) {
+      const cleanDomain = publicDomain.replace(/\/$/, '');
+      return `${cleanDomain}/${objectKey}`;
+    }
+    return this.getSignedDownloadUrl(objectKey, expiresInSeconds);
+  }
+
+  /**
    * Uploads a local file (already on disk from ffmpeg/whisper.cpp output) to R2.
    * Returns the object key.
    *
