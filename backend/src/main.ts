@@ -37,8 +37,12 @@ async function bootstrap() {
   const adapter = app.getHttpAdapter();
   const instance = adapter.getInstance();
 
-  // 1) For the Stripe webhook ONLY — parse body as RAW Buffer, and let
+  // 1) For the Paddle webhook — parse body as RAW Buffer, and let
   // Nest's rawBody flag + @nestjs/platform-express attach `req.rawBody`.
+  instance.use(
+    '/billing/paddle/webhook',
+    express.raw({ type: 'application/json' }),
+  );
   instance.use(
     '/billing/webhook',
     express.raw({ type: 'application/json' }),
@@ -49,7 +53,12 @@ async function bootstrap() {
   instance.use(
     '/',
     (req: any, res: any, next: any) => {
-      if (req.path.startsWith('/billing/webhook')) return next();
+      if (
+        req.path.startsWith('/billing/paddle/webhook') ||
+        req.path.startsWith('/billing/webhook')
+      ) {
+        return next();
+      }
       return express.json({ limit: '10mb' })(req, res, next);
     },
   );

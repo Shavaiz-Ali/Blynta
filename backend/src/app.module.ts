@@ -11,7 +11,7 @@ import { Connection } from 'mongoose';
 import { RedisModule } from './redis/redis.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { StripeModule } from './stripe/stripe.module';
+import { PaddleModule } from './paddle/paddle.module';
 import { BillingModule } from './billing/billing.module';
 import { CommonModule } from './common/common.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -63,7 +63,7 @@ const logger = new Logger('MongooseModule');
       inject: [ConfigService],
     }),
     MailModule,
-    StripeModule,
+    PaddleModule,
     BillingModule,
     UsersModule,
     AuthModule,

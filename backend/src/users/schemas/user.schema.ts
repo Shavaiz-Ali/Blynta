@@ -67,15 +67,30 @@ export class User {
   @Prop({ type: [LinkedAccountSchema], default: [] })
   linkedAccounts: LinkedAccount[];
 
-  // --- Plan & billing ---
+  // --- Plan & billing (Paddle) ---
   @Prop({ enum: UserPlan, default: UserPlan.FREE })
   plan: UserPlan;
 
   @Prop()
-  stripeCustomerId: string;
+  paddleCustomerId: string;
 
   @Prop()
-  stripeSubscriptionId: string;
+  paddleSubscriptionId: string;
+
+  @Prop()
+  paddleProductId: string;
+
+  @Prop()
+  paddlePriceId: string;
+
+  @Prop()
+  paddleSubscriptionStatus: string; // 'active' | 'trialing' | 'past_due' | 'paused' | 'canceled'
+
+  @Prop()
+  paddleScheduledChangeAction: string; // 'cancel' | 'pause' | 'resume' | null
+
+  @Prop()
+  paddleScheduledChangeAt: Date;
 
   @Prop({ default: true })
   isActive: boolean;

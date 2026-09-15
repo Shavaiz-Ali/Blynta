@@ -6,12 +6,12 @@ import {
   Request,
   UseGuards,
   NotFoundException,
-  BadRequestException,
   Headers,
   Req,
   Res,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request as ExpressRequest } from 'express';
@@ -19,20 +19,18 @@ import type { Response } from 'express';
 import type { RawBodyRequest } from '@nestjs/common';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { BillingService } from './billing.service';
-import { StripeService } from '../stripe/stripe.service';
-import {
-  CreateCheckoutSessionDto,
-} from './dto/create-checkout-session.dto';
+import { PaddleService } from '../paddle/paddle.service';
+import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { UsersService } from '../users/users.service';
-import { UserPlan } from '../users/schemas/user.schema';
-import Stripe from 'stripe';
 
 @Controller('billing')
 export class BillingController {
+  private readonly logger = new Logger(BillingController.name);
+
   constructor(
     private billingService: BillingService,
     private usersService: UsersService,
-    private stripeService: StripeService,
+    private paddleService: PaddleService,
   ) {}
 
   /* -------------------------------------------------------------------------- */
@@ -53,122 +51,130 @@ export class BillingController {
   }
 
   /* -------------------------------------------------------------------------- */
-  /*                Stripe webhook — NO JWT auth, signature only                */
+  /*                      Customer portal — authenticated                       */
+  /* -------------------------------------------------------------------------- */
+
+  @Get('customer-portal')
+  @UseGuards(AuthGuard('jwt'))
+  async getCustomerPortal(@Request() req) {
+    const user = await this.usersService.findById(req.user.userId);
+    if (!user) throw new NotFoundException('User not found');
+
+    return this.billingService.getCustomerPortalUrl(user);
+  }
+
+  /* -------------------------------------------------------------------------- */
+  /*                Paddle webhook — NO JWT auth, signature only                */
   /* -------------------------------------------------------------------------- */
 
   /**
-   * IMPORTANT: Stripe's signature check REQUIRES the UNTOUCHED raw request
-   * body. We cannot run the global JSON parser + Zod pipe over this endpoint
-   * — the bytes must be exactly what Stripe sent, otherwise the HMAC will
-   * fail to verify.
-   *
-   * We mount express.raw({ type: 'application/json' }) for this route in
-   * main.ts BEFORE the global JSON body parser runs, and here we read from
-   * `(req as RawBodyRequest<ExpressRequest>).rawBody`.
+   * IMPORTANT: Paddle's signature check REQUIRES the UNTOUCHED raw request
+   * body. We extract it from req.body (express.raw Buffer) or req.rawBody.
    */
-  @Post('webhook')
+  @Post('paddle/webhook')
   @HttpCode(HttpStatus.OK)
-  async stripeWebhook(
+  async paddleWebhook(
     @Req() req: RawBodyRequest<ExpressRequest>,
-    @Headers('stripe-signature') signature: string | undefined,
+    @Headers('paddle-signature') signature: string | undefined,
     @Res() res: Response,
   ) {
-    const rawBody = req.rawBody;
+    const sig =
+      signature ||
+      (req.headers['paddle-signature'] as string) ||
+      (req.headers['Paddle-Signature'] as string);
 
-    if (!rawBody || !signature) {
-      return res
-        .status(HttpStatus.BAD_REQUEST)
-        .json({ error: 'Missing Stripe signature or raw body.' });
+    let rawBody = '';
+    if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString('utf8');
+    } else if (req.rawBody) {
+      rawBody = Buffer.isBuffer(req.rawBody)
+        ? req.rawBody.toString('utf8')
+        : String(req.rawBody);
+    } else if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else if (req.body && typeof req.body === 'object') {
+      rawBody = JSON.stringify(req.body);
     }
 
-    let event: Stripe.Event;
+    if (!rawBody || !sig) {
+      this.logger.warn(
+        `[Paddle Webhook] Rejected request: missing signature (${Boolean(
+          sig,
+        )}) or rawBody (len: ${rawBody?.length ?? 0})`,
+      );
+      return res
+        .status(HttpStatus.BAD_REQUEST)
+        .json({ error: 'Missing Paddle signature or raw body.' });
+    }
+
+    let event: any;
     try {
-      event = this.stripeService.stripe.webhooks.constructEvent(
+      const secret = this.paddleService.getWebhookSecret();
+      event = await this.paddleService.paddle.webhooks.unmarshal(
         rawBody,
-        signature,
-        this.stripeService.getWebhookSecret(),
+        secret,
+        sig,
       );
     } catch (err: any) {
-      return res
-        .status(HttpStatus.BAD_REQUEST)
-        .json({ error: `Webhook signature verification failed: ${err?.message}` });
+      this.logger.error(
+        `[Paddle Webhook] Signature verification failed: ${err?.message}`,
+      );
+      return res.status(HttpStatus.BAD_REQUEST).json({
+        error: `Webhook signature verification failed: ${err?.message}`,
+      });
     }
 
     try {
-      switch (event.type) {
-        case 'checkout.session.completed': {
-          const session = event.data.object as Stripe.Checkout.Session;
-          const customerId = session.customer as string;
-          const subscriptionId = session.subscription as string;
+      const eventType = event?.eventType || event?.event_type;
+      const eventId = event?.eventId || event?.event_id || event?.id;
+      const data = event?.data;
 
-          // For checkout.session.completed in subscription mode, the price
-          // lives on the session's line_items OR the linked subscription. The
-          // most reliable source is expanding the subscription and reading
-          // the item's price. But we also support a fast path via metadata
-          // requestedPlan set on session.
-          let targetPlan: UserPlan | null =
-            session.metadata?.requestedPlan === 'pro'
-              ? UserPlan.PRO
-              : session.metadata?.requestedPlan === 'business'
-                ? UserPlan.BUSINESS
-                : null;
+      this.logger.log(
+        `[Paddle Webhook] Successfully verified & received event: ${eventType} (ID: ${eventId})`,
+      );
 
-          if (!targetPlan && subscriptionId) {
-            try {
-              const sub = await this.stripeService.stripe.subscriptions.retrieve(
-                subscriptionId,
-                { expand: ['items.data.price'] },
-              );
-              const priceId = sub.items.data?.[0]?.price?.id;
-              if (priceId) {
-                const mapped = this.stripeService.mapPriceIdToPlan(priceId);
-                if (mapped && mapped !== 'free') targetPlan = mapped as UserPlan;
-              }
-            } catch {
-              /* swallow — fall through to error below */
-            }
-          }
-
-          if (!targetPlan) {
-            return res
-              .status(HttpStatus.BAD_REQUEST)
-              .json({ error: 'Could not resolve plan from checkout session.' });
-          }
-
-          if (customerId && subscriptionId) {
-            await this.billingService.applyPaidSubscription({
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: subscriptionId,
-              plan: targetPlan,
-            });
-          }
+      switch (eventType) {
+        case 'subscription.created':
+        case 'subscription.updated':
+        case 'subscription.activated':
+        case 'subscription.paused':
+        case 'subscription.resumed':
+          await this.billingService.handleSubscriptionUpdated(data);
           break;
-        }
 
-        case 'customer.subscription.deleted': {
-          const sub = event.data.object as Stripe.Subscription;
-          const subscriptionId = sub.id;
-          if (subscriptionId) {
+        case 'subscription.canceled':
+          if (data?.id) {
             await this.billingService.revertSubscriptionToFree({
-              stripeSubscriptionId: subscriptionId,
+              paddleSubscriptionId: data.id,
+              paddleCustomerId: data.customerId || data.customer_id,
+              status: 'canceled',
             });
           }
           break;
-        }
 
-        // We don't need to handle anything else, but we must ACK with 200 so
-        // Stripe stops retrying.
+        case 'customer.created':
+        case 'customer.updated':
+          await this.billingService.handleCustomerUpserted(data);
+          break;
+
+        case 'transaction.completed':
+        case 'transaction.paid':
+          await this.billingService.handleTransactionCompleted(data);
+          break;
+
         default:
+          this.logger.debug(
+            `[Paddle Webhook] Unhandled event type: ${eventType}`,
+          );
           break;
       }
     } catch (err: any) {
-      // Log the error but return 200 for unhandled event types; we don't
-      // want Stripe to keep retrying a failing webhook. In production, send
-      // this to an error tracker (Sentry etc).
-      // eslint-disable-next-line no-console
-      console.error('[billing/webhook] unhandled error:', err?.message ?? err);
+      this.logger.error(
+        `[Paddle Webhook] Error processing event: ${err?.message}`,
+        err?.stack,
+      );
     }
 
-    return res.json({ received: true });
+    return res.status(HttpStatus.OK).json({ received: true });
   }
 }
