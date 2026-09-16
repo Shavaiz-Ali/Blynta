@@ -13,6 +13,8 @@ import {
   registerSchema,
   type RegisterInput,
 } from "@/lib/validators/auth.schema";
+import { useForgotPassword } from "../queries";
+import { toast } from "sonner";
 
 export type { RegisterInput as SignupFormValues };
 
@@ -43,6 +45,7 @@ function SignupForm({
   });
 
   const showLoading = isSubmitting || rhfSubmitting;
+
 
   const submitFn: SubmitHandler<RegisterInput> = (values, event) => {
     if (onSubmit) return onSubmit(values, event as never);

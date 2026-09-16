@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { SourcePlatform, useCreateJob, useStylePresets, type StylePresetInfo } from "@/features/jobs";
 import { useCurrentUser } from "@/features/auth/queries";
@@ -156,10 +157,10 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       stylePreset,
     };
 
-    if (customPrompt.trim().length > 0) {
+    if (isPaid && customPrompt.trim().length > 0) {
       body.customPrompt = customPrompt.trim();
     }
-    if (aiModel && aiModel !== "default") {
+    if (isPaid && aiModel && aiModel !== "default") {
       body.aiModel = aiModel;
     }
 
@@ -178,60 +179,47 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       )}
 
       {/* ── Creation Card Surface ── */}
-      <AppCard useDefaultClasses={false}>
-        {/* Header inside creation surface */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
-          <div>
-            <h2 className="text-base sm:text-lg font-bold text-foreground tracking-tight">
-              Create clips
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Turn long-form content into viral short-form clips.
-            </p>
+      <AppCard
+        className="flex-col gap-4 p-4 sm:p-5 rounded-xl border border-border/80 bg-card/70 backdrop-blur-md shadow-sm"
+        useDefaultClasses={false}
+      >
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {/* Label + Cost badge */}
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="video-url-input"
+              className="text-xs font-semibold text-foreground flex items-center gap-1.5"
+            >
+              <SparklesIcon className="h-3.5 w-3.5 text-primary" />
+              <span>Create Viral Shorts with AI</span>
+            </label>
+            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-medium bg-muted/60 px-2 py-0.5 rounded-md">
+              <CoinsIcon className="h-3 w-3 text-amber-500" />
+              <span>1 credit per job</span>
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground self-start sm:self-auto">
-            <CoinsIcon className="h-3.5 w-3.5 text-primary" />
-            <span>1 credit per video</span>
-          </div>
-        </div>
 
-        {/* ── URL Input & Submit Capsule ── */}
-        <form onSubmit={handleSubmit} className="space-y-2 mt-5">
-          <div
-            className={cn(
-              "flex flex-col sm:flex-row items-stretch sm:items-center rounded-lg border bg-background p-1.5 gap-2 transition-all duration-200",
-              "focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/15",
-              fieldError ? "border-destructive/60 ring-1 ring-destructive/20" : "border-border"
-            )}
-          >
-            {/* URL input */}
-            <div className="flex-1 flex items-center gap-2.5 px-3 py-1.5">
-              <svg
-                className="h-4 w-4 text-muted-foreground/60 shrink-0"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-              </svg>
+          {/* Input field + submit button */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
               <input
+                id="video-url-input"
                 type="text"
                 value={url}
                 onChange={(e) => {
                   setUrl(e.target.value);
                   if (fieldError) setFieldError(undefined);
                 }}
-                placeholder="Paste a YouTube, Vimeo, or podcast URL..."
-                aria-label="Video URL"
-                className="w-full h-9 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
+                placeholder="Paste long-form video URL (YouTube, Vimeo, etc.)..."
+                className={cn(
+                  "w-full h-10 px-3.5 rounded-lg border bg-background text-sm text-foreground placeholder:text-muted-foreground/60 transition-colors",
+                  "focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30",
+                  fieldError ? "border-destructive ring-1 ring-destructive/30" : "border-border/80"
+                )}
+                disabled={isPending}
               />
             </div>
 
-            {/* Submit button */}
             <AppButton
               type="submit"
               disabled={submitDisabled}
@@ -275,6 +263,11 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             >
               <SlidersIcon className="h-3 w-3" />
               <span>Advanced options</span>
+              {!isPaid && (
+                <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/15 text-primary border border-primary/20">
+                  PRO
+                </span>
+              )}
               {hasAdvancedOverrides && <CheckIcon className="h-3 w-3 text-primary" />}
               {showAdvanced ? (
                 <ChevronUpIcon className="h-3 w-3" />
@@ -322,80 +315,108 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         {/* ── Progressive Disclosure: Advanced AI Controls ── */}
         {showAdvanced && (
           <div className="pt-4 border-t border-border/60 space-y-4 animate-in fade-in duration-200">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CrownIcon className="h-4 w-4 text-primary" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                  Advanced AI &amp; Output Configuration
-                </h3>
-              </div>
-              {!isPaid && (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/15 px-2 py-0.5 rounded">
-                  Pro / Business
-                </span>
-              )}
-            </div>
+            {!isPaid ? (
+              /* Upgrade to Pro / Business Callout for Free Plan */
+              <div className="relative overflow-hidden rounded-xl border border-primary/25 bg-gradient-to-br from-primary/10 via-card to-card p-4 sm:p-5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/15 text-primary border border-primary/25 shrink-0 mt-0.5">
+                      <CrownIcon className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-bold text-foreground">
+                          Advanced AI Models &amp; Custom Prompts
+                        </h4>
+                        <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
+                          PRO &amp; BUSINESS
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground max-w-lg leading-relaxed">
+                        Upgrade to Pro or Business to select deep reasoning models (<span className="font-semibold text-foreground">GPT-4o</span>, <span className="font-semibold text-foreground">Claude 3.5 Sonnet</span>), write custom hook prompts, and fine-tune output framing.
+                      </p>
+                    </div>
+                  </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* AI Model Selection */}
-              <div className="space-y-1.5">
-                <AppSelect
-                  label="AI Model Engine"
-                  value={aiModel}
-                  onValueChange={setAiModel}
-                  options={AI_MODEL_OPTIONS}
-                  disabled={!isPaid}
-                  triggerClassName="h-9 rounded-lg bg-background text-xs"
-                  helperText="Select model reasoning depth for analyzing hooks and speaker dynamics."
-                />
+                  <Link href="/billing" className="shrink-0 self-start sm:self-center">
+                    <AppButton
+                      variant="default"
+                      size="sm"
+                      className="h-8.5 px-3.5 text-xs font-semibold cursor-pointer shadow-sm"
+                      icon={<CrownIcon className="h-3.5 w-3.5" />}
+                    >
+                      Upgrade Plan
+                    </AppButton>
+                  </Link>
+                </div>
               </div>
+            ) : (
+              /* Paid options for Pro / Business */
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CrownIcon className="h-4 w-4 text-primary" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      Advanced AI &amp; Output Configuration
+                    </h3>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/15 px-2 py-0.5 rounded">
+                    Active Plan
+                  </span>
+                </div>
 
-              {/* Output / Crop / Captions */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  Output Formatting
-                </label>
-                <div className="flex items-center gap-3 pt-1">
-                  <Toggle
-                    active={verticalCrop}
-                    onToggle={() => setVerticalCrop(!verticalCrop)}
-                    label="9:16 Vertical Crop"
-                  />
-                  <span className="text-border">·</span>
-                  <Toggle
-                    active={autoCaptions}
-                    onToggle={() => setAutoCaptions(!autoCaptions)}
-                    label="Auto Captions"
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* AI Model Selection */}
+                  <div className="space-y-1.5">
+                    <AppSelect
+                      label="AI Model Engine"
+                      value={aiModel}
+                      onValueChange={setAiModel}
+                      options={AI_MODEL_OPTIONS}
+                      triggerClassName="h-9 rounded-lg bg-background text-xs"
+                      helperText="Select model reasoning depth for analyzing hooks and speaker dynamics."
+                    />
+                  </div>
+
+                  {/* Output / Crop / Captions */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-foreground">
+                      Output Formatting
+                    </label>
+                    <div className="flex items-center gap-3 pt-1">
+                      <Toggle
+                        active={verticalCrop}
+                        onToggle={() => setVerticalCrop(!verticalCrop)}
+                        label="9:16 Vertical Crop"
+                      />
+                      <span className="text-border">·</span>
+                      <Toggle
+                        active={autoCaptions}
+                        onToggle={() => setAutoCaptions(!autoCaptions)}
+                        label="Auto Captions"
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Automatically reframes landscape videos and burns animated subtitles.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Custom AI Prompt */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    Custom AI Prompt / Focus Instructions (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder="Tell Blynta what kind of moments to prioritize (e.g., debate hooks, humor, actionable advice)..."
+                    className="w-full rounded-lg border border-border bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none resize-y min-h-[64px] focus:border-primary focus:ring-1 focus:ring-primary/20"
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Automatically reframes landscape videos and burns animated subtitles.
-                </p>
-              </div>
-            </div>
-
-            {/* Custom AI Prompt */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">
-                Custom AI Prompt / Focus Instructions (Optional)
-              </label>
-              <textarea
-                rows={2}
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                disabled={!isPaid}
-                placeholder={
-                  isPaid
-                    ? "Tell Blynta what kind of moments to prioritize (e.g., debate hooks, humor, actionable advice)..."
-                    : "Upgrade to Pro to give custom instructions to the AI detection model."
-                }
-                className={cn(
-                  "w-full rounded-lg border border-border bg-background p-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 outline-none resize-y min-h-[64px]",
-                  "focus:border-primary focus:ring-1 focus:ring-primary/20",
-                  !isPaid && "opacity-60 cursor-not-allowed"
-                )}
-              />
-            </div>
+              </>
+            )}
           </div>
         )}
       </AppCard>

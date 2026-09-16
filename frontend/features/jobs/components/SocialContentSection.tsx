@@ -5,13 +5,11 @@ import { Highlight, Job } from "@/features/jobs";
 import {
   CopyIcon,
   CheckCircleIcon,
-  SparklesIcon,
+  Share2Icon,
 } from "@/features/dashboard/icons";
-import { AppButton } from "@/components/common/AppButton";
-import { AppCard } from "@/components/common/AppCard";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export interface SocialContentSectionProps {
   job: Job;
@@ -33,7 +31,7 @@ export function SocialContentSection({
     (job.videoTitle || "the source video") +
     ".";
 
-  // SEO Keywords (un-hashed)
+  // SEO Keywords
   const keywords = React.useMemo(() => {
     const list = new Set<string>();
     if (job.keywords) {
@@ -53,7 +51,7 @@ export function SocialContentSection({
     return Array.from(list).slice(0, 10);
   }, [job.keywords, highlight?.tags]);
 
-  // Hashtags (with #)
+  // Hashtags
   const hashtags = React.useMemo(() => {
     const list = new Set<string>();
     if (job.hashtags) {
@@ -87,169 +85,170 @@ export function SocialContentSection({
   };
 
   return (
-    <AppCard className="space-y-4!" useDefaultClasses={false}>
-      {/* ── Section Header ── */}
-      <div className="flex items-center justify-between pb-3 border-b border-border/60">
+    <div className="rounded-lg border border-border/80 bg-card/60 p-4 sm:p-5 space-y-4 h-full flex flex-col justify-between shadow-2xs">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-border/60">
         <div className="flex items-center gap-2">
-          <div className="h-7 w-7 rounded-md bg-primary/10 flex items-center justify-center text-primary">
-            <SparklesIcon className="h-4 w-4" />
-          </div>
-          <div>
-            <h3 className="text-xs font-bold text-foreground uppercase tracking-wider">
-              Ready to Publish
-            </h3>
-            <p className="text-[11px] text-muted-foreground">
-              AI-generated social captions & SEO keywords
-            </p>
-          </div>
+          <Share2Icon className="h-4 w-4 text-primary" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+            Publishing Package
+          </h3>
         </div>
 
-        <AppButton
+        <Button
           variant="outline"
           size="sm"
           onClick={handleCopyAllPackage}
-          icon={
-            copiedField === "all" ? (
-              <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500" />
-            ) : (
-              <CopyIcon className="h-3.5 w-3.5" />
-            )
-          }
-          className="h-8 text-xs font-semibold"
+          className="h-7 text-xs font-semibold self-start sm:self-center cursor-pointer border-border hover:bg-muted"
         >
-          {copiedField === "all" ? "Copied All" : "Copy Full Package"}
-        </AppButton>
+          {copiedField === "all" ? (
+            <>
+              <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-500 mr-1.5" />
+              <span>Copied Package</span>
+            </>
+          ) : (
+            <>
+              <CopyIcon className="h-3.5 w-3.5 mr-1.5" />
+              <span>Copy Full Package</span>
+            </>
+          )}
+        </Button>
       </div>
 
-      {/* ── Title Field ── */}
-      <div className="space-y-1.5 my-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-foreground">Generated Title</span>
-          <button
-            type="button"
-            onClick={() => triggerCopy(clipTitle, "Title", "title")}
-            className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
-          >
-            {copiedField === "title" ? (
-              <>
-                <CheckCircleIcon className="h-3 w-3 text-emerald-500" />
-                <span className="text-emerald-500">Copied</span>
-              </>
-            ) : (
-              <>
-                <CopyIcon className="h-3 w-3" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-        <div className="p-2.5 rounded-md bg-background/50 border border-input text-xs font-medium text-foreground leading-relaxed">
-          {clipTitle}
-        </div>
-      </div>
-
-      {/* ── Description Field ── */}
-      <div className="space-y-1.5 my-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-foreground">Generated Description</span>
-          <button
-            type="button"
-            onClick={() => triggerCopy(descriptionText, "Description", "description")}
-            className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
-          >
-            {copiedField === "description" ? (
-              <>
-                <CheckCircleIcon className="h-3 w-3 text-emerald-500" />
-                <span className="text-emerald-500">Copied</span>
-              </>
-            ) : (
-              <>
-                <CopyIcon className="h-3 w-3" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-        <div className="p-3 rounded-md bg-background/50 border border-input text-xs text-muted-foreground leading-relaxed">
-          {descriptionText}
-        </div>
-      </div>
-
-      {/* ── SEO Keywords ── */}
-      {keywords.length > 0 && (
-        <div className="space-y-1.5">
+      {/* Content Fields */}
+      <div className="space-y-3.5 flex-1">
+        {/* ── Optimized Title ── */}
+        <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-foreground">SEO Keywords</span>
+            <span className="font-semibold text-foreground">Optimized Title</span>
             <button
               type="button"
-              onClick={() => triggerCopy(keywords.join(", "), "Keywords", "keywords")}
+              onClick={() => triggerCopy(clipTitle, "Title", "title")}
               className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
             >
-              {copiedField === "keywords" ? (
+              {copiedField === "title" ? (
                 <>
                   <CheckCircleIcon className="h-3 w-3 text-emerald-500" />
-                  <span className="text-emerald-500">Copied All</span>
+                  <span className="text-emerald-500">Copied</span>
                 </>
               ) : (
                 <>
                   <CopyIcon className="h-3 w-3" />
-                  <span>Copy All</span>
+                  <span>Copy</span>
                 </>
               )}
             </button>
           </div>
-          <div className="flex flex-wrap gap-1.5 pt-0.5 my-2">
-            {keywords.map((kw) => (
-              <Badge
-                key={kw}
-                variant="outline"
-                onClick={() => triggerCopy(kw, `Keyword "${kw}"`, `kw-${kw}`)}
-                className="cursor-pointer hover:border-primary/50 text-[11px] font-mono px-2 py-0.5"
-              >
-                {kw}
-              </Badge>
-            ))}
+          <div className="p-2.5 rounded-md bg-muted/20 border border-border/50 text-xs font-medium text-foreground leading-relaxed select-text">
+            {clipTitle}
           </div>
         </div>
-      )}
 
-      {/* ── Trending Hashtags ── */}
-      {hashtags.length > 0 && (
-        <div className="space-y-1.5">
+        {/* ── Social Caption ── */}
+        <div className="space-y-1">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-foreground">Trending Hashtags</span>
+            <span className="font-semibold text-foreground">Social Caption</span>
             <button
               type="button"
-              onClick={() => triggerCopy(hashtags.join(" "), "Hashtags", "hashtags")}
+              onClick={() => triggerCopy(descriptionText, "Description", "description")}
               className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
             >
-              {copiedField === "hashtags" ? (
+              {copiedField === "description" ? (
                 <>
                   <CheckCircleIcon className="h-3 w-3 text-emerald-500" />
-                  <span className="text-emerald-500">Copied All</span>
+                  <span className="text-emerald-500">Copied</span>
                 </>
               ) : (
                 <>
                   <CopyIcon className="h-3 w-3" />
-                  <span>Copy All</span>
+                  <span>Copy</span>
                 </>
               )}
             </button>
           </div>
-          <div className="flex flex-wrap gap-1.5 pt-0.5">
-            {hashtags.map((tag) => (
-              <Badge
-                key={tag}
-                variant="secondary"
-                onClick={() => triggerCopy(tag, `Hashtag "${tag}"`, `tag-${tag}`)}
-                className="cursor-pointer bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 text-[11px] font-semibold px-2 py-0.5"
-              >
-                {tag}
-              </Badge>
-            ))}
+          <div className="p-2.5 rounded-md bg-muted/20 border border-border/50 text-xs text-muted-foreground leading-relaxed select-text">
+            {descriptionText}
           </div>
         </div>
-      )}
-    </AppCard>
+
+        {/* ── SEO Keywords ── */}
+        {keywords.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-foreground">SEO Keywords</span>
+              <button
+                type="button"
+                onClick={() => triggerCopy(keywords.join(", "), "Keywords", "keywords")}
+                className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+              >
+                {copiedField === "keywords" ? (
+                  <>
+                    <CheckCircleIcon className="h-3 w-3 text-emerald-500" />
+                    <span className="text-emerald-500">Copied All</span>
+                  </>
+                ) : (
+                  <>
+                    <CopyIcon className="h-3 w-3" />
+                    <span>Copy All</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {keywords.map((kw) => (
+                <Badge
+                  key={kw}
+                  variant="outline"
+                  onClick={() => triggerCopy(kw, `Keyword "${kw}"`, `kw-${kw}`)}
+                  className="cursor-pointer hover:border-primary/50 text-[10px] font-mono px-2 py-0.5 rounded-md border-border/70 bg-muted/20"
+                >
+                  {kw}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Trending Hashtags ── */}
+        {hashtags.length > 0 && (
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-foreground">Trending Hashtags</span>
+              <button
+                type="button"
+                onClick={() => triggerCopy(hashtags.join(" "), "Hashtags", "hashtags")}
+                className="text-[11px] text-primary hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
+              >
+                {copiedField === "hashtags" ? (
+                  <>
+                    <CheckCircleIcon className="h-3 w-3 text-emerald-500" />
+                    <span className="text-emerald-500">Copied All</span>
+                  </>
+                ) : (
+                  <>
+                    <CopyIcon className="h-3 w-3" />
+                    <span>Copy All</span>
+                  </>
+                )}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {hashtags.map((tag) => (
+                <Badge
+                  key={tag}
+                  variant="secondary"
+                  onClick={() => triggerCopy(tag, `Hashtag "${tag}"`, `tag-${tag}`)}
+                  className="cursor-pointer bg-primary/10 text-primary border-primary/20 hover:bg-primary/20 text-[10px] font-semibold px-2 py-0.5 rounded-md"
+                >
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
+
+

@@ -350,3 +350,36 @@ export function invalidateCurrentUser(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: userQueryKeys.me() });
 }
 
+
+/* -------------------------------------------------------------------------- */
+/*                   useForgotPassword — POST /auth/forgot-password                     */
+/* -------------------------------------------------------------------------- */
+
+export interface ForgotPasswordInput {
+  email: string;
+}
+
+export interface ForgotPasswordResult {
+  message: string;
+}
+
+type ForgotPasswordOpts = Omit<
+  UseMutationOptions<ForgotPasswordResult, Error, ForgotPasswordInput, unknown>,
+  "mutationFn"
+>;
+
+export function useForgotPassword(
+  opts: ForgotPasswordOpts = {}
+): UseMutationResult<ForgotPasswordResult, Error, ForgotPasswordInput, unknown> {
+  return useMutation({
+    mutationFn: async (input: ForgotPasswordInput) => {
+      const { data } = await axiosClient.post<ForgotPasswordResult>(
+        "/auth/forgot-password",
+        input
+      );
+      return data;
+    },
+    ...opts,
+  });
+}
+

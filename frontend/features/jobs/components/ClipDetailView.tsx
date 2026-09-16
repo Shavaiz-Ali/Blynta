@@ -3,47 +3,57 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Job, Clip, Highlight, useJob, useDeleteClip, useDownloadClip } from "@/features/jobs";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  useJob,
+  useDeleteClip,
+  useClipSignedUrl,
+  useDownloadClip,
+} from "@/features/jobs";
+import { axiosClient } from "@/config/axiosClient";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
-import { AppButton } from "@/components/common/AppButton";
-import { AppDropdown } from "@/components/common/AppDropdown";
-import { AppDialog } from "@/components/common/AppDialog";
-import { AppCard } from "@/components/common/AppCard";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { AppDropdown } from "@/components/common/AppDropdown";
+import { AppDialog } from "@/components/common/AppDialog";
 import { StudioVideoPlayer } from "./player/StudioVideoPlayer";
 import { ClipAnalysis } from "./ClipAnalysis";
 import { ClipEditorPanel, AspectRatioOption } from "./ClipEditorPanel";
 import { SocialContentSection } from "./SocialContentSection";
 import { ClipNavigationBar } from "./ClipNavigationBar";
 import { TranscriptDialog } from "./TranscriptDialog";
-import { JobDetailSkeleton } from "./JobDetailSkeleton";
+import { ClipWorkspaceSkeleton } from "./JobDetailSkeleton";
 import {
   getJobDisplayTitle,
-  formatDate,
 } from "@/features/dashboard/utils";
 import {
   ChevronLeftIcon,
   DownloadIcon,
   Share2Icon,
   TrashIcon,
-  ClockIcon,
   SparklesIcon,
   AlertTriangleIcon,
   CalendarIcon,
   FileTextIcon,
   MoreVerticalIcon,
   ExternalLinkIcon,
-  LockIcon,
+  PlayIcon,
 } from "@/features/dashboard/icons";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export interface ClipDetailViewProps {
   jobId: string;
@@ -59,12 +69,14 @@ function formatTime(seconds: number): string {
 
 export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: profile } = useCurrentUser();
   const { data: job, isLoading, error } = useJob(jobId);
 
   const [aspectRatio, setAspectRatio] = React.useState<AspectRatioOption>("9:16");
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [transcriptOpen, setTranscriptOpen] = React.useState(false);
+  const [videoPlayerOpen, setVideoPlayerOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isDownloading, setIsDownloading] = React.useState(false);
 
@@ -72,12 +84,28 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   const deleteMutation = useDeleteClip();
 
   // Find active clip & highlight
-  const { activeClip, activeHighlight, clipIndex } = React.useMemo(() => {
-    if (!job?.clips) return { activeClip: undefined, activeHighlight: undefined, clipIndex: -1 };
+  const { activeClip, activeHighlight, clipIndex, prevClipId, nextClipId } = React.useMemo(() => {
+    if (!job?.clips) {
+      return {
+        activeClip: undefined,
+        activeHighlight: undefined,
+        clipIndex: -1,
+        prevClipId: null,
+        nextClipId: null,
+      };
+    }
     const index = job.clips.findIndex(
       (c) => (c._id && c._id.toString() === clipId) || (c.id && c.id.toString() === clipId)
     );
-    if (index === -1) return { activeClip: undefined, activeHighlight: undefined, clipIndex: -1 };
+    if (index === -1) {
+      return {
+        activeClip: undefined,
+        activeHighlight: undefined,
+        clipIndex: -1,
+        prevClipId: null,
+        nextClipId: null,
+      };
+    }
 
     const clip = job.clips[index];
     const highlight =
@@ -88,12 +116,66 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
           Math.abs(h.endTime - clip.endTime) < 2
       );
 
-    return { activeClip: clip, activeHighlight: highlight, clipIndex: index };
+    const prevClip = index > 0 ? job.clips[index - 1] : null;
+    const nextClip = index < job.clips.length - 1 ? job.clips[index + 1] : null;
+
+    return {
+      activeClip: clip,
+      activeHighlight: highlight,
+      clipIndex: index,
+      prevClipId: prevClip ? prevClip._id || prevClip.id : null,
+      nextClipId: nextClip ? nextClip._id || nextClip.id : null,
+    };
   }, [job, clipId]);
+
+  // Cached signed URL for active clip
+  const {
+    data: videoSrc,
+    isLoading: videoLoading,
+    isError: videoError,
+  } = useClipSignedUrl(jobId, clipId, {
+    enabled: Boolean(jobId && clipId && activeClip),
+  });
+
+  // Prefetch adjacent clips signed URLs in background
+  React.useEffect(() => {
+    if (!jobId) return;
+
+    if (prevClipId) {
+      queryClient.prefetchQuery({
+        queryKey: ["clip-url", jobId, prevClipId],
+        queryFn: async () => {
+          const { data } = await axiosClient.get<{ signedUrl: string }>(
+            `/jobs/${jobId}/clips/${prevClipId}/download`
+          );
+          return data.signedUrl;
+        },
+        staleTime: 1000 * 60 * 50,
+      });
+    }
+
+    if (nextClipId) {
+      queryClient.prefetchQuery({
+        queryKey: ["clip-url", jobId, nextClipId],
+        queryFn: async () => {
+          const { data } = await axiosClient.get<{ signedUrl: string }>(
+            `/jobs/${jobId}/clips/${nextClipId}/download`
+          );
+          return data.signedUrl;
+        },
+        staleTime: 1000 * 60 * 50,
+      });
+    }
+  }, [jobId, prevClipId, nextClipId, queryClient]);
 
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
+      if (videoSrc) {
+        window.open(videoSrc, "_blank", "noopener,noreferrer");
+        toast.success("Download started!");
+        return;
+      }
       toast.info("Generating secure download URL...");
       const res = await downloadMutation.mutateAsync({ jobId, clipId });
       if (res.signedUrl) {
@@ -139,14 +221,14 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
         <Link
           href="/my-clips"
-          className="hover:text-foreground transition-colors shrink-0"
+          className="hover:text-foreground transition-colors shrink-0 font-medium"
         >
-          Clips
+          My Clips
         </Link>
         <span>/</span>
         <Link
           href={`/my-clips/${jobId}`}
-          className="hover:text-foreground transition-colors truncate max-w-[140px] sm:max-w-[200px]"
+          className="hover:text-foreground transition-colors truncate max-w-[140px] sm:max-w-[220px]"
         >
           {job ? getJobDisplayTitle(job, 30) : "Source Video"}
         </Link>
@@ -160,7 +242,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         <DashboardHeaderRight profile={profile} />
       ) : (
         <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-md bg-muted animate-pulse" />
+          <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
         </div>
       )}
     </div>
@@ -169,7 +251,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   if (isLoading) {
     return (
       <DashboardLayout headerContent={headerContent}>
-        <JobDetailSkeleton />
+        <ClipWorkspaceSkeleton />
       </DashboardLayout>
     );
   }
@@ -177,7 +259,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   if (error || !job || !activeClip) {
     return (
       <DashboardLayout headerContent={headerContent}>
-        <AppCard className="p-10 text-center max-w-lg mx-auto my-12 border-destructive/30" useDefaultClasses={false}>
+        <div className="p-10 text-center max-w-lg mx-auto my-12 rounded-lg border border-destructive/30 bg-card">
           <AlertTriangleIcon className="h-10 w-10 text-destructive mx-auto mb-3" />
           <h3 className="text-base font-bold text-foreground">
             This clip is no longer available
@@ -185,15 +267,15 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
           <p className="text-xs text-muted-foreground mt-1">
             {error?.message || "The clip you requested could not be found."}
           </p>
-          <AppButton
+          <Button
             variant="outline"
             size="sm"
             onClick={() => router.push(`/my-clips/${jobId}`)}
             className="mt-4"
           >
             Back to Generated Shorts
-          </AppButton>
-        </AppCard>
+          </Button>
+        </div>
       </DashboardLayout>
     );
   }
@@ -203,210 +285,314 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
     activeHighlight?.clipTitle ||
     activeHighlight?.hookText ||
     `Generated Short #${clipIndex + 1}`;
-  const videoSrc = activeClip.outputUrl || activeClip.downloadUrl || "";
 
   return (
     <DashboardLayout headerContent={headerContent}>
-      {/* ── Top Workspace Bar & Primary Actions ── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/70">
-        <Link
-          href={`/my-clips/${jobId}`}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group"
-        >
-          <ChevronLeftIcon className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-          <span>Back to &ldquo;{getJobDisplayTitle(job, 35)}&rdquo;</span>
-        </Link>
+      <div className="space-y-3.5 sm:space-y-4 pb-10">
+        {/* ── 1. CLIP HEADER & ACTIONS ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/80">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link
+              href={`/my-clips/${jobId}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors group shrink-0"
+            >
+              <ChevronLeftIcon className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+              <span className="truncate max-w-[200px] sm:max-w-[320px]">
+                {getJobDisplayTitle(job, 35)}
+              </span>
+            </Link>
 
-        {/* Primary Action Buttons Bar */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Schedule Post (Disabled UI Control - Coming Soon) */}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  disabled
-                  className="h-9 px-3 text-xs font-medium rounded-md border border-border/50 bg-muted/30 text-muted-foreground/60 flex items-center gap-1.5 cursor-not-allowed opacity-60 select-none"
-                >
-                  <CalendarIcon className="h-3.5 w-3.5" />
-                  <span>Schedule Post</span>
-                  <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase border-border/60">
-                    Coming Soon
-                  </Badge>
-                </button>
-              }
-            />
-            <TooltipContent side="bottom" className="text-xs max-w-xs">
-              Social post scheduling directly from Blynta is coming soon.
-            </TooltipContent>
-          </Tooltip>
+            {job.clips && job.clips.length > 1 && (
+              <>
+                <Separator orientation="vertical" className="h-4 bg-border/80" />
+                <Badge variant="secondary" className="text-xs font-medium px-2 py-0.5 rounded-md">
+                  Short {clipIndex + 1} of {job.clips.length}
+                </Badge>
+              </>
+            )}
+          </div>
 
-          <AppButton
-            variant="outline"
-            size="sm"
-            onClick={handleShare}
-            icon={<Share2Icon className="h-3.5 w-3.5" />}
-            className="h-9 text-xs font-medium"
-          >
-            Share Link
-          </AppButton>
+          {/* Action Toolbar */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Schedule Post (Disabled / Coming Soon) */}
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled
+                    className="h-8 px-2.5 text-xs font-medium border-border/50 text-muted-foreground/50 hidden md:flex items-center gap-1.5 cursor-not-allowed opacity-60"
+                  >
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    <span>Schedule</span>
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 uppercase border-border/60">
+                      Soon
+                    </Badge>
+                  </Button>
+                }
+              />
+              <TooltipContent side="bottom" className="text-xs max-w-xs">
+                Social post scheduling is currently on the product roadmap and will be available in a future release.
+              </TooltipContent>
+            </Tooltip>
 
-          <AppButton
-            variant="default"
-            size="sm"
-            onClick={handleDownload}
-            isLoading={isDownloading}
-            icon={<DownloadIcon className="h-3.5 w-3.5" />}
-            className="h-9 text-xs font-semibold shadow-xs"
-          >
-            Download MP4
-          </AppButton>
-
-          {job.transcript && job.transcript.length > 0 && (
-            <AppButton
+            <Button
               variant="outline"
               size="sm"
-              onClick={() => setTranscriptOpen(true)}
-              icon={<FileTextIcon className="h-3.5 w-3.5" />}
-              className="h-9 text-xs font-medium"
+              onClick={handleShare}
+              className="h-8 text-xs font-semibold cursor-pointer border-border hover:bg-muted"
             >
-              Transcript
-            </AppButton>
-          )}
+              <Share2Icon className="h-3.5 w-3.5 mr-1.5" />
+              <span>Share Link</span>
+            </Button>
 
-          {/* More Actions Dropdown */}
-          <AppDropdown
-            trigger={
-              <button
-                type="button"
-                className="h-9 w-9 rounded-md flex items-center justify-center border border-border/80 bg-background/50 text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                aria-label="More actions"
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="h-8 text-xs font-semibold shadow-xs cursor-pointer"
+            >
+              <DownloadIcon className="h-3.5 w-3.5 mr-1.5" />
+              <span>{isDownloading ? "Preparing..." : "Download MP4"}</span>
+            </Button>
+
+            {job.transcript && job.transcript.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTranscriptOpen(true)}
+                className="h-8 text-xs font-semibold cursor-pointer border-border hover:bg-muted"
               >
-                <MoreVerticalIcon className="h-4 w-4" />
-              </button>
-            }
-            items={[
-              ...(job.sourceUrl
-                ? [
-                  {
-                    label: "Open Source Video",
-                    icon: <ExternalLinkIcon className="h-3.5 w-3.5" />,
-                    onClick: () => window.open(job.sourceUrl, "_blank", "noopener,noreferrer"),
-                  },
-                ]
-                : []),
-              {
-                label: "Delete Clip",
-                icon: <TrashIcon className="h-3.5 w-3.5" />,
-                onClick: () => setDeleteOpen(true),
-                destructive: true,
-                separatorBefore: true,
-              },
-            ]}
-          />
-        </div>
-      </div>
-
-      {/* ── Clip Navigation Strip (Prev / Clip X of Y / Next) ── */}
-      {job.clips && job.clips.length > 1 && (
-        <ClipNavigationBar
-          jobId={jobId}
-          clips={job.clips}
-          activeClipIndex={clipIndex}
-        />
-      )}
-
-      {/* ── Main Workspace Grid (Video on Left, Content Publishing & Insights on Right) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Prominent Video Player & Quick Metadata */}
-        <div className="lg:col-span-6 xl:col-span-6 flex flex-col items-center gap-4 w-full min-w-0">
-          {/* Hero 9:16 Video Player Container */}
-          <AppCard
-            className={cn(
-              "w-full flex items-center justify-center  border-border/80 bg-card/60 backdrop-blur-md shadow-xs",
-              aspectRatio === "9:16" && "max-w-[380px] sm:max-w-[400px]",
-              aspectRatio === "1:1" && "max-w-[420px]",
-              aspectRatio === "16:9" && "max-w-[560px]"
+                <FileTextIcon className="h-3.5 w-3.5 mr-1.5" />
+                <span>Transcript</span>
+              </Button>
             )}
-            useDefaultClasses={false}
-          >
-            <StudioVideoPlayer
-              src={videoSrc}
-              poster={job.thumbnailUrl}
-              autoPlay={false}
-              badgeText={`${aspectRatio} Short`}
-              className={cn(
-                aspectRatio === "1:1" && "aspect-square max-w-full",
-                aspectRatio === "16:9" && "aspect-video max-w-full"
-              )}
-            />
-          </AppCard>
 
-          {/* Quick Player Footer Metadata Bar */}
-          <div className="w-full max-w-[420px] flex items-center justify-between p-3 rounded-md bg-card border border-border/80 text-xs text-muted-foreground shadow-xs">
-            <div className="flex items-center gap-1.5 font-mono">
-              <ClockIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>
-                {formatTime(activeClip.startTime)} → {formatTime(activeClip.endTime)}
-              </span>
-              <span className="text-muted-foreground/60">({Math.round(durationSec)}s)</span>
+            {/* More Actions Dropdown */}
+            <AppDropdown
+              trigger={
+                <button
+                  type="button"
+                  className="h-8 w-8 rounded-md flex items-center justify-center border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  aria-label="More actions"
+                >
+                  <MoreVerticalIcon className="h-4 w-4" />
+                </button>
+              }
+              items={[
+                ...(job.sourceUrl
+                  ? [
+                    {
+                      label: "Open Source Video",
+                      icon: <ExternalLinkIcon className="h-3.5 w-3.5" />,
+                      onClick: () => window.open(job.sourceUrl, "_blank", "noopener,noreferrer"),
+                    },
+                  ]
+                  : []),
+                {
+                  label: "Delete Clip",
+                  icon: <TrashIcon className="h-3.5 w-3.5" />,
+                  onClick: () => setDeleteOpen(true),
+                  destructive: true,
+                  separatorBefore: true,
+                },
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* ── 2. CLIP OVERVIEW (COMPACT PREVIEW + CLIP IDENTITY) ── */}
+        <div className="p-4 sm:p-5 rounded-lg bg-card/60 border border-border/80 shadow-2xs">
+          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+            {/* Compact Video Preview Entry Point */}
+            <div
+              onClick={() => setVideoPlayerOpen(true)}
+              className="relative aspect-[9/16] w-24 sm:w-28 md:w-32 shrink-0 rounded-lg overflow-hidden bg-black border border-border/80 group cursor-pointer shadow-xs select-none transition-transform duration-200 hover:scale-[1.02]"
+              title="Click to watch full short"
+            >
+              {/* Thumbnail / Poster */}
+              {job.thumbnailUrl ? (
+                <img
+                  src={job.thumbnailUrl}
+                  alt={clipTitle}
+                  className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
+                />
+              ) : (
+                <div className="w-full h-full flex flex-col items-center justify-center bg-muted/20 text-muted-foreground p-2 text-center">
+                  <PlayIcon className="h-6 w-6 text-primary/70 mb-1" />
+                  <span className="text-[9px]">Short #{clipIndex + 1}</span>
+                </div>
+              )}
+
+              {/* Dark Gradient Overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-black/35 group-hover:from-black/75 transition-colors" />
+
+              {/* Top Aspect Ratio Tag */}
+              <div className="absolute top-1.5 left-1.5 z-10">
+                <Badge
+                  variant="secondary"
+                  className="bg-black/70 text-foreground border-white/10 text-[9px] font-mono px-1 py-0 backdrop-blur-xs leading-tight"
+                >
+                  9:16
+                </Badge>
+              </div>
+
+              {/* Centered Play Button Overlay */}
+              <div className="absolute inset-0 z-10 flex items-center justify-center">
+                <div className="h-8 w-8 rounded-full bg-primary/95 text-primary-foreground flex items-center justify-center shadow-md transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary pl-0.5">
+                  <PlayIcon className="h-3.5 w-3.5 fill-current" />
+                </div>
+              </div>
+
+              {/* Bottom Metadata & Prompt */}
+              <div className="absolute bottom-0 inset-x-0 p-1.5 z-10 flex flex-col gap-0.5 text-[10px] text-white/90">
+                <div className="flex items-center justify-between font-mono text-[9px]">
+                  <span>{formatTime(activeClip.startTime)}</span>
+                  <span className="font-semibold text-primary-foreground bg-black/50 px-1 rounded text-[8px]">
+                    {Math.round(durationSec)}s
+                  </span>
+                </div>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <Badge variant="outline" className="text-[11px] font-mono">
-                {aspectRatio}
-              </Badge>
-              <div className="flex items-center gap-1 text-primary font-semibold text-[11px]">
-                <SparklesIcon className="h-3 w-3" />
-                <span>AI Auto-Framed</span>
+            {/* Clip Information */}
+            <div className="flex-1 min-w-0 space-y-3">
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-primary">
+                    AI Generated Short
+                  </span>
+                  <span className="text-muted-foreground/40">•</span>
+                  <span className="text-xs text-muted-foreground font-medium">
+                    Short #{clipIndex + 1} of {job.clips.length}
+                  </span>
+                </div>
+
+                <h1 className="text-xl sm:text-2xl font-bold text-foreground leading-snug tracking-tight">
+                  {clipTitle}
+                </h1>
+
+                {activeHighlight?.clipDescription && (
+                  <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-prose">
+                    {activeHighlight.clipDescription}
+                  </p>
+                )}
+              </div>
+
+              {/* Metadata Badges & Watch CTA */}
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                <Badge variant="outline" className="text-xs font-normal rounded-md border-border/80">
+                  Source: {job.sourcePlatform}
+                </Badge>
+                <Badge variant="outline" className="text-xs font-normal rounded-md border-border/80">
+                  Duration: {Math.round(durationSec)}s
+                </Badge>
+                <Badge variant="outline" className="text-xs font-normal rounded-md border-border/80">
+                  Status: Ready to publish
+                </Badge>
+                <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-xs font-semibold rounded-md">
+                  <SparklesIcon className="h-3 w-3 mr-1" />
+                  AI Framed
+                </Badge>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setVideoPlayerOpen(true)}
+                  className="h-7 text-xs font-semibold gap-1.5 cursor-pointer border-primary/40 text-primary hover:bg-primary/10 ml-auto hidden sm:flex"
+                >
+                  <PlayIcon className="h-3 w-3 fill-current" />
+                  <span>Watch Short</span>
+                </Button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Title, AI Insights, Social Content & Studio Customization */}
-        <div className="lg:col-span-6 xl:col-span-6 space-y-6 w-full min-w-0">
-          {/* Clip Header Banner */}
-          <AppCard className="space-y-2" useDefaultClasses={false}>
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold uppercase tracking-wider">
-                Short #{clipIndex + 1}
-              </Badge>
-              <span className="text-xs text-muted-foreground">
-                Extracted from {job.sourcePlatform} video
-              </span>
-            </div>
-
-            <div className="my-2">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-foreground leading-snug">
-                {clipTitle}
-              </h1>
-            </div>
-
-            {activeHighlight?.clipDescription && (
-              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed pt-1">
-                {activeHighlight.clipDescription}
-              </p>
-            )}
-          </AppCard>
-
-          {/* AI Insights Section */}
+        {/* ── 3. AI INSIGHTS & VIRALITY ANALYSIS ── */}
+        <div className="p-4 sm:p-5 rounded-lg bg-card/60 border border-border/80 shadow-2xs">
           <ClipAnalysis job={job} highlight={activeHighlight} />
+        </div>
 
-          {/* Social Content / Ready to Publish Section */}
-          <SocialContentSection
-            job={job}
-            highlight={activeHighlight}
-            clipTitle={clipTitle}
+        {/* ── 4. GENERATED SHORTS NAVIGATION ── */}
+        {job.clips && job.clips.length > 1 && (
+          <ClipNavigationBar
+            jobId={jobId}
+            clips={job.clips}
+            activeClipIndex={clipIndex}
+            variant="rail"
           />
+        )}
 
-          {/* Studio Customization & Aspect Ratio Framing */}
-          <ClipEditorPanel
-            aspectRatio={aspectRatio}
-            onAspectRatioChange={setAspectRatio}
-          />
+        {/* ── 5. SECONDARY PRODUCTION WORKSPACE ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch">
+          {/* Left: Publishing Package */}
+          <div className="lg:col-span-7 w-full min-w-0">
+            <SocialContentSection
+              job={job}
+              highlight={activeHighlight}
+              clipTitle={clipTitle}
+            />
+          </div>
+
+          {/* Right: Studio & Framing Settings */}
+          <div className="lg:col-span-5 w-full min-w-0">
+            <ClipEditorPanel
+              aspectRatio={aspectRatio}
+              onAspectRatioChange={setAspectRatio}
+            />
+          </div>
         </div>
       </div>
+
+      {/* ── FULL 9:16 VIDEO PLAYER DIALOG ── */}
+      <Dialog open={videoPlayerOpen} onOpenChange={setVideoPlayerOpen}>
+        <DialogContent
+          className="sm:max-w-[440px] p-0 bg-black border-border/80 overflow-hidden text-foreground rounded-xl"
+          showCloseButton={true}
+        >
+          <DialogHeader className="p-4 pb-2 bg-neutral-950 border-b border-border/50">
+            <DialogTitle className="text-sm font-bold text-foreground truncate pr-6">
+              {clipTitle}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="p-3 flex flex-col items-center justify-center bg-black">
+            {videoLoading && (
+              <div className="aspect-[9/16] w-full rounded-lg bg-black border border-border flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <div className="h-10 w-10 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                <p className="text-xs font-medium text-muted-foreground">Loading video...</p>
+              </div>
+            )}
+            {videoError && !videoLoading && (
+              <div className="aspect-[9/16] w-full rounded-lg bg-black border border-destructive/40 flex flex-col items-center justify-center gap-3 text-muted-foreground p-4 text-center">
+                <AlertTriangleIcon className="h-8 w-8 text-destructive" />
+                <p className="text-xs font-medium text-foreground">Could not load video stream</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownload}
+                  className="h-7 text-xs mt-1"
+                >
+                  <DownloadIcon className="h-3 w-3 mr-1" />
+                  <span>Download MP4</span>
+                </Button>
+              </div>
+            )}
+            {videoSrc && !videoLoading && (
+              <StudioVideoPlayer
+                src={videoSrc}
+                poster={job.thumbnailUrl}
+                autoPlay={true}
+                badgeText={`${aspectRatio} Short`}
+                className="rounded-lg shadow-lg w-full"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Transcript Dialog */}
       {job.transcript && (
@@ -431,26 +617,29 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         description={`Are you sure you want to delete "${clipTitle}"? This will permanently remove the short video from your workspace.`}
         footer={
           <>
-            <AppButton
+            <Button
               variant="outline"
               size="sm"
               onClick={() => setDeleteOpen(false)}
               disabled={isDeleting}
+              className="cursor-pointer"
             >
               Cancel
-            </AppButton>
-            <AppButton
+            </Button>
+            <Button
               variant="destructive"
               size="sm"
               onClick={handleDeleteConfirm}
-              isLoading={isDeleting}
-              icon={<TrashIcon className="h-3.5 w-3.5" />}
+              disabled={isDeleting}
+              className="cursor-pointer"
             >
-              Delete Short
-            </AppButton>
+              <TrashIcon className="h-3.5 w-3.5 mr-1.5" />
+              <span>{isDeleting ? "Deleting..." : "Delete Short"}</span>
+            </Button>
           </>
         }
       />
     </DashboardLayout>
   );
 }
+

@@ -47,11 +47,11 @@ export function useCreateCheckoutSession(
     },
     onSuccess: async (data, vars, ctx) => {
       // Invalidate current user so any plan/credits updates show immediately
-      // once the user returns from Stripe (and the browser refetches).
+      // once the user returns from Paddle (and the browser refetches).
       invalidateCurrentUser(queryClient);
 
       if (data?.checkoutUrl) {
-        // Full page navigation to Stripe hosted checkout — NOT client-side.
+        // Full page navigation to Paddle hosted checkout — NOT client-side.
         if (typeof window !== "undefined") {
           window.location.href = data.checkoutUrl;
         }
@@ -60,6 +60,26 @@ export function useCreateCheckoutSession(
       if (userOnSuccess) (userOnSuccess as any)(data, vars, ctx);
     },
     ...restOpts,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*              useCustomerPortal — GET /billing/customer-portal               */
+/* -------------------------------------------------------------------------- */
+
+export function useCustomerPortal() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await axiosClient.get<{ url: string }>(
+        "/billing/customer-portal"
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.url && typeof window !== "undefined") {
+        window.location.href = data.url;
+      }
+    },
   });
 }
 

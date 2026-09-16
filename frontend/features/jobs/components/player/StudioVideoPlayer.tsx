@@ -214,7 +214,7 @@ export function StudioVideoPlayer({
         if (isPlaying && !isScrubbing) setShowControls(false);
       }}
       className={cn(
-        "relative select-none aspect-[9/16] w-full max-w-[340px] sm:max-w-[360px] rounded-2xl bg-black border border-border/80 shadow-lg overflow-hidden group flex items-center justify-center",
+        "relative select-none aspect-[9/16] w-full rounded-lg bg-black border border-border shadow-md overflow-hidden group flex items-center justify-center",
         isFullscreen && "max-w-none w-full h-full rounded-none border-none aspect-auto",
         className
       )}

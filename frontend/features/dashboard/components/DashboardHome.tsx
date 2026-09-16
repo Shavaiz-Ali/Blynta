@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/features/auth/queries";
-import { useJobs, JobStatus } from "@/features/jobs";
+import { useJobs } from "@/features/jobs";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { WelcomeDialog } from "@/features/dashboard/components/WelcomeDialog";
 import { AppButton } from "@/components/common/AppButton";
@@ -15,7 +15,6 @@ import { JobsCard } from "./JobsCard";
 import { JobsSkeleton } from "./JobsSkeleton";
 import { AttentionNeeded } from "./AttentionNeeded";
 import { AlertTriangleIcon } from "../icons";
-import { countCompletedClips } from "../utils";
 
 export function DashboardHome() {
   const router = useRouter();
@@ -35,9 +34,6 @@ export function DashboardHome() {
     }
   }, [profile?.isWelcomed]);
 
-  const totalClipsGenerated = countCompletedClips(jobs);
-  const hasCompletedClips = jobs.some((j) => j.status === JobStatus.COMPLETED && j.clips && j.clips.length > 0);
-
   const headerContent = (
     <div className="flex-1 min-w-0 flex items-center justify-between">
       <h1 className="text-sm font-medium text-foreground">Home</h1>
@@ -55,7 +51,6 @@ export function DashboardHome() {
 
   return (
     <DashboardLayout headerContent={headerContent}>
-
       {/* ── Top Upgrade Short Banner (if on free tier) ── */}
       {!profileLoading && <UpgradeBanner plan={profile?.plan ?? "free"} />}
 
@@ -68,7 +63,7 @@ export function DashboardHome() {
       {/* ── Attention needed (failed jobs banner if any) ── */}
       {!jobsLoading && <AttentionNeeded jobs={jobs} />}
 
-      {/* ── Split Layout: Archives (Main) & Ready Clips Showcase (Side) ── */}
+      {/* ── Recent Projects / Clips Section ── */}
       <div className="min-w-0">
         {jobsLoading ? (
           <JobsSkeleton />
@@ -91,25 +86,10 @@ export function DashboardHome() {
               Refresh
             </AppButton>
           </div>
-        ) : hasCompletedClips ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Left / Main Archives Column */}
-            <div className="lg:col-span-12 min-w-0">
-              <JobsCard jobs={jobs} />
-            </div>
-
-            {/* Right / Ready Viral Clips Column */}
-            {/* <div className="lg:col-span-4 min-w-0 sticky top-20">
-                <ReadyClipsRack jobs={jobs} />
-              </div> */}
-          </div>
         ) : (
           <JobsCard jobs={jobs} />
         )}
       </div>
-
-      {/* ── Pipeline Throughput & Keyboard Status Footer ── */}
-      {/* <PipelineThroughput profile={profile} totalClips={totalClipsGenerated} /> */}
 
       {profile ? (
         <WelcomeDialog

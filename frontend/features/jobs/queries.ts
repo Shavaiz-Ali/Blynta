@@ -95,8 +95,11 @@ export function useJob(
     staleTime: 1000 * 10,
     refetchInterval: (query: Query<Job, Error>) => {
       const status = query.state.data?.status;
+      if (status === JobStatus.CUTTING_CLIPS) {
+        return 2500;
+      }
       if (status && ACTIVE_JOB_STATUSES.includes(status)) {
-        return 4000;
+        return 3500;
       }
       return false;
     },
@@ -182,6 +185,31 @@ export function useDownloadClip(
       );
       return data;
     },
+    ...opts,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                  useClipSignedUrl — GET /jobs/:id/clips/:id/download query */
+/* -------------------------------------------------------------------------- */
+
+export function useClipSignedUrl(
+  jobId: string,
+  clipId: string,
+  opts?: Omit<UseQueryOptions<string, Error>, "queryKey" | "queryFn">
+): UseQueryResult<string, Error> {
+  return useQuery({
+    queryKey: ["clip-url", jobId, clipId],
+    queryFn: async () => {
+      const { data } = await axiosClient.get<{ signedUrl: string }>(
+        `/jobs/${jobId}/clips/${clipId}/download`
+      );
+      return data.signedUrl;
+    },
+    enabled: Boolean(jobId && clipId),
+    staleTime: 1000 * 60 * 50, // 50 min cache (signed URLs typically 1h TTL)
+    gcTime: 1000 * 60 * 55,
+    retry: 1,
     ...opts,
   });
 }

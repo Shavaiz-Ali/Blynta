@@ -92,6 +92,7 @@ function VerifyOtpDialog({
       open={open}
       onOpenChange={handleOpenChange}
       size="md"
+      dismissible={false}
       title="Verify your email"
       description={
         <span>

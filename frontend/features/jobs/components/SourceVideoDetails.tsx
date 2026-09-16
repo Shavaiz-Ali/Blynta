@@ -11,7 +11,7 @@ import { AppButton } from "@/components/common/AppButton";
 import { GeneratedClipsGrid } from "./GeneratedClipsGrid";
 import { JobProcessingView } from "./JobProcessingView";
 import { FailedStateCard } from "./FailedStateCard";
-import { JobDetailSkeleton } from "./JobDetailSkeleton";
+import { SourceVideoDetailsSkeleton } from "./SourceVideoDetailsSkeleton";
 import {
   platformIcon,
   getJobDisplayTitle,
@@ -108,7 +108,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   if (isLoading) {
     return (
       <DashboardLayout headerContent={headerContent}>
-        <JobDetailSkeleton />
+        <SourceVideoDetailsSkeleton />
       </DashboardLayout>
     );
   }
@@ -139,10 +139,15 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
 
   const duration = getJobDurationFormatted(job);
   const clipsCount = job.clips?.length ?? 0;
-  const isProcessing = isProcessingStatus(job.status);
+  const isEarlyProcessing =
+    job.status === JobStatus.PENDING ||
+    job.status === JobStatus.TRANSCRIBING ||
+    job.status === JobStatus.DETECTING_HIGHLIGHTS;
+  const isCuttingClips = job.status === JobStatus.CUTTING_CLIPS;
   const isCompleted = job.status === JobStatus.COMPLETED;
   const isFailed = job.status === JobStatus.FAILED;
   const thumbnail = getJobThumbnail(job);
+  const totalHighlightsCount = job.highlights?.length || 6;
 
   return (
     <DashboardLayout headerContent={headerContent}>
@@ -158,6 +163,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
             <span>Back to Clips</span>
           </Link>
         </div>
+
         {/* Source Media Banner Container */}
         <AppCard className="gap-5" useDefaultClasses={true}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 min-w-0 flex-1">
@@ -192,7 +198,15 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
                     <SparklesIcon className="h-3 w-3" />
                     <span>Completed</span>
                   </Badge>
-                ) : isProcessing ? (
+                ) : isCuttingClips ? (
+                  <Badge variant="outline" className="gap-1 bg-primary/15 text-primary border-primary/30 text-[11px] font-semibold">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
+                    </span>
+                    <span>Cutting &amp; Captioning ({clipsCount}/{totalHighlightsCount} ready)</span>
+                  </Badge>
+                ) : isEarlyProcessing ? (
                   <Badge variant="outline" className="gap-1 bg-chart-4/15 text-chart-4 border-chart-4/25 text-[11px] font-semibold">
                     <ClockIcon className="h-3 w-3 animate-spin" />
                     <span>Processing ({job.progressPercent || 0}%)</span>
@@ -304,8 +318,8 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
       </div>
 
       {/* ── Level 2 Main Body ── */}
-      {isProcessing ? (
-        /* Live pipeline processing view */
+      {isEarlyProcessing ? (
+        /* Stages 1-3: Downloading, Transcribing, AI Highlight Detection */
         <div className="py-2">
           <JobProcessingView job={job} />
         </div>
@@ -315,15 +329,60 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
           <FailedStateCard job={job} />
         </div>
       ) : (
-        /* Completed Generated Clips Grid */
-        <div className="space-y-4">
+        /* Stage 4 (Cutting & Captioning) and Completed Stage: Live Shorts Grid */
+        <div className="space-y-5">
+          {/* Live Cutting Notice Banner when in Stage 4 */}
+          {isCuttingClips && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 via-card to-card shadow-xs backdrop-blur-sm">
+              <div className="flex items-center gap-3">
+                <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary border border-primary/30 shrink-0">
+                  <FilmIcon className="h-4.5 w-4.5 animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-foreground">
+                      Stage 4: Cutting &amp; Captioning Shorts
+                    </h4>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-ping" />
+                      {clipsCount} of {totalHighlightsCount} ready
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Rendering 9:16 vertical shorts &amp; burning animated subtitles. Finished clips are ready to preview below in real time!
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
+                <div className="h-2 w-28 sm:w-36 rounded-full bg-muted/70 overflow-hidden border border-border/50">
+                  <div
+                    className="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.max(
+                        10,
+                        Math.round((clipsCount / Math.max(1, totalHighlightsCount)) * 100)
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-mono font-bold text-primary">
+                  {Math.round((clipsCount / Math.max(1, totalHighlightsCount)) * 100)}%
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Section Heading for Completed or Cutting Stage */}
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-xl font-bold tracking-tight text-foreground">
                 Generated Shorts
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {clipsCount} viral short {clipsCount === 1 ? "clip" : "clips"} extracted from this long-form video.
+                {isCuttingClips
+                  ? `${clipsCount} of ${totalHighlightsCount} viral shorts generated so far. Remaining clips rendering...`
+                  : `${clipsCount} viral short ${clipsCount === 1 ? "clip" : "clips"} extracted from this long-form video.`}
               </p>
             </div>
           </div>

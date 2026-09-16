@@ -72,6 +72,8 @@ export function AppSelect({
   const errorId = `${selectId}-error`;
   const helperId = `${selectId}-helper`;
 
+  const selectedOption = options?.find((opt) => opt.value === (value ?? defaultValue));
+
   return (
     <div className={cn("flex w-full flex-col gap-1.5", wrapperClassName)}>
       {label && (
@@ -108,7 +110,11 @@ export function AppSelect({
             className
           )}
         >
-          <SelectValue placeholder={placeholder} />
+          <SelectValue placeholder={placeholder}>
+            {selectedOption ? (
+              <span className="truncate">{selectedOption.label}</span>
+            ) : undefined}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent className={cn("rounded-md border-border bg-popover text-popover-foreground shadow-md", contentClassName)}>
           {children

@@ -18,7 +18,7 @@ import {
   ShieldIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
-  ClockIcon,
+  CheckIcon,
 } from "@/features/dashboard/icons";
 import {
   Activity,
@@ -38,7 +38,10 @@ function getActivityIcon(activity: Activity) {
       if (activity.type === ActivityType.CLIP_DOWNLOAD) {
         return <DownloadIcon className="h-4 w-4 text-emerald-500" />;
       }
-      if (activity.type === ActivityType.CLIP_DELETE || activity.type === ActivityType.JOB_DELETE) {
+      if (
+        activity.type === ActivityType.CLIP_DELETE ||
+        activity.type === ActivityType.JOB_DELETE
+      ) {
         return <Trash2Icon className="h-4 w-4 text-rose-500" />;
       }
       if (activity.type === ActivityType.JOB_COMPLETE) {
@@ -63,44 +66,127 @@ function getActivityIcon(activity: Activity) {
 
     case ActivityCategory.AUTH:
     case ActivityCategory.ACCOUNT:
-      if (activity.type === ActivityType.AUTH_PASSWORD_CHANGE || activity.type === ActivityType.AUTH_PASSWORD_RESET_COMPLETE) {
+      if (
+        activity.type === ActivityType.AUTH_PASSWORD_CHANGE ||
+        activity.type === ActivityType.AUTH_PASSWORD_RESET_COMPLETE
+      ) {
         return <KeyRoundIcon className="h-4 w-4 text-amber-500" />;
       }
-      return <UserIcon className="h-4 w-4 text-blue-500" />;
+      return <UserIcon className="h-4 w-4 text-sky-500" />;
 
     default:
       return <ShieldIcon className="h-4 w-4 text-muted-foreground" />;
   }
 }
 
+function getActivityIconContainerClass(category: ActivityCategory) {
+  switch (category) {
+    case ActivityCategory.JOB:
+      return "bg-primary/10 text-primary border-primary/25";
+    case ActivityCategory.CREDIT:
+      return "bg-amber-500/10 text-amber-500 border-amber-500/25";
+    case ActivityCategory.BILLING:
+      return "bg-violet-500/10 text-violet-500 border-violet-500/25";
+    case ActivityCategory.REFERRAL:
+      return "bg-pink-500/10 text-pink-500 border-pink-500/25";
+    case ActivityCategory.AUTH:
+    case ActivityCategory.ACCOUNT:
+      return "bg-sky-500/10 text-sky-500 border-sky-500/25";
+    default:
+      return "bg-muted text-muted-foreground border-border/70";
+  }
+}
+
 function getCategoryBadge(category: ActivityCategory) {
   switch (category) {
     case ActivityCategory.JOB:
-      return <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-medium">Job</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-primary/10 text-primary border-primary/20 text-[11px] font-medium"
+        >
+          Job
+        </Badge>
+      );
     case ActivityCategory.CREDIT:
-      return <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[11px] font-medium">Credits</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-[11px] font-medium"
+        >
+          Credits
+        </Badge>
+      );
     case ActivityCategory.BILLING:
-      return <Badge variant="secondary" className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 text-[11px] font-medium">Billing</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 text-[11px] font-medium"
+        >
+          Billing
+        </Badge>
+      );
     case ActivityCategory.REFERRAL:
-      return <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20 text-[11px] font-medium">Referral</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-pink-500/10 text-pink-600 dark:text-pink-400 border-pink-500/20 text-[11px] font-medium"
+        >
+          Referral
+        </Badge>
+      );
     case ActivityCategory.AUTH:
     case ActivityCategory.ACCOUNT:
-      return <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 text-[11px] font-medium">Account</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20 text-[11px] font-medium"
+        >
+          Account
+        </Badge>
+      );
     default:
-      return <Badge variant="secondary" className="text-[11px]">System</Badge>;
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-muted text-muted-foreground border-border/60 text-[11px] font-medium"
+        >
+          System
+        </Badge>
+      );
   }
 }
 
 function getStatusIndicator(status: ActivityStatus) {
   switch (status) {
     case ActivityStatus.SUCCESS:
-      return <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" title="Success" />;
+      return (
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block" />
+          <span>Success</span>
+        </span>
+      );
     case ActivityStatus.PENDING:
-      return <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" title="In Progress" />;
+      return (
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse inline-block" />
+          <span>Processing</span>
+        </span>
+      );
     case ActivityStatus.FAILED:
-      return <span className="inline-block w-2 h-2 rounded-full bg-rose-500" title="Failed" />;
+      return (
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-rose-600 dark:text-rose-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-rose-500 inline-block" />
+          <span>Failed</span>
+        </span>
+      );
     case ActivityStatus.CANCELLED:
-      return <span className="inline-block w-2 h-2 rounded-full bg-muted-foreground" title="Cancelled" />;
+      return (
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground inline-block" />
+          <span>Cancelled</span>
+        </span>
+      );
   }
 }
 
@@ -128,19 +214,62 @@ function formatRelativeTime(dateString: string): string {
 
 export function ActivityItem({ activity }: ActivityItemProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
-  const hasMetadata = Boolean(activity.metadata && Object.keys(activity.metadata).length > 0);
+  const [copied, setCopied] = React.useState(false);
+  const hasMetadata = Boolean(
+    activity.metadata && Object.keys(activity.metadata).length > 0
+  );
+
+  // Only show a navigation action if it's a specific Job or Billing with an actual dedicated page (and not generic dashboard / home page)
+  const isDedicatedJob =
+    activity.category === ActivityCategory.JOB &&
+    Boolean(activity.entityId || (activity.activityUrl && activity.activityUrl.startsWith("/jobs/")));
+  const isBillingAction =
+    activity.category === ActivityCategory.BILLING &&
+    activity.activityUrl === "/billing";
+
+  const targetUrl = isDedicatedJob
+    ? activity.entityId
+      ? `/jobs/${activity.entityId}`
+      : activity.activityUrl
+    : isBillingAction
+    ? "/billing"
+    : null;
+
+  const handleCopyPayload = () => {
+    const payload = {
+      id: activity._id,
+      type: activity.type,
+      category: activity.category,
+      status: activity.status,
+      title: activity.title,
+      description: activity.description,
+      metadata: activity.metadata,
+      ipAddress: activity.ipAddress,
+      entityType: activity.entityType,
+      entityId: activity.entityId,
+      createdAt: activity.createdAt,
+    };
+    navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   return (
     <div
       className={cn(
-        "group p-4 transition-all duration-150 hover:bg-muted/30 border-b border-border/30 last:border-b-0",
-        isExpanded && "bg-muted/20"
+        "group p-4 transition-all duration-150 hover:bg-muted/40",
+        isExpanded && "bg-muted/25"
       )}
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         {/* Left: Icon and Details */}
         <div className="flex items-start gap-3.5 flex-1 min-w-0">
-          <div className="h-10 w-10 rounded-xl bg-muted/60 border border-border/40 flex items-center justify-center shrink-0 shadow-sm">
+          <div
+            className={cn(
+              "h-10 w-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs border transition-colors",
+              getActivityIconContainerClass(activity.category)
+            )}
+          >
             {getActivityIcon(activity)}
           </div>
 
@@ -150,9 +279,7 @@ export function ActivityItem({ activity }: ActivityItemProps) {
                 {activity.title}
               </span>
               {getCategoryBadge(activity.category)}
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                {getStatusIndicator(activity.status)}
-              </span>
+              {getStatusIndicator(activity.status)}
             </div>
 
             {activity.description && (
@@ -161,17 +288,19 @@ export function ActivityItem({ activity }: ActivityItemProps) {
               </p>
             )}
 
-            {/* Quick Metadata preview tags */}
+            {/* Quick Metadata tags */}
             {activity.metadata && (
               <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                 {activity.metadata.amount !== undefined && (
                   <span className="inline-flex items-center text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                    {activity.metadata.amount} {activity.metadata.amount === 1 ? 'credit' : 'credits'}
+                    {activity.metadata.amount}{" "}
+                    {activity.metadata.amount === 1 ? "credit" : "credits"}
                   </span>
                 )}
                 {activity.metadata.clipCount !== undefined && (
                   <span className="inline-flex items-center text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                    {activity.metadata.clipCount} {activity.metadata.clipCount === 1 ? 'clip' : 'clips'}
+                    {activity.metadata.clipCount}{" "}
+                    {activity.metadata.clipCount === 1 ? "clip" : "clips"}
                   </span>
                 )}
                 {activity.metadata.plan && (
@@ -180,7 +309,7 @@ export function ActivityItem({ activity }: ActivityItemProps) {
                   </span>
                 )}
                 {activity.metadata.sourcePlatform && (
-                  <span className="inline-flex items-center text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/40">
+                  <span className="inline-flex items-center text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/50">
                     Platform: {String(activity.metadata.sourcePlatform)}
                   </span>
                 )}
@@ -189,63 +318,92 @@ export function ActivityItem({ activity }: ActivityItemProps) {
           </div>
         </div>
 
-        {/* Right: Timestamp and Action Button */}
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Right: Timestamp and Action Buttons */}
+        <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
           <span
-            className="text-xs text-muted-foreground hidden sm:inline-block font-mono"
+            className="text-xs text-muted-foreground font-mono"
             title={new Date(activity.createdAt).toLocaleString()}
           >
             {formatRelativeTime(activity.createdAt)}
           </span>
 
-          {activity.activityUrl && (
-            <Link href={activity.activityUrl}>
+          {targetUrl && (
+            <Link href={targetUrl}>
               <AppButton
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs font-medium gap-1.5 hover:border-primary/40 hover:bg-primary/5"
+                className="h-8 text-xs font-semibold gap-1.5 hover:border-primary/40 hover:bg-primary/5 cursor-pointer shadow-2xs"
               >
-                <span>View</span>
+                <span>{isBillingAction ? "Manage" : "View"}</span>
                 <ArrowRightIcon className="h-3.5 w-3.5 opacity-70" />
               </AppButton>
             </Link>
           )}
 
           {hasMetadata && (
-            <button
+            <AppButton
+              variant="ghost"
+              size="sm"
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs text-muted-foreground hover:text-foreground underline decoration-dotted ml-1 transition-colors"
-              title="Toggle details"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground cursor-pointer px-2"
             >
               {isExpanded ? "Hide" : "Details"}
-            </button>
+            </AppButton>
           )}
         </div>
       </div>
 
       {/* Expanded Metadata Inspector */}
       {isExpanded && hasMetadata && (
-        <div className="mt-3 pt-3 border-t border-border/20 pl-13">
-          <div className="rounded-lg bg-muted/40 border border-border/30 p-2.5 font-mono text-[11px] text-muted-foreground overflow-x-auto space-y-1">
-            <div className="text-foreground font-semibold text-[11px] mb-1">Event Payload & Metadata:</div>
-            {Object.entries(activity.metadata || {}).map(([key, value]) => (
-              <div key={key} className="flex items-center gap-2">
-                <span className="text-primary/90 font-medium">{key}:</span>
-                <span className="text-foreground">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
-              </div>
-            ))}
-            {activity.entityType && (
-              <div className="flex items-center gap-2">
-                <span className="text-primary/90 font-medium">entity:</span>
-                <span className="text-foreground">{activity.entityType} ({activity.entityId || 'none'})</span>
-              </div>
-            )}
-            {activity.ipAddress && (
-              <div className="flex items-center gap-2">
-                <span className="text-primary/90 font-medium">clientIp:</span>
-                <span className="text-foreground">{activity.ipAddress}</span>
-              </div>
-            )}
+        <div className="mt-3 pt-3 border-t border-border/30 pl-0 sm:pl-13">
+          <div className="rounded-xl bg-card border border-border/70 p-3 font-mono text-[11px] text-muted-foreground space-y-2 shadow-2xs">
+            <div className="flex items-center justify-between border-b border-border/40 pb-2">
+              <span className="text-foreground font-semibold text-xs">
+                Event Payload & Metadata
+              </span>
+              <button
+                onClick={handleCopyPayload}
+                className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                {copied ? (
+                  <>
+                    <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-emerald-500 font-medium">Copied!</span>
+                  </>
+                ) : (
+                  <span>Copy JSON</span>
+                )}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 overflow-x-auto">
+              {Object.entries(activity.metadata || {}).map(([key, value]) => (
+                <div key={key} className="flex items-center gap-2 truncate">
+                  <span className="text-primary font-medium">{key}:</span>
+                  <span className="text-foreground truncate">
+                    {typeof value === "object"
+                      ? JSON.stringify(value)
+                      : String(value)}
+                  </span>
+                </div>
+              ))}
+              {activity.entityType && (
+                <div className="flex items-center gap-2 truncate">
+                  <span className="text-primary font-medium">entity:</span>
+                  <span className="text-foreground truncate">
+                    {activity.entityType} ({activity.entityId || "none"})
+                  </span>
+                </div>
+              )}
+              {activity.ipAddress && (
+                <div className="flex items-center gap-2 truncate">
+                  <span className="text-primary font-medium">clientIp:</span>
+                  <span className="text-foreground truncate">
+                    {activity.ipAddress}
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

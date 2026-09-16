@@ -7,12 +7,19 @@ import { useRouter } from "next/navigation";
 import { AppButton } from "@/components/common/AppButton";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "@/features/auth/queries";
-import { useCreateCheckoutSession } from "@/features/billing/queries";
+import {
+  useCreateCheckoutSession,
+  useCustomerPortal,
+  invalidateCurrentUser,
+} from "@/features/billing/queries";
 import type { UserPlan as BillingUserPlan } from "./types";
 import type { BillingPlanTier } from "@/features/billing/queries";
 import { cn } from "@/lib/utils";
-import { CoinsIcon, FilmIcon, CrownIcon, CheckIcon, SparklesIcon, ZapIcon, BuildingIcon } from "@/features/dashboard/icons";
+import {
+  CoinsIcon, FilmIcon, CrownIcon, CheckIcon, SparklesIcon, ZapIcon, BuildingIcon
+} from "@/features/dashboard/icons";
 
 /* -------------------------------------------------------------------------- */
 /*                                 Types                                      */
@@ -453,6 +460,18 @@ export function BillingPage() {
     },
   });
 
+  const customerPortal = useCustomerPortal();
+
+  const handleManageSubscription = () => {
+    toast.loading("Opening subscription management portal...");
+    customerPortal.mutate(undefined, {
+      onError: (err: any) => {
+        toast.dismiss();
+        toast.error(err?.message || "Failed to open customer portal.");
+      },
+    });
+  };
+
   const creditsResetText = profile?.creditsResetAt
     ? new Date(profile.creditsResetAt).toLocaleDateString(undefined, {
       month: "short",
@@ -467,13 +486,25 @@ export function BillingPage() {
   const [dismissSuccess, setDismissSuccess] = React.useState(!showSuccess);
   const [dismissCancel, setDismissCancel] = React.useState(!showCanceled);
 
+  const queryClient = useQueryClient();
+
   React.useEffect(() => {
     if (showSuccess) {
       toast.success("Upgrade successful! Your plan & credits have been updated.");
+      invalidateCurrentUser(queryClient);
+
+      // Periodically refresh user to catch async webhook processing
+      const timers = [1500, 3500, 6000].map((delay) =>
+        setTimeout(() => {
+          invalidateCurrentUser(queryClient);
+        }, delay)
+      );
+
+      return () => timers.forEach(clearTimeout);
     } else if (showCanceled) {
       toast.info("Checkout was canceled. No charges were made.");
     }
-  }, [showSuccess, showCanceled]);
+  }, [showSuccess, showCanceled, queryClient]);
 
   React.useEffect(() => {
     if (!showSuccess && !showCanceled) return;
@@ -528,21 +559,35 @@ export function BillingPage() {
       )}
 
       {/* ── Page heading ── */}
-      <div className="space-y-1.5">
-        {profileLoading ? (
-          <div className="space-y-1.5">
-            <div className="h-8 w-56 bg-muted rounded-lg animate-pulse" />
-            <div className="h-4 w-72 bg-muted rounded-md animate-pulse" />
-          </div>
-        ) : (
-          <>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
-              Billing &amp; Plan
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Manage your subscription, view remaining credits, and upgrade anytime.
-            </p>
-          </>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1.5">
+          {profileLoading ? (
+            <div className="space-y-1.5">
+              <div className="h-8 w-56 bg-muted rounded-lg animate-pulse" />
+              <div className="h-4 w-72 bg-muted rounded-md animate-pulse" />
+            </div>
+          ) : (
+            <>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                Billing &amp; Plan
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Manage your subscription, view remaining credits, and upgrade anytime.
+              </p>
+            </>
+          )}
+        </div>
+
+        {currentPlan !== "free" && (
+          <AppButton
+            variant="outline"
+            size="sm"
+            onClick={handleManageSubscription}
+            isLoading={customerPortal.isPending}
+            className="self-start sm:self-auto"
+          >
+            Manage subscription
+          </AppButton>
         )}
       </div>
 
@@ -576,7 +621,7 @@ export function BillingPage() {
       {/* ── Footer note ── */}
       <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p>
-          All charges are in USD and processed securely by Stripe. Monthly
+          All charges are in USD and processed securely by Paddle. Monthly
           subscriptions renew automatically; cancel anytime from this page.
         </p>
         <p>

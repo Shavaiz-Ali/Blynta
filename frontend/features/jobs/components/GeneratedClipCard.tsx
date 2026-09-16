@@ -118,9 +118,10 @@ export function GeneratedClipCard({
         onClick={handleOpenClip}
         className={cn(
           "group relative flex flex-col  overflow-hidden transition-all duration-200 text-left border border-border/80 bg-card",
-          "hover:border-primary/40 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer"
+          "hover:border-primary/40 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer p-0!"
         )}
         useDefaultClasses={false}
+        contentClassName="!p-0 py-0!"
       >
         {/* ── Thumbnail Area ── */}
         <div className="relative aspect-[16/10] w-full bg-muted/40 overflow-hidden select-none">
@@ -189,7 +190,7 @@ export function GeneratedClipCard({
               </Badge>
             </div>
 
-            <h4 className="text-sm font-bold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+            <h4 className="text-sm font-bold text-foreground line-clamp-1 leading-snug group-hover:text-primary transition-colors">
               {clipTitle}
             </h4>
 

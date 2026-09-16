@@ -2,29 +2,71 @@
 
 import * as React from "react";
 import { ActivityCategory, ActivityStatus } from "../types";
-import { cn } from "@/lib/utils";
+import { AppTabs, AppTabItem } from "@/components/common/AppTabs";
+import { AppSelect } from "@/components/common/AppSelect";
+import { AppInput } from "@/components/common/AppInput";
+import { AppButton } from "@/components/common/AppButton";
+import {
+  ActivityIcon,
+  FilmIcon,
+  CoinsIcon,
+  CreditCardIcon,
+  UserIcon,
+  UserPlusIcon,
+  SearchIcon,
+  RefreshCwIcon,
+} from "@/features/dashboard/icons";
 
 interface ActivityFilterBarProps {
   activeCategory?: ActivityCategory;
   onSelectCategory: (category?: ActivityCategory) => void;
   activeStatus?: ActivityStatus;
   onSelectStatus: (status?: ActivityStatus) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+  onResetFilters: () => void;
+  isFiltered: boolean;
 }
 
-const CATEGORY_TABS: { label: string; value?: ActivityCategory }[] = [
-  { label: "All Activity", value: undefined },
-  { label: "Video Jobs", value: ActivityCategory.JOB },
-  { label: "Credits", value: ActivityCategory.CREDIT },
-  { label: "Billing", value: ActivityCategory.BILLING },
-  { label: "Account & Auth", value: ActivityCategory.ACCOUNT },
-  { label: "Referrals", value: ActivityCategory.REFERRAL },
+const CATEGORY_TABS: AppTabItem[] = [
+  {
+    value: "all",
+    label: "All Activity",
+    icon: <ActivityIcon className="h-3.5 w-3.5" />,
+  },
+  {
+    value: ActivityCategory.JOB,
+    label: "Video Jobs",
+    icon: <FilmIcon className="h-3.5 w-3.5" />,
+  },
+  {
+    value: ActivityCategory.CREDIT,
+    label: "Credits",
+    icon: <CoinsIcon className="h-3.5 w-3.5" />,
+  },
+  {
+    value: ActivityCategory.BILLING,
+    label: "Billing",
+    icon: <CreditCardIcon className="h-3.5 w-3.5" />,
+  },
+  {
+    value: ActivityCategory.ACCOUNT,
+    label: "Account & Auth",
+    icon: <UserIcon className="h-3.5 w-3.5" />,
+  },
+  {
+    value: ActivityCategory.REFERRAL,
+    label: "Referrals",
+    icon: <UserPlusIcon className="h-3.5 w-3.5" />,
+  },
 ];
 
-const STATUS_TABS: { label: string; value?: ActivityStatus }[] = [
-  { label: "All Status", value: undefined },
-  { label: "Success", value: ActivityStatus.SUCCESS },
-  { label: "In Progress", value: ActivityStatus.PENDING },
-  { label: "Failed", value: ActivityStatus.FAILED },
+const STATUS_OPTIONS = [
+  { value: "all", label: "All Status" },
+  { value: ActivityStatus.SUCCESS, label: "Success" },
+  { value: ActivityStatus.PENDING, label: "In Progress" },
+  { value: ActivityStatus.FAILED, label: "Failed" },
+  { value: ActivityStatus.CANCELLED, label: "Cancelled" },
 ];
 
 export function ActivityFilterBar({
@@ -32,47 +74,81 @@ export function ActivityFilterBar({
   onSelectCategory,
   activeStatus,
   onSelectStatus,
+  searchQuery,
+  onSearchChange,
+  onResetFilters,
+  isFiltered,
 }: ActivityFilterBarProps) {
+  const currentCategoryValue = activeCategory ?? "all";
+  const currentStatusValue = activeStatus ?? "all";
+
+  const handleTabChange = (val: string) => {
+    if (val === "all") {
+      onSelectCategory(undefined);
+    } else {
+      onSelectCategory(val as ActivityCategory);
+    }
+  };
+
+  const handleStatusChange = (val: string) => {
+    if (val === "all") {
+      onSelectStatus(undefined);
+    } else {
+      onSelectStatus(val as ActivityStatus);
+    }
+  };
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-card/40 border border-border/40 p-2 rounded-2xl">
-      {/* Category Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-        {CATEGORY_TABS.map((tab) => {
-          const isSelected = activeCategory === tab.value;
-          return (
-            <button
-              key={tab.label}
-              onClick={() => onSelectCategory(tab.value)}
-              className={cn(
-                "px-3 py-1.5 rounded-xl text-xs font-medium transition-all duration-150 whitespace-nowrap shrink-0",
-                isSelected
-                  ? "bg-primary text-primary-foreground shadow-sm font-semibold"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-              )}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
+    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5 p-3 sm:p-3.5 rounded-lg border border-border/70 bg-card/60 backdrop-blur-sm shadow-xs">
+      {/* ── Category Navigation Tabs using AppTabs ── */}
+      <div className="overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+        <AppTabs
+          value={currentCategoryValue}
+          onValueChange={handleTabChange}
+          tabs={CATEGORY_TABS}
+          variant="default"
+          size="default"
+          className="w-full sm:w-auto"
+        />
       </div>
 
-      {/* Status Filter Select */}
-      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
-        <select
-          value={activeStatus ?? ""}
-          onChange={(e) =>
-            onSelectStatus(
-              e.target.value ? (e.target.value as ActivityStatus) : undefined
-            )
-          }
-          className="h-8 rounded-xl border border-border/50 bg-background/80 px-2.5 text-xs text-muted-foreground hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-        >
-          {STATUS_TABS.map((tab) => (
-            <option key={tab.label} value={tab.value ?? ""}>
-              {tab.label}
-            </option>
-          ))}
-        </select>
+      {/* ── Search, Status & Clear Controls ── */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        {/* Search Input */}
+        <div className="min-w-[200px] sm:min-w-[240px] flex-1 sm:flex-initial">
+          <AppInput
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search by action, keyword..."
+            size="default"
+            prefixIcon={<SearchIcon className="h-3.5 w-3.5" />}
+            className="bg-background/80"
+          />
+        </div>
+
+        {/* Status Select */}
+        <div className="w-[140px]">
+          <AppSelect
+            value={currentStatusValue}
+            onValueChange={handleStatusChange}
+            size="default"
+            options={STATUS_OPTIONS}
+            className="bg-background/80"
+          />
+        </div>
+
+        {/* Reset Filter Button */}
+        {isFiltered && (
+          <AppButton
+            variant="ghost"
+            size="sm"
+            onClick={onResetFilters}
+            className="h-9 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
+            icon={<RefreshCwIcon className="h-3.5 w-3.5" />}
+          >
+            Reset
+          </AppButton>
+        )}
       </div>
     </div>
   );

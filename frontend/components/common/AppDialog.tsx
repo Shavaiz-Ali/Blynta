@@ -26,6 +26,8 @@ export interface AppDialogProps {
   footerClassName?: string;
   descriptionClassName?: string;
   size?: "sm" | "md" | "lg";
+  /** When false, clicking outside or pressing Escape will NOT close the dialog. Defaults to true. */
+  dismissible?: boolean;
 }
 
 const sizeMap = {
@@ -48,9 +50,16 @@ function AppDialog({
   footerClassName,
   descriptionClassName,
   size = "md",
+  dismissible = true,
 }: AppDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(open) => {
+        if (!dismissible) return;
+        onOpenChange(open);
+      }}
+    >
       <DialogContent
         className={cn(
           "gap-0 overflow-hidden p-0 rounded-xl",
@@ -71,6 +80,7 @@ function AppDialog({
                 {title}
               </DialogTitle>
             )}
+
             {description && (
               <DialogDescription
                 className={cn(

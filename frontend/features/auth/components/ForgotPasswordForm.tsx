@@ -14,6 +14,8 @@ import {
 } from "@/lib/validators/auth.schema";
 
 import { toast } from "sonner";
+import { useForgotPassword } from "../queries";
+import { ApiError } from "@/config/axiosClient";
 
 export interface ForgotPasswordFormProps {
   onSubmit?: SubmitHandler<ForgotPasswordInput>;
@@ -39,9 +41,22 @@ function ForgotPasswordForm({
 
   const showLoading = isSubmitting || rhfSubmitting;
 
+
+  const forgotPasswordMutation = useForgotPassword({
+    onSuccess: () => {
+      toast.success("Email sent successfully.");
+    },
+    onError: (error) => {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : (error?.message ?? "Something went wrong. Please try again.");
+      toast.error(message);
+    },
+  });
+
   const submitFn: SubmitHandler<ForgotPasswordInput> = (values, event) => {
-    if (onSubmit) return onSubmit(values, event);
-    toast.success(`Password reset instructions sent to ${values.email}!`);
+    forgotPasswordMutation.mutate(values);
   };
 
   return (
@@ -73,7 +88,8 @@ function ForgotPasswordForm({
         type="submit"
         size="lg"
         className="h-10 w-full font-semibold shadow-md hover:shadow-lg transition-all"
-        isLoading={showLoading}
+        isLoading={forgotPasswordMutation.isPending}
+        disabled={forgotPasswordMutation.isPending}
       >
         Send reset link
       </AppButton>
