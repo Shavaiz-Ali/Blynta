@@ -1,127 +1,96 @@
 "use client";
 
-import * as React from "react";
+import { AppCard } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AspectRatio } from "@/components/ui/aspect-ratio";
 
+/**
+ * Loading state mirroring the clip review composition:
+ * header, compact hero (video + clip information), then the AI insight and
+ * publishing content cards.
+ */
 export function ClipWorkspaceSkeleton() {
   return (
-    <div className="space-y-8 max-w-7xl mx-auto pb-12 animate-in fade-in duration-200">
-      {/* ── 1. Top Context & Action Bar Skeleton ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-4 w-4 rounded" />
-          <Skeleton className="h-4 w-40 sm:w-56 rounded-md" />
-          <Skeleton className="h-6 w-24 rounded-md" />
+    <div className="w-full space-y-5 pb-14" role="status" aria-label="Loading clip review">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
+        <div className="flex items-center gap-2.5">
+          <Skeleton className="h-7 w-7 rounded-lg" />
+          <div className="space-y-1.5">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-20" />
+          </div>
         </div>
         <div className="flex items-center gap-2">
-          <Skeleton className="h-8 w-24 rounded-md" />
-          <Skeleton className="h-8 w-28 rounded-md" />
-          <Skeleton className="h-8 w-8 rounded-md" />
+          <Skeleton className="h-7 w-16 rounded-lg" />
+          <Skeleton className="h-7 w-20 rounded-lg" />
+          <Skeleton className="h-7 w-24 rounded-lg" />
         </div>
       </div>
 
-      {/* ── 2. Hero 2-Column Workspace Skeleton (Large Video Left + AI Intelligence Right) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
-        {/* Left Column (5 cols): Large 9:16 Video Player */}
-        <div className="lg:col-span-5 xl:col-span-5 flex flex-col items-center gap-3 w-full">
-          <div className="w-full max-w-[420px] sm:max-w-[440px] aspect-[9/16] rounded-lg bg-muted/60 border border-border p-4 flex flex-col items-center justify-between relative overflow-hidden">
-            <Skeleton className="h-6 w-20 rounded-md self-start" />
-            <Skeleton className="h-12 w-12 rounded-full" />
-            <Skeleton className="h-8 w-full rounded-md bg-black/30" />
+      {/* Compact hero */}
+      <div className="grid items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-6">
+        <div className="w-[8.5rem] shrink-0 sm:w-[10rem]">
+          <AspectRatio ratio={9 / 16}>
+            <Skeleton className="h-full w-full rounded-lg" />
+          </AspectRatio>
+        </div>
+        <div className="min-h-[14rem] space-y-3.5 sm:min-h-[17.75rem]">
+          <Skeleton className="h-3 w-36" />
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-3/5" />
+            <Skeleton className="h-4 w-full max-w-prose" />
+            <Skeleton className="h-4 w-2/3 max-w-prose" />
           </div>
+          <Skeleton className="h-3 w-1/2" />
+          <Skeleton className="h-7 w-28 rounded-lg" />
+        </div>
+      </div>
 
-          <div className="w-full max-w-[420px] sm:max-w-[440px] p-2.5 rounded-lg bg-card border border-border flex items-center justify-between">
-            <Skeleton className="h-4 w-28 rounded-md" />
-            <Skeleton className="h-4 w-20 rounded-md" />
+      {/* AI insight card */}
+      <AppCard
+        size="sm"
+        title="AI insight"
+        headerAction={<Skeleton className="h-5 w-28 rounded-md" />}
+        contentClassName="px-3 pb-0"
+      >
+        <div className="grid w-full gap-x-8 gap-y-3.5 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-36" />
+            <Skeleton className="h-4 w-full max-w-prose" />
+            <Skeleton className="h-4 w-1/2" />
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-4 w-full" />
           </div>
         </div>
+      </AppCard>
 
-        {/* Right Column (7 cols): Identity & AI Intelligence */}
-        <div className="lg:col-span-7 xl:col-span-7 space-y-6 w-full">
-          {/* Identity Group */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-3.5 w-28 rounded-md" />
-              <Skeleton className="h-3.5 w-24 rounded-md" />
-            </div>
-            <Skeleton className="h-8 w-4/5 rounded-md" />
-            <Skeleton className="h-4 w-full rounded-md" />
-            <Skeleton className="h-4 w-3/4 rounded-md" />
-
-            <div className="flex items-center gap-2 pt-1">
-              <Skeleton className="h-6 w-20 rounded-md" />
-              <Skeleton className="h-6 w-24 rounded-md" />
-            </div>
-          </div>
-
-          <div className="h-px bg-border w-full" />
-
-          {/* AI Virality Intelligence Skeleton */}
-          <div className="space-y-4">
-            <div className="p-4 rounded-lg bg-card border border-border space-y-3">
-              <div className="flex justify-between items-center">
-                <Skeleton className="h-4 w-32 rounded-md" />
-                <Skeleton className="h-4 w-16 rounded-md" />
+      {/* Publishing content cards */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-7 w-20 rounded-lg" />
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {[0, 1, 2, 3].map((card) => (
+            <AppCard
+              key={card}
+              size="sm"
+              title={<Skeleton className="h-3 w-24" />}
+              contentClassName="px-3 pb-0"
+            >
+              <div className="space-y-1.5 py-1">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
               </div>
-              <Skeleton className="h-2 w-full rounded-full" />
-            </div>
-
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-36 rounded-md" />
-              <Skeleton className="h-12 w-full rounded-md" />
-            </div>
-
-            <Skeleton className="h-14 w-full rounded-md" />
-          </div>
-        </div>
-      </div>
-
-      {/* ── 3. Generated Shorts Rail Skeleton ── */}
-      <div className="p-3 rounded-lg bg-card border border-border space-y-2">
-        <div className="flex justify-between items-center">
-          <Skeleton className="h-4 w-36 rounded-md" />
-          <Skeleton className="h-6 w-16 rounded-md" />
-        </div>
-        <div className="flex gap-2 overflow-hidden">
-          <Skeleton className="h-8 w-24 rounded-md" />
-          <Skeleton className="h-8 w-24 rounded-md" />
-          <Skeleton className="h-8 w-24 rounded-md" />
-          <Skeleton className="h-8 w-24 rounded-md" />
-          <Skeleton className="h-8 w-24 rounded-md" />
-        </div>
-      </div>
-
-      {/* ── 4. Publishing & Studio Grid Skeleton ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch pt-2">
-        <div className="lg:col-span-7 rounded-lg border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-border">
-            <Skeleton className="h-4 w-32 rounded-md" />
-            <Skeleton className="h-8 w-32 rounded-md" />
-          </div>
-          <Skeleton className="h-10 w-full rounded-md" />
-          <Skeleton className="h-16 w-full rounded-md" />
-          <div className="flex gap-2">
-            <Skeleton className="h-6 w-16 rounded-md" />
-            <Skeleton className="h-6 w-16 rounded-md" />
-            <Skeleton className="h-6 w-16 rounded-md" />
-          </div>
-        </div>
-
-        <div className="lg:col-span-5 rounded-lg border border-border bg-card p-5 space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-border">
-            <Skeleton className="h-4 w-32 rounded-md" />
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <Skeleton className="h-12 w-full rounded-md" />
-            <Skeleton className="h-12 w-full rounded-md" />
-            <Skeleton className="h-12 w-full rounded-md" />
-          </div>
-          <Skeleton className="h-20 w-full rounded-md" />
+            </AppCard>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-// Backward compatibility export
 export const JobDetailSkeleton = ClipWorkspaceSkeleton;

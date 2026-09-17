@@ -1,0 +1,117 @@
+
+> kestro@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.12 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.122:3000
+- Environments: .env.local
+✓ Ready in 1269ms
+
+○ Compiling /dev-video-check ...
+ GET /dev-video-check 200 in 34.2s (next.js: 25.6s, application-code: 8.5s)
+✓ Finished filesystem cache database compaction in 14.3s
+ GET /dev-video-check 200 in 449ms (next.js: 33ms, application-code: 416ms)
+[auth:providers] GET http://localhost:5001/auth/providers — revalidate=0s
+[auth:providers] response status = 200 OK
+[auth:providers] resolved providers = []
+ GET /login?icon.1mp2z-mo9w4iz.svg=&callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Ficon.svg%3Ficon.1mp2z-mo9w4iz.svg%3D 200 in 3.9s (next.js: 394ms, proxy.ts: 401ms, application-code: 3.1s)
+ GET /api/auth/session 200 in 5.3s (next.js: 4.7s, application-code: 546ms)
+ GET /api/auth/session 200 in 185ms (next.js: 130ms, application-code: 55ms)
+ GET /dev-video-check 200 in 1634ms (next.js: 357ms, application-code: 1277ms)
+ GET /api/auth/session 200 in 133ms (next.js: 105ms, application-code: 27ms)
+[auth:providers] GET http://localhost:5001/auth/providers — revalidate=0s
+ GET /api/auth/session 200 in 60ms (next.js: 12ms, application-code: 48ms)
+[auth:providers] GET http://localhost:5001/auth/providers — revalidate=0s
+[auth:providers] response status = 200 OK
+[auth:providers] resolved providers = []
+ GET /login?icon.1mp2z-mo9w4iz.svg=&callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Ficon.svg%3Ficon.1mp2z-mo9w4iz.svg%3D 200 in 1009ms (next.js: 108ms, proxy.ts: 29ms, application-code: 872ms)
+[auth:providers] response status = 200 OK
+[auth:providers] resolved providers = []
+ GET /login?callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Fdev-sample.mp4 200 in 711ms (next.js: 13ms, proxy.ts: 21ms, application-code: 677ms)
+✓ Compiled in 153ms
+ GET /dev-video-check 200 in 1404ms (next.js: 280ms, application-code: 1124ms)
+ GET /api/auth/session 200 in 119ms (next.js: 99ms, application-code: 20ms)
+[auth:providers] GET http://localhost:5001/auth/providers — revalidate=0s
+ GET /api/auth/session 200 in 65ms (next.js: 11ms, application-code: 54ms)
+[auth:providers] response status = 200 OK
+[auth:providers] resolved providers = []
+ GET /login?icon.1mp2z-mo9w4iz.svg=&callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Ficon.svg%3Ficon.1mp2z-mo9w4iz.svg%3D 200 in 917ms (next.js: 70ms, proxy.ts: 94ms, application-code: 753ms)
+ GET /dev-video-check 200 in 1291ms (next.js: 418ms, application-code: 873ms)
+ GET /api/auth/session 200 in 122ms (next.js: 106ms, application-code: 16ms)
+[auth:providers] GET http://localhost:5001/auth/providers — revalidate=0s
+ GET /api/auth/session 200 in 48ms (next.js: 14ms, application-code: 33ms)
+[auth:providers] response status = 200 OK
+[auth:providers] resolved providers = []
+ GET /login?icon.1mp2z-mo9w4iz.svg=&callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Ficon.svg%3Ficon.1mp2z-mo9w4iz.svg%3D 200 in 1301ms (next.js: 114ms, proxy.ts: 70ms, application-code: 1117ms)
+[auth:providers] GET http://localhost:5001/auth/providers — revalidate=0s
+[auth:providers] response status = 200 OK
+[auth:providers] resolved providers = []
+ GET /login?callbackUrl=http%3A%2F%2Flocalhost%3A3000%2Fdev-missing.mp4 200 in 671ms (next.js: 21ms, proxy.ts: 29ms, application-code: 622ms)
+ GET /api/auth/session 200 in 313ms (next.js: 74ms, application-code: 239ms)
+ GET /api/auth/session 200 in 42ms (next.js: 10ms, application-code: 32ms)
+ GET /api/auth/session 200 in 37ms (next.js: 11ms, application-code: 26ms)
+ GET /api/auth/session 200 in 52ms (next.js: 9ms, application-code: 43ms)
+ GET /api/auth/session 200 in 34ms (next.js: 15ms, application-code: 19ms)
+ GET /api/auth/session 200 in 26ms (next.js: 6ms, application-code: 20ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 2.3s (next.js: 1246ms, proxy.ts: 31ms, application-code: 1070ms)
+ GET /api/auth/session 200 in 85ms (next.js: 27ms, application-code: 58ms)
+ GET /api/auth/session 200 in 43ms (next.js: 6ms, application-code: 37ms)
+ GET /api/auth/session 200 in 54ms (next.js: 7ms, application-code: 46ms)
+ GET /api/auth/session 200 in 28ms (next.js: 8ms, application-code: 20ms)
+ GET /api/auth/session 200 in 37ms (next.js: 19ms, application-code: 18ms)
+ GET /api/auth/session 200 in 17ms (next.js: 3ms, application-code: 14ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 419ms (next.js: 35ms, proxy.ts: 22ms, application-code: 362ms)
+ GET /api/auth/session 200 in 232ms (next.js: 83ms, application-code: 149ms)
+ GET /api/auth/session 200 in 248ms (next.js: 48ms, application-code: 200ms)
+ GET /api/auth/session 200 in 271ms (next.js: 53ms, application-code: 218ms)
+ GET /api/auth/session 200 in 79ms (next.js: 27ms, application-code: 52ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 2.7s (next.js: 142ms, proxy.ts: 1997ms, application-code: 520ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1054ms (next.js: 13ms, proxy.ts: 197ms, application-code: 843ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 888ms (next.js: 35ms, proxy.ts: 89ms, application-code: 764ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 889ms (next.js: 103ms, proxy.ts: 87ms, application-code: 698ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 894ms (next.js: 171ms, proxy.ts: 86ms, application-code: 638ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 896ms (next.js: 250ms, proxy.ts: 86ms, application-code: 560ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1262ms (next.js: 95ms, proxy.ts: 464ms, application-code: 704ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 818ms (next.js: 80ms, proxy.ts: 85ms, application-code: 652ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 12.2s (next.js: 10.7s, proxy.ts: 216ms, application-code: 1328ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 12.6s (next.js: 10.7s, proxy.ts: 538ms, application-code: 1453ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 12.3s (next.js: 11.3s, proxy.ts: 244ms, application-code: 827ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 12.0s (next.js: 11.2s, proxy.ts: 38ms, application-code: 668ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 12.4s (next.js: 11.0s, proxy.ts: 303ms, application-code: 1067ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 12.4s (next.js: 10.9s, proxy.ts: 257ms, application-code: 1276ms)
+✓ Compiled in 0ms
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1451ms (next.js: 277ms, proxy.ts: 293ms, application-code: 880ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1450ms (next.js: 574ms, proxy.ts: 296ms, application-code: 580ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1454ms (next.js: 519ms, proxy.ts: 295ms, application-code: 640ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1448ms (next.js: 662ms, proxy.ts: 293ms, application-code: 493ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1457ms (next.js: 776ms, proxy.ts: 316ms, application-code: 365ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 1270ms (next.js: 889ms, proxy.ts: 129ms, application-code: 252ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 573ms (next.js: 39ms, proxy.ts: 89ms, application-code: 444ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 573ms (next.js: 85ms, proxy.ts: 91ms, application-code: 397ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 576ms (next.js: 156ms, proxy.ts: 90ms, application-code: 330ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 568ms (next.js: 212ms, proxy.ts: 84ms, application-code: 272ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 570ms (next.js: 268ms, proxy.ts: 79ms, application-code: 224ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 577ms (next.js: 323ms, proxy.ts: 67ms, application-code: 186ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 557ms (next.js: 88ms, proxy.ts: 78ms, application-code: 390ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 561ms (next.js: 24ms, proxy.ts: 78ms, application-code: 458ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 552ms (next.js: 150ms, proxy.ts: 68ms, application-code: 334ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 556ms (next.js: 201ms, proxy.ts: 68ms, application-code: 287ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 549ms (next.js: 277ms, proxy.ts: 60ms, application-code: 212ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 552ms (next.js: 217ms, proxy.ts: 167ms, application-code: 168ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 553ms (next.js: 57ms, proxy.ts: 59ms, application-code: 438ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 553ms (next.js: 114ms, proxy.ts: 55ms, application-code: 383ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 551ms (next.js: 163ms, proxy.ts: 65ms, application-code: 324ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 552ms (next.js: 224ms, proxy.ts: 64ms, application-code: 264ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 552ms (next.js: 269ms, proxy.ts: 62ms, application-code: 220ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 552ms (next.js: 205ms, proxy.ts: 185ms, application-code: 162ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 606ms (next.js: 26ms, proxy.ts: 61ms, application-code: 519ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 601ms (next.js: 88ms, proxy.ts: 55ms, application-code: 458ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 601ms (next.js: 142ms, proxy.ts: 54ms, application-code: 404ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 599ms (next.js: 219ms, proxy.ts: 51ms, application-code: 329ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 597ms (next.js: 339ms, proxy.ts: 48ms, application-code: 211ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 698ms (next.js: 347ms, proxy.ts: 103ms, application-code: 249ms)
+ GET /api/auth/session 200 in 151ms (next.js: 93ms, application-code: 58ms)
+ GET /api/auth/session 200 in 39ms (next.js: 7ms, application-code: 33ms)
+ GET /my-clips/6aaa61b69425e70347208064/clips/6aaa6447d71bcefd02f635b2 200 in 316ms (next.js: 31ms, proxy.ts: 151ms, application-code: 135ms)
+[?25h

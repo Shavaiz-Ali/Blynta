@@ -1,7 +1,10 @@
 export { StudioVideoPlayer } from "./StudioVideoPlayer";
+export { ClipMediaStage, MEDIA_STAGE_STYLE } from "./ClipMediaStage";
+export { useVideoPlayback } from "./useVideoPlayback";
 export { PlayerTopBar } from "./PlayerTopBar";
 export { PlayerMenuDropdown } from "./PlayerMenuDropdown";
 export { PlayerOverlay } from "./PlayerOverlay";
 export { PlayerScrubber } from "./PlayerScrubber";
 export { PlayerControls } from "./PlayerControls";
-export type { StudioVideoPlayerProps, PlayerMenuActions } from "./types";
+export type { StudioVideoPlayerProps, ClipMediaStageProps, PlayerMenuActions } from "./types";
+export type { UseVideoPlaybackOptions, VideoPlayback } from "./useVideoPlayback";

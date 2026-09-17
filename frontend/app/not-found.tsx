@@ -12,11 +12,21 @@ export default function NotFound() {
 
   return (
     <div className="min-h-screen w-full flex flex-col bg-background text-foreground relative overflow-hidden selection:bg-primary/20">
-      {/* ── Ambient Background Glow & Grid ── */}
+      {/* ── Ambient Theme Background (matches (auth)/layout visual language) ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute -top-40 left-1/2 -translate-x-1/2 w-[700px] h-[450px] bg-primary/10 rounded-full blur-[120px]" />
-        <div className="absolute top-1/2 -left-40 w-[500px] h-[350px] bg-chart-4/10 rounded-full blur-[100px]" />
-        <div className="absolute -bottom-20 -right-20 w-[600px] h-[400px] bg-primary/10 rounded-full blur-[120px]" />
+        {/* Radial gradient glow mesh */}
+        <div
+          className="absolute inset-0 opacity-40 pointer-events-none"
+          style={{
+            background: `
+              radial-gradient(circle at 25% 20%, var(--primary) 0%, transparent 45%),
+              radial-gradient(circle at 75% 45%, var(--chart-4) 0%, transparent 40%),
+              radial-gradient(circle at 50% 85%, var(--secondary) 0%, transparent 55%)
+            `,
+            filter: "blur(70px)",
+          }}
+        />
+        {/* Dotted grid overlay */}
         <div
           className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05]"
           style={{
@@ -43,43 +53,21 @@ export default function NotFound() {
 
       {/* ── Main 404 Hero Section ── */}
       <main className="flex-1 relative z-10 flex flex-col items-center justify-center px-4 sm:px-6 text-center py-12">
-        <div className="max-w-2xl mx-auto flex flex-col items-center space-y-6">
+        <div className="max-w-2xl mx-auto flex flex-col items-center space-y-7">
           {/* Status Badge */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-card/80 border border-primary/20 text-xs font-medium text-foreground shadow-sm backdrop-blur-md animate-in fade-in zoom-in-90 duration-300">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-medium shadow-sm backdrop-blur-md">
             <span className="flex h-2 w-2 rounded-full bg-destructive animate-pulse" />
-            <span className="font-mono text-[11px] font-bold tracking-wider uppercase text-muted-foreground">
-              ERROR 404 • SCENE NOT FOUND
+            <span className="font-mono text-[11px] font-bold tracking-wider uppercase">
+              ERROR 404 &bull; SCENE NOT FOUND
             </span>
           </div>
 
-          {/* Stylized 404 Number with Video Reel Cutout */}
-          <div className="relative select-none my-2">
-            <h1 className="text-8xl sm:text-9xl lg:text-[11rem] font-black tracking-tighter leading-none bg-gradient-to-b from-foreground via-foreground/70 to-foreground/20 bg-clip-text text-transparent">
+          {/* Stylized 404 in brand gradient */}
+          <h1 className="text-8xl sm:text-9xl font-black tracking-tighter leading-none">
+            <span className="bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent">
               404
-            </h1>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="p-3 rounded-2xl bg-card/90 border border-border/80 shadow-2xl backdrop-blur-xl text-primary animate-bounce duration-1000">
-                <svg
-                  className="h-8 w-8 sm:h-10 sm:w-10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect width="18" height="18" x="3" y="3" rx="2" />
-                  <path d="M7 3v18" />
-                  <path d="M3 7.5h4" />
-                  <path d="M3 12h18" />
-                  <path d="M3 16.5h4" />
-                  <path d="M17 3v18" />
-                  <path d="M17 7.5h4" />
-                  <path d="M17 16.5h4" />
-                </svg>
-              </div>
-            </div>
-          </div>
+            </span>
+          </h1>
 
           {/* Heading & Subtitle */}
           <div className="space-y-3">

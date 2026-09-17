@@ -51,8 +51,21 @@ export {
   ClipAnalysis,
 } from "./components/ClipAnalysis";
 export {
-  ClipEditorPanel,
-} from "./components/ClipEditorPanel";
+  ClipHeader,
+  ClipPreview,
+  ClipInformation,
+  VideoWorkspaceDialog,
+  AIInsights,
+  PublishingPackage,
+} from "./components/clip-detail";
+export type {
+  ClipHeaderProps,
+  ClipPreviewProps,
+  ClipInformationProps,
+  VideoWorkspaceDialogProps,
+  AIInsightsProps,
+  PublishingPackageProps,
+} from "./components/clip-detail";
 export {
   JobDetailContent,
   PipelineStepper,
