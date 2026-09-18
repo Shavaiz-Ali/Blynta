@@ -32,6 +32,8 @@ import {
   PublishingPackage,
   VideoWorkspaceDialog,
 } from "./clip-detail";
+import { ShareDialog } from "@/features/shares";
+import { PublishToYouTubeDialog } from "@/features/youtube";
 import { toast } from "sonner";
 
 export interface ClipDetailViewProps {
@@ -56,6 +58,8 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   const { data: profile } = useCurrentUser();
   const { data: job, isLoading, error } = useJob(jobId);
 
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [youtubePublishOpen, setYoutubePublishOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [transcriptOpen, setTranscriptOpen] = React.useState(false);
   const [videoPlayerOpen, setVideoPlayerOpen] = React.useState(false);
@@ -123,6 +127,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   const {
     data: videoSrc,
     isLoading: videoLoading,
+    isFetching: videoFetching,
     isError: videoError,
     refetch: refetchVideoSrc,
   } = useClipSignedUrl(jobId, clipId, {
@@ -319,7 +324,8 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
           totalClips={totalClips}
           onDownload={handleDownload}
           isDownloading={isDownloading}
-          onShare={handleShare}
+          onShare={() => setShareOpen(true)}
+          onPublishYouTube={() => setYoutubePublishOpen(true)}
           hasTranscript={Boolean(job.transcript?.length)}
           onOpenTranscript={() => setTranscriptOpen(true)}
           sourceUrl={job.sourceUrl}
@@ -371,7 +377,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         title={clipTitle}
         context={contextLine}
         videoSrc={videoSrc}
-        videoLoading={videoLoading}
+        videoLoading={(videoLoading || videoFetching) && !videoSrc}
         videoError={videoError}
         poster={job.thumbnailUrl}
         aspectLabel="9:16 Short"
@@ -429,6 +435,25 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
             </Button>
           </>
         }
+      />
+
+      {/* Share Dialog */}
+      <ShareDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        jobId={jobId}
+        clipId={clipId}
+        clipTitle={clipTitle}
+      />
+
+      {/* Publish to YouTube Dialog */}
+      <PublishToYouTubeDialog
+        open={youtubePublishOpen}
+        onOpenChange={setYoutubePublishOpen}
+        jobId={jobId}
+        clipId={clipId}
+        clipTitle={clipTitle}
+        defaultDescription={activeHighlight?.clipDescription}
       />
     </DashboardLayout>
   );

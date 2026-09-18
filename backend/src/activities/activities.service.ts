@@ -72,7 +72,7 @@ export class ActivitiesService {
     private readonly activityModel: Model<ActivityDocument>,
     @InjectQueue(ACTIVITIES_QUEUE)
     private readonly activitiesQueue: Queue,
-  ) {}
+  ) { }
 
   private toObjectId(value: ObjectIdLike): Types.ObjectId {
     if (value instanceof Types.ObjectId) {
@@ -168,6 +168,7 @@ export class ActivitiesService {
         removeOnComplete: 1000,
         removeOnFail: 5000,
       });
+
     } catch (err) {
       this.logger.warn(
         `Failed to enqueue activity [${input.type}] for user ${input.userId}: ${err instanceof Error ? err.message : err}`,

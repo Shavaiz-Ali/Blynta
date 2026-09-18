@@ -34,3 +34,6 @@ export {
 } from "./AppCard";
 export type { AppCardProps } from "./AppCard";
 
+export { AppTextarea } from "./AppTextarea";
+export type { AppTextareaProps } from "./AppTextarea";
+

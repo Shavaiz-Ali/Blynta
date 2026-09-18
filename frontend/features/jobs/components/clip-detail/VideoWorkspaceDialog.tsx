@@ -85,7 +85,7 @@ export function VideoWorkspaceDialog({
   onDownloadTranscript,
   onDownloadSubtitles,
 }: VideoWorkspaceDialogProps) {
-  const unavailable = videoError || !videoSrc;
+  const unavailable = !videoLoading && (videoError || !videoSrc);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

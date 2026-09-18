@@ -116,7 +116,12 @@ export function AppSelect({
             ) : undefined}
           </SelectValue>
         </SelectTrigger>
-        <SelectContent className={cn("rounded-md border-border bg-popover text-popover-foreground shadow-md", contentClassName)}>
+        <SelectContent
+          className={cn(
+            "w-[var(--anchor-width)] min-w-[var(--anchor-width)] rounded-md border-border bg-popover text-popover-foreground shadow-md",
+            contentClassName
+          )}
+        >
           {children
             ? children
             : options?.map((opt) => (

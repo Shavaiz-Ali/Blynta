@@ -18,6 +18,7 @@ import {
   MoreVerticalIcon,
   Share2Icon,
   TrashIcon,
+  YouTubeIcon,
 } from "@/features/dashboard/icons";
 
 export interface ClipHeaderProps {
@@ -28,6 +29,7 @@ export interface ClipHeaderProps {
   onDownload: () => void;
   isDownloading: boolean;
   onShare: () => void;
+  onPublishYouTube?: () => void;
   hasTranscript: boolean;
   onOpenTranscript: () => void;
   sourceUrl?: string;
@@ -49,6 +51,7 @@ export function ClipHeader({
   onDownload,
   isDownloading,
   onShare,
+  onPublishYouTube,
   hasTranscript,
   onOpenTranscript,
   sourceUrl,
@@ -79,6 +82,26 @@ export function ClipHeader({
 
       {/* Utility actions */}
       <div className="flex shrink-0 items-center gap-1.5">
+        {onPublishYouTube && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onPublishYouTube}
+                  aria-label="Publish to YouTube"
+                  className="cursor-pointer gap-1.5"
+                >
+                  <YouTubeIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Publish</span>
+                </Button>
+              }
+            />
+            <TooltipContent className="text-xs">Publish directly to YouTube</TooltipContent>
+          </Tooltip>
+        )}
+
         <Tooltip>
           <TooltipTrigger
             render={
@@ -140,6 +163,15 @@ export function ClipHeader({
             </Button>
           }
           items={[
+            ...(onPublishYouTube
+              ? [
+                  {
+                    label: "Publish to YouTube",
+                    onClick: onPublishYouTube,
+                    icon: <YouTubeIcon className="h-3.5 w-3.5" />,
+                  },
+                ]
+              : []),
             { label: "Share link", onClick: onShare, icon: <Share2Icon /> },
             ...(hasTranscript
               ? [

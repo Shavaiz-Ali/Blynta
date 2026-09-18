@@ -120,7 +120,7 @@ export class JobsController {
 
     const signedUrl = await this.r2Service.getSignedDownloadUrl(clip.r2ObjectKey, 3600);
 
-    await this.activitiesService.queueCreate({
+    this.activitiesService.queueCreate({
       userId: req.user.userId,
       type: ActivityType.CLIP_DOWNLOAD,
       category: ActivityCategory.JOB,

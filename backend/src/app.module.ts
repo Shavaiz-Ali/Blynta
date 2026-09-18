@@ -16,6 +16,8 @@ import { BillingModule } from './billing/billing.module';
 import { CommonModule } from './common/common.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ActivitiesModule } from './activities/activities.module';
+import { SharesModule } from './share/shares.module';
+import { YouTubeModule } from './youtube/youtube.module';
 
 const logger = new Logger('MongooseModule');
 
@@ -69,6 +71,8 @@ const logger = new Logger('MongooseModule');
     AuthModule,
     JobsModule,
     RedisModule,
+    SharesModule,
+    YouTubeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
