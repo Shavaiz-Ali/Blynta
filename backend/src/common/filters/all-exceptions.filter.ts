@@ -1,4 +1,11 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import { DomainException } from '../exceptions/domain.exception';
 import { ZodValidationException } from 'nestjs-zod';
@@ -11,7 +18,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    
+
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let message = 'Something went wrong';
     let code = 'INTERNAL_ERROR';
@@ -28,8 +35,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       status = HttpStatus.BAD_REQUEST;
       code = 'VALIDATION_ERROR';
       message = 'Validation failed';
-      const zodError = exception.getZodError() as { issues: Array<{ path: (string | number)[]; message: string }> };
-      details = zodError.issues.map(issue => ({
+      const zodError = exception.getZodError() as {
+        issues: Array<{ path: (string | number)[]; message: string }>;
+      };
+      details = zodError.issues.map((issue) => ({
         path: issue.path.join('.'),
         message: issue.message,
       }));
@@ -38,9 +47,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
     else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse() as any;
-      
-      message = typeof exceptionResponse === 'string' ? exceptionResponse : (exceptionResponse.message || exception.message);
-      
+
+      message =
+        typeof exceptionResponse === 'string'
+          ? exceptionResponse
+          : exceptionResponse.message || exception.message;
+
       if (status === HttpStatus.BAD_REQUEST && Array.isArray(message)) {
         details = message;
         message = 'Validation failed';
@@ -48,15 +60,20 @@ export class AllExceptionsFilter implements ExceptionFilter {
       } else {
         code = this.getCodeFromStatus(status);
         if (Array.isArray(message)) {
-           message = message.join(', ');
+          message = message.join(', ');
         }
       }
-    } 
+    }
     // 4. Mongoose/MongoDB errors
-    else if (exception.name === 'MongoServerError' && exception.code === 11000) {
+    else if (
+      exception.name === 'MongoServerError' &&
+      exception.code === 11000
+    ) {
       status = HttpStatus.CONFLICT;
       code = 'DUPLICATE_KEY';
-      const keyPattern = exception.keyPattern ? Object.keys(exception.keyPattern).join(', ') : 'unknown field';
+      const keyPattern = exception.keyPattern
+        ? Object.keys(exception.keyPattern).join(', ')
+        : 'unknown field';
       message = `${keyPattern} already in use`;
     } else if (exception.name === 'ValidationError') {
       status = HttpStatus.BAD_REQUEST;
@@ -69,7 +86,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message = 'Invalid ID format';
     } else {
       // 4. Any other unhandled/unexpected error
-      this.logger.error(`Unhandled Exception: ${exception.message}`, exception.stack);
+      this.logger.error(
+        `Unhandled Exception: ${exception.message}`,
+        exception.stack,
+      );
     }
 
     const errorPayload: any = {
@@ -90,12 +110,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   private getCodeFromStatus(status: number): string {
     switch (status) {
-      case HttpStatus.BAD_REQUEST: return 'BAD_REQUEST';
-      case HttpStatus.UNAUTHORIZED: return 'UNAUTHORIZED';
-      case HttpStatus.FORBIDDEN: return 'FORBIDDEN';
-      case HttpStatus.NOT_FOUND: return 'NOT_FOUND';
-      case HttpStatus.CONFLICT: return 'CONFLICT';
-      default: return 'INTERNAL_ERROR';
+      case HttpStatus.BAD_REQUEST:
+        return 'BAD_REQUEST';
+      case HttpStatus.UNAUTHORIZED:
+        return 'UNAUTHORIZED';
+      case HttpStatus.FORBIDDEN:
+        return 'FORBIDDEN';
+      case HttpStatus.NOT_FOUND:
+        return 'NOT_FOUND';
+      case HttpStatus.CONFLICT:
+        return 'CONFLICT';
+      default:
+        return 'INTERNAL_ERROR';
     }
   }
 }

@@ -148,9 +148,7 @@ export class BillingService {
 
       return { checkoutUrl };
     } catch (err: any) {
-      this.logger.error(
-        `Failed to create Paddle transaction: ${err?.message}`,
-      );
+      this.logger.error(`Failed to create Paddle transaction: ${err?.message}`);
       throw new InternalServerErrorException(
         `Failed to create Paddle checkout session: ${
           err?.message ?? 'unknown error'
@@ -467,9 +465,7 @@ export class BillingService {
     const scheduledChangeAction = scheduledChange?.action ?? null;
     const scheduledChangeAt =
       scheduledChange?.effectiveAt || scheduledChange?.effective_at
-        ? new Date(
-            scheduledChange.effectiveAt || scheduledChange.effective_at,
-          )
+        ? new Date(scheduledChange.effectiveAt || scheduledChange.effective_at)
         : null;
 
     let userEmail: string | undefined;

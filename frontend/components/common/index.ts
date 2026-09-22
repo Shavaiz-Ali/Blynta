@@ -37,3 +37,5 @@ export type { AppCardProps } from "./AppCard";
 export { AppTextarea } from "./AppTextarea";
 export type { AppTextareaProps } from "./AppTextarea";
 
+export { AppSteps } from "./AppSteps";
+export type { AppStepsProps, AppStepDef } from "./AppSteps";

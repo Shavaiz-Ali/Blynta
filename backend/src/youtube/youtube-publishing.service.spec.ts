@@ -73,7 +73,9 @@ describe('YouTubePublishingService', () => {
     it('should return connected: false when no connection exists', async () => {
       mockOAuthService.findConnectionByUserId.mockResolvedValue(null);
 
-      const status = await service.getConnectionStatus('507f1f77bcf86cd799439011');
+      const status = await service.getConnectionStatus(
+        '507f1f77bcf86cd799439011',
+      );
       expect(status).toEqual({ connected: false, channel: null });
     });
 
@@ -84,7 +86,9 @@ describe('YouTubePublishingService', () => {
         channelThumbnail: 'http://img.url',
       });
 
-      const status = await service.getConnectionStatus('507f1f77bcf86cd799439011');
+      const status = await service.getConnectionStatus(
+        '507f1f77bcf86cd799439011',
+      );
       expect(status.connected).toBe(true);
       expect(status.channel?.title).toBe('My Channel');
     });
@@ -115,9 +119,13 @@ describe('YouTubePublishingService', () => {
         job: {},
         clip: { id: clipId, r2ObjectKey: 'path/to/clip.mp4' },
       });
-      mockOAuthService.findConnectionByUserId.mockResolvedValue({ channelId: 'UC123' });
+      mockOAuthService.findConnectionByUserId.mockResolvedValue({
+        channelId: 'UC123',
+      });
       mockFindOne.mockReturnValue({
-        exec: jest.fn().mockResolvedValue({ status: PublicationStatus.UPLOADING }),
+        exec: jest
+          .fn()
+          .mockResolvedValue({ status: PublicationStatus.UPLOADING }),
       });
 
       await expect(
@@ -133,7 +141,9 @@ describe('YouTubePublishingService', () => {
         job: {},
         clip: { id: clipId, r2ObjectKey: 'path/to/clip.mp4' },
       });
-      mockOAuthService.findConnectionByUserId.mockResolvedValue({ channelId: 'UC123' });
+      mockOAuthService.findConnectionByUserId.mockResolvedValue({
+        channelId: 'UC123',
+      });
       mockFindOne.mockReturnValue({
         exec: jest.fn().mockResolvedValue(null),
       });
@@ -190,7 +200,12 @@ describe('YouTubePublishingService', () => {
         exec: jest.fn().mockResolvedValue(mockPub),
       });
 
-      const result = await service.retryPublication(userId, jobId, clipId, pubId);
+      const result = await service.retryPublication(
+        userId,
+        jobId,
+        clipId,
+        pubId,
+      );
       expect(result.success).toBe(true);
       expect(mockPub.status).toBe(PublicationStatus.QUEUED);
       expect(mockPub.error).toBeUndefined();

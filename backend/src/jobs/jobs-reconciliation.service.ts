@@ -25,7 +25,10 @@ export class JobsReconciliationService {
     private jobsService: JobsService,
     private configService: ConfigService,
   ) {
-    this.storageRoot = this.configService.get<string>('STORAGE_ROOT', '/var/blynta/storage');
+    this.storageRoot = this.configService.get<string>(
+      'STORAGE_ROOT',
+      '/var/blynta/storage',
+    );
   }
 
   @Cron(CronExpression.EVERY_5_MINUTES)
@@ -35,10 +38,15 @@ export class JobsReconciliationService {
     }
 
     const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MS);
-    const stuckJobs = await this.jobsService.findStuckJobs(PROCESSING_STATUSES, cutoff);
+    const stuckJobs = await this.jobsService.findStuckJobs(
+      PROCESSING_STATUSES,
+      cutoff,
+    );
 
     if (stuckJobs.length === 0) return;
-    this.logger.warn(`Found ${stuckJobs.length} stuck job(s), marking as FAILED`);
+    this.logger.warn(
+      `Found ${stuckJobs.length} stuck job(s), marking as FAILED`,
+    );
 
     for (const job of stuckJobs) {
       const jobId = job._id.toString();
@@ -47,7 +55,9 @@ export class JobsReconciliationService {
         errorMessage: `Job exceeded ${STUCK_THRESHOLD_MS / 60000} minutes without progress — likely orphaned by a server restart or crash.`,
         errorStage: 'reconciliation',
       });
-      this.logger.warn(`[${jobId}] Marked stuck job as FAILED (was status=${job.status})`);
+      this.logger.warn(
+        `[${jobId}] Marked stuck job as FAILED (was status=${job.status})`,
+      );
     }
   }
 
@@ -65,17 +75,22 @@ export class JobsReconciliationService {
     }
 
     const cutoff = new Date(Date.now() - ABANDONED_JOB_TTL_MS);
-    const abandonedJobs = await this.jobsService.findAbandonedFailedJobs(cutoff);
+    const abandonedJobs =
+      await this.jobsService.findAbandonedFailedJobs(cutoff);
 
     if (abandonedJobs.length === 0) return;
-    this.logger.log(`Sweeping ${abandonedJobs.length} abandoned failed job director(ies) (older than 7 days)`);
+    this.logger.log(
+      `Sweeping ${abandonedJobs.length} abandoned failed job director(ies) (older than 7 days)`,
+    );
 
     for (const job of abandonedJobs) {
       const jobId = job._id.toString();
       const jobDir = path.join(this.storageRoot, 'jobs', jobId);
       try {
         await fs.promises.rm(jobDir, { recursive: true, force: true });
-        this.logger.log(`[${jobId}] Swept abandoned failed job directory: ${jobDir}`);
+        this.logger.log(
+          `[${jobId}] Swept abandoned failed job directory: ${jobDir}`,
+        );
       } catch (err) {
         this.logger.warn(
           `[${jobId}] Failed to sweep job directory ${jobDir}: ${err instanceof Error ? err.message : err}`,

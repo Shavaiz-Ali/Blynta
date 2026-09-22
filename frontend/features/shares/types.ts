@@ -2,6 +2,7 @@ export interface ShareView {
   id: string;
   jobId: string;
   clipId: string;
+  token?: string | null;
   isActive: boolean;
   expiresAt: string | null;
   revokedAt: string | null;

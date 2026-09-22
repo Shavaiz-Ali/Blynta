@@ -29,4 +29,4 @@ import { JobsReconciliationService } from './jobs-reconciliation.service';
   providers: [JobsService],
   exports: [JobsService, BullModule, MongooseModule],
 })
-export class JobsModule { }
+export class JobsModule {}

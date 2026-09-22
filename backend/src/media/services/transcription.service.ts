@@ -29,17 +29,28 @@ export class TranscriptionService {
     private configService: ConfigService,
     private processRegistry: ProcessRegistryService,
   ) {
-    this.provider = this.configService.get<string>('TRANSCRIPTION_PROVIDER', 'groq');
+    this.provider = this.configService.get<string>(
+      'TRANSCRIPTION_PROVIDER',
+      'groq',
+    );
     if (this.provider === 'groq') {
       const apiKey = this.configService.get<string>('GROQ_API_KEY');
       if (!apiKey) {
-        throw new Error('GROQ_API_KEY is not configured but TRANSCRIPTION_PROVIDER=groq');
+        throw new Error(
+          'GROQ_API_KEY is not configured but TRANSCRIPTION_PROVIDER=groq',
+        );
       }
       this.groq = new Groq({ apiKey });
-      this.modelName = this.configService.get<string>('GROQ_WHISPER_MODEL', 'whisper-large-v3-turbo');
+      this.modelName = this.configService.get<string>(
+        'GROQ_WHISPER_MODEL',
+        'whisper-large-v3-turbo',
+      );
     } else if (this.provider === 'whisper-cpp') {
-      this.whisperBinaryPath = this.configService.get<string>('WHISPER_BINARY_PATH');
-      this.whisperModelPath = this.configService.get<string>('WHISPER_MODEL_PATH');
+      this.whisperBinaryPath = this.configService.get<string>(
+        'WHISPER_BINARY_PATH',
+      );
+      this.whisperModelPath =
+        this.configService.get<string>('WHISPER_MODEL_PATH');
       if (!this.whisperBinaryPath || !this.whisperModelPath) {
         throw new Error(
           'WHISPER_BINARY_PATH or WHISPER_MODEL_PATH is not configured when TRANSCRIPTION_PROVIDER=whisper-cpp',
@@ -71,7 +82,9 @@ export class TranscriptionService {
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
   ): Promise<TranscriptSegmentDto[]> {
-    this.logger.log(`Transcribing ${audioPath} with Groq (model=${this.modelName})`);
+    this.logger.log(
+      `Transcribing ${audioPath} with Groq (model=${this.modelName})`,
+    );
 
     const { uploadPath, isTemp } = await this.prepareAudioForUpload(audioPath);
     const stopProgressSimulation = this.simulateProgress(audioPath, onProgress);
@@ -99,13 +112,17 @@ export class TranscriptionService {
           await fs.promises.unlink(uploadPath);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          this.logger.warn(`Failed to clean up compressed audio file: ${message}`);
+          this.logger.warn(
+            `Failed to clean up compressed audio file: ${message}`,
+          );
         }
       }
     }
   }
 
-  private async prepareAudioForUpload(audioPath: string): Promise<{ uploadPath: string; isTemp: boolean }> {
+  private async prepareAudioForUpload(
+    audioPath: string,
+  ): Promise<{ uploadPath: string; isTemp: boolean }> {
     const stats = await fs.promises.stat(audioPath);
     if (stats.size <= GROQ_MAX_FILE_BYTES) {
       return { uploadPath: audioPath, isTemp: false };
@@ -118,7 +135,14 @@ export class TranscriptionService {
 
     await runCommandWithProgress(
       'ffmpeg',
-      ['-i', audioPath, '-b:a', `${COMPRESSED_BITRATE_KBPS}k`, '-y', compressedPath],
+      [
+        '-i',
+        audioPath,
+        '-b:a',
+        `${COMPRESSED_BITRATE_KBPS}k`,
+        '-y',
+        compressedPath,
+      ],
       () => {},
       this.processRegistry,
     );
@@ -191,7 +215,10 @@ export class TranscriptionService {
       onProgress(2); // immediate feedback that the request started
       intervalId = setInterval(() => {
         elapsedMs += tickIntervalMs;
-        const simulated = Math.min(maxSimulatedPercent, Math.round((elapsedMs / estimatedTotalMs) * 100));
+        const simulated = Math.min(
+          maxSimulatedPercent,
+          Math.round((elapsedMs / estimatedTotalMs) * 100),
+        );
         onProgress(simulated);
       }, tickIntervalMs);
     });
@@ -209,7 +236,9 @@ export class TranscriptionService {
       // Fallback: some responses may omit segment-level timestamps for very
       // short audio — return one segment spanning the whole thing rather
       // than silently dropping the transcript.
-      this.logger.warn('Groq response had no segment timestamps — returning single full-text segment');
+      this.logger.warn(
+        'Groq response had no segment timestamps — returning single full-text segment',
+      );
       return [{ startTime: 0, endTime: 0, text: transcription.text.trim() }];
     }
     return segments.map((seg: any) => ({
@@ -225,11 +254,15 @@ export class TranscriptionService {
     initialPrompt?: string,
   ): Promise<TranscriptSegmentDto[]> {
     if (!this.whisperBinaryPath || !this.whisperModelPath) {
-      throw new Error('WHISPER_BINARY_PATH or WHISPER_MODEL_PATH is not configured');
+      throw new Error(
+        'WHISPER_BINARY_PATH or WHISPER_MODEL_PATH is not configured',
+      );
     }
 
     const outputBase = audioPath.replace(/\.wav$/, '');
-    this.logger.log(`Transcribing ${audioPath} with whisper.cpp (model=${this.whisperModelPath})`);
+    this.logger.log(
+      `Transcribing ${audioPath} with whisper.cpp (model=${this.whisperModelPath})`,
+    );
 
     const binary = this.whisperBinaryPath;
     const args = [
@@ -295,7 +328,9 @@ export class TranscriptionService {
     }
 
     if (!jsonPath) {
-      throw new Error(`Whisper transcription finished but no output JSON file was found at ${outputBase}.json`);
+      throw new Error(
+        `Whisper transcription finished but no output JSON file was found at ${outputBase}.json`,
+      );
     }
 
     this.logger.log(`Reading whisper output from ${jsonPath}`);

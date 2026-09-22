@@ -3,6 +3,10 @@ import { DomainException } from './domain.exception';
 
 export class InvalidCredentialsException extends DomainException {
   constructor() {
-    super('Invalid credentials', HttpStatus.UNAUTHORIZED, 'INVALID_CREDENTIALS');
+    super(
+      'Invalid credentials',
+      HttpStatus.UNAUTHORIZED,
+      'INVALID_CREDENTIALS',
+    );
   }
 }

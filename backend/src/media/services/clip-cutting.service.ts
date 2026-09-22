@@ -16,11 +16,20 @@ export class ClipCuttingService {
   ): Promise<string> {
     const duration = endTime - startTime;
     if (duration <= 0) {
-      throw new Error(`Invalid clip range: startTime=${startTime}, endTime=${endTime}`);
+      throw new Error(
+        `Invalid clip range: startTime=${startTime}, endTime=${endTime}`,
+      );
     }
 
-    this.logger.log(`Cutting clip: ${sourceVideoPath} [${startTime}s - ${endTime}s] -> ${outputPath}`);
-    await this.cutAndCropWithFfmpeg(sourceVideoPath, startTime, duration, outputPath);
+    this.logger.log(
+      `Cutting clip: ${sourceVideoPath} [${startTime}s - ${endTime}s] -> ${outputPath}`,
+    );
+    await this.cutAndCropWithFfmpeg(
+      sourceVideoPath,
+      startTime,
+      duration,
+      outputPath,
+    );
     return outputPath;
   }
 
@@ -43,7 +52,9 @@ export class ClipCuttingService {
         .outputOptions(['-y'])
         .on('end', () => resolve())
         .on('error', (err: Error, stdout: string, stderr: string) => {
-          this.logger.error(`ffmpeg clip cut failed: ${err.message}\n${stderr}`);
+          this.logger.error(
+            `ffmpeg clip cut failed: ${err.message}\n${stderr}`,
+          );
           reject(new Error(`ffmpeg clip cut failed: ${err.message}`));
         });
 

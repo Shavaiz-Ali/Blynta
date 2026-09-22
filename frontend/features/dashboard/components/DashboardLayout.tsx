@@ -20,7 +20,7 @@ import {
   ClockIcon,
   CreditCardIcon,
   SettingsIcon,
-  FolderIcon,
+  UploadIcon,
   Share2Icon,
   UserIcon,
   ActivityIcon,
@@ -75,7 +75,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Home", href: "/dashboard", icon: Icon.LayoutDashboard },
       { label: "My Clips", href: "/my-clips", icon: FilmIcon },
-      { label: "Projects", href: "/jobs", icon: FolderIcon },
+      { label: "Publications", href: "/publications", icon: UploadIcon },
     ],
   },
   {
@@ -84,10 +84,8 @@ export const navGroups: NavGroup[] = [
       { label: "Calendar", href: "/jobs", icon: ClockIcon },
       {
         label: "Social Accounts",
-        href: "#",
+        href: "/social-accounts",
         icon: Share2Icon,
-        badge: "Soon",
-        disabled: true,
       },
     ],
   },

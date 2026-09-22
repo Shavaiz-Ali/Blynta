@@ -31,7 +31,8 @@ export class TranscriptSegment {
   @Prop({ required: true })
   text: string;
 }
-export const TranscriptSegmentSchema = SchemaFactory.createForClass(TranscriptSegment);
+export const TranscriptSegmentSchema =
+  SchemaFactory.createForClass(TranscriptSegment);
 
 // A detected highlight moment, before it's been cut into a clip
 @Schema({ _id: false })

@@ -35,7 +35,9 @@ class MockNoObjectGeneratedError extends Error {
   static isInstance(error: unknown): error is MockNoObjectGeneratedError {
     return (
       error instanceof MockNoObjectGeneratedError ||
-      (typeof error === 'object' && error !== null && (error as any).name === 'NoObjectGeneratedError')
+      (typeof error === 'object' &&
+        error !== null &&
+        (error as any).name === 'NoObjectGeneratedError')
     );
   }
 }
@@ -54,7 +56,9 @@ jest.mock('@ai-sdk/openai', () => ({
 }));
 
 jest.mock('@ai-sdk/google', () => ({
-  createGoogleGenerativeAI: jest.fn().mockReturnValue((modelName: string) => `google-model:${modelName}`),
+  createGoogleGenerativeAI: jest
+    .fn()
+    .mockReturnValue((modelName: string) => `google-model:${modelName}`),
 }));
 
 import {
@@ -68,7 +72,9 @@ describe('HighlightDetectionService & Schemas', () => {
   describe('System Prompt Generation', () => {
     it('should generate long-form duration rule for videos >= 10 minutes (600s)', () => {
       const prompt = buildHighlightSystemPrompt(600);
-      expect(prompt).toContain('Every clip duration (endTime − startTime) MUST be strictly between 45');
+      expect(prompt).toContain(
+        'Every clip duration (endTime − startTime) MUST be strictly between 45',
+      );
       expect(prompt).toContain('NEVER produce a clip shorter than 45 seconds.');
       expect(prompt).toContain('curiosity-hook');
       expect(prompt).toContain('emotional-ken-burns');
@@ -76,7 +82,9 @@ describe('HighlightDetectionService & Schemas', () => {
 
     it('should generate short-form duration rule for videos < 10 minutes (600s)', () => {
       const prompt = buildHighlightSystemPrompt(300);
-      expect(prompt).toContain('This video is under 10 minutes long, so clips do NOT need to hit a');
+      expect(prompt).toContain(
+        'This video is under 10 minutes long, so clips do NOT need to hit a',
+      );
       expect(prompt).toContain('45-second minimum.');
       expect(prompt).toContain('curiosity-hook');
     });
@@ -171,7 +179,8 @@ describe('HighlightDetectionService & Schemas', () => {
               get: jest.fn((key: string, defaultValue?: string) => {
                 if (key === 'LLM_PROVIDER') return 'groq';
                 if (key === 'GROQ_API_KEY') return 'test-groq-key';
-                if (key === 'LLM_MODEL_NAME') return defaultValue || 'openai/gpt-oss-120b';
+                if (key === 'LLM_MODEL_NAME')
+                  return defaultValue || 'openai/gpt-oss-120b';
                 return defaultValue;
               }),
             },
@@ -179,7 +188,9 @@ describe('HighlightDetectionService & Schemas', () => {
         ],
       }).compile();
 
-      service = module.get<HighlightDetectionService>(HighlightDetectionService);
+      service = module.get<HighlightDetectionService>(
+        HighlightDetectionService,
+      );
     });
 
     it('should call generateObject with schemaName and explicit system prompt', async () => {
@@ -206,7 +217,9 @@ describe('HighlightDetectionService & Schemas', () => {
         },
       });
 
-      const segments = [{ startTime: 0, endTime: 30, text: 'Hello world transcript' }];
+      const segments = [
+        { startTime: 0, endTime: 30, text: 'Hello world transcript' },
+      ];
       const result = await service.detectHighlights(segments);
 
       expect(mockGenerateObject).toHaveBeenCalledTimes(1);
@@ -221,7 +234,9 @@ describe('HighlightDetectionService & Schemas', () => {
     });
 
     it('should retry on json_validate_failed schema mismatch with lower temperature (0.1)', async () => {
-      const schemaError = new Error('Generated JSON does not match the expected schema: json_validate_failed');
+      const schemaError = new Error(
+        'Generated JSON does not match the expected schema: json_validate_failed',
+      );
       (schemaError as any).code = 'json_validate_failed';
 
       mockGenerateObject
@@ -243,7 +258,9 @@ describe('HighlightDetectionService & Schemas', () => {
           },
         });
 
-      const segments = [{ startTime: 0, endTime: 30, text: 'Hello world transcript' }];
+      const segments = [
+        { startTime: 0, endTime: 30, text: 'Hello world transcript' },
+      ];
       const result = await service.detectHighlights(segments);
 
       expect(mockGenerateObject).toHaveBeenCalledTimes(2);
@@ -280,7 +297,9 @@ describe('HighlightDetectionService & Schemas', () => {
           },
         });
 
-      const segments = [{ startTime: 0, endTime: 30, text: 'Hello world transcript' }];
+      const segments = [
+        { startTime: 0, endTime: 30, text: 'Hello world transcript' },
+      ];
       const result = await service.detectHighlights(segments);
 
       expect(mockGenerateObject).toHaveBeenCalledTimes(2);
@@ -298,7 +317,9 @@ describe('HighlightDetectionService & Schemas', () => {
         .mockRejectedValueOnce(schemaError1)
         .mockRejectedValueOnce(schemaError2);
 
-      const segments = [{ startTime: 0, endTime: 30, text: 'Hello world transcript' }];
+      const segments = [
+        { startTime: 0, endTime: 30, text: 'Hello world transcript' },
+      ];
 
       const result = await service.detectHighlights(segments);
       expect(result).toEqual([]);
@@ -306,4 +327,3 @@ describe('HighlightDetectionService & Schemas', () => {
     });
   });
 });
-

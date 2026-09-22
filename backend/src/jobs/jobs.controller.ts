@@ -35,7 +35,7 @@ export class JobsController {
     private usersService: UsersService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
-  ) { }
+  ) {}
 
   private shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
     const responseJob = job.toObject();
@@ -78,7 +78,11 @@ export class JobsController {
   // GET /jobs/style-presets — returns the public-safe shape for style presets
   @Get('style-presets')
   getStylePresets() {
-    return Object.values(STYLE_PRESETS).map(({ key, label, isPro }) => ({ key, label, isPro }));
+    return Object.values(STYLE_PRESETS).map(({ key, label, isPro }) => ({
+      key,
+      label,
+      isPro,
+    }));
   }
 
   // GET /jobs/:id — single job detail
@@ -118,7 +122,10 @@ export class JobsController {
       clipId,
     );
 
-    const signedUrl = await this.r2Service.getSignedDownloadUrl(clip.r2ObjectKey, 3600);
+    const signedUrl = await this.r2Service.getSignedDownloadUrl(
+      clip.r2ObjectKey,
+      3600,
+    );
 
     this.activitiesService.queueCreate({
       userId: req.user.userId,

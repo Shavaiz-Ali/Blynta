@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -17,10 +13,7 @@ import {
   ActivityStatus,
   ActivityType,
 } from './schemas/activity.schema';
-import {
-  ACTIVITIES_QUEUE,
-  ACTIVITY_JOBS,
-} from './activities.constants';
+import { ACTIVITIES_QUEUE, ACTIVITY_JOBS } from './activities.constants';
 
 type ObjectIdLike = string | Types.ObjectId;
 
@@ -50,6 +43,15 @@ export interface ListActivitiesOptions {
   category?: ActivityCategory;
   type?: ActivityType;
   status?: ActivityStatus;
+  search?: string;
+}
+
+export interface ActivityStatsResult {
+  total: number;
+  jobsCount: number;
+  jobsCompleted: number;
+  creditsUsed: number;
+  billingEvents: number;
 }
 
 export interface ListActivitiesResult {
@@ -65,14 +67,14 @@ export class ActivitiesService {
   private readonly logger = new Logger(ActivitiesService.name);
   private readonly DEFAULT_PAGE = 1;
   private readonly DEFAULT_LIMIT = 20;
-  private readonly MAX_LIMIT = 50;
+  private readonly MAX_LIMIT = 100;
 
   constructor(
     @InjectModel(Activity.name)
     private readonly activityModel: Model<ActivityDocument>,
     @InjectQueue(ACTIVITIES_QUEUE)
     private readonly activitiesQueue: Queue,
-  ) { }
+  ) {}
 
   private toObjectId(value: ObjectIdLike): Types.ObjectId {
     if (value instanceof Types.ObjectId) {
@@ -84,6 +86,10 @@ export class ActivitiesService {
     }
 
     return new Types.ObjectId(value);
+  }
+
+  private escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   private isDuplicateKeyError(error: unknown): boolean {
@@ -98,7 +104,9 @@ export class ActivitiesService {
   async create(input: CreateActivityInput): Promise<ActivityDocument> {
     const userId = this.toObjectId(input.userId);
     const actorId = input.actorId ? this.toObjectId(input.actorId) : undefined;
-    const entityId = input.entityId ? this.toObjectId(input.entityId) : undefined;
+    const entityId = input.entityId
+      ? this.toObjectId(input.entityId)
+      : undefined;
 
     const activity = new this.activityModel({
       userId,
@@ -109,7 +117,9 @@ export class ActivitiesService {
       activityUrl: input.activityUrl,
       status: input.status ?? ActivityStatus.SUCCESS,
       severity: input.severity ?? ActivitySeverity.INFO,
-      actorType: input.actorType ?? (input.isSystem ? ActivityActorType.SYSTEM : ActivityActorType.USER),
+      actorType:
+        input.actorType ??
+        (input.isSystem ? ActivityActorType.SYSTEM : ActivityActorType.USER),
       actorId,
       entityType: input.entityType,
       entityId,
@@ -137,9 +147,13 @@ export class ActivitiesService {
     }
   }
 
-  async createIfNotExists(input: CreateActivityInput): Promise<ActivityDocument> {
+  async createIfNotExists(
+    input: CreateActivityInput,
+  ): Promise<ActivityDocument> {
     if (!input.dedupeKey) {
-      throw new BadRequestException('dedupeKey is required when using createIfNotExists');
+      throw new BadRequestException(
+        'dedupeKey is required when using createIfNotExists',
+      );
     }
 
     return this.create(input);
@@ -168,7 +182,6 @@ export class ActivitiesService {
         removeOnComplete: 1000,
         removeOnFail: 5000,
       });
-
     } catch (err) {
       this.logger.warn(
         `Failed to enqueue activity [${input.type}] for user ${input.userId}: ${err instanceof Error ? err.message : err}`,
@@ -181,7 +194,9 @@ export class ActivitiesService {
    */
   async queueCreateIfNotExists(input: CreateActivityInput): Promise<void> {
     if (!input.dedupeKey) {
-      throw new BadRequestException('dedupeKey is required when using queueCreateIfNotExists');
+      throw new BadRequestException(
+        'dedupeKey is required when using queueCreateIfNotExists',
+      );
     }
 
     try {
@@ -192,15 +207,19 @@ export class ActivitiesService {
         entityId: input.entityId ? input.entityId.toString() : undefined,
       };
 
-      await this.activitiesQueue.add(ACTIVITY_JOBS.CREATE_IF_NOT_EXISTS, payload, {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
+      await this.activitiesQueue.add(
+        ACTIVITY_JOBS.CREATE_IF_NOT_EXISTS,
+        payload,
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000,
+          },
+          removeOnComplete: 1000,
+          removeOnFail: 5000,
         },
-        removeOnComplete: 1000,
-        removeOnFail: 5000,
-      });
+      );
     } catch (err) {
       this.logger.warn(
         `Failed to enqueue deduplicated activity [${input.type}] with key ${input.dedupeKey}: ${err instanceof Error ? err.message : err}`,
@@ -219,11 +238,21 @@ export class ActivitiesService {
     const limit = Math.min(Math.max(1, requestedLimit), this.MAX_LIMIT);
     const skip = (page - 1) * limit;
 
+    const search = options.search?.trim();
+
     const filter: Record<string, unknown> = {
       userId: userObjectId,
       ...(options.category && { category: options.category }),
       ...(options.type && { type: options.type }),
       ...(options.status && { status: options.status }),
+      ...(search && {
+        $or: [
+          { title: new RegExp(this.escapeRegExp(search), 'i') },
+          { description: new RegExp(this.escapeRegExp(search), 'i') },
+          { type: new RegExp(this.escapeRegExp(search), 'i') },
+          { entityType: new RegExp(this.escapeRegExp(search), 'i') },
+        ],
+      }),
     };
 
     const [activities, total] = await Promise.all([
@@ -243,5 +272,57 @@ export class ActivitiesService {
       limit,
       totalPages: total === 0 ? 0 : Math.ceil(total / limit),
     };
+  }
+
+  /**
+   * Lifetime aggregate counters for the activity log header cards.
+   *
+   * Aggregated in MongoDB so the numbers stay correct for the whole history
+   * instead of only the single page of results the client happens to hold.
+   */
+  async getStatsForUser(userId: string): Promise<ActivityStatsResult> {
+    const userObjectId = this.toObjectId(userId);
+
+    const rows = await this.activityModel
+      .aggregate<{
+        _id: { category: ActivityCategory; type: ActivityType };
+        count: number;
+        credits: number;
+      }>([
+        { $match: { userId: userObjectId } },
+        {
+          $group: {
+            _id: { category: '$category', type: '$type' },
+            count: { $sum: 1 },
+            credits: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$type', ActivityType.CREDIT_DEDUCT] },
+                  { $ifNull: ['$metadata.amount', 0] },
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ])
+      .exec();
+
+    let total = 0;
+    let jobsCount = 0;
+    let jobsCompleted = 0;
+    let creditsUsed = 0;
+    let billingEvents = 0;
+
+    for (const row of rows) {
+      const count = row.count ?? 0;
+      total += count;
+      if (row._id.category === ActivityCategory.JOB) jobsCount += count;
+      if (row._id.type === ActivityType.JOB_COMPLETE) jobsCompleted += count;
+      if (row._id.category === ActivityCategory.BILLING) billingEvents += count;
+      creditsUsed += row.credits ?? 0;
+    }
+
+    return { total, jobsCount, jobsCompleted, creditsUsed, billingEvents };
   }
 }

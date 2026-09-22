@@ -9,7 +9,7 @@ import { StorageModule } from '../storage/storage.module';
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Share.name, schema: ShareSchema }]),
-    JobsModule,    // provides JobsService for ownership checks + clip resolution
+    JobsModule, // provides JobsService for ownership checks + clip resolution
     StorageModule, // provides R2Service for signed URL generation
   ],
   controllers: [SharesController],

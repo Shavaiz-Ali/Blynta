@@ -33,7 +33,7 @@ export class AuthService {
     private mailService: MailService,
     private jwtService: JwtService,
     private activitiesService: ActivitiesService,
-  ) { }
+  ) {}
 
   async signup(dto: CreateUserDto) {
     const refCode = dto.ref || dto.referralCode;
@@ -69,7 +69,10 @@ export class AuthService {
     if (!user || !user.password) {
       throw new InvalidCredentialsException();
     }
-    const isValid = await this.usersService.validatePassword(dto.password, user.password);
+    const isValid = await this.usersService.validatePassword(
+      dto.password,
+      user.password,
+    );
     if (!isValid) {
       throw new InvalidCredentialsException();
     }
@@ -101,7 +104,10 @@ export class AuthService {
     return { id, email: user.email, role: user.role, accessToken };
   }
 
-  async validateSocialLogin(dto: SocialLoginDto, provider: AuthProvider): Promise<AuthResult> {
+  async validateSocialLogin(
+    dto: SocialLoginDto,
+    provider: AuthProvider,
+  ): Promise<AuthResult> {
     const user = await this.usersService.findOrCreateFromSocialProvider({
       provider,
       providerId: dto.providerId,
@@ -152,7 +158,10 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired code');
     }
 
-    const isValid = await this.usersService.verifyOtpCode(user._id.toString(), otp);
+    const isValid = await this.usersService.verifyOtpCode(
+      user._id.toString(),
+      otp,
+    );
     if (!isValid) {
       throw new BadRequestException('Invalid or expired code');
     }
@@ -209,7 +218,10 @@ export class AuthService {
     }
 
     const resetToken = randomBytes(32).toString('hex');
-    await this.usersService.setPasswordResetToken(user._id.toString(), resetToken);
+    await this.usersService.setPasswordResetToken(
+      user._id.toString(),
+      resetToken,
+    );
     await this.mailService.queuePasswordResetEmail(user.email, resetToken);
 
     await this.activitiesService.queueCreate({

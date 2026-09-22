@@ -9,6 +9,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as fs from 'fs';
+import { Readable } from 'stream';
 
 @Injectable()
 export class R2Service {
@@ -20,7 +21,10 @@ export class R2Service {
     this.bucket = this.configService.get<string>('R2_BUCKET_NAME', '');
     const endpoint = this.configService.get<string>('R2_ENDPOINT', '');
     const accessKeyId = this.configService.get<string>('R2_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.configService.get<string>('R2_SECRET_ACCESS_KEY', '');
+    const secretAccessKey = this.configService.get<string>(
+      'R2_SECRET_ACCESS_KEY',
+      '',
+    );
 
     this.client = new S3Client({
       region: 'auto', // R2 uses 'auto', not a real AWS region
@@ -50,7 +54,9 @@ export class R2Service {
         ContentType: contentType,
       }),
     );
-    this.logger.log(`Uploaded buffer (${buffer.length} bytes) to R2 as ${objectKey}`);
+    this.logger.log(
+      `Uploaded buffer (${buffer.length} bytes) to R2 as ${objectKey}`,
+    );
     return objectKey;
   }
 
@@ -148,5 +154,42 @@ export class R2Service {
       new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),
     );
     this.logger.log(`Deleted R2 object: ${objectKey}`);
+  }
+
+  /**
+   * Downloads an R2 object into an in-memory Buffer.
+   * Used by the YouTube processor to read a custom thumbnail before calling thumbnails.set.
+   */
+  async downloadToBuffer(objectKey: string): Promise<Buffer> {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+    );
+    const stream = result.Body as Readable;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
+  }
+
+  /**
+   * Generates a short-lived presigned PUT URL for direct client uploads to R2.
+   * The frontend uses this to upload thumbnail images without routing through the API server.
+   *
+   * @param objectKey  - R2 object key to write to (e.g. "thumbnails/userId/abc123.jpg")
+   * @param contentType - MIME type of the upload (e.g. "image/jpeg")
+   * @param expiresIn  - URL expiry in seconds (default 5 minutes)
+   */
+  async getPresignedUploadUrl(
+    objectKey: string,
+    contentType: string,
+    expiresIn = 300,
+  ): Promise<string> {
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: objectKey,
+      ContentType: contentType,
+    });
+    return getSignedUrl(this.client, command, { expiresIn });
   }
 }

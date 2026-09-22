@@ -86,9 +86,10 @@ describe('NotificationsService', () => {
       });
 
       expect(notificationSave).toHaveBeenCalledTimes(1);
-      const instance = (NotificationModel as any).find.mock.instances[0]
-        || (NotificationModel as any).findOne.mock.instances[0]
-        || notificationSave.mock.instances[0];
+      const instance =
+        (NotificationModel as any).find.mock.instances[0] ||
+        (NotificationModel as any).findOne.mock.instances[0] ||
+        notificationSave.mock.instances[0];
       expect(instance).toBeDefined();
     });
   });
@@ -114,7 +115,10 @@ describe('NotificationsService', () => {
       listExec.mockResolvedValue([]);
       countDocumentsExec.mockResolvedValue(10);
 
-      const result = await service.listForUser(userId, { page: 1, limit: 1000 });
+      const result = await service.listForUser(userId, {
+        page: 1,
+        limit: 1000,
+      });
 
       expect(result.limit).toBe(50);
     });
@@ -128,7 +132,8 @@ describe('NotificationsService', () => {
       const count = await service.getUnreadCount(userId);
 
       expect(count).toBe(7);
-      const findArg = (NotificationModel as any).countDocuments.mock.calls[0][0];
+      const findArg = (NotificationModel as any).countDocuments.mock
+        .calls[0][0];
       expect(findArg.status).toBe(NotificationStatus.UNREAD);
     });
   });

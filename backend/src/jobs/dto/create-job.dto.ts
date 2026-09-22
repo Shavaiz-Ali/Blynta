@@ -18,5 +18,4 @@ const CreateJobSchema = z.object({
   // progressPercent: z.number()
 });
 
-export class CreateJobDto extends createZodDto(CreateJobSchema) { }
-
+export class CreateJobDto extends createZodDto(CreateJobSchema) {}

@@ -4,7 +4,7 @@ import { STYLE_PRESETS } from './media/style-presets';
 
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) { }
+  constructor(private readonly appService: AppService) {}
 
   @Get('health')
   getHealth() {
@@ -13,6 +13,10 @@ export class AppController {
 
   @Get('style-presets')
   getStylePresets() {
-    return Object.values(STYLE_PRESETS).map(({ key, label, isPro }) => ({ key, label, isPro }));
+    return Object.values(STYLE_PRESETS).map(({ key, label, isPro }) => ({
+      key,
+      label,
+      isPro,
+    }));
   }
 }

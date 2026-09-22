@@ -19,8 +19,11 @@ function getKey(secret: string): Buffer {
 export function encryptToken(plaintext: string, secret: string): string {
   const key = getKey(secret);
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipheriv(ALGORITHM, key, iv) as crypto.CipherGCM;
-  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([
+    cipher.update(plaintext, 'utf8'),
+    cipher.final(),
+  ]);
   const authTag = cipher.getAuthTag();
   return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted.toString('base64')}`;
 }
@@ -38,8 +41,11 @@ export function decryptToken(ciphertext: string, secret: string): string {
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
   const encryptedBuffer = Buffer.from(encryptedBase64, 'base64');
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv) as crypto.DecipherGCM;
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([decipher.update(encryptedBuffer), decipher.final()]);
+  const decrypted = Buffer.concat([
+    decipher.update(encryptedBuffer),
+    decipher.final(),
+  ]);
   return decrypted.toString('utf8');
 }

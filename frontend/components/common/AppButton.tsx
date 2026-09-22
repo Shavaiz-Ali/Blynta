@@ -132,7 +132,7 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
         variant={shadcnVariant}
         size={size}
         disabled={isDisabled}
-        className={cn(appButtonVariants({ variant }), "cursor-pointer", className)}
+        className={cn(appButtonVariants({ variant }), "cursor-pointer whitespace-nowrap", className)}
         {...props}
       >
         {showSpinner ? (
@@ -140,15 +140,15 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
             <AppSpinner size={spinnerSize} className="m-0" />
           </span>
         ) : (
-          <>
+          <span className="inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap">
             {resolvedIcon && iconPosition === "left" && (
-              <span className="shrink-0">{resolvedIcon}</span>
+              <span className="shrink-0 inline-flex items-center">{resolvedIcon}</span>
             )}
-            {children != null && <span>{children}</span>}
+            {children != null && <span className="shrink-0">{children}</span>}
             {resolvedIcon && iconPosition === "right" && (
-              <span className="shrink-0">{resolvedIcon}</span>
+              <span className="shrink-0 inline-flex items-center">{resolvedIcon}</span>
             )}
-          </>
+          </span>
         )}
       </Button>
     );

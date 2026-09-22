@@ -37,7 +37,7 @@ export class JobsService {
     private configService: ConfigService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
-  ) { }
+  ) {}
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
     await this.usersService.deductCredit(userId);
@@ -180,10 +180,7 @@ export class JobsService {
   }
 
   // Task 2 — delete an entire job + its clips from R2
-  async deleteJob(
-    userId: string,
-    jobId: string,
-  ): Promise<{ message: string }> {
+  async deleteJob(userId: string, jobId: string): Promise<{ message: string }> {
     const job = await this.getJobById(userId, jobId); // ownership check + NotFoundException
 
     const activeStatuses: JobStatus[] = [
@@ -320,7 +317,10 @@ export class JobsService {
   //
   // TODO: confirm with product — should a resumed retry consume a credit?
   // Currently it does NOT because it re-uses the same job document.
-  async retryJob(userId: string, jobId: string): Promise<{ jobId: string; status: string }> {
+  async retryJob(
+    userId: string,
+    jobId: string,
+  ): Promise<{ jobId: string; status: string }> {
     await this.getJobById(userId, jobId); // ownership check + NotFoundException
     const job = await this.jobModel.findById(jobId).exec();
     if (!job) throw new NotFoundException('Job not found');

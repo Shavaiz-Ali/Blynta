@@ -24,7 +24,9 @@ export class PaddleService implements OnModuleInit {
         ? Environment.production
         : Environment.sandbox;
 
-    this.logger.log(`Initializing Paddle SDK in ${env.toLowerCase()} environment`);
+    this.logger.log(
+      `Initializing Paddle SDK in ${env.toLowerCase()} environment`,
+    );
 
     this.paddle = new Paddle(apiKey, {
       environment,
@@ -71,7 +73,9 @@ export class PaddleService implements OnModuleInit {
     const proMonthly =
       this.configService.get<string>('PADDLE_PRICE_ID_PRO') ||
       this.configService.get<string>('PADDLE_PRICE_ID_PRO_MONTHLY');
-    const proAnnual = this.configService.get<string>('PADDLE_PRICE_ID_PRO_ANNUAL');
+    const proAnnual = this.configService.get<string>(
+      'PADDLE_PRICE_ID_PRO_ANNUAL',
+    );
 
     const businessMonthly =
       this.configService.get<string>('PADDLE_PRICE_ID_BUSINESS') ||

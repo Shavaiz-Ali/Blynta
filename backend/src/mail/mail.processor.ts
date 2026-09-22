@@ -22,7 +22,6 @@ import {
   stalledInterval: 15_000,
   maxStalledCount: 3,
 })
-
 export class MailProcessor extends WorkerHost {
   private readonly logger = new Logger(MailProcessor.name);
   private resend?: Resend;
@@ -43,10 +42,8 @@ export class MailProcessor extends WorkerHost {
       'Blynta <onboarding@resend.dev>',
     );
     this.frontendUrl = (
-      this.configService.get<string>(
-        'FRONTEND_URL',
-        'http://localhost:3000',
-      ) || 'http://localhost:3000'
+      this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000') ||
+      'http://localhost:3000'
     ).replace(/\/$/, '');
 
     if (this.mailProvider === 'gmail') {
@@ -80,9 +77,7 @@ export class MailProcessor extends WorkerHost {
       const apiKey = this.configService.get<string>('RESEND_API_KEY');
 
       if (!apiKey) {
-        throw new Error(
-          'RESEND_API_KEY is required when MAIL_PROVIDER=resend',
-        );
+        throw new Error('RESEND_API_KEY is required when MAIL_PROVIDER=resend');
       }
 
       this.resend = new Resend(apiKey);
@@ -144,7 +139,9 @@ export class MailProcessor extends WorkerHost {
 
       throw new Error(`Unsupported MAIL_PROVIDER: ${this.mailProvider}`);
     } catch (err: any) {
-      this.logger.error(`Failed to send email to ${to}: ${err?.message ?? err}`);
+      this.logger.error(
+        `Failed to send email to ${to}: ${err?.message ?? err}`,
+      );
       throw err;
     }
   }
@@ -216,10 +213,7 @@ export class MailProcessor extends WorkerHost {
       case MAIL_JOBS.SEND_JOB_FAILED: {
         const { email, videoTitle, jobId } = job.data;
         const retryUrl = `${this.frontendUrl}/dashboard/jobs/${jobId}`;
-        const { subject, html } = jobFailedEmailTemplate(
-          videoTitle,
-          retryUrl,
-        );
+        const { subject, html } = jobFailedEmailTemplate(videoTitle, retryUrl);
         await this.sendEmail(email, subject, html);
         break;
       }

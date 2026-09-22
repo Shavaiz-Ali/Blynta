@@ -4,7 +4,7 @@ import { Connection } from 'mongoose';
 
 @Injectable()
 export class AppService {
-  constructor(@InjectConnection() private mongoConnection: Connection) { }
+  constructor(@InjectConnection() private mongoConnection: Connection) {}
 
   getHealth() {
     const dbState = this.mongoConnection.readyState;

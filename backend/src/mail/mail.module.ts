@@ -5,10 +5,8 @@ import { MailProcessor } from './mail.processor';
 import { MAIL_QUEUE } from './mail.constants';
 
 @Module({
-    imports: [
-        BullModule.registerQueue({ name: MAIL_QUEUE }),
-    ],
-    providers: [MailService],
-    exports: [MailService, BullModule],
+  imports: [BullModule.registerQueue({ name: MAIL_QUEUE })],
+  providers: [MailService],
+  exports: [MailService, BullModule],
 })
-export class MailModule { }
+export class MailModule {}

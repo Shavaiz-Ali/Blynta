@@ -16,4 +16,5 @@ export class AuthProviderConfig {
   disabledReason: string;
 }
 
-export const AuthProviderConfigSchema = SchemaFactory.createForClass(AuthProviderConfig);
+export const AuthProviderConfigSchema =
+  SchemaFactory.createForClass(AuthProviderConfig);

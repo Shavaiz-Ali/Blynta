@@ -1,4 +1,7 @@
-function baseEmailLayout(contentHtml: string, previewText: string = ''): string {
+function baseEmailLayout(
+  contentHtml: string,
+  previewText: string = '',
+): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -112,29 +115,36 @@ function baseEmailLayout(contentHtml: string, previewText: string = ''): string 
 
 export const otpEmailTemplate = (otp: string) => ({
   subject: `${otp} is your Blynta verification code`,
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Verify your email address</h2>
     <p>Please enter the verification code below to confirm your account and get started:</p>
     <div class="code-box">${otp}</div>
     <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">This code expires in 10 minutes. If you didn't request this verification, you can safely ignore this email.</p>
-  `, `Your verification code is ${otp}`),
+  `,
+    `Your verification code is ${otp}`,
+  ),
 });
 
 export const passwordResetEmailTemplate = (resetUrl: string) => ({
   subject: 'Reset your Blynta password',
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Password Reset Request</h2>
     <p>We received a request to reset your password. Click the button below to choose a new password:</p>
     <div style="text-align: center; margin: 24px 0;">
       <a href="${resetUrl}" class="button" target="_blank">Reset Password</a>
     </div>
     <p style="font-size: 13px; color: #94a3b8; margin-top: 24px;">This link will expire in 1 hour. If you didn't request a password reset, you can safely ignore this email.</p>
-  `, 'Reset your Blynta password'),
+  `,
+    'Reset your Blynta password',
+  ),
 });
 
 export const welcomeEmailTemplate = (name: string, dashboardUrl: string) => ({
   subject: 'Welcome to Blynta! Turn long videos into viral clips',
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Welcome${name ? `, ${name}` : ''}!</h2>
     <p>We're thrilled to have you onboard. Blynta uses AI to transcribe, detect highlights, and cut vertical ready-to-post clips with auto-generated captions in seconds.</p>
     <div class="highlight-card">
@@ -143,12 +153,18 @@ export const welcomeEmailTemplate = (name: string, dashboardUrl: string) => ({
     <div style="text-align: center; margin: 28px 0 16px;">
       <a href="${dashboardUrl}" class="button" target="_blank">Go to Your Workspace</a>
     </div>
-  `, 'Welcome to Blynta! Start creating viral clips from your long videos.'),
+  `,
+    'Welcome to Blynta! Start creating viral clips from your long videos.',
+  ),
 });
 
-export const referralInviteEmailTemplate = (referrerName: string, referralLink: string) => ({
+export const referralInviteEmailTemplate = (
+  referrerName: string,
+  referralLink: string,
+) => ({
   subject: `${referrerName} invited you to try Blynta`,
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">You've been invited!</h2>
     <p><strong>${referrerName}</strong> thinks you'll love <strong>Blynta</strong> — the AI platform that turns podcasts, webinars, and YouTube videos into short viral clips with captions.</p>
     <div class="highlight-card">
@@ -157,12 +173,19 @@ export const referralInviteEmailTemplate = (referrerName: string, referralLink: 
     <div style="text-align: center; margin: 28px 0 16px;">
       <a href="${referralLink}" class="button" target="_blank">Claim Your Bonus Credits</a>
     </div>
-  `, `${referrerName} invited you to join Blynta`),
+  `,
+    `${referrerName} invited you to join Blynta`,
+  ),
 });
 
-export const referralRewardEmailTemplate = (creditsEarned: number, totalCredits: number, dashboardUrl: string) => ({
+export const referralRewardEmailTemplate = (
+  creditsEarned: number,
+  totalCredits: number,
+  dashboardUrl: string,
+) => ({
   subject: `You earned ${creditsEarned} bonus credits on Blynta!`,
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Referral Reward Earned!</h2>
     <p>Great news! A creator you referred just signed in to Blynta.</p>
     <div class="highlight-card">
@@ -171,12 +194,19 @@ export const referralRewardEmailTemplate = (creditsEarned: number, totalCredits:
     <div style="text-align: center; margin: 24px 0 12px;">
       <a href="${dashboardUrl}" class="button" target="_blank">Open Workspace</a>
     </div>
-  `, `You earned ${creditsEarned} referral credits!`),
+  `,
+    `You earned ${creditsEarned} referral credits!`,
+  ),
 });
 
-export const jobCompletedEmailTemplate = (videoTitle: string, clipCount: number, jobUrl: string) => ({
+export const jobCompletedEmailTemplate = (
+  videoTitle: string,
+  clipCount: number,
+  jobUrl: string,
+) => ({
   subject: `Your clips are ready: ${videoTitle}`,
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Your clips are ready to download!</h2>
     <p>Blynta finished processing your video <strong>"${videoTitle}"</strong>.</p>
     <div class="highlight-card">
@@ -185,24 +215,37 @@ export const jobCompletedEmailTemplate = (videoTitle: string, clipCount: number,
     <div style="text-align: center; margin: 28px 0 16px;">
       <a href="${jobUrl}" class="button" target="_blank">View & Download Clips</a>
     </div>
-  `, `Your clips for "${videoTitle}" are ready!`),
+  `,
+    `Your clips for "${videoTitle}" are ready!`,
+  ),
 });
 
-export const jobFailedEmailTemplate = (videoTitle: string, retryUrl: string) => ({
+export const jobFailedEmailTemplate = (
+  videoTitle: string,
+  retryUrl: string,
+) => ({
   subject: `Clip generation issue: ${videoTitle}`,
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Clip Generation Failed</h2>
     <p>We encountered an issue while processing your video <strong>"${videoTitle}"</strong>.</p>
     <p style="color: #94a3b8; font-size: 14px;">No credits were consumed for failed processing. You can check the details or try re-submitting with a different link or file format.</p>
     <div style="text-align: center; margin: 24px 0 12px;">
       <a href="${retryUrl}" class="button" target="_blank">View Job Details</a>
     </div>
-  `, `We encountered an issue processing "${videoTitle}"`),
+  `,
+    `We encountered an issue processing "${videoTitle}"`,
+  ),
 });
 
-export const subscriptionActivatedEmailTemplate = (planName: string, credits: number, billingUrl: string) => ({
+export const subscriptionActivatedEmailTemplate = (
+  planName: string,
+  credits: number,
+  billingUrl: string,
+) => ({
   subject: `Your Blynta ${planName.toUpperCase()} plan is now active!`,
-  html: baseEmailLayout(`
+  html: baseEmailLayout(
+    `
     <h2 style="margin-top: 0; color: #f8fafc; font-size: 20px;">Subscription Confirmed!</h2>
     <p>Thank you for upgrading to the <strong>${planName.toUpperCase()}</strong> plan.</p>
     <div class="highlight-card">
@@ -211,5 +254,7 @@ export const subscriptionActivatedEmailTemplate = (planName: string, credits: nu
     <div style="text-align: center; margin: 28px 0 16px;">
       <a href="${billingUrl}" class="button" target="_blank">Manage Billing & Credits</a>
     </div>
-  `, `Your Blynta ${planName.toUpperCase()} plan is active`),
+  `,
+    `Your Blynta ${planName.toUpperCase()} plan is active`,
+  ),
 });

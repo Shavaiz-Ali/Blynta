@@ -41,10 +41,19 @@ export class ClipPublication {
   @Prop({ required: true })
   clipId: string;
 
-  @Prop({ enum: PublicationPlatform, required: true, default: PublicationPlatform.YOUTUBE })
+  @Prop({
+    enum: PublicationPlatform,
+    required: true,
+    default: PublicationPlatform.YOUTUBE,
+  })
   platform: PublicationPlatform;
 
-  @Prop({ enum: PublicationStatus, required: true, default: PublicationStatus.QUEUED, index: true })
+  @Prop({
+    enum: PublicationStatus,
+    required: true,
+    default: PublicationStatus.QUEUED,
+    index: true,
+  })
   status: PublicationStatus;
 
   /** Title submitted by the user. */
@@ -58,6 +67,28 @@ export class ClipPublication {
   /** YouTube privacy setting: private | unlisted | public. */
   @Prop({ required: true, default: 'private' })
   privacyStatus: string;
+
+  /**
+   * YouTube video tags submitted by the user.
+   * Passed to snippet.tags in videos.insert.
+   */
+  @Prop({ type: [String] })
+  tags: string[];
+
+  /**
+   * YouTube video category ID (from videoCategories.list).
+   * Passed to snippet.categoryId in videos.insert.
+   */
+  @Prop()
+  categoryId: string;
+
+  /**
+   * R2 object key for a custom thumbnail image.
+   * If present, the worker calls thumbnails.set after a successful video upload.
+   * A failed thumbnails.set does NOT fail the publication.
+   */
+  @Prop()
+  thumbnailKey: string;
 
   /** YouTube video ID after successful upload (e.g. "dQw4w9WgXcQ"). */
   @Prop()
@@ -80,7 +111,8 @@ export class ClipPublication {
   metadata: Record<string, unknown>;
 }
 
-export const ClipPublicationSchema = SchemaFactory.createForClass(ClipPublication);
+export const ClipPublicationSchema =
+  SchemaFactory.createForClass(ClipPublication);
 
 // Prevent two active uploads of the same clip to the same platform simultaneously.
 // Note: we allow multiple publications per clip (for retries), hence no global unique.

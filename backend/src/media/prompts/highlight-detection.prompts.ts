@@ -142,7 +142,9 @@ Each maps to a caption/zoom/emoji treatment your editor (ffmpeg) applies — the
 // the base + duration rules + style blocks + output format into one final
 // system prompt string, in this exact order.
 // ---------------------------------------------------------------------------
-export function buildHighlightSystemPrompt(videoDurationSeconds: number): string {
+export function buildHighlightSystemPrompt(
+  videoDurationSeconds: number,
+): string {
   return [
     buildBasePrompt(),
     buildDurationRules(videoDurationSeconds),

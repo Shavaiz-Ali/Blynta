@@ -56,8 +56,14 @@ export class YouTubeOAuthService {
     private configService: ConfigService,
   ) {
     this.clientId = this.configService.get<string>('GOOGLE_CLIENT_ID', '');
-    this.clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET', '');
-    this.redirectUri = this.configService.get<string>('GOOGLE_REDIRECT_URI', '');
+    this.clientSecret = this.configService.get<string>(
+      'GOOGLE_CLIENT_SECRET',
+      '',
+    );
+    this.redirectUri = this.configService.get<string>(
+      'GOOGLE_REDIRECT_URI',
+      '',
+    );
     this.scopes = this.configService.get<string>(
       'YOUTUBE_OAUTH_SCOPES',
       [
@@ -65,7 +71,10 @@ export class YouTubeOAuthService {
         'https://www.googleapis.com/auth/youtube.upload',
       ].join(' '),
     );
-    this.encryptionKey = this.configService.get<string>('TOKEN_ENCRYPTION_KEY', '');
+    this.encryptionKey = this.configService.get<string>(
+      'TOKEN_ENCRYPTION_KEY',
+      '',
+    );
   }
 
   /**
@@ -102,11 +111,16 @@ export class YouTubeOAuthService {
    *
    * Returns the userId encoded in the state so the caller can redirect correctly.
    */
-  async handleCallback(code: string, state: string): Promise<{ userId: string }> {
+  async handleCallback(
+    code: string,
+    state: string,
+  ): Promise<{ userId: string }> {
     // --- CSRF / state validation ---
     const storedUserId = await this.redis.get(`oauth_state:${state}`);
     if (!storedUserId) {
-      throw new Error('Invalid or expired OAuth state. Please try connecting again.');
+      throw new Error(
+        'Invalid or expired OAuth state. Please try connecting again.',
+      );
     }
     // Consume the state — one-time use
     await this.redis.del(`oauth_state:${state}`);
@@ -118,7 +132,10 @@ export class YouTubeOAuthService {
     const channel = await this.fetchYouTubeChannel(tokens.access_token);
 
     // --- Encrypt and persist ---
-    const encryptedAccess = encryptToken(tokens.access_token, this.encryptionKey);
+    const encryptedAccess = encryptToken(
+      tokens.access_token,
+      this.encryptionKey,
+    );
     const encryptedRefresh = tokens.refresh_token
       ? encryptToken(tokens.refresh_token, this.encryptionKey)
       : undefined;
@@ -162,7 +179,10 @@ export class YouTubeOAuthService {
   async refreshAccessToken(
     connection: YouTubeConnectionDocument,
   ): Promise<{ accessToken: string }> {
-    const refreshToken = decryptToken(connection.refreshToken, this.encryptionKey);
+    const refreshToken = decryptToken(
+      connection.refreshToken,
+      this.encryptionKey,
+    );
 
     let resp: GoogleTokenResponse;
     try {
@@ -180,7 +200,9 @@ export class YouTubeOAuthService {
       const data = await response.json();
       if (!response.ok) {
         const errorCode = data?.error;
-        this.logger.warn(`Token refresh failed for user ${connection.userId}: ${errorCode}`);
+        this.logger.warn(
+          `Token refresh failed for user ${connection.userId}: ${errorCode}`,
+        );
         if (
           errorCode === 'invalid_grant' ||
           errorCode === 'token_revoked' ||
@@ -188,7 +210,9 @@ export class YouTubeOAuthService {
         ) {
           throw new YouTubeReauthRequiredException();
         }
-        throw new Error(data?.error_description || data?.error || 'Token refresh failed');
+        throw new Error(
+          data?.error_description || data?.error || 'Token refresh failed',
+        );
       }
 
       resp = data as GoogleTokenResponse;
@@ -218,15 +242,20 @@ export class YouTubeOAuthService {
    * Decrypts and returns the current access token for a connection,
    * automatically refreshing it if it has expired (or is within 60s of expiry).
    */
-  async getValidAccessToken(connection: YouTubeConnectionDocument): Promise<string> {
+  async getValidAccessToken(
+    connection: YouTubeConnectionDocument,
+  ): Promise<string> {
     const bufferMs = 60 * 1000; // 60 second buffer
-    const isExpired = connection.accessTokenExpiresAt.getTime() - Date.now() < bufferMs;
+    const isExpired =
+      connection.accessTokenExpiresAt.getTime() - Date.now() < bufferMs;
 
     if (!isExpired) {
       return decryptToken(connection.accessToken, this.encryptionKey);
     }
 
-    this.logger.log(`Access token expired for user ${connection.userId} — refreshing`);
+    this.logger.log(
+      `Access token expired for user ${connection.userId} — refreshing`,
+    );
     const { accessToken } = await this.refreshAccessToken(connection);
     return accessToken;
   }
@@ -244,19 +273,21 @@ export class YouTubeOAuthService {
 
     // Best-effort token revocation — don't fail if Google returns an error
     try {
-      const accessToken = decryptToken(connection.accessToken, this.encryptionKey);
-      await fetch(`${GOOGLE_REVOKE_URL}?token=${encodeURIComponent(accessToken)}`, {
-        method: 'POST',
-      });
-    } catch (err: any) {
-      this.logger.warn(
-        `Token revocation failed (non-fatal): ${err?.message}`,
+      const accessToken = decryptToken(
+        connection.accessToken,
+        this.encryptionKey,
       );
+      await fetch(
+        `${GOOGLE_REVOKE_URL}?token=${encodeURIComponent(accessToken)}`,
+        {
+          method: 'POST',
+        },
+      );
+    } catch (err: any) {
+      this.logger.warn(`Token revocation failed (non-fatal): ${err?.message}`);
     }
 
-    await this.youtubeConnectionModel
-      .findByIdAndDelete(connection._id)
-      .exec();
+    await this.youtubeConnectionModel.findByIdAndDelete(connection._id).exec();
 
     this.logger.log(`YouTube connection deleted for user ${userId}`);
   }
@@ -289,7 +320,9 @@ export class YouTubeOAuthService {
   // Private Google OAuth / YouTube API helpers
   // ---------------------------------------------------------------------------
 
-  private async exchangeCodeForTokens(code: string): Promise<GoogleTokenResponse> {
+  private async exchangeCodeForTokens(
+    code: string,
+  ): Promise<GoogleTokenResponse> {
     const response = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -312,7 +345,9 @@ export class YouTubeOAuthService {
     return data as GoogleTokenResponse;
   }
 
-  private async fetchYouTubeChannel(accessToken: string): Promise<YouTubeChannelItem> {
+  private async fetchYouTubeChannel(
+    accessToken: string,
+  ): Promise<YouTubeChannelItem> {
     const response = await fetch(YOUTUBE_CHANNEL_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });

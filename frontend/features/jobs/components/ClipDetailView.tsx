@@ -80,9 +80,17 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         nextClipId: null,
       };
     }
-    const index = job.clips.findIndex(
-      (c) => (c._id && c._id.toString() === clipId) || (c.id && c.id.toString() === clipId)
+    let index = job.clips.findIndex(
+      (c) =>
+        (c._id && String(c._id) === String(clipId)) ||
+        (c.id && String(c.id) === String(clipId))
     );
+    if (index === -1 && /^\d+$/.test(clipId)) {
+      const numericIndex = parseInt(clipId, 10);
+      if (numericIndex >= 0 && numericIndex < job.clips.length) {
+        index = numericIndex;
+      }
+    }
     if (index === -1) {
       return {
         activeClip: undefined,
@@ -122,6 +130,43 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       `Generated Short #${clipIndex + 1}`,
     [activeHighlight, clipIndex]
   );
+
+  const clipDescriptionText = React.useMemo(() => {
+    return (
+      activeHighlight?.clipDescription ||
+      activeHighlight?.reason ||
+      (job?.videoTitle ? `Watch this high-retention AI extracted short clip from ${job.videoTitle}.` : "")
+    );
+  }, [activeHighlight, job?.videoTitle]);
+
+  const clipKeywords = React.useMemo(() => {
+    const list = new Set<string>();
+    if (job?.keywords) {
+      job.keywords.split(",").forEach((k) => {
+        const trimmed = k.trim().replace(/^#/, "");
+        if (trimmed) list.add(trimmed);
+      });
+    }
+    activeHighlight?.tags?.forEach((t) => list.add(t.replace(/^#/, "")));
+    if (list.size === 0) {
+      ["shorts", "viral", "video"].forEach((k) => list.add(k));
+    }
+    return Array.from(list).slice(0, 30);
+  }, [job?.keywords, activeHighlight?.tags]);
+
+  const clipHashtags = React.useMemo(() => {
+    const list = new Set<string>();
+    job?.hashtags?.forEach((h) => {
+      list.add(h.startsWith("#") ? h : `#${h}`);
+    });
+    activeHighlight?.tags?.forEach((t) => {
+      list.add(t.startsWith("#") ? t : `#${t}`);
+    });
+    if (list.size === 0) {
+      clipKeywords.slice(0, 10).forEach((k) => list.add(`#${k}`));
+    }
+    return Array.from(list).slice(0, 10);
+  }, [job?.hashtags, activeHighlight?.tags, clipKeywords]);
 
   // Cached signed URL for active clip
   const {
@@ -453,7 +498,9 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         jobId={jobId}
         clipId={clipId}
         clipTitle={clipTitle}
-        defaultDescription={activeHighlight?.clipDescription}
+        defaultDescription={clipDescriptionText}
+        defaultTags={clipKeywords}
+        defaultHashtags={clipHashtags}
       />
     </DashboardLayout>
   );

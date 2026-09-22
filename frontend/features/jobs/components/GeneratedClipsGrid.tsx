@@ -14,6 +14,7 @@ import {
 } from "@/features/dashboard/icons";
 import { AppButton } from "@/components/common/AppButton";
 import { AppCard } from "@/components/common";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export interface GeneratedClipsGridProps {
@@ -42,9 +43,17 @@ function ClipGeneratingSkeletonCard({
   const style = highlight?.style || "Curiosity Hook";
 
   return (
-    <div className="relative rounded-lg border border-primary/30 bg-card/60 overflow-hidden shadow-xs flex flex-col justify-between animate-pulse transition-all">
-      {/* 9:16 Video Preview Container */}
-      <div className="relative aspect-[9/16] w-full bg-gradient-to-b from-muted/70 via-primary/5 to-muted/90 flex flex-col items-center justify-between p-3 select-none overflow-hidden">
+    <AppCard
+      className={cn(
+        "group relative flex flex-col overflow-hidden text-left",
+        "border border-primary/40 bg-card animate-pulse transition-all",
+        "p-0!"
+      )}
+      useDefaultClasses={false}
+      contentClassName="!p-0 py-0!"
+    >
+      {/* ── Media Area: same 16:10 box as GeneratedClipCard's thumbnail ── */}
+      <div className="relative aspect-[16/10] w-full bg-gradient-to-b from-muted/70 via-primary/5 to-muted/90 flex flex-col items-center justify-between p-3 select-none overflow-hidden">
         {/* Top Badges */}
         <div className="w-full flex items-center justify-between z-10">
           <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold border border-primary/30 shadow-2xs backdrop-blur-md">
@@ -62,12 +71,12 @@ function ClipGeneratingSkeletonCard({
           )}
         </div>
 
-        {/* Center Live Processing Graphic */}
-        <div className="flex flex-col items-center text-center space-y-2 my-auto z-10 px-2">
+        {/* Center Live Processing Graphic (compact to fit the 16:10 box) */}
+        <div className="flex flex-col items-center text-center space-y-1.5 my-auto z-10 px-2">
           <div className="relative flex items-center justify-center">
-            <div className="absolute h-14 w-14 rounded-full bg-primary/25 animate-ping opacity-60" />
-            <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 border border-primary/35 text-primary shadow-md backdrop-blur-xs">
-              <FilmIcon className="h-6 w-6 animate-pulse" />
+            <div className="absolute h-10 w-10 rounded-full bg-primary/25 animate-ping opacity-60" />
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 border border-primary/35 text-primary shadow-md backdrop-blur-xs">
+              <FilmIcon className="h-4 w-4 animate-pulse" />
             </div>
           </div>
           <div className="space-y-0.5">
@@ -95,33 +104,39 @@ function ClipGeneratingSkeletonCard({
         </div>
       </div>
 
-      {/* Card Content Skeleton */}
-      <div className="p-3.5 space-y-3">
+      {/* ── Card Content: mirrors GeneratedClipCard body rows ── */}
+      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
         <div className="space-y-1.5">
-          <p className="text-xs font-bold text-foreground line-clamp-1">
-            {title}
-          </p>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="text-[10px] font-mono px-1.5 py-0 uppercase"
+            >
+              Short #{index + 1}
+            </Badge>
             <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/50">
               {style}
             </span>
-            <div className="h-3 w-20 rounded bg-muted/60 animate-pulse" />
+          </div>
+
+          <h4 className="text-sm font-bold text-foreground line-clamp-1 leading-snug">
+            {title}
+          </h4>
+
+          {/* Two shimmer lines standing in for the clip description (line-clamp-2) */}
+          <div className="space-y-1.5">
+            <div className="h-3.5 w-full rounded bg-muted/70 animate-pulse" />
+            <div className="h-3.5 w-4/5 rounded bg-muted/50 animate-pulse" />
           </div>
         </div>
 
-        <div className="space-y-1 pt-1">
-          <div className="h-2.5 w-full rounded bg-muted/70 animate-pulse" />
-          <div className="h-2.5 w-4/5 rounded bg-muted/50 animate-pulse" />
-        </div>
-
-        <div className="pt-2 border-t border-border/50 flex items-center justify-between">
-          <span className="text-[10px] text-muted-foreground font-mono">
-            Short #{index + 1}
-          </span>
-          <div className="h-4 w-16 rounded bg-muted animate-pulse" />
+        {/* Bottom Controls Row */}
+        <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+          <div className="h-8 w-24 rounded-md bg-muted/80 animate-pulse" />
+          <div className="h-8 w-8 rounded-md bg-muted/60 animate-pulse" />
         </div>
       </div>
-    </div>
+    </AppCard>
   );
 }
 

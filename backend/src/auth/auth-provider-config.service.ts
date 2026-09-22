@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { AuthProviderConfig, AuthProviderConfigDocument } from './schemas/auth-provider-config.schema';
+import {
+  AuthProviderConfig,
+  AuthProviderConfigDocument,
+} from './schemas/auth-provider-config.schema';
 import { AuthProvider } from '../users/schemas/user.schema';
 
 @Injectable()
@@ -21,7 +24,11 @@ export class AuthProviderConfigService {
     return config ? config.isEnabled : false;
   }
 
-  async setProviderEnabled(provider: AuthProvider, isEnabled: boolean, disabledReason?: string) {
+  async setProviderEnabled(
+    provider: AuthProvider,
+    isEnabled: boolean,
+    disabledReason?: string,
+  ) {
     return this.configModel.findOneAndUpdate(
       { provider },
       { isEnabled, disabledReason: isEnabled ? undefined : disabledReason },

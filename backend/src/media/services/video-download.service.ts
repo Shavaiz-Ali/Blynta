@@ -31,7 +31,7 @@ export class VideoDownloadService {
   constructor(
     private configService: ConfigService,
     private processRegistry: ProcessRegistryService,
-  ) { }
+  ) {}
 
   async downloadVideo(
     sourceUrl: string,
@@ -52,10 +52,14 @@ export class VideoDownloadService {
     const maxHeight = resolution === '1080p' ? 1080 : 720;
 
     const ytDlpArgs = [
-      '--js-runtimes', 'deno',
-      '-f', `bestvideo[height<=${maxHeight}]+bestaudio/best[height<=${maxHeight}]`,
-      '--merge-output-format', 'mp4',
-      '--progress-template', 'download:PROGRESS %(progress._percent_str)s',
+      '--js-runtimes',
+      'deno',
+      '-f',
+      `bestvideo[height<=${maxHeight}]+bestaudio/best[height<=${maxHeight}]`,
+      '--merge-output-format',
+      'mp4',
+      '--progress-template',
+      'download:PROGRESS %(progress._percent_str)s',
     ];
 
     const cookiesPath = this.configService.get<string>('YOUTUBE_COOKIES_PATH');
@@ -70,7 +74,9 @@ export class VideoDownloadService {
 
     ytDlpArgs.push('-o', videoPath, sourceUrl);
 
-    this.logger.log(`Downloading video (${resolution}) from ${sourceUrl} to ${videoPath}`);
+    this.logger.log(
+      `Downloading video (${resolution}) from ${sourceUrl} to ${videoPath}`,
+    );
 
     try {
       await runCommandWithProgress(
@@ -87,8 +93,8 @@ export class VideoDownloadService {
       if (/sign in to confirm|not a bot/i.test(message)) {
         throw new Error(
           'This video requires YouTube authentication cookies, which are missing or expired. ' +
-          'Refresh YOUTUBE_COOKIES_PATH by re-exporting cookies from a logged-in browser session ' +
-          '(see comment at top of video-download.service.ts for instructions).',
+            'Refresh YOUTUBE_COOKIES_PATH by re-exporting cookies from a logged-in browser session ' +
+            '(see comment at top of video-download.service.ts for instructions).',
         );
       }
       throw err;
@@ -97,8 +103,19 @@ export class VideoDownloadService {
     this.logger.log(`Extracting audio to ${audioPath}`);
     await runCommandWithProgress(
       'ffmpeg',
-      ['-i', videoPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', '-y', audioPath],
-      () => { },
+      [
+        '-i',
+        videoPath,
+        '-ar',
+        '16000',
+        '-ac',
+        '1',
+        '-c:a',
+        'pcm_s16le',
+        '-y',
+        audioPath,
+      ],
+      () => {},
       this.processRegistry,
     );
 
@@ -122,12 +139,16 @@ export class VideoDownloadService {
   }> {
     return new Promise((resolve) => {
       const ytDlpArgs = [
-        '--js-runtimes', 'deno',
-        '--print', '%(title)s|||%(uploader)s|||%(thumbnail)s|||%(duration)s',
+        '--js-runtimes',
+        'deno',
+        '--print',
+        '%(title)s|||%(uploader)s|||%(thumbnail)s|||%(duration)s',
         '--skip-download',
       ];
 
-      const cookiesPath = this.configService.get<string>('YOUTUBE_COOKIES_PATH');
+      const cookiesPath = this.configService.get<string>(
+        'YOUTUBE_COOKIES_PATH',
+      );
       if (cookiesPath && fs.existsSync(cookiesPath)) {
         ytDlpArgs.push('--cookies', cookiesPath);
       }
@@ -143,11 +164,20 @@ export class VideoDownloadService {
       proc.stderr?.on('data', (d) => (stderr += d.toString()));
       proc.on('close', (code) => {
         if (code !== 0) {
-          this.logger.warn(`Failed to fetch video metadata: ${stderr.slice(-300)}`);
-          resolve({ title: 'Untitled video', uploader: '', thumbnailUrl: '', duration: 0 });
+          this.logger.warn(
+            `Failed to fetch video metadata: ${stderr.slice(-300)}`,
+          );
+          resolve({
+            title: 'Untitled video',
+            uploader: '',
+            thumbnailUrl: '',
+            duration: 0,
+          });
           return;
         }
-        const [title, uploader, thumbnail, durationStr] = output.trim().split('|||');
+        const [title, uploader, thumbnail, durationStr] = output
+          .trim()
+          .split('|||');
         const duration = parseFloat(durationStr) || 0;
         resolve({
           title: title?.trim() || 'Untitled video',
@@ -158,7 +188,12 @@ export class VideoDownloadService {
       });
       proc.on('error', (err) => {
         this.logger.warn(`Error running yt-dlp metadata fetch: ${err.message}`);
-        resolve({ title: 'Untitled video', uploader: '', thumbnailUrl: '', duration: 0 });
+        resolve({
+          title: 'Untitled video',
+          uploader: '',
+          thumbnailUrl: '',
+          duration: 0,
+        });
       });
     });
   }

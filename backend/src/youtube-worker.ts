@@ -12,7 +12,9 @@ async function bootstrapYouTubeWorker() {
   const processRegistry = app.get(ProcessRegistryService);
 
   const shutdown = async (signal: string) => {
-    logger.log(`Received ${signal}, shutting down YouTube worker gracefully...`);
+    logger.log(
+      `Received ${signal}, shutting down YouTube worker gracefully...`,
+    );
     await processRegistry.killAll();
     await app.close();
     process.exit(0);
@@ -20,7 +22,9 @@ async function bootstrapYouTubeWorker() {
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
 
-  logger.log('YouTube worker process started — listening for YouTube publishing jobs.');
+  logger.log(
+    'YouTube worker process started — listening for YouTube publishing jobs.',
+  );
 }
 
 bootstrapYouTubeWorker();

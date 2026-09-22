@@ -4,7 +4,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { NotificationsProcessor } from './notifications.processor';
-import { Notification, NotificationSchema } from './schemas/notification.schema';
+import {
+  Notification,
+  NotificationSchema,
+} from './schemas/notification.schema';
 import { NOTIFICATIONS_QUEUE } from './notifications.constants';
 
 @Module({

@@ -84,5 +84,8 @@ export const STYLE_PRESETS: Record<string, StylePreset> = {
 export const DEFAULT_STYLE_PRESET_KEY = 'default';
 
 export function resolveStylePreset(key: string | undefined): StylePreset {
-  return STYLE_PRESETS[key ?? DEFAULT_STYLE_PRESET_KEY] ?? STYLE_PRESETS[DEFAULT_STYLE_PRESET_KEY];
+  return (
+    STYLE_PRESETS[key ?? DEFAULT_STYLE_PRESET_KEY] ??
+    STYLE_PRESETS[DEFAULT_STYLE_PRESET_KEY]
+  );
 }

@@ -20,6 +20,7 @@ describe('ActivitiesService', () => {
   const findOneExec = jest.fn();
   const listExec = jest.fn();
   const countDocumentsExec = jest.fn();
+  const aggregateExec = jest.fn();
   const queueAdd = jest.fn().mockResolvedValue(undefined);
 
   function ActivityModel(this: any, data: any) {
@@ -37,6 +38,9 @@ describe('ActivitiesService', () => {
   }));
   (ActivityModel as any).countDocuments = jest.fn(() => ({
     exec: countDocumentsExec,
+  }));
+  (ActivityModel as any).aggregate = jest.fn(() => ({
+    exec: aggregateExec,
   }));
 
   beforeEach(async () => {
@@ -169,6 +173,122 @@ describe('ActivitiesService', () => {
       expect(result.activities).toHaveLength(2);
       expect(result.total).toBe(2);
       expect(result.totalPages).toBe(1);
+    });
+
+    it('caps the requested limit at MAX_LIMIT (100)', async () => {
+      const userId = new Types.ObjectId().toString();
+      listExec.mockResolvedValueOnce([]);
+      countDocumentsExec.mockResolvedValueOnce(0);
+
+      const result = await service.listForUser(userId, { limit: 500 });
+
+      expect(result.limit).toBe(100);
+    });
+
+    it('applies a case-insensitive search filter across title and description', async () => {
+      const userId = new Types.ObjectId().toString();
+      listExec.mockResolvedValueOnce([]);
+      countDocumentsExec.mockResolvedValueOnce(0);
+
+      await service.listForUser(userId, { search: 'clip' });
+
+      const filter = (ActivityModel as any).countDocuments.mock.calls[0][0];
+      expect(filter.$or).toHaveLength(4);
+      // Case-insensitive across title, description, type and entityType
+      expect(filter.$or[0].title.test('Clip generation completed')).toBe(true);
+      expect(filter.$or[0].title.test('A CLIP was made')).toBe(true);
+      expect(
+        filter.$or[1].description.test('A clip download link was generated.'),
+      ).toBe(true);
+      expect(filter.$or[2].type.test('clip.download')).toBe(true);
+      expect(filter.$or[0].title.test('Credit used')).toBe(false);
+    });
+
+    it('escapes regex metacharacters in the search term', async () => {
+      const userId = new Types.ObjectId().toString();
+      listExec.mockResolvedValueOnce([]);
+      countDocumentsExec.mockResolvedValueOnce(0);
+
+      await service.listForUser(userId, { search: 'a.*b' });
+
+      const filter = (ActivityModel as any).countDocuments.mock.calls[0][0];
+      expect(filter.$or[0].title.test('a.*b')).toBe(true);
+      expect(filter.$or[0].title.test('axxb')).toBe(false);
+    });
+  });
+
+  describe('getStatsForUser', () => {
+    it('aggregates lifetime counters from grouped category/type rows', async () => {
+      const userId = new Types.ObjectId().toString();
+
+      aggregateExec.mockResolvedValueOnce([
+        {
+          _id: {
+            category: ActivityCategory.JOB,
+            type: ActivityType.JOB_CREATE,
+          },
+          count: 3,
+        },
+        {
+          _id: {
+            category: ActivityCategory.JOB,
+            type: ActivityType.JOB_COMPLETE,
+          },
+          count: 2,
+        },
+        {
+          _id: {
+            category: ActivityCategory.JOB,
+            type: ActivityType.CLIP_DOWNLOAD,
+          },
+          count: 9,
+        },
+        {
+          _id: {
+            category: ActivityCategory.CREDIT,
+            type: ActivityType.CREDIT_DEDUCT,
+          },
+          count: 3,
+          credits: 3,
+        },
+        {
+          _id: {
+            category: ActivityCategory.BILLING,
+            type: ActivityType.BILLING_PAYMENT_SUCCESS,
+          },
+          count: 2,
+        },
+        {
+          _id: {
+            category: ActivityCategory.AUTH,
+            type: ActivityType.AUTH_LOGIN,
+          },
+          count: 2,
+        },
+      ]);
+
+      const result = await service.getStatsForUser(userId);
+
+      expect(result.total).toBe(21);
+      expect(result.jobsCount).toBe(14);
+      expect(result.jobsCompleted).toBe(2);
+      expect(result.creditsUsed).toBe(3);
+      expect(result.billingEvents).toBe(2);
+    });
+
+    it('returns zeroed counters when the user has no activity', async () => {
+      const userId = new Types.ObjectId().toString();
+      aggregateExec.mockResolvedValueOnce([]);
+
+      const result = await service.getStatsForUser(userId);
+
+      expect(result).toEqual({
+        total: 0,
+        jobsCount: 0,
+        jobsCompleted: 0,
+        creditsUsed: 0,
+        billingEvents: 0,
+      });
     });
   });
 });

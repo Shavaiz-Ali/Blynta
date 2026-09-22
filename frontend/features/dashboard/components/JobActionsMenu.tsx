@@ -90,7 +90,7 @@ export function JobActionsMenu({
         >
           <DropdownMenuItem
             className="rounded-lg text-xs font-medium cursor-pointer"
-            onClick={() => router.push(`/jobs/${jobId}`)}
+            onClick={() => router.push(`/my-clips/${jobId}`)}
           >
             <ArrowRightIcon className="h-3.5 w-3.5 text-primary" />
             <span>View Clips</span>

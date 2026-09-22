@@ -4,7 +4,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationsProcessor } from './notifications.processor';
 import { NotificationsService } from './notifications.service';
-import { Notification, NotificationSchema } from './schemas/notification.schema';
+import {
+  Notification,
+  NotificationSchema,
+} from './schemas/notification.schema';
 import { NOTIFICATIONS_QUEUE } from './notifications.constants';
 import { CommonModule } from '../common/common.module';
 import { Connection } from 'mongoose';

@@ -63,7 +63,7 @@ export function ActivePipelineBanner({ jobs }: ActivePipelineBannerProps) {
         <AppButton
           size="sm"
           variant="ghost"
-          onClick={() => router.push(`/jobs/${activeJob._id}`)}
+          onClick={() => router.push(`/my-clips/${activeJob._id}`)}
           className="h-7 px-2 text-xs font-semibold text-primary hover:text-primary hover:bg-primary/10 gap-1 cursor-pointer"
         >
           View

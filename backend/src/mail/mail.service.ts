@@ -28,7 +28,10 @@ export class MailService {
     );
   }
 
-  async queuePasswordResetEmail(email: string, resetToken: string): Promise<void> {
+  async queuePasswordResetEmail(
+    email: string,
+    resetToken: string,
+  ): Promise<void> {
     this.logger.log(`Queueing password reset email to ${email}`);
     await this.mailQueue.add(
       MAIL_JOBS.SEND_PASSWORD_RESET,
@@ -51,7 +54,9 @@ export class MailService {
     referrerName: string,
     referralLink: string,
   ): Promise<void> {
-    this.logger.log(`Queueing referral invite email to ${toEmail} from ${referrerName}`);
+    this.logger.log(
+      `Queueing referral invite email to ${toEmail} from ${referrerName}`,
+    );
     await this.mailQueue.add(
       MAIL_JOBS.SEND_REFERRAL_INVITE,
       { toEmail, referrerName, referralLink },
@@ -78,7 +83,9 @@ export class MailService {
     clipCount: number,
     jobId: string,
   ): Promise<void> {
-    this.logger.log(`Queueing job completed email for job ${jobId} to ${email}`);
+    this.logger.log(
+      `Queueing job completed email for job ${jobId} to ${email}`,
+    );
     await this.mailQueue.add(
       MAIL_JOBS.SEND_JOB_COMPLETED,
       { email, videoTitle, clipCount, jobId },
@@ -104,7 +111,9 @@ export class MailService {
     plan: string,
     credits: number,
   ): Promise<void> {
-    this.logger.log(`Queueing subscription activated email to ${email} for plan ${plan}`);
+    this.logger.log(
+      `Queueing subscription activated email to ${email} for plan ${plan}`,
+    );
     await this.mailQueue.add(
       MAIL_JOBS.SEND_SUBSCRIPTION_ACTIVATED,
       { email, plan, credits },

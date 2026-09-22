@@ -50,7 +50,9 @@ export class ProcessRegistryService {
       try {
         cmd.kill('SIGTERM');
       } catch (err) {
-        this.logger.warn(`Failed to SIGTERM ffmpeg command: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.warn(
+          `Failed to SIGTERM ffmpeg command: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -86,7 +88,9 @@ export class ProcessRegistryService {
     // 4. Force kill any remaining child processes
     for (const proc of procs) {
       if (!proc.killed && proc.pid) {
-        this.logger.warn(`Force-killing process PID ${proc.pid} (did not exit after SIGTERM)`);
+        this.logger.warn(
+          `Force-killing process PID ${proc.pid} (did not exit after SIGTERM)`,
+        );
         try {
           process.kill(-proc.pid, 'SIGKILL');
         } catch {

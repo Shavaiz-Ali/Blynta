@@ -47,7 +47,8 @@ export class YouTubeConnection {
   scope: string;
 }
 
-export const YouTubeConnectionSchema = SchemaFactory.createForClass(YouTubeConnection);
+export const YouTubeConnectionSchema =
+  SchemaFactory.createForClass(YouTubeConnection);
 
 // Enforce one connection per user (we upsert, so this is a safety net).
 YouTubeConnectionSchema.index({ userId: 1 }, { unique: true });

@@ -7,7 +7,10 @@ import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthProviderConfigService } from './auth-provider-config.service';
-import { AuthProviderConfig, AuthProviderConfigSchema } from './schemas/auth-provider-config.schema';
+import {
+  AuthProviderConfig,
+  AuthProviderConfigSchema,
+} from './schemas/auth-provider-config.schema';
 import { UsersModule } from '../users/users.module';
 import { MailModule } from 'src/mail/mail.module';
 import { ActivitiesModule } from '../activities/activities.module';
@@ -26,7 +29,9 @@ const DEFAULT_JWT_EXPIRES_IN = '7d';
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService): Promise<JwtModuleOptions> => {
+      useFactory: async (
+        configService: ConfigService,
+      ): Promise<JwtModuleOptions> => {
         const secret = configService.get<string>('JWT_SECRET');
         if (!secret) {
           throw new Error('JWT_SECRET is not defined in environment variables');
@@ -45,4 +50,4 @@ const DEFAULT_JWT_EXPIRES_IN = '7d';
   providers: [JwtStrategy, AuthService, AuthProviderConfigService],
   exports: [PassportModule, JwtModule],
 })
-export class AuthModule { }
+export class AuthModule {}

@@ -5,4 +5,6 @@ const SendReferralInviteSchema = z.object({
   email: z.string().email(),
 });
 
-export class SendReferralInviteDto extends createZodDto(SendReferralInviteSchema) {}
+export class SendReferralInviteDto extends createZodDto(
+  SendReferralInviteSchema,
+) {}

@@ -105,7 +105,9 @@ describe('YouTubeProcessor', () => {
       channelId: 'UC123',
     });
 
-    mockOAuthService.getValidAccessToken.mockResolvedValue('valid-access-token');
+    mockOAuthService.getValidAccessToken.mockResolvedValue(
+      'valid-access-token',
+    );
 
     // Mock S3 send
     const stream = new Readable();
@@ -153,7 +155,9 @@ describe('YouTubeProcessor', () => {
       exec: jest.fn().mockResolvedValue(mockPublication),
     });
 
-    mockJobsService.getClipForDownload.mockRejectedValue(new Error('Clip not found'));
+    mockJobsService.getClipForDownload.mockRejectedValue(
+      new Error('Clip not found'),
+    );
 
     await expect(
       processor.process({

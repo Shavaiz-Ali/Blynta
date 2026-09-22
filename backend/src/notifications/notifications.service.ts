@@ -127,15 +127,10 @@ export class NotificationsService {
   }
 
   async queueCreate(input: CreateNotificationInput): Promise<void> {
-    await this.notificationsQueue.add(
-      NOTIFICATION_JOBS.CREATE,
-      input,
-    );
+    await this.notificationsQueue.add(NOTIFICATION_JOBS.CREATE, input);
   }
 
-  async queueCreateIfNotExists(
-    input: CreateNotificationInput,
-  ): Promise<void> {
+  async queueCreateIfNotExists(input: CreateNotificationInput): Promise<void> {
     if (!input.dedupeKey) {
       throw new BadRequestException(
         'dedupeKey is required when using queueCreateIfNotExists',
@@ -154,16 +149,10 @@ export class NotificationsService {
   ): Promise<ListNotificationsResult> {
     const userObjectId = this.toObjectId(userId);
 
-    const page = Math.max(
-      this.DEFAULT_PAGE,
-      options.page ?? this.DEFAULT_PAGE,
-    );
+    const page = Math.max(this.DEFAULT_PAGE, options.page ?? this.DEFAULT_PAGE);
 
     const requestedLimit = options.limit ?? this.DEFAULT_LIMIT;
-    const limit = Math.min(
-      Math.max(1, requestedLimit),
-      this.MAX_LIMIT,
-    );
+    const limit = Math.min(Math.max(1, requestedLimit), this.MAX_LIMIT);
 
     const skip = (page - 1) * limit;
 
@@ -231,9 +220,7 @@ export class NotificationsService {
     return notification.save();
   }
 
-  async markAllAsRead(
-    userId: string,
-  ): Promise<{ updatedCount: number }> {
+  async markAllAsRead(userId: string): Promise<{ updatedCount: number }> {
     const userObjectId = this.toObjectId(userId);
 
     const result = await this.notificationModel

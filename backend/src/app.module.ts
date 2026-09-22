@@ -77,4 +77,4 @@ const logger = new Logger('MongooseModule');
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

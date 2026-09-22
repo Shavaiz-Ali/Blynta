@@ -37,7 +37,12 @@ export function runCommandWithProgress(
 
     proc.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`${command} exited with code ${code}: ${fullStderr.slice(-500)}`));
+      else
+        reject(
+          new Error(
+            `${command} exited with code ${code}: ${fullStderr.slice(-500)}`,
+          ),
+        );
     });
   });
 }

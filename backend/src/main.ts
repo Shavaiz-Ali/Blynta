@@ -43,25 +43,19 @@ async function bootstrap() {
     '/billing/paddle/webhook',
     express.raw({ type: 'application/json' }),
   );
-  instance.use(
-    '/billing/webhook',
-    express.raw({ type: 'application/json' }),
-  );
+  instance.use('/billing/webhook', express.raw({ type: 'application/json' }));
 
   // 2) For EVERYTHING ELSE — standard JSON body parser (the default Nest
   // behavior we disabled above).
-  instance.use(
-    '/',
-    (req: any, res: any, next: any) => {
-      if (
-        req.path.startsWith('/billing/paddle/webhook') ||
-        req.path.startsWith('/billing/webhook')
-      ) {
-        return next();
-      }
-      return express.json({ limit: '10mb' })(req, res, next);
-    },
-  );
+  instance.use('/', (req: any, res: any, next: any) => {
+    if (
+      req.path.startsWith('/billing/paddle/webhook') ||
+      req.path.startsWith('/billing/webhook')
+    ) {
+      return next();
+    }
+    return express.json({ limit: '10mb' })(req, res, next);
+  });
   instance.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -78,9 +72,7 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AllExceptionsFilter());
 
-  app.useGlobalPipes(
-    new ZodValidationPipe(),
-  );
+  app.useGlobalPipes(new ZodValidationPipe());
 
   app.useGlobalInterceptors(new ResponseInterceptor());
 

@@ -1,14 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job as BullJob } from 'bullmq';
-import {
-  ACTIVITIES_QUEUE,
-  ACTIVITY_JOBS,
-} from './activities.constants';
-import {
-  CreateActivityInput,
-  ActivitiesService,
-} from './activities.service';
+import { ACTIVITIES_QUEUE, ACTIVITY_JOBS } from './activities.constants';
+import { CreateActivityInput, ActivitiesService } from './activities.service';
 
 @Processor(ACTIVITIES_QUEUE, {
   concurrency: 5,

@@ -149,8 +149,7 @@ export class Notification {
   expiresAt?: Date;
 }
 
-export const NotificationSchema =
-  SchemaFactory.createForClass(Notification);
+export const NotificationSchema = SchemaFactory.createForClass(Notification);
 
 /**
  * Main notification listing:

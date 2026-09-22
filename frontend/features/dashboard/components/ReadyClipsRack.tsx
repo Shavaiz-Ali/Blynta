@@ -92,8 +92,12 @@ export function ReadyClipsRack({ jobs }: ReadyClipsRackProps) {
 
           return (
             <div
-              key={`${item.jobId}-${item.clip.id || idx}`}
-              onClick={() => router.push(`/jobs/${item.jobId}`)}
+              key={`${item.jobId}-${item.clip._id || item.clip.id || idx}`}
+              onClick={() =>
+                router.push(
+                  `/my-clips/${item.jobId}/clips/${item.clip._id || item.clip.id}`
+                )
+              }
               className="group relative flex flex-col rounded-xl border border-border/70 bg-muted/30 overflow-hidden cursor-pointer hover:border-primary/50 transition-all duration-300 hover:shadow-md hover:shadow-primary/5"
             >
               {/* 9:16 Aspect ratio container */}
@@ -165,7 +169,13 @@ export function ReadyClipsRack({ jobs }: ReadyClipsRackProps) {
       {/* ── Studio Clip Editor CTA ── */}
       <AppButton
         variant="secondary"
-        onClick={() => router.push(completedClips[0] ? `/jobs/${completedClips[0].jobId}` : "/my-clips")}
+        onClick={() =>
+          router.push(
+            completedClips[0]
+              ? `/my-clips/${completedClips[0].jobId}/clips/${completedClips[0].clip._id || completedClips[0].clip.id}`
+              : "/my-clips"
+          )
+        }
         className="w-full justify-between h-9 text-xs font-semibold group shadow-2xs border border-border/80 hover:border-primary/40"
         icon={<ScissorsIcon className="h-3.5 w-3.5 text-primary group-hover:rotate-12 transition-transform" />}
       >

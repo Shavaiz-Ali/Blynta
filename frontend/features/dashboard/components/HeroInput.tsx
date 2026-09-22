@@ -121,7 +121,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       setAiModel("default");
       setShowAdvanced(false);
       toast.success("Video ingested! AI clip generation started.");
-      router.push(`/jobs/${data?._id}`);
+      router.push(`/my-clips/${data?._id}`);
       onSuccess?.();
     },
     onError: (err: any) => {

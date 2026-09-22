@@ -1,10 +1,4 @@
-import {
-  Controller,
-  Get,
-  Query,
-  Request,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Query, Request, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ListActivitiesDto } from './dto/list-activities.dto';
 import { ActivitiesService } from './activities.service';
@@ -12,9 +6,7 @@ import { ActivitiesService } from './activities.service';
 @Controller('activities')
 @UseGuards(AuthGuard('jwt'))
 export class ActivitiesController {
-  constructor(
-    private readonly activitiesService: ActivitiesService,
-  ) {}
+  constructor(private readonly activitiesService: ActivitiesService) {}
 
   @Get()
   list(@Request() req, @Query() query: ListActivitiesDto) {
@@ -24,6 +16,12 @@ export class ActivitiesController {
       category: query.category,
       type: query.type,
       status: query.status,
+      search: query.search,
     });
+  }
+
+  @Get('stats')
+  stats(@Request() req) {
+    return this.activitiesService.getStatsForUser(req.user.userId);
   }
 }

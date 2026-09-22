@@ -16,7 +16,7 @@ export class AuthController {
   constructor(
     private authService: AuthService,
     private providerConfigService: AuthProviderConfigService,
-  ) { }
+  ) {}
 
   // Frontend calls this to know which login buttons to render
   @Get('providers')
@@ -36,14 +36,18 @@ export class AuthController {
 
   @Post('google')
   async googleLogin(@Body() dto: SocialLoginDto) {
-    const enabled = await this.providerConfigService.isProviderEnabled(AuthProvider.GOOGLE);
+    const enabled = await this.providerConfigService.isProviderEnabled(
+      AuthProvider.GOOGLE,
+    );
     if (!enabled) throw new ProviderDisabledException('Google');
     return this.authService.validateSocialLogin(dto, AuthProvider.GOOGLE);
   }
 
   @Post('facebook')
   async facebookLogin(@Body() dto: SocialLoginDto) {
-    const enabled = await this.providerConfigService.isProviderEnabled(AuthProvider.FACEBOOK);
+    const enabled = await this.providerConfigService.isProviderEnabled(
+      AuthProvider.FACEBOOK,
+    );
     if (!enabled) throw new ProviderDisabledException('Facebook');
     return this.authService.validateSocialLogin(dto, AuthProvider.FACEBOOK);
   }

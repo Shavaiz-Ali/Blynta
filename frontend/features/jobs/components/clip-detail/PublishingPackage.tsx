@@ -106,7 +106,7 @@ export function PublishingPackage({
     {
       key: "package",
       label: "Copy package",
-      description: "Title, caption & hashtags",
+      description: "Title, description & hashtags",
       icon: <SendIcon className="h-3.5 w-3.5" />,
       onClick: () => copy(packageText, "Publishing package"),
     },
@@ -119,11 +119,11 @@ export function PublishingPackage({
       separatorBefore: true,
     },
     {
-      key: "caption",
-      label: "Copy caption",
-      description: "Paste-ready caption",
+      key: "description",
+      label: "Copy description",
+      description: "Paste-ready description",
       icon: <FileTextIcon className="h-3.5 w-3.5" />,
-      onClick: () => copy(descriptionText, "Caption"),
+      onClick: () => copy(descriptionText, "Description"),
     },
     {
       key: "keywords",
@@ -199,7 +199,7 @@ export function PublishingPackage({
 
         <AppCard
           size="sm"
-          title="Caption"
+          title="Description"
           titleClassName={CARD_LABEL_CLASS}
           contentClassName="px-3 pb-0"
         >

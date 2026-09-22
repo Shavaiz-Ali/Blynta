@@ -37,8 +37,10 @@ export class CaptionBurningService {
   }
 
   private buildAssHeader(style: CaptionStyleConfig): string {
-    const alignment = style.position === 'top' ? 8 : style.position === 'center' ? 5 : 2;
-    const marginV = style.position === 'bottom' ? 120 : style.position === 'top' ? 80 : 0;
+    const alignment =
+      style.position === 'top' ? 8 : style.position === 'center' ? 5 : 2;
+    const marginV =
+      style.position === 'bottom' ? 120 : style.position === 'top' ? 80 : 0;
     return `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -53,7 +55,10 @@ Format: Layer, Start, End, Style, Text
 `;
   }
 
-  private buildAss(segments: TranscriptSegmentDto[], style: CaptionStyleConfig): string {
+  private buildAss(
+    segments: TranscriptSegmentDto[],
+    style: CaptionStyleConfig,
+  ): string {
     const header = this.buildAssHeader(style);
     const events = segments
       .map((seg) => {
@@ -76,9 +81,16 @@ Format: Layer, Start, End, Style, Text
     return `${h}:${pad(m)}:${pad(s)}.${pad(cs, 2)}`;
   }
 
-  private burnWithFfmpeg(videoPath: string, assPath: string, outputPath: string): Promise<void> {
+  private burnWithFfmpeg(
+    videoPath: string,
+    assPath: string,
+    outputPath: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const escapedAssPath = assPath.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
+      const escapedAssPath = assPath
+        .replace(/\\/g, '\\\\')
+        .replace(/:/g, '\\:')
+        .replace(/'/g, "\\'");
       const filter = `subtitles='${escapedAssPath}'`;
 
       const cmd = ffmpeg(videoPath)
@@ -87,7 +99,9 @@ Format: Layer, Start, End, Style, Text
         .outputOptions(['-y'])
         .on('end', () => resolve())
         .on('error', (err: Error, stdout: string, stderr: string) => {
-          this.logger.error(`ffmpeg caption burn failed: ${err.message}\n${stderr}`);
+          this.logger.error(
+            `ffmpeg caption burn failed: ${err.message}\n${stderr}`,
+          );
           reject(new Error(`ffmpeg caption burn failed: ${err.message}`));
         });
 

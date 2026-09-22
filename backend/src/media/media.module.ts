@@ -6,7 +6,10 @@ import { CaptionBurningService } from './services/caption-burning.service';
 import { HighlightDetectionService } from './services/highlight-detection.service';
 import { ClipCuttingService } from './services/clip-cutting.service';
 import { SourceVideoService } from './services/source-video.service';
-import { SourceVideo, SourceVideoSchema } from '../jobs/schemas/source-video.schema';
+import {
+  SourceVideo,
+  SourceVideoSchema,
+} from '../jobs/schemas/source-video.schema';
 
 @Module({
   imports: [

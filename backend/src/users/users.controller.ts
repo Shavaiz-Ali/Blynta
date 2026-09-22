@@ -32,7 +32,7 @@ export class UsersController {
   constructor(
     private usersService: UsersService,
     private activitiesService: ActivitiesService,
-  ) { }
+  ) {}
 
   @Get('me')
   async getProfile(@Request() req) {
@@ -87,11 +87,19 @@ export class UsersController {
   )
   async uploadAvatar(
     @Request() req,
-    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname?: string; size?: number },
+    @UploadedFile()
+    file: {
+      buffer: Buffer;
+      mimetype: string;
+      originalname?: string;
+      size?: number;
+    },
   ) {
     if (!file) throw new BadRequestException('No file provided');
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
-      throw new BadRequestException('Avatar must be a JPEG, PNG, or WebP image');
+      throw new BadRequestException(
+        'Avatar must be a JPEG, PNG, or WebP image',
+      );
     }
     return this.usersService.updateAvatar(
       req.user.userId,

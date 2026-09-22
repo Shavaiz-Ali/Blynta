@@ -18,6 +18,11 @@ export interface YouTubeStatusResponse {
   channel: YouTubeChannelInfo | null;
 }
 
+export interface YouTubeCategory {
+  id: string;
+  title: string;
+}
+
 export interface ClipPublication {
   _id: string;
   userId: string;
@@ -28,6 +33,9 @@ export interface ClipPublication {
   title: string;
   description?: string;
   privacyStatus: "private" | "unlisted" | "public";
+  tags?: string[];
+  categoryId?: string;
+  thumbnailKey?: string;
   externalId?: string;
   externalUrl?: string;
   publishedAt?: string;
@@ -40,4 +48,27 @@ export interface PublishToYouTubeInput {
   title: string;
   description?: string;
   privacyStatus: "private" | "unlisted" | "public";
+  tags?: string[];
+  categoryId?: string;
+  thumbnailKey?: string;
+}
+
+export interface ThumbnailPresignedResponse {
+  presignedUrl: string;
+  thumbnailKey: string;
+}
+
+export interface ListPublicationsParams {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+}
+
+export interface UserPublicationsResponse {
+  publications: ClipPublication[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }

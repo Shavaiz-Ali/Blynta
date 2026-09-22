@@ -86,7 +86,7 @@ export interface Activity {
   actorId?: string;
   entityType?: string;
   entityId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   dedupeKey?: string;
   ipAddress?: string;
   userAgent?: string;
@@ -103,10 +103,19 @@ export interface ListActivitiesResult {
   totalPages: number;
 }
 
+export interface ActivityStats {
+  total: number;
+  jobsCount: number;
+  jobsCompleted: number;
+  creditsUsed: number;
+  billingEvents: number;
+}
+
 export interface ListActivitiesOptions {
   page?: number;
   limit?: number;
   category?: ActivityCategory;
   type?: ActivityType;
   status?: ActivityStatus;
+  search?: string;
 }

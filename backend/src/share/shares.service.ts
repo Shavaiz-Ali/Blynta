@@ -30,6 +30,7 @@ export interface ShareView {
   id: string;
   jobId: string;
   clipId: string;
+  token?: string | null;
   isActive: boolean;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -58,6 +59,7 @@ export interface PublicShareResponse {
 function toShareView(doc: ShareDocument): ShareView {
   const obj = doc.toObject() as ShareDocument & {
     _id: Types.ObjectId;
+    rawToken?: string;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -65,6 +67,7 @@ function toShareView(doc: ShareDocument): ShareView {
     id: obj._id.toString(),
     jobId: obj.jobId.toString(),
     clipId: obj.clipId.toString(),
+    token: obj.rawToken || null,
     isActive: obj.isActive,
     expiresAt: obj.expiresAt ? obj.expiresAt.toISOString() : null,
     revokedAt: obj.revokedAt ? obj.revokedAt.toISOString() : null,
@@ -72,8 +75,8 @@ function toShareView(doc: ShareDocument): ShareView {
     lastAccessedAt: obj.lastAccessedAt
       ? obj.lastAccessedAt.toISOString()
       : null,
-    createdAt: (obj.createdAt as unknown as Date).toISOString(),
-    updatedAt: (obj.updatedAt as unknown as Date).toISOString(),
+    createdAt: obj.createdAt.toISOString(),
+    updatedAt: obj.updatedAt.toISOString(),
   };
 }
 
@@ -107,6 +110,7 @@ export class SharesService {
       jobId: new Types.ObjectId(dto.jobId),
       clipId: new Types.ObjectId(dto.clipId),
       tokenHash,
+      rawToken,
       isActive: true,
       expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       revokedAt: null,
@@ -160,7 +164,10 @@ export class SharesService {
   }
 
   /** DELETE /shares/:id — revoke (soft-delete). */
-  async revokeShare(userId: string, shareId: string): Promise<{ message: string }> {
+  async revokeShare(
+    userId: string,
+    shareId: string,
+  ): Promise<{ message: string }> {
     const share = await this.findOwnedShare(userId, shareId);
 
     share.isActive = false;
@@ -285,4 +292,3 @@ export class SharesService {
     return share;
   }
 }
-

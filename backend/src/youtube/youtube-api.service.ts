@@ -10,8 +10,7 @@ import { Readable } from 'stream';
 const YOUTUBE_UPLOAD_BASE =
   'https://www.googleapis.com/upload/youtube/v3/videos';
 
-const YOUTUBE_API_BASE =
-  'https://www.googleapis.com/youtube/v3';
+const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 
 const CHUNK_SIZE = 8 * 1024 * 1024; // 8 MB
 const MAX_RETRIES = 5;
@@ -22,6 +21,8 @@ export interface YouTubeVideoMetadata {
   description?: string;
   privacyStatus: 'private' | 'unlisted' | 'public';
   categoryId?: string;
+  /** Optional list of tags to attach to the video (snippet.tags). */
+  tags?: string[];
 }
 
 export interface YouTubeUploadResult {
@@ -41,9 +42,7 @@ export class YouTubeApiService {
   ): Promise<YouTubeUploadResult> {
     const tempFile = path.join(
       os.tmpdir(),
-      `blynta-youtube-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.mp4`,
+      `blynta-youtube-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`,
     );
 
     try {
@@ -113,9 +112,7 @@ export class YouTubeApiService {
 
     try {
       for await (const chunk of stream) {
-        const buffer = Buffer.isBuffer(chunk)
-          ? chunk
-          : Buffer.from(chunk);
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 
         totalBytes += buffer.length;
 
@@ -132,9 +129,7 @@ export class YouTubeApiService {
         output.once('error', reject);
       });
 
-      this.logger.log(
-        `Video saved temporarily: ${totalBytes} bytes`,
-      );
+      this.logger.log(`Video saved temporarily: ${totalBytes} bytes`);
 
       return totalBytes;
     } catch (error) {
@@ -164,6 +159,9 @@ export class YouTubeApiService {
         title: metadata.title,
         description: metadata.description ?? '',
         categoryId: metadata.categoryId ?? '22',
+        ...(metadata.tags && metadata.tags.length > 0
+          ? { tags: metadata.tags }
+          : {}),
       },
       status: {
         privacyStatus: metadata.privacyStatus,
@@ -192,13 +190,11 @@ export class YouTubeApiService {
 
       throw new Error(
         `Failed to initiate YouTube resumable upload: ` +
-        `${response.status} ${errorText}`,
+          `${response.status} ${errorText}`,
       );
     }
 
-    this.logger.log(
-      'YouTube resumable upload session initiated',
-    );
+    this.logger.log('YouTube resumable upload session initiated');
 
     return sessionUri;
   }
@@ -217,10 +213,7 @@ export class YouTubeApiService {
 
     while (uploadedBytes < totalSize) {
       const chunkStart = uploadedBytes;
-      const chunkEnd = Math.min(
-        chunkStart + CHUNK_SIZE,
-        totalSize,
-      ) - 1;
+      const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalSize) - 1;
 
       const chunkLength = chunkEnd - chunkStart + 1;
 
@@ -257,27 +250,22 @@ export class YouTubeApiService {
             break;
           }
 
-          throw new Error(
-            'YouTube returned an unexpected upload response',
-          );
+          throw new Error('YouTube returned an unexpected upload response');
         } catch (error: any) {
           attempt++;
 
-          const retriable =
-            this.isRetriableError(error);
+          const retriable = this.isRetriableError(error);
 
           if (!retriable || attempt > MAX_RETRIES) {
             throw error;
           }
 
-          const delay =
-            RETRY_BASE_DELAY_MS *
-            Math.pow(2, attempt - 1);
+          const delay = RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
 
           this.logger.warn(
             `YouTube upload interrupted at byte ${chunkStart}. ` +
-            `Attempt ${attempt}/${MAX_RETRIES}. ` +
-            `Retrying in ${delay}ms. Error: ${error?.message}`,
+              `Attempt ${attempt}/${MAX_RETRIES}. ` +
+              `Retrying in ${delay}ms. Error: ${error?.message}`,
           );
 
           await this.sleep(delay);
@@ -287,12 +275,11 @@ export class YouTubeApiService {
           // Never assume YouTube received zero bytes.
           // Ask YouTube where the upload currently is.
           // -------------------------------------------------------------
-          const serverPosition =
-            await this.getUploadPosition(
-              accessToken,
-              sessionUri,
-              totalSize,
-            );
+          const serverPosition = await this.getUploadPosition(
+            accessToken,
+            sessionUri,
+            totalSize,
+          );
 
           if (serverPosition === totalSize) {
             // Upload actually completed but response was lost.
@@ -323,9 +310,7 @@ export class YouTubeApiService {
       void chunkLength;
     }
 
-    throw new Error(
-      'YouTube upload ended without returning a video ID',
-    );
+    throw new Error('YouTube upload ended without returning a video ID');
   }
 
   // ---------------------------------------------------------------------------
@@ -371,10 +356,7 @@ export class YouTubeApiService {
             // ---------------------------------------------------------
             // Upload completed.
             // ---------------------------------------------------------
-            if (
-              response.statusCode === 200 ||
-              response.statusCode === 201
-            ) {
+            if (response.statusCode === 200 || response.statusCode === 201) {
               try {
                 const data = JSON.parse(body);
 
@@ -393,9 +375,7 @@ export class YouTubeApiService {
                 return;
               } catch {
                 reject(
-                  new Error(
-                    `Invalid YouTube completion response: ${body}`,
-                  ),
+                  new Error(`Invalid YouTube completion response: ${body}`),
                 );
                 return;
               }
@@ -405,8 +385,7 @@ export class YouTubeApiService {
             // Chunk accepted, more data required.
             // ---------------------------------------------------------
             if (response.statusCode === 308) {
-              const range =
-                response.headers.range;
+              const range = response.headers.range;
 
               if (!range) {
                 // Nothing confirmed yet.
@@ -416,20 +395,14 @@ export class YouTubeApiService {
                 return;
               }
 
-              const match =
-                /bytes=0-(\d+)/.exec(range);
+              const match = /bytes=0-(\d+)/.exec(range);
 
               if (!match) {
-                reject(
-                  new Error(
-                    `Invalid YouTube Range header: ${range}`,
-                  ),
-                );
+                reject(new Error(`Invalid YouTube Range header: ${range}`));
                 return;
               }
 
-              const lastByte =
-                Number(match[1]);
+              const lastByte = Number(match[1]);
 
               resolve({
                 nextByte: lastByte + 1,
@@ -514,33 +487,24 @@ export class YouTubeApiService {
 
           response.on('end', () => {
             // Upload already completed.
-            if (
-              response.statusCode === 200 ||
-              response.statusCode === 201
-            ) {
+            if (response.statusCode === 200 || response.statusCode === 201) {
               resolve(totalSize);
               return;
             }
 
             // Upload still incomplete.
             if (response.statusCode === 308) {
-              const range =
-                response.headers.range;
+              const range = response.headers.range;
 
               if (!range) {
                 resolve(0);
                 return;
               }
 
-              const match =
-                /bytes=0-(\d+)/.exec(range);
+              const match = /bytes=0-(\d+)/.exec(range);
 
               if (!match) {
-                reject(
-                  new Error(
-                    `Invalid YouTube Range header: ${range}`,
-                  ),
-                );
+                reject(new Error(`Invalid YouTube Range header: ${range}`));
                 return;
               }
 
@@ -550,18 +514,14 @@ export class YouTubeApiService {
 
             // Session expired.
             if (response.statusCode === 404) {
-              reject(
-                new Error(
-                  'YouTube resumable upload session expired',
-                ),
-              );
+              reject(new Error('YouTube resumable upload session expired'));
               return;
             }
 
             reject(
               new Error(
                 `Failed to query YouTube upload position: ` +
-                `${response.statusCode} ${body}`,
+                  `${response.statusCode} ${body}`,
               ),
             );
           });
@@ -607,10 +567,7 @@ export class YouTubeApiService {
           });
 
           response.on('end', () => {
-            if (
-              response.statusCode === 200 ||
-              response.statusCode === 201
-            ) {
+            if (response.statusCode === 200 || response.statusCode === 201) {
               try {
                 const data = JSON.parse(body);
                 resolve(data?.id);
@@ -629,7 +586,7 @@ export class YouTubeApiService {
             reject(
               new Error(
                 `Failed to confirm YouTube upload: ` +
-                `${response.statusCode} ${body}`,
+                  `${response.statusCode} ${body}`,
               ),
             );
           });
@@ -658,9 +615,7 @@ export class YouTubeApiService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) =>
-      setTimeout(resolve, ms),
-    );
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -687,11 +642,88 @@ export class YouTubeApiService {
       const data = await response.json();
       const item = data?.items?.[0];
 
-      return item
-        ? { status: item.status.uploadStatus }
-        : null;
+      return item ? { status: item.status.uploadStatus } : null;
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Sets a custom thumbnail for a YouTube video using the thumbnails.set endpoint.
+   *
+   * IMPORTANT: This must be called AFTER the video upload completes and a video ID is available.
+   * Failure of this method should NOT cause the overall publication to fail — the video already
+   * exists on YouTube. Callers must handle errors independently.
+   *
+   * @param accessToken - Valid YouTube OAuth access token
+   * @param videoId     - The YouTube video ID returned by videos.insert
+   * @param imageBuffer - Raw image data (JPEG, PNG, or WEBP)
+   * @param contentType - MIME type of the image buffer (default: 'image/jpeg')
+   */
+  async setThumbnail(
+    accessToken: string,
+    videoId: string,
+    imageBuffer: Buffer,
+    contentType = 'image/jpeg',
+  ): Promise<void> {
+    this.logger.log(`Setting custom thumbnail for video ${videoId}`);
+
+    const url = `${YOUTUBE_UPLOAD_BASE.replace('/videos', '/thumbnails')}/set?videoId=${encodeURIComponent(videoId)}&uploadType=media`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': contentType,
+        'Content-Length': String(imageBuffer.length),
+      },
+      body: new Uint8Array(imageBuffer),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to set YouTube thumbnail: ${response.status} ${errorText}`,
+      );
+    }
+
+    this.logger.log(`Custom thumbnail set successfully for video ${videoId}`);
+  }
+
+  /**
+   * Fetches YouTube video categories for a given region.
+   * Results should be cached by the caller (e.g. Redis) to avoid repeated API calls.
+   *
+   * @param accessToken  - Valid YouTube OAuth access token
+   * @param regionCode   - ISO 3166-1 alpha-2 region code (default: 'US')
+   */
+  async listVideoCategories(
+    accessToken: string,
+    regionCode = 'US',
+  ): Promise<Array<{ id: string; title: string }>> {
+    const url = `${YOUTUBE_API_BASE}/videoCategories?part=snippet&regionCode=${encodeURIComponent(regionCode)}&hl=en`;
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to fetch YouTube categories: ${response.status} ${errorText}`,
+      );
+    }
+
+    const data = await response.json();
+    const items: Array<{
+      id: string;
+      snippet: { title: string; assignable: boolean };
+    }> = data?.items ?? [];
+
+    // Only return assignable categories (not all categories can be assigned to videos)
+    return items
+      .filter((item) => item.snippet.assignable)
+      .map((item) => ({ id: item.id, title: item.snippet.title }))
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 }

@@ -6,10 +6,10 @@ import { randomBytes } from 'crypto';
 const CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 export function generateReferralCode(length = 8): string {
-    const bytes = randomBytes(length);
-    let code = '';
-    for (let i = 0; i < length; i++) {
-        code += CHARS[bytes[i] % CHARS.length];
-    }
-    return code;
+  const bytes = randomBytes(length);
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += CHARS[bytes[i] % CHARS.length];
+  }
+  return code;
 }

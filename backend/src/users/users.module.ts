@@ -4,7 +4,10 @@ import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
 import { User, UserSchema } from './schemas/user.schema';
 import { MailModule } from '../mail/mail.module';
-import { ReferralReward, ReferralRewardSchema } from './schemas/referral-reward.schema';
+import {
+  ReferralReward,
+  ReferralRewardSchema,
+} from './schemas/referral-reward.schema';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StorageModule } from '../storage/storage.module';
 import { ActivitiesModule } from '../activities/activities.module';
@@ -24,4 +27,4 @@ import { ActivitiesModule } from '../activities/activities.module';
   providers: [UsersService],
   exports: [UsersService],
 })
-export class UsersModule { }
+export class UsersModule {}
