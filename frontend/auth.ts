@@ -77,6 +77,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
   session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 }, // 7 days — aligned with backend JWT expiresIn ('7d')
 
+  secret: process.env.AUTH_SECRET,
+
+
   providers: [
     // ------------------------------------------------------------------
     // 1. Credentials (email + password) — calls NestJS POST /auth/login
