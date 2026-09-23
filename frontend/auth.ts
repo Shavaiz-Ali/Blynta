@@ -74,8 +74,9 @@ async function callBackend<T>(
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
-
-  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 }, // 7 days — aligned with backend JWT expiresIn ('7d')
+  trustHost: true,
+  debug: true,
+  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
 
   secret: process.env.AUTH_SECRET,
 
