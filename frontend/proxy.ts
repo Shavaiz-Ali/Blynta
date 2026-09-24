@@ -1,23 +1,58 @@
 /**
  * middleware.ts — Next.js App Router middleware.
  *
- * Wraps NextAuth v5's edge middleware handler via auth.config.ts.
- * CRITICAL: the `matcher` must explicitly exclude the NextAuth API
- * endpoints (/api/auth/*). If the middleware runs its `authorized()`
- * callback on those routes when a session cookie is absent, it will
- * redirect (or return the login page HTML) for JSON-only REST calls
- * like /api/auth/session — which then fails to parse as JSON with:
- *     "Unexpected token '<', '<!DOCTYPE' ... is not valid JSON"
+ * Checks for the presence of NextAuth's session cookie directly, instead of
+ * creating a second NextAuth() instance on the Edge runtime. This avoids a
+ * whole class of bugs where the Edge-runtime NextAuth instance (previously
+ * created via `NextAuth(authConfig)` here) lacked `secret`/`trustHost` and
+ * silently fell back to bad defaults (e.g. localhost:3000 in callbackUrl).
  *
- * Excluding /api/auth/* from the matcher prevents this entire class of
- * bugs without any change to NextAuth's own route handling.
+ * This is a coarse-grained check — it only confirms a session cookie exists,
+ * it does not verify the JWT signature. That's fine for route gating: actual
+ * authorization/session validity is still enforced server-side wherever the
+ * real session is read (route handlers, server components via `auth()`).
  */
 
-import NextAuth from "next-auth";
-import { authConfig } from "./auth.config";
+import { NextResponse, type NextRequest } from "next/server";
 
-export const { auth: proxy } = NextAuth(authConfig);
-export default proxy;
+// NextAuth v5 (Auth.js) cookie names differ based on whether the request is
+// secure (HTTPS) or not. Check both so this works in local dev (http) and
+// production (https) without extra config.
+const SESSION_COOKIE_NAMES = [
+  "__Secure-authjs.session-token", // v5 default, secure/HTTPS
+  "authjs.session-token", // v5 default, non-secure/HTTP (local dev)
+  "__Secure-next-auth.session-token", // v4-style fallback, in case of legacy cookies
+  "next-auth.session-token", // v4-style fallback, non-secure
+];
+
+function hasSessionCookie(request: NextRequest): boolean {
+  return SESSION_COOKIE_NAMES.some((name) => !!request.cookies.get(name));
+}
+
+export function middleware(request: NextRequest) {
+  const { nextUrl } = request;
+  const isLoggedIn = hasSessionCookie(request);
+
+  const isAuthPage =
+    nextUrl.pathname.startsWith("/login") ||
+    nextUrl.pathname.startsWith("/signup") ||
+    nextUrl.pathname.startsWith("/forgot-password");
+
+  // Let auth pages through unconditionally (logged-in users will be
+  // redirected away by the login page itself if needed).
+  if (isAuthPage) {
+    return NextResponse.next();
+  }
+
+  // All other routes require a session cookie to be present.
+  if (!isLoggedIn) {
+    const loginUrl = new URL("/login", nextUrl);
+    loginUrl.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
