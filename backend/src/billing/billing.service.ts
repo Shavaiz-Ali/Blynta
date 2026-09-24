@@ -57,31 +57,130 @@ export class BillingService {
 
   /**
    * Ensure a user has a Paddle customer ID.
+   * Checks DB first, then Paddle (active and archived), creating only if absent everywhere.
    */
-  async getOrCreatePaddleCustomer(user: UserDocument): Promise<string> {
-    if (user.paddleCustomerId) return user.paddleCustomerId;
+  async getOrCreatePaddleCustomer(
+    emailOrUser: string | UserDocument,
+    name?: string,
+  ): Promise<string> {
+    const email = (
+      typeof emailOrUser === 'string' ? emailOrUser : emailOrUser.email
+    )
+      .toLowerCase()
+      .trim();
+    const userName =
+      typeof emailOrUser === 'string'
+        ? name
+        : emailOrUser.name || name || undefined;
+
+    // 1. Check MongoDB first: if paddleCustomerId already exists, return it immediately
+    const user =
+      typeof emailOrUser !== 'string' && emailOrUser.paddleCustomerId
+        ? emailOrUser
+        : await this.userModel.findOne({ email });
+
+    if (user?.paddleCustomerId) {
+      return user.paddleCustomerId;
+    }
 
     try {
-      const customer = await this.paddleService.paddle.customers.create({
-        email: user.email,
-        name: user.name || undefined,
-        customData: {
-          blyntaUserId: String(user._id),
-        },
+      // 2. Query Paddle for existing customer by email (explicitly including 'active' and 'archived')
+      const customerCollection = this.paddleService.paddle.customers.list({
+        email: [email],
+        status: ['active', 'archived'],
       });
 
-      user.paddleCustomerId = customer.id;
-      await user.save();
+      let existingCustomer: any = null;
+      for await (const customer of customerCollection) {
+        if (customer.email && customer.email.toLowerCase().trim() === email) {
+          existingCustomer = customer;
+          break;
+        }
+      }
+
+      // 3. If found on Paddle (active or archived), save its ID and return it
+      if (existingCustomer) {
+        if (user) {
+          user.paddleCustomerId = existingCustomer.id;
+          await user.save();
+        } else {
+          await this.userModel.findOneAndUpdate(
+            { email },
+            { $set: { paddleCustomerId: existingCustomer.id } },
+          );
+        }
+        this.logger.log(
+          `Found existing Paddle customer ${existingCustomer.id} (status: ${existingCustomer.status}) for ${email}. Associated with user in DB.`,
+        );
+        return existingCustomer.id;
+      }
+
+      // 4. Only if no match exists on Paddle either, create a new customer
+      const customData: Record<string, any> = {};
+      if (user?._id) {
+        customData.blyntaUserId = String(user._id);
+      }
+
+      const newCustomer = await this.paddleService.paddle.customers.create({
+        email,
+        name: userName,
+        customData: Object.keys(customData).length > 0 ? customData : undefined,
+      });
+
+      if (user) {
+        user.paddleCustomerId = newCustomer.id;
+        await user.save();
+      } else {
+        await this.userModel.findOneAndUpdate(
+          { email },
+          { $set: { paddleCustomerId: newCustomer.id } },
+        );
+      }
+
       this.logger.log(
-        `Created Paddle customer ${customer.id} for Blynta user ${user._id} (${user.email})`,
+        `Created Paddle customer ${newCustomer.id} for user ${user?._id ?? ''} (${email})`,
       );
-      return customer.id;
+      return newCustomer.id;
     } catch (err: any) {
+      // Fallback in case of conflict / race condition: re-query Paddle with active + archived status
+      this.logger.warn(
+        `Encountered issue when obtaining Paddle customer for ${email}: ${err?.message}. Checking if customer exists in Paddle...`,
+      );
+
+      try {
+        const fallbackCollection = this.paddleService.paddle.customers.list({
+          email: [email],
+          status: ['active', 'archived'],
+        });
+
+        for await (const customer of fallbackCollection) {
+          if (customer.email && customer.email.toLowerCase().trim() === email) {
+            if (user) {
+              user.paddleCustomerId = customer.id;
+              await user.save();
+            } else {
+              await this.userModel.findOneAndUpdate(
+                { email },
+                { $set: { paddleCustomerId: customer.id } },
+              );
+            }
+            this.logger.log(
+              `Recovered existing Paddle customer ${customer.id} for ${email}`,
+            );
+            return customer.id;
+          }
+        }
+      } catch (fallbackErr: any) {
+        this.logger.error(
+          `Recovery search failed for ${email}: ${fallbackErr?.message}`,
+        );
+      }
+
       this.logger.error(
-        `Failed to create Paddle customer for ${user.email}: ${err?.message}`,
+        `Failed to create or retrieve Paddle customer for ${email}: ${err?.message}`,
       );
       throw new InternalServerErrorException(
-        `Failed to create Paddle customer: ${err?.message ?? 'unknown error'}`,
+        `Failed to obtain Paddle customer: ${err?.message ?? 'unknown error'}`,
       );
     }
   }
@@ -561,6 +660,7 @@ export class BillingService {
 
   /**
    * Handles customer events (customer.created, customer.updated).
+   * Upserts paddleCustomerId onto the matching user by userId or email.
    */
   async handleCustomerUpserted(customer: any): Promise<void> {
     const customerId = customer?.id;
@@ -572,15 +672,35 @@ export class BillingService {
       `[Paddle Event] handleCustomerUpserted: customerId=${customerId} email=${email} userId=${userId}`,
     );
 
+    if (!customerId) return;
+
     if (userId && Types.ObjectId.isValid(userId)) {
-      await this.userModel.findByIdAndUpdate(userId, {
+      const updated = await this.userModel.findByIdAndUpdate(userId, {
         $set: { paddleCustomerId: customerId },
       });
-    } else if (email) {
-      await this.userModel.findOneAndUpdate(
-        { email: email.toLowerCase().trim() },
+      if (updated) {
+        this.logger.log(
+          `[Paddle Event] handleCustomerUpserted: Updated user ${userId} with paddleCustomerId ${customerId}`,
+        );
+        return;
+      }
+    }
+
+    if (email) {
+      const normalizedEmail = email.toLowerCase().trim();
+      const updated = await this.userModel.findOneAndUpdate(
+        { email: normalizedEmail },
         { $set: { paddleCustomerId: customerId } },
       );
+      if (updated) {
+        this.logger.log(
+          `[Paddle Event] handleCustomerUpserted: Updated user ${updated._id} (${normalizedEmail}) with paddleCustomerId ${customerId}`,
+        );
+      } else {
+        this.logger.warn(
+          `[Paddle Event] handleCustomerUpserted: No matching user found for email ${normalizedEmail}`,
+        );
+      }
     }
   }
 

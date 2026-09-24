@@ -71,8 +71,8 @@ export class User {
   @Prop({ enum: UserPlan, default: UserPlan.FREE })
   plan: UserPlan;
 
-  @Prop()
-  paddleCustomerId: string;
+  @Prop({ type: String, default: null })
+  paddleCustomerId?: string | null;
 
   @Prop()
   paddleSubscriptionId: string;
