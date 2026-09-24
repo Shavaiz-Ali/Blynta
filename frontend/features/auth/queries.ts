@@ -9,11 +9,16 @@ import {
   UseQueryResult,
 } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
-import type { UserProfile } from "@/features/auth/types";
+import type { AuthProvider, UserProfile } from "@/features/auth/types";
+import { PROVIDERS_DEFAULT } from "./api";
 
 /* -------------------------------------------------------------------------- */
 /*                              Query keys                                    */
 /* -------------------------------------------------------------------------- */
+
+export const authQueryKeys = {
+  providers: () => ["auth", "providers"] as const,
+};
 
 export const userQueryKeys = {
   all: ["user"] as const,
@@ -379,6 +384,34 @@ export function useForgotPassword(
       );
       return data;
     },
+    ...opts,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*             useEnabledProviders — GET /auth/providers                      */
+/* -------------------------------------------------------------------------- */
+
+export function useEnabledProviders(
+  opts?: Omit<UseQueryOptions<AuthProvider[], Error>, "queryKey" | "queryFn">
+): UseQueryResult<AuthProvider[], Error> {
+  return useQuery({
+    queryKey: authQueryKeys.providers(),
+    queryFn: async () => {
+      try {
+        const { data } = await axiosClient.get<AuthProvider[]>("/auth/providers");
+        if (Array.isArray(data) && data.length > 0) {
+          return data;
+        }
+        return PROVIDERS_DEFAULT;
+      } catch (err) {
+        console.warn("[useEnabledProviders] Failed to load providers, using defaults:", err);
+        return PROVIDERS_DEFAULT;
+      }
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: 2,
+    placeholderData: PROVIDERS_DEFAULT,
     ...opts,
   });
 }

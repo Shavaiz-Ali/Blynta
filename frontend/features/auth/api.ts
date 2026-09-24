@@ -1,21 +1,12 @@
 import type { AuthProvider } from "./types";
 
 /**
- * Safe fallback used when the backend cannot be reached or is misconfigured.
- * Only "local" = credential login. Social buttons will NOT be rendered,
- * giving a clear visual signal that the provider fetch did not succeed.
- *
- * Previously this fell back to ["local", "google", "facebook"], which made
- * it impossible to tell (from the UI) whether the backend call had worked.
+ * Standard default providers fallback when backend is unreachable or not yet populated.
+ * Includes local, google, and facebook so social login options remain available.
  */
-export const PROVIDERS_FALLBACK_UNREACHABLE: AuthProvider[] = ["local"];
-
-/**
- * Fallback used only when NEXT_PUBLIC_BACKEND_URL itself is missing.
- * Without a backend URL we can't even attempt a fetch; in that case we
- * conservatively show credential-only login as well.
- */
-export const PROVIDERS_FALLBACK_NO_URL: AuthProvider[] = ["local"];
+export const PROVIDERS_DEFAULT: AuthProvider[] = ["local", "google", "facebook"];
+export const PROVIDERS_FALLBACK_UNREACHABLE: AuthProvider[] = ["local", "google", "facebook"];
+export const PROVIDERS_FALLBACK_NO_URL: AuthProvider[] = ["local", "google", "facebook"];
 
 export interface GetEnabledProvidersOptions {
   /**

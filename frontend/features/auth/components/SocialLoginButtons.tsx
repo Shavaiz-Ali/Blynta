@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { AppButton } from "@/components/common/AppButton";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { AuthProvider } from "@/features/auth/types";
+import { useEnabledProviders } from "@/features/auth/queries";
 
 export interface SocialLoginButtonsProps {
   onFacebookClick?: () => void;
@@ -10,8 +12,21 @@ export interface SocialLoginButtonsProps {
   facebookLoading?: boolean;
   googleLoading?: boolean;
   className?: string;
-  /** Array of enabled provider strings from GET /auth/providers */
+  /** Initial providers from SSR */
+  initialProviders?: AuthProvider[];
+  /** Controlled enabled providers if explicitly provided */
   enabledProviders?: AuthProvider[];
+  /** Loading state override */
+  isLoading?: boolean;
+}
+
+export function SocialLoginButtonsSkeleton({ className }: { className?: string }) {
+  return (
+    <div className={className ? className : "grid grid-cols-2 gap-3"}>
+      <Skeleton className="h-10 w-full rounded-xl bg-muted/60 border border-border/50 animate-pulse" />
+      <Skeleton className="h-10 w-full rounded-xl bg-muted/60 border border-border/50 animate-pulse" />
+    </div>
+  );
 }
 
 function SocialLoginButtons({
@@ -20,12 +35,23 @@ function SocialLoginButtons({
   facebookLoading,
   googleLoading,
   className,
-  enabledProviders,
+  initialProviders,
+  enabledProviders: controlledProviders,
+  isLoading: forcedLoading,
 }: SocialLoginButtonsProps) {
-  const showFacebook =
-    !enabledProviders || enabledProviders.includes("facebook");
-  const showGoogle =
-    !enabledProviders || enabledProviders.includes("google");
+  const { data: fetchedProviders, isLoading: queryLoading } = useEnabledProviders({
+    initialData: initialProviders,
+  });
+
+  const isLoading = forcedLoading ?? (queryLoading && !initialProviders && !controlledProviders);
+
+  if (isLoading) {
+    return <SocialLoginButtonsSkeleton className={className} />;
+  }
+
+  const effectiveProviders = controlledProviders ?? fetchedProviders ?? ["google", "facebook"];
+  const showFacebook = effectiveProviders.includes("facebook");
+  const showGoogle = effectiveProviders.includes("google");
 
   // If no social providers are enabled, render nothing
   if (!showFacebook && !showGoogle) return null;
@@ -59,3 +85,4 @@ function SocialLoginButtons({
 }
 
 export { SocialLoginButtons };
+

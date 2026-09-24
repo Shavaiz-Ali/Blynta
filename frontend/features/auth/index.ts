@@ -13,15 +13,21 @@ export { ForgotPasswordForm } from "./components/ForgotPasswordForm";
 export type { ForgotPasswordFormProps } from "./components/ForgotPasswordForm";
 export { VerifyOtpDialog } from "./components/VerifyOtpDialog";
 export type { VerifyOtpDialogProps } from "./components/VerifyOtpDialog";
-export { SocialLoginButtons } from "./components/SocialLoginButtons";
+export {
+  SocialLoginButtons,
+  SocialLoginButtonsSkeleton,
+} from "./components/SocialLoginButtons";
 export type { SocialLoginButtonsProps } from "./components/SocialLoginButtons";
 export {
   getEnabledProviders,
+  PROVIDERS_DEFAULT,
   PROVIDERS_FALLBACK_UNREACHABLE,
   PROVIDERS_FALLBACK_NO_URL,
 } from "./api";
 export type { GetEnabledProvidersOptions } from "./api";
 export {
+  useEnabledProviders,
+  authQueryKeys,
   useCurrentUser,
   useUpdateProfile,
   useUploadAvatar,

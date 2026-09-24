@@ -10,6 +10,7 @@ import { AppInput } from "@/components/common/AppInput";
 import { AppButton } from "@/components/common/AppButton";
 import { AuthDivider } from "@/features/auth/components/AuthDivider";
 import { SocialLoginButtons } from "@/features/auth/components/SocialLoginButtons";
+import { useEnabledProviders } from "@/features/auth/queries";
 import type { AuthProvider } from "@/features/auth/types";
 import {
   loginSchema,
@@ -31,6 +32,11 @@ function LoginForm({
   enabledProviders,
 }: LoginFormProps) {
   const router = useRouter();
+
+  const { data: fetchedProviders, isLoading: providersLoading } =
+    useEnabledProviders({
+      initialData: enabledProviders,
+    });
 
   const {
     control,
@@ -89,12 +95,12 @@ function LoginForm({
     router.refresh();
   };
 
-  // Show social buttons only when the backend says local login is not the
-  // only option AND at least one social provider is enabled.
+  const activeProviders =
+    fetchedProviders ?? enabledProviders ?? ["google", "facebook"];
   const showSocialSection =
-    !enabledProviders ||
-    enabledProviders.includes("google") ||
-    enabledProviders.includes("facebook");
+    providersLoading ||
+    activeProviders.includes("google") ||
+    activeProviders.includes("facebook");
 
   return (
     <div className={className}>
@@ -105,7 +111,8 @@ function LoginForm({
           onGoogleClick={() => handleSocial("google")}
           facebookLoading={socialLoading === "facebook"}
           googleLoading={socialLoading === "google"}
-          enabledProviders={enabledProviders}
+          initialProviders={enabledProviders}
+          isLoading={providersLoading && !enabledProviders}
         />
       )}
 

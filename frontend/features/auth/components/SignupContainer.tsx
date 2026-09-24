@@ -9,7 +9,12 @@ import { VerifyOtpDialog } from "@/features/auth/components/VerifyOtpDialog";
 import { AuthDivider } from "@/features/auth/components/AuthDivider";
 import { SocialLoginButtons } from "@/features/auth/components/SocialLoginButtons";
 import type { AuthProvider } from "@/features/auth/types";
-import { useSignup, useVerifyOtp, useResendOtp } from "@/features/auth/queries";
+import {
+  useSignup,
+  useVerifyOtp,
+  useResendOtp,
+  useEnabledProviders,
+} from "@/features/auth/queries";
 
 import { toast } from "sonner";
 import { signIn } from "next-auth/react";
@@ -23,6 +28,11 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref") || undefined;
+
+  const { data: fetchedProviders, isLoading: providersLoading } =
+    useEnabledProviders({
+      initialData: enabledProviders,
+    });
 
   const [currentEmail, setCurrentEmail] = React.useState("");
   const [currentPassword, setCurrentPassword] = React.useState("");
@@ -132,10 +142,12 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
     resendOtpMutation.mutate(currentEmail);
   }
 
+  const activeProviders =
+    fetchedProviders ?? enabledProviders ?? ["google", "facebook"];
   const showSocialSection =
-    !enabledProviders ||
-    enabledProviders.includes("google") ||
-    enabledProviders.includes("facebook");
+    providersLoading ||
+    activeProviders.includes("google") ||
+    activeProviders.includes("facebook");
 
   return (
     <AuthCard
@@ -167,7 +179,8 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
           onGoogleClick={() => handleSocial("google")}
           facebookLoading={socialLoading === "facebook"}
           googleLoading={socialLoading === "google"}
-          enabledProviders={enabledProviders}
+          initialProviders={enabledProviders}
+          isLoading={providersLoading && !enabledProviders}
         />
       )}
 
