@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AuthCard, LoginForm, getEnabledProviders } from "@/features/auth";
+import { AuthCard, LoginForm } from "@/features/auth";
 
 export const metadata: Metadata = {
   title: "Sign In | Blynta",
   description: "Sign in to your Blynta account to continue creating viral video clips.",
 };
 
-export default async function LoginPage() {
-  const enabledProviders = await getEnabledProviders();
-
+export default function LoginPage() {
   return (
     <AuthCard
       header={
@@ -34,7 +32,7 @@ export default async function LoginPage() {
         </p>
       }
     >
-      <LoginForm enabledProviders={enabledProviders} />
+      <LoginForm />
     </AuthCard>
   );
 }

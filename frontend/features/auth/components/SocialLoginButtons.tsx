@@ -23,8 +23,14 @@ export interface SocialLoginButtonsProps {
 export function SocialLoginButtonsSkeleton({ className }: { className?: string }) {
   return (
     <div className={className ? className : "grid grid-cols-2 gap-3"}>
-      <Skeleton className="h-10 w-full rounded-xl bg-muted/60 border border-border/50 animate-pulse" />
-      <Skeleton className="h-10 w-full rounded-xl bg-muted/60 border border-border/50 animate-pulse" />
+      <div className="h-10 w-full rounded-xl bg-card/60 border border-border/80 flex items-center justify-center gap-2 shadow-xs animate-pulse">
+        <Skeleton className="h-4 w-4 rounded-full bg-muted-foreground/20" />
+        <Skeleton className="h-3.5 w-16 rounded-md bg-muted-foreground/20" />
+      </div>
+      <div className="h-10 w-full rounded-xl bg-card/60 border border-border/80 flex items-center justify-center gap-2 shadow-xs animate-pulse">
+        <Skeleton className="h-4 w-4 rounded-full bg-muted-foreground/20" />
+        <Skeleton className="h-3.5 w-14 rounded-md bg-muted-foreground/20" />
+      </div>
     </div>
   );
 }
