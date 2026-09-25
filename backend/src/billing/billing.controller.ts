@@ -124,22 +124,58 @@ export class BillingController {
       });
     }
 
-    try {
-      const eventType = event?.eventType || event?.event_type;
-      const eventId = event?.eventId || event?.event_id || event?.id;
-      const data = event?.data;
+    // ── Acknowledge immediately after signature is verified ──────────────────
+    // Responding 200 here prevents Paddle from retrying due to slow DB/API
+    // work inside the handler (Paddle retries after ~30s timeout).
+    // All processing below happens fire-and-forget after the response.
+    res.status(HttpStatus.OK).json({ received: true });
 
-      this.logger.log(
-        `[Paddle Webhook] Successfully verified & received event: ${eventType} (ID: ${eventId})`,
+    // ── Process event asynchronously ─────────────────────────────────────────
+    this.processWebhookEvent(event).catch((err: any) => {
+      this.logger.error(
+        `[Paddle Webhook] Unhandled error in processWebhookEvent: ${err?.message}`,
+        err?.stack,
       );
+    });
+  }
 
+  private async processWebhookEvent(event: any): Promise<void> {
+    const eventType = event?.eventType || event?.event_type;
+    const eventId = event?.eventId || event?.event_id || event?.id;
+    const data = event?.data;
+
+    this.logger.log(
+      `[Paddle Webhook] Received event: ${eventType} (ID: ${eventId})`,
+    );
+
+    if (!eventId) {
+      this.logger.warn(
+        `[Paddle Webhook] Event has no eventId — cannot deduplicate. Processing anyway.`,
+      );
+    } else {
+      // ── Idempotency check ───────────────────────────────────────────────────
+      const alreadyProcessed =
+        await this.billingService.isEventProcessed(eventId);
+      if (alreadyProcessed) {
+        this.logger.log(
+          `[Paddle Webhook] Skipping duplicate event: ${eventType} (ID: ${eventId}) — already processed.`,
+        );
+        return;
+      }
+    }
+
+    try {
       switch (eventType) {
         case 'subscription.created':
         case 'subscription.updated':
         case 'subscription.activated':
         case 'subscription.paused':
         case 'subscription.resumed':
-          await this.billingService.handleSubscriptionUpdated(data);
+          await this.billingService.handleSubscriptionUpdated(
+            data,
+            eventId,
+            eventType,
+          );
           break;
 
         case 'subscription.canceled':
@@ -148,6 +184,9 @@ export class BillingController {
               paddleSubscriptionId: data.id,
               paddleCustomerId: data.customerId || data.customer_id,
               status: 'canceled',
+              paddleEventId: eventId,
+              eventType,
+              rawPayload: data,
             });
           }
           break;
@@ -159,7 +198,11 @@ export class BillingController {
 
         case 'transaction.completed':
         case 'transaction.paid':
-          await this.billingService.handleTransactionCompleted(data);
+          await this.billingService.handleTransactionCompleted(
+            data,
+            eventId,
+            eventType,
+          );
           break;
 
         default:
@@ -168,13 +211,22 @@ export class BillingController {
           );
           break;
       }
+
+      // ── Mark as processed only after successful handling ────────────────────
+      if (eventId) {
+        await this.billingService.markEventProcessed(eventId, eventType);
+        this.logger.log(
+          `[Paddle Webhook] Event processed and recorded: ${eventType} (ID: ${eventId})`,
+        );
+      }
     } catch (err: any) {
       this.logger.error(
-        `[Paddle Webhook] Error processing event: ${err?.message}`,
+        `[Paddle Webhook] Error processing event ${eventType} (ID: ${eventId}): ${err?.message}`,
         err?.stack,
       );
+      // Do NOT mark as processed on error — allow Paddle retry to re-attempt
     }
-
-    return res.status(HttpStatus.OK).json({ received: true });
   }
 }
+
+

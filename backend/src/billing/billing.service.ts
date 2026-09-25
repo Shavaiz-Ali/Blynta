@@ -29,6 +29,18 @@ import {
   ActivityType,
 } from '../activities/schemas/activity.schema';
 import type { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
+import {
+  ProcessedPaddleEvent,
+  ProcessedPaddleEventDocument,
+} from './schemas/processed-paddle-event.schema';
+import {
+  Customer,
+  CustomerDocument,
+} from './schemas/customer.schema';
+import {
+  SubscriptionEvent,
+  SubscriptionEventDocument,
+} from './schemas/subscription-event.schema';
 
 @Injectable()
 export class BillingService {
@@ -41,7 +53,47 @@ export class BillingService {
     private mailService: MailService,
     private activitiesService: ActivitiesService,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    @InjectModel(Customer.name) private customerModel: Model<CustomerDocument>,
+    @InjectModel(SubscriptionEvent.name)
+    private subscriptionEventModel: Model<SubscriptionEventDocument>,
+    @InjectModel(ProcessedPaddleEvent.name)
+    private processedEventModel: Model<ProcessedPaddleEventDocument>,
   ) {}
+
+  /* =========================================================================
+     Idempotency helpers
+     ========================================================================= */
+
+  /**
+   * Returns true if this Paddle event ID has already been handled.
+   */
+  async isEventProcessed(eventId: string): Promise<boolean> {
+    const existing = await this.processedEventModel
+      .findOne({ eventId })
+      .lean()
+      .exec();
+    return !!existing;
+  }
+
+  /**
+   * Marks a Paddle event ID as handled so future retries are skipped.
+   */
+  async markEventProcessed(eventId: string, eventType: string): Promise<void> {
+    try {
+      await this.processedEventModel.create({
+        eventId,
+        eventType,
+        processedAt: new Date(),
+      });
+    } catch (err: any) {
+      // E11000 = duplicate key — already marked, safe to ignore
+      if (err?.code !== 11000) throw err;
+    }
+  }
+
+  /* =========================================================================
+     Internal helpers
+     ========================================================================= */
 
   private get frontendUrl(): string {
     return (
@@ -49,15 +101,78 @@ export class BillingService {
     );
   }
 
+  /**
+   * Fallback reset date: one calendar month from now.
+   * Used only when Paddle doesn't supply current_billing_period.ends_at.
+   */
   private nextMonth(): Date {
     const d = new Date();
     d.setMonth(d.getMonth() + 1);
     return d;
   }
 
+  /* =========================================================================
+     Customer lookup helpers — work from the Customer collection
+     ========================================================================= */
+
+  /** Find Customer by any Paddle identifier. */
+  private async findCustomerByPaddleIds(opts: {
+    paddleCustomerId?: string;
+    paddleSubscriptionId?: string;
+  }): Promise<CustomerDocument | null> {
+    const conditions: any[] = [];
+    if (opts.paddleCustomerId)
+      conditions.push({ paddleCustomerId: opts.paddleCustomerId });
+    if (opts.paddleSubscriptionId)
+      conditions.push({ paddleSubscriptionId: opts.paddleSubscriptionId });
+    if (conditions.length === 0) return null;
+    return this.customerModel
+      .findOne(conditions.length === 1 ? conditions[0] : { $or: conditions })
+      .exec();
+  }
+
+  /** Find User by any combination of identifiers. */
+  private async resolveUser(opts: {
+    userId?: string;
+    userEmail?: string;
+    paddleCustomerId?: string;
+    paddleSubscriptionId?: string;
+  }): Promise<UserDocument | null> {
+    // 1. Try direct identifiers on User first (fast path)
+    const userConditions: any[] = [];
+    if (opts.userId && Types.ObjectId.isValid(opts.userId))
+      userConditions.push({ _id: new Types.ObjectId(opts.userId) });
+    if (opts.userEmail)
+      userConditions.push({ email: opts.userEmail.toLowerCase().trim() });
+
+    if (userConditions.length > 0) {
+      const user = await this.userModel
+        .findOne(
+          userConditions.length === 1
+            ? userConditions[0]
+            : { $or: userConditions },
+        )
+        .exec();
+      if (user) return user;
+    }
+
+    // 2. Fall back: look up via Customer collection
+    const customer = await this.findCustomerByPaddleIds({
+      paddleCustomerId: opts.paddleCustomerId,
+      paddleSubscriptionId: opts.paddleSubscriptionId,
+    });
+    if (!customer) return null;
+    return this.userModel.findById(customer.userId).exec();
+  }
+
+  /* =========================================================================
+     Public: get or create Paddle customer
+     ========================================================================= */
+
   /**
-   * Ensure a user has a Paddle customer ID.
-   * Checks DB first, then Paddle (active and archived), creating only if absent everywhere.
+   * Ensures a Paddle customer exists for the given user.
+   * Checks Customer collection → Paddle active/archived → creates.
+   * Returns the Paddle customer ID string.
    */
   async getOrCreatePaddleCustomer(
     emailOrUser: string | UserDocument,
@@ -73,53 +188,61 @@ export class BillingService {
         ? name
         : emailOrUser.name || name || undefined;
 
-    // 1. Check MongoDB first: if paddleCustomerId already exists, return it immediately
+    // Resolve the User document
     const user =
-      typeof emailOrUser !== 'string' && emailOrUser.paddleCustomerId
+      typeof emailOrUser !== 'string'
         ? emailOrUser
-        : await this.userModel.findOne({ email });
+        : await this.userModel.findOne({ email }).exec();
 
-    if (user?.paddleCustomerId) {
-      return user.paddleCustomerId;
+    // 1. Customer collection first — fast path, no Paddle API call needed
+    if (user) {
+      const existingCustomer = await this.customerModel
+        .findOne({ userId: user._id })
+        .lean()
+        .exec();
+      if (existingCustomer?.paddleCustomerId) {
+        return existingCustomer.paddleCustomerId;
+      }
     }
 
     try {
-      // 2. Query Paddle for existing customer by email (explicitly including 'active' and 'archived')
+      // 2. Query Paddle for customer by email (active + archived)
       const customerCollection = this.paddleService.paddle.customers.list({
         email: [email],
         status: ['active', 'archived'],
       });
 
-      let existingCustomer: any = null;
-      for await (const customer of customerCollection) {
-        if (customer.email && customer.email.toLowerCase().trim() === email) {
-          existingCustomer = customer;
+      let existingPaddleCustomer: any = null;
+      for await (const c of customerCollection) {
+        if (c.email && c.email.toLowerCase().trim() === email) {
+          existingPaddleCustomer = c;
           break;
         }
       }
 
-      // 3. If found on Paddle (active or archived), save its ID and return it
-      if (existingCustomer) {
+      if (existingPaddleCustomer) {
+        // 3. Save to Customer collection
         if (user) {
-          user.paddleCustomerId = existingCustomer.id;
-          await user.save();
-        } else {
-          await this.userModel.findOneAndUpdate(
-            { email },
-            { $set: { paddleCustomerId: existingCustomer.id } },
+          await this.customerModel.findOneAndUpdate(
+            { userId: user._id },
+            {
+              $set: {
+                userId: user._id,
+                paddleCustomerId: existingPaddleCustomer.id,
+              },
+            },
+            { upsert: true, new: true },
           );
         }
         this.logger.log(
-          `Found existing Paddle customer ${existingCustomer.id} (status: ${existingCustomer.status}) for ${email}. Associated with user in DB.`,
+          `Found existing Paddle customer ${existingPaddleCustomer.id} (status: ${existingPaddleCustomer.status}) for ${email}. Saved to Customer collection.`,
         );
-        return existingCustomer.id;
+        return existingPaddleCustomer.id;
       }
 
-      // 4. Only if no match exists on Paddle either, create a new customer
+      // 4. Create a new Paddle customer
       const customData: Record<string, any> = {};
-      if (user?._id) {
-        customData.blyntaUserId = String(user._id);
-      }
+      if (user?._id) customData.blyntaUserId = String(user._id);
 
       const newCustomer = await this.paddleService.paddle.customers.create({
         email,
@@ -128,12 +251,10 @@ export class BillingService {
       });
 
       if (user) {
-        user.paddleCustomerId = newCustomer.id;
-        await user.save();
-      } else {
-        await this.userModel.findOneAndUpdate(
-          { email },
-          { $set: { paddleCustomerId: newCustomer.id } },
+        await this.customerModel.findOneAndUpdate(
+          { userId: user._id },
+          { $set: { userId: user._id, paddleCustomerId: newCustomer.id } },
+          { upsert: true, new: true },
         );
       }
 
@@ -142,32 +263,26 @@ export class BillingService {
       );
       return newCustomer.id;
     } catch (err: any) {
-      // Fallback in case of conflict / race condition: re-query Paddle with active + archived status
+      // Fallback: race condition / conflict — re-query Paddle
       this.logger.warn(
-        `Encountered issue when obtaining Paddle customer for ${email}: ${err?.message}. Checking if customer exists in Paddle...`,
+        `Issue getting Paddle customer for ${email}: ${err?.message}. Re-querying Paddle...`,
       );
-
       try {
-        const fallbackCollection = this.paddleService.paddle.customers.list({
+        const fallback = this.paddleService.paddle.customers.list({
           email: [email],
           status: ['active', 'archived'],
         });
-
-        for await (const customer of fallbackCollection) {
-          if (customer.email && customer.email.toLowerCase().trim() === email) {
+        for await (const c of fallback) {
+          if (c.email && c.email.toLowerCase().trim() === email) {
             if (user) {
-              user.paddleCustomerId = customer.id;
-              await user.save();
-            } else {
-              await this.userModel.findOneAndUpdate(
-                { email },
-                { $set: { paddleCustomerId: customer.id } },
+              await this.customerModel.findOneAndUpdate(
+                { userId: user._id },
+                { $set: { userId: user._id, paddleCustomerId: c.id } },
+                { upsert: true, new: true },
               );
             }
-            this.logger.log(
-              `Recovered existing Paddle customer ${customer.id} for ${email}`,
-            );
-            return customer.id;
+            this.logger.log(`Recovered Paddle customer ${c.id} for ${email}`);
+            return c.id;
           }
         }
       } catch (fallbackErr: any) {
@@ -175,7 +290,6 @@ export class BillingService {
           `Recovery search failed for ${email}: ${fallbackErr?.message}`,
         );
       }
-
       this.logger.error(
         `Failed to create or retrieve Paddle customer for ${email}: ${err?.message}`,
       );
@@ -185,9 +299,10 @@ export class BillingService {
     }
   }
 
-  /**
-   * Creates a transaction / checkout for the requested plan and returns the checkout URL.
-   */
+  /* =========================================================================
+     Public: checkout session
+     ========================================================================= */
+
   async createCheckoutSession(
     user: UserDocument,
     dto: CreateCheckoutSessionDto,
@@ -200,29 +315,24 @@ export class BillingService {
     const priceId = this.paddleService.getPriceIdForPlan(dto.plan);
 
     try {
-      const transaction = await this.paddleService.paddle.transactions.create({
-        customerId,
-        items: [
-          {
-            priceId,
-            quantity: 1,
+      const transaction =
+        await this.paddleService.paddle.transactions.create({
+          customerId,
+          items: [{ priceId, quantity: 1 }],
+          customData: {
+            blyntaUserId: String(user._id),
+            requestedPlan: dto.plan,
           },
-        ],
-        customData: {
-          blyntaUserId: String(user._id),
-          requestedPlan: dto.plan,
-        },
-      });
+        });
 
       let checkoutUrl = transaction.checkout?.url;
-
       if (!checkoutUrl) {
         throw new InternalServerErrorException(
           'Paddle transaction did not return a checkout URL.',
         );
       }
 
-      // Normalization: Ensure localhost development URLs match the local HTTP scheme
+      // Dev URL normalisation
       if (
         checkoutUrl.startsWith('https://localhost:3000') &&
         this.frontendUrl.startsWith('http://localhost:3000')
@@ -242,31 +352,37 @@ export class BillingService {
       }
 
       this.logger.log(
-        `Created Paddle transaction ${transaction.id} for user ${user._id} (checkoutUrl: ${checkoutUrl})`,
+        `Created Paddle transaction ${transaction.id} for user ${user._id}`,
       );
-
       return { checkoutUrl };
     } catch (err: any) {
       this.logger.error(`Failed to create Paddle transaction: ${err?.message}`);
       throw new InternalServerErrorException(
-        `Failed to create Paddle checkout session: ${
-          err?.message ?? 'unknown error'
-        }`,
+        `Failed to create Paddle checkout session: ${err?.message ?? 'unknown error'}`,
       );
     }
   }
 
-  /**
-   * Resolves customer portal URL for user to manage their subscription.
-   */
+  /* =========================================================================
+     Public: customer portal
+     ========================================================================= */
+
   async getCustomerPortalUrl(user: UserDocument): Promise<{ url: string }> {
     const customerId = await this.getOrCreatePaddleCustomer(user);
+
+    // Get subscriptionId from Customer collection — no longer on User
+    const customerDoc = await this.customerModel
+      .findOne({ userId: user._id })
+      .select('paddleSubscriptionId')
+      .lean()
+      .exec();
+    const subscriptionId = customerDoc?.paddleSubscriptionId;
 
     try {
       const portalSession =
         await this.paddleService.paddle.customerPortalSessions.create(
           customerId,
-          user.paddleSubscriptionId ? [user.paddleSubscriptionId] : [],
+          subscriptionId ? [subscriptionId] : [],
         );
 
       const portalUrl = portalSession.urls?.general?.overview;
@@ -275,22 +391,34 @@ export class BillingService {
           'Paddle did not return a customer portal URL.',
         );
       }
-
       return { url: portalUrl };
     } catch (err: any) {
       this.logger.error(
         `Failed to create customer portal session: ${err?.message}`,
       );
       throw new InternalServerErrorException(
-        `Failed to create customer portal session: ${
-          err?.message ?? 'unknown error'
-        }`,
+        `Failed to create customer portal session: ${err?.message ?? 'unknown error'}`,
       );
     }
   }
 
+  /* =========================================================================
+     Core: applyPaddleSubscription
+     ========================================================================= */
+
   /**
-   * Applies paid subscription upgrades and assigns credits.
+   * Applies a subscription state change to the User and Customer documents.
+   *
+   * @param grantCredits  Pass true only when this is a genuine plan upgrade or
+   *                      a renewal payment. Pass false for status-only changes
+   *                      (e.g. schedule-cancel then resume with the same plan)
+   *                      to prevent free credit refills via schedule/resume.
+   *
+   * @param billingPeriodEndsAt  Actual period end from Paddle's payload.
+   *                             Used as creditsResetAt instead of nextMonth().
+   *
+   * @param paddleEventId  The Paddle webhook event ID — written to the audit log.
+   * @param eventType      e.g. 'subscription.updated', 'transaction.completed'.
    */
   async applyPaddleSubscription(params: {
     paddleCustomerId?: string;
@@ -301,8 +429,13 @@ export class BillingService {
     status?: string;
     scheduledChangeAction?: string | null;
     scheduledChangeAt?: Date | null;
+    billingPeriodEndsAt?: Date | null;
     userId?: string;
     userEmail?: string;
+    grantCredits: boolean;
+    paddleEventId?: string;
+    eventType?: string;
+    rawPayload?: Record<string, any>;
   }): Promise<void> {
     const {
       paddleCustomerId,
@@ -313,86 +446,113 @@ export class BillingService {
       status = 'active',
       scheduledChangeAction = null,
       scheduledChangeAt = null,
+      billingPeriodEndsAt,
       userId,
       userEmail,
+      grantCredits,
+      paddleEventId,
+      eventType,
+      rawPayload,
     } = params;
 
-    const conditions: any[] = [];
-    if (userId && Types.ObjectId.isValid(userId)) {
-      conditions.push({ _id: new Types.ObjectId(userId) });
-    }
-    if (paddleCustomerId) {
-      conditions.push({ paddleCustomerId });
-    }
-    if (paddleSubscriptionId) {
-      conditions.push({ paddleSubscriptionId });
-    }
-    if (userEmail) {
-      conditions.push({ email: userEmail.toLowerCase().trim() });
-    }
-
-    if (conditions.length === 0) {
-      this.logger.warn(
-        '[applyPaddleSubscription] No identifiers provided to find Blynta user.',
-      );
-      return;
-    }
-
-    const query = conditions.length === 1 ? conditions[0] : { $or: conditions };
-    const nextReset = this.nextMonth();
-
-    const update: any = {
-      $set: {
-        plan,
-        paddleSubscriptionStatus: status,
-        creditsBalance: PLAN_CREDITS[plan],
-        creditsResetAt: nextReset,
-      },
-    };
-
-    if (paddleCustomerId) update.$set.paddleCustomerId = paddleCustomerId;
-    if (paddleSubscriptionId) {
-      update.$set.paddleSubscriptionId = paddleSubscriptionId;
-    }
-    if (productId) update.$set.paddleProductId = productId;
-    if (priceId) update.$set.paddlePriceId = priceId;
-    if (scheduledChangeAction !== undefined) {
-      update.$set.paddleScheduledChangeAction = scheduledChangeAction;
-    }
-    if (scheduledChangeAt !== undefined) {
-      update.$set.paddleScheduledChangeAt = scheduledChangeAt;
-    }
-
-    const user = await this.userModel.findOneAndUpdate(query, update, {
-      new: true,
+    // --- Find user ---
+    const user = await this.resolveUser({
+      userId,
+      userEmail,
+      paddleCustomerId,
+      paddleSubscriptionId,
     });
 
     if (!user) {
       this.logger.warn(
-        `[applyPaddleSubscription] User not found in MongoDB matching query: ${JSON.stringify(
-          query,
-        )}`,
+        `[applyPaddleSubscription] User not found. paddleCustomerId=${paddleCustomerId} paddleSubscriptionId=${paddleSubscriptionId} userId=${userId} email=${userEmail}`,
       );
       return;
     }
 
-    this.logger.log(
-      `[applyPaddleSubscription] Successfully updated user ${user._id} (${user.email}) -> plan: ${plan}, status: ${status}, credits: ${PLAN_CREDITS[plan]}`,
+    // --- Snapshot current state for audit log ---
+    const previousPlan = user.plan as string;
+    const customerDoc = await this.customerModel
+      .findOne({ userId: user._id })
+      .lean()
+      .exec();
+    const previousPriceId = customerDoc?.paddlePriceId;
+
+    // --- Update User (only plan + credits — no Paddle IDs) ---
+    const userUpdate: Record<string, any> = { plan };
+    if (grantCredits) {
+      const resetAt = billingPeriodEndsAt ?? this.nextMonth();
+      userUpdate.creditsBalance = PLAN_CREDITS[plan];
+      userUpdate.creditsResetAt = resetAt;
+    }
+    await this.userModel
+      .findByIdAndUpdate(user._id, { $set: userUpdate })
+      .exec();
+
+    // --- Update Customer collection (all Paddle-specific state) ---
+    const customerUpdate: Record<string, any> = {
+      paddleSubscriptionStatus: status,
+      paddleScheduledChangeAction: scheduledChangeAction,
+      paddleScheduledChangeAt: scheduledChangeAt,
+    };
+    if (paddleCustomerId) customerUpdate.paddleCustomerId = paddleCustomerId;
+    if (paddleSubscriptionId)
+      customerUpdate.paddleSubscriptionId = paddleSubscriptionId;
+    if (productId) customerUpdate.paddleProductId = productId;
+    if (priceId) customerUpdate.paddlePriceId = priceId;
+    if (billingPeriodEndsAt)
+      customerUpdate.currentBillingPeriodEndsAt = billingPeriodEndsAt;
+
+    await this.customerModel.findOneAndUpdate(
+      { userId: user._id },
+      { $set: { userId: user._id, ...customerUpdate } },
+      { upsert: true, new: true },
     );
 
+    this.logger.log(
+      `[applyPaddleSubscription] User ${user._id} (${user.email}) → plan: ${plan}, status: ${status}, grantCredits: ${grantCredits}`,
+    );
+
+    // --- Write audit log row ---
+    if (paddleEventId && paddleSubscriptionId) {
+      try {
+        await this.subscriptionEventModel.create({
+          userId: user._id,
+          paddleSubscriptionId,
+          paddleEventId,
+          eventType: eventType ?? 'unknown',
+          previousPlan,
+          newPlan: plan,
+          previousPriceId,
+          newPriceId: priceId,
+          creditsGranted: grantCredits ? PLAN_CREDITS[plan] : 0,
+          rawPayload,
+        });
+      } catch (auditErr) {
+        this.logger.warn(
+          `[applyPaddleSubscription] Failed to write SubscriptionEvent audit row: ${auditErr}`,
+        );
+      }
+    }
+
+    // --- Notifications / email / activity (only when granting credits) ---
+    if (!grantCredits) return;
+
     try {
-      const subId = paddleSubscriptionId || 'sub_init';
+      const subId =
+        paddleSubscriptionId ||
+        `cust_${paddleCustomerId || String(user._id)}`;
+      const upgradeDedupeKey = `billing:upgrade:${subId}`;
+
       await this.notificationsService.queueCreateIfNotExists({
         userId: user._id,
         type: NotificationType.SUCCESS,
         category: NotificationCategory.BILLING,
         title: `Upgraded to ${plan.toUpperCase()}`,
-        message: `Your account has been upgraded to ${plan.toUpperCase()} with ${
-          PLAN_CREDITS[plan]
-        } credits.`,
+        message: `Your account has been upgraded to ${plan.toUpperCase()} with ${PLAN_CREDITS[plan]} credits.`,
         actionUrl: '/billing',
         actionLabel: 'View plan',
-        dedupeKey: `billing:upgrade:${subId}:${Date.now()}`,
+        dedupeKey: upgradeDedupeKey,
       });
 
       if (user.email) {
@@ -400,6 +560,7 @@ export class BillingService {
           user.email,
           plan,
           PLAN_CREDITS[plan],
+          `sub-activated:${subId}`,
         );
       }
 
@@ -408,9 +569,7 @@ export class BillingService {
         type: ActivityType.BILLING_SUBSCRIPTION_CREATE,
         category: ActivityCategory.BILLING,
         title: `Subscribed to ${plan.toUpperCase()}`,
-        description: `Upgraded to ${plan.toUpperCase()} plan with ${
-          PLAN_CREDITS[plan]
-        } monthly credits.`,
+        description: `Upgraded to ${plan.toUpperCase()} plan with ${PLAN_CREDITS[plan]} monthly credits.`,
         activityUrl: '/billing',
         entityType: 'subscription',
         entityId: user._id,
@@ -440,109 +599,165 @@ export class BillingService {
         status: ActivityStatus.SUCCESS,
         severity: ActivitySeverity.SUCCESS,
         dedupeKey: `activity:billing:credits:${subId}`,
-        metadata: {
-          amount: PLAN_CREDITS[plan],
-          plan,
-        },
+        metadata: { amount: PLAN_CREDITS[plan], plan },
       });
     } catch (err) {
       this.logger.warn(
-        `Failed to dispatch billing notification/email/activity: ${err}`,
+        `[applyPaddleSubscription] Failed to dispatch notification/email/activity: ${err}`,
       );
     }
   }
 
+  /* =========================================================================
+     Public: revert to free tier
+     ========================================================================= */
+
   /**
-   * Reverts subscription to Free tier.
+   * Reverts a user to the Free tier when their subscription is canceled/paused.
    */
   async revertSubscriptionToFree(params: {
     paddleSubscriptionId?: string;
     paddleCustomerId?: string;
     status?: string;
+    paddleEventId?: string;
+    eventType?: string;
+    rawPayload?: Record<string, any>;
   }): Promise<void> {
     const {
       paddleSubscriptionId,
       paddleCustomerId,
       status = 'canceled',
+      paddleEventId,
+      eventType,
+      rawPayload,
     } = params;
-    const nextReset = this.nextMonth();
 
-    const conditions: any[] = [];
-    if (paddleSubscriptionId) conditions.push({ paddleSubscriptionId });
-    if (paddleCustomerId) conditions.push({ paddleCustomerId });
+    const customer = await this.findCustomerByPaddleIds({
+      paddleCustomerId,
+      paddleSubscriptionId,
+    });
 
-    if (conditions.length === 0) {
+    if (!customer) {
       this.logger.warn(
-        '[revertSubscriptionToFree] No identifiers provided to find subscription.',
+        `[revertSubscriptionToFree] No Customer found for paddleSubscriptionId=${paddleSubscriptionId} paddleCustomerId=${paddleCustomerId}`,
       );
       return;
     }
 
-    const query = conditions.length === 1 ? conditions[0] : { $or: conditions };
+    const user = await this.userModel.findById(customer.userId).exec();
+    if (!user) {
+      this.logger.warn(
+        `[revertSubscriptionToFree] No User found for customer.userId=${customer.userId}`,
+      );
+      return;
+    }
 
-    const user = await this.userModel.findOneAndUpdate(
-      query,
-      {
+    const previousPlan = user.plan as string;
+    const previousPriceId = customer.paddlePriceId;
+
+    // Update User — reset to free plan and refill free credits
+    await this.userModel
+      .findByIdAndUpdate(user._id, {
         $set: {
           plan: UserPlan.FREE,
-          paddleSubscriptionStatus: status,
-          paddleScheduledChangeAction: null,
-          paddleScheduledChangeAt: null,
           creditsBalance: PLAN_CREDITS[UserPlan.FREE],
-          creditsResetAt: nextReset,
+          creditsResetAt: this.nextMonth(),
         },
-      },
-      { new: true },
+      })
+      .exec();
+
+    // Update Customer — reflect status, clear scheduled change
+    await this.customerModel
+      .findOneAndUpdate(
+        { userId: user._id },
+        {
+          $set: {
+            paddleSubscriptionStatus: status,
+            paddleScheduledChangeAction: null,
+            paddleScheduledChangeAt: null,
+          },
+        },
+      )
+      .exec();
+
+    this.logger.log(
+      `[revertSubscriptionToFree] Downgraded user ${user._id} (${user.email}) to Free (status: ${status})`,
     );
 
-    if (user) {
-      this.logger.log(
-        `[revertSubscriptionToFree] Downgraded user ${user._id} (${user.email}) to Free tier (status: ${status})`,
-      );
-
-      const subId = paddleSubscriptionId || 'sub_revert';
+    // Audit log
+    if (paddleEventId && paddleSubscriptionId) {
       try {
-        await this.notificationsService.queueCreateIfNotExists({
+        await this.subscriptionEventModel.create({
           userId: user._id,
-          type: NotificationType.INFO,
-          category: NotificationCategory.BILLING,
-          title: 'Subscription ended',
-          message: 'Your plan has reverted to Free tier.',
-          actionUrl: '/billing',
-          actionLabel: 'Manage plan',
-          dedupeKey: `billing:revert:${subId}:${Date.now()}`,
+          paddleSubscriptionId,
+          paddleEventId,
+          eventType: eventType ?? 'subscription.canceled',
+          previousPlan,
+          newPlan: UserPlan.FREE,
+          previousPriceId,
+          newPriceId: undefined,
+          creditsGranted: 0,
+          rawPayload,
         });
-
-        await this.activitiesService.queueCreateIfNotExists({
-          userId: user._id,
-          type: ActivityType.BILLING_SUBSCRIPTION_CANCEL,
-          category: ActivityCategory.BILLING,
-          title: 'Subscription ended',
-          description: 'Your plan reverted to the Free tier.',
-          activityUrl: '/billing',
-          entityType: 'subscription',
-          entityId: user._id,
-          actorType: ActivityActorType.SYSTEM,
-          isSystem: true,
-          status: ActivityStatus.SUCCESS,
-          severity: ActivitySeverity.INFO,
-          dedupeKey: `activity:billing:cancel:${subId}`,
-        });
-      } catch (err) {
+      } catch (auditErr) {
         this.logger.warn(
-          `Failed to dispatch billing cancel notification/activity: ${err}`,
+          `[revertSubscriptionToFree] Failed to write audit row: ${auditErr}`,
         );
       }
     }
+
+    const subId = paddleSubscriptionId || 'sub_revert';
+    try {
+      // Fixed: removed Date.now() so dedupeKey is stable for idempotency
+      await this.notificationsService.queueCreateIfNotExists({
+        userId: user._id,
+        type: NotificationType.INFO,
+        category: NotificationCategory.BILLING,
+        title: 'Subscription ended',
+        message: 'Your plan has reverted to Free tier.',
+        actionUrl: '/billing',
+        actionLabel: 'Manage plan',
+        dedupeKey: `billing:revert:${subId}`,
+      });
+
+      await this.activitiesService.queueCreateIfNotExists({
+        userId: user._id,
+        type: ActivityType.BILLING_SUBSCRIPTION_CANCEL,
+        category: ActivityCategory.BILLING,
+        title: 'Subscription ended',
+        description: 'Your plan reverted to the Free tier.',
+        activityUrl: '/billing',
+        entityType: 'subscription',
+        entityId: user._id,
+        actorType: ActivityActorType.SYSTEM,
+        isSystem: true,
+        status: ActivityStatus.SUCCESS,
+        severity: ActivitySeverity.INFO,
+        dedupeKey: `activity:billing:cancel:${subId}`,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `[revertSubscriptionToFree] Failed to dispatch notification/activity: ${err}`,
+      );
+    }
   }
+
+  /* =========================================================================
+     Public: handleSubscriptionUpdated
+     ========================================================================= */
 
   /**
    * Handles subscription lifecycle events.
+   * Only grants credits when the plan or priceId actually changes.
    */
-  async handleSubscriptionUpdated(subscription: any): Promise<void> {
+  async handleSubscriptionUpdated(
+    subscription: any,
+    paddleEventId?: string,
+    originalEventType?: string,
+  ): Promise<void> {
     const subscriptionId = subscription?.id;
     const customerId = subscription?.customerId || subscription?.customer_id;
-    const status = subscription?.status; // 'active', 'trialing', 'past_due', 'paused', 'canceled'
+    const status = subscription?.status;
     const customData =
       subscription?.customData || subscription?.custom_data || {};
     let userId = customData?.blyntaUserId || customData?.blynta_user_id;
@@ -559,17 +774,27 @@ export class BillingService {
       firstItem?.product_id ||
       firstItem?.productId;
 
+    // Extract actual billing period end from Paddle payload
+    const billingPeriodEndsAt = (() => {
+      const raw =
+        subscription?.currentBillingPeriod?.endsAt ||
+        subscription?.current_billing_period?.ends_at;
+      return raw ? new Date(raw) : null;
+    })();
+
     const scheduledChange =
       subscription?.scheduledChange || subscription?.scheduled_change;
     const scheduledChangeAction = scheduledChange?.action ?? null;
     const scheduledChangeAt =
       scheduledChange?.effectiveAt || scheduledChange?.effective_at
-        ? new Date(scheduledChange.effectiveAt || scheduledChange.effective_at)
+        ? new Date(
+            scheduledChange.effectiveAt || scheduledChange.effective_at,
+          )
         : null;
 
     let userEmail: string | undefined;
 
-    // If userId not on subscription, check customer in Paddle
+    // Enrich from Paddle customer if userId not on the subscription
     if (!userId && customerId) {
       try {
         const customer =
@@ -577,18 +802,16 @@ export class BillingService {
         if (customer?.customData?.blyntaUserId) {
           userId = customer.customData.blyntaUserId;
         }
-        if (customer?.email) {
-          userEmail = customer.email;
-        }
+        if (customer?.email) userEmail = customer.email;
       } catch (err) {
         this.logger.debug(
-          `Could not fetch customer ${customerId} from Paddle SDK: ${err}`,
+          `Could not fetch customer ${customerId} from Paddle: ${err}`,
         );
       }
     }
 
     this.logger.log(
-      `[Paddle Event] handleSubscriptionUpdated: subId=${subscriptionId} customerId=${customerId} userId=${userId} status=${status} priceId=${priceId} scheduledAction=${scheduledChangeAction}`,
+      `[handleSubscriptionUpdated] subId=${subscriptionId} customerId=${customerId} userId=${userId} status=${status} priceId=${priceId} scheduledAction=${scheduledChangeAction}`,
     );
 
     if (status === 'canceled' || status === 'paused') {
@@ -596,19 +819,19 @@ export class BillingService {
         paddleSubscriptionId: subscriptionId,
         paddleCustomerId: customerId,
         status,
+        paddleEventId,
+        eventType: originalEventType,
+        rawPayload: subscription,
       });
       return;
     }
 
-    // Active, trialing, past_due maintain plan access
+    // Resolve plan from priceId
     let mappedPlan: UserPlan | null = null;
     if (priceId) {
       const planStr = this.paddleService.mapPriceIdToPlan(priceId);
-      if (planStr && planStr !== 'free') {
-        mappedPlan = planStr as UserPlan;
-      }
+      if (planStr && planStr !== 'free') mappedPlan = planStr as UserPlan;
     }
-
     if (!mappedPlan && customData?.requestedPlan) {
       mappedPlan =
         customData.requestedPlan === 'pro'
@@ -618,49 +841,76 @@ export class BillingService {
             : null;
     }
 
-    if (mappedPlan) {
-      await this.applyPaddleSubscription({
-        userId,
-        userEmail,
+    if (!mappedPlan) {
+      this.logger.warn(
+        `[handleSubscriptionUpdated] Could not resolve plan for priceId=${priceId}. Updating Customer status only.`,
+      );
+      // Status-only update: write to Customer, not to User
+      const customerDoc = await this.findCustomerByPaddleIds({
         paddleCustomerId: customerId,
         paddleSubscriptionId: subscriptionId,
-        plan: mappedPlan,
-        productId,
-        priceId,
-        status,
-        scheduledChangeAction,
-        scheduledChangeAt,
       });
-    } else {
-      this.logger.warn(
-        `[Paddle Event] Could not resolve plan for priceId=${priceId}. Updating status only.`,
-      );
-      await this.userModel.findOneAndUpdate(
-        {
-          $or: [
-            ...(userId && Types.ObjectId.isValid(userId)
-              ? [{ _id: new Types.ObjectId(userId) }]
-              : []),
-            ...(subscriptionId
-              ? [{ paddleSubscriptionId: subscriptionId }]
-              : []),
-            ...(customerId ? [{ paddleCustomerId: customerId }] : []),
-          ],
-        },
-        {
-          $set: {
-            paddleSubscriptionStatus: status,
-            paddleScheduledChangeAction: scheduledChangeAction,
-            paddleScheduledChangeAt: scheduledChangeAt,
-          },
-        },
-      );
+      if (customerDoc) {
+        await this.customerModel
+          .findByIdAndUpdate(customerDoc._id, {
+            $set: {
+              paddleSubscriptionStatus: status,
+              paddleScheduledChangeAction: scheduledChangeAction,
+              paddleScheduledChangeAt: scheduledChangeAt,
+            },
+          })
+          .exec();
+      }
+      return;
     }
+
+    // --- Determine if this is a real plan/price change ---
+    // A "real" change warrants refilling credits.
+    // Schedule-cancel-then-resume with the same plan/price is NOT a real change.
+    const existingCustomer = await this.findCustomerByPaddleIds({
+      paddleCustomerId: customerId,
+      paddleSubscriptionId: subscriptionId,
+    });
+    const existingUser = existingCustomer
+      ? await this.userModel
+          .findById(existingCustomer.userId)
+          .select('plan')
+          .lean()
+          .exec()
+      : null;
+
+    const isRealPlanChange =
+      !existingUser ||
+      !existingCustomer ||
+      (existingUser.plan as string) !== (mappedPlan as string) ||
+      existingCustomer.paddlePriceId !== priceId;
+
+    await this.applyPaddleSubscription({
+      userId,
+      userEmail,
+      paddleCustomerId: customerId,
+      paddleSubscriptionId: subscriptionId,
+      plan: mappedPlan,
+      productId,
+      priceId,
+      status,
+      scheduledChangeAction,
+      scheduledChangeAt,
+      billingPeriodEndsAt,
+      grantCredits: isRealPlanChange,
+      paddleEventId,
+      eventType: originalEventType,
+      rawPayload: subscription,
+    });
   }
 
+  /* =========================================================================
+     Public: handleCustomerUpserted
+     ========================================================================= */
+
   /**
-   * Handles customer events (customer.created, customer.updated).
-   * Upserts paddleCustomerId onto the matching user by userId or email.
+   * Handles customer.created / customer.updated.
+   * Upserts the Customer document (no longer touches User).
    */
   async handleCustomerUpserted(customer: any): Promise<void> {
     const customerId = customer?.id;
@@ -669,45 +919,55 @@ export class BillingService {
     const userId = customData?.blyntaUserId || customData?.blynta_user_id;
 
     this.logger.log(
-      `[Paddle Event] handleCustomerUpserted: customerId=${customerId} email=${email} userId=${userId}`,
+      `[handleCustomerUpserted] customerId=${customerId} email=${email} userId=${userId}`,
     );
 
     if (!customerId) return;
 
+    let targetUserId: Types.ObjectId | null = null;
+
     if (userId && Types.ObjectId.isValid(userId)) {
-      const updated = await this.userModel.findByIdAndUpdate(userId, {
-        $set: { paddleCustomerId: customerId },
-      });
-      if (updated) {
-        this.logger.log(
-          `[Paddle Event] handleCustomerUpserted: Updated user ${userId} with paddleCustomerId ${customerId}`,
-        );
-        return;
-      }
+      targetUserId = new Types.ObjectId(userId);
+    } else if (email) {
+      const user = await this.userModel
+        .findOne({ email: email.toLowerCase().trim() })
+        .select('_id')
+        .lean()
+        .exec();
+      if (user) targetUserId = user._id as Types.ObjectId;
     }
 
-    if (email) {
-      const normalizedEmail = email.toLowerCase().trim();
-      const updated = await this.userModel.findOneAndUpdate(
-        { email: normalizedEmail },
-        { $set: { paddleCustomerId: customerId } },
+    if (!targetUserId) {
+      this.logger.warn(
+        `[handleCustomerUpserted] No matching Blynta user for customerId=${customerId} email=${email}`,
       );
-      if (updated) {
-        this.logger.log(
-          `[Paddle Event] handleCustomerUpserted: Updated user ${updated._id} (${normalizedEmail}) with paddleCustomerId ${customerId}`,
-        );
-      } else {
-        this.logger.warn(
-          `[Paddle Event] handleCustomerUpserted: No matching user found for email ${normalizedEmail}`,
-        );
-      }
+      return;
     }
+
+    await this.customerModel.findOneAndUpdate(
+      { userId: targetUserId },
+      { $set: { userId: targetUserId, paddleCustomerId: customerId } },
+      { upsert: true, new: true },
+    );
+
+    this.logger.log(
+      `[handleCustomerUpserted] Upserted Customer for userId=${targetUserId} paddleCustomerId=${customerId}`,
+    );
   }
 
+  /* =========================================================================
+     Public: handleTransactionCompleted
+     ========================================================================= */
+
   /**
-   * Handles transaction.completed event.
+   * Handles transaction.completed / transaction.paid.
+   * A completed transaction always represents a real payment → always grant credits.
    */
-  async handleTransactionCompleted(transaction: any): Promise<void> {
+  async handleTransactionCompleted(
+    transaction: any,
+    paddleEventId?: string,
+    originalEventType?: string,
+  ): Promise<void> {
     const transactionId = transaction?.id;
     const subscriptionId =
       transaction?.subscriptionId || transaction?.subscription_id;
@@ -734,15 +994,12 @@ export class BillingService {
       try {
         const customer =
           await this.paddleService.paddle.customers.get(customerId);
-        if (customer?.customData?.blyntaUserId) {
+        if (customer?.customData?.blyntaUserId)
           userId = customer.customData.blyntaUserId;
-        }
-        if (customer?.email) {
-          userEmail = customer.email;
-        }
+        if (customer?.email) userEmail = customer.email;
       } catch (err) {
         this.logger.debug(
-          `Could not fetch customer ${customerId} from Paddle SDK: ${err}`,
+          `Could not fetch customer ${customerId} from Paddle: ${err}`,
         );
       }
     }
@@ -752,7 +1009,6 @@ export class BillingService {
       const mapped = this.paddleService.mapPriceIdToPlan(priceId);
       if (mapped && mapped !== 'free') targetPlan = mapped as UserPlan;
     }
-
     if (!targetPlan && customData?.requestedPlan) {
       targetPlan =
         customData.requestedPlan === 'pro'
@@ -763,7 +1019,7 @@ export class BillingService {
     }
 
     this.logger.log(
-      `[Paddle Event] handleTransactionCompleted: txId=${transactionId} subId=${subscriptionId} customerId=${customerId} userId=${userId} plan=${targetPlan}`,
+      `[handleTransactionCompleted] txId=${transactionId} subId=${subscriptionId} customerId=${customerId} userId=${userId} plan=${targetPlan}`,
     );
 
     if (targetPlan && (subscriptionId || customerId || userId || userEmail)) {
@@ -776,6 +1032,11 @@ export class BillingService {
         productId,
         priceId,
         status: 'active',
+        // A real payment always grants credits — renewal or new subscription
+        grantCredits: true,
+        paddleEventId,
+        eventType: originalEventType,
+        rawPayload: transaction,
       });
     }
   }

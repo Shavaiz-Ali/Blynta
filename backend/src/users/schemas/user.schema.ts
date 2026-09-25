@@ -67,30 +67,9 @@ export class User {
   @Prop({ type: [LinkedAccountSchema], default: [] })
   linkedAccounts: LinkedAccount[];
 
-  // --- Plan & billing (Paddle) ---
+  // --- Plan (fast path for feature gating — no join needed) ---
   @Prop({ enum: UserPlan, default: UserPlan.FREE })
   plan: UserPlan;
-
-  @Prop({ type: String, default: null })
-  paddleCustomerId?: string | null;
-
-  @Prop()
-  paddleSubscriptionId: string;
-
-  @Prop()
-  paddleProductId: string;
-
-  @Prop()
-  paddlePriceId: string;
-
-  @Prop()
-  paddleSubscriptionStatus: string; // 'active' | 'trialing' | 'past_due' | 'paused' | 'canceled'
-
-  @Prop()
-  paddleScheduledChangeAction: string; // 'cancel' | 'pause' | 'resume' | null
-
-  @Prop()
-  paddleScheduledChangeAt: Date;
 
   @Prop({ default: true })
   isActive: boolean;

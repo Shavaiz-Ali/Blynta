@@ -28,7 +28,9 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "sync:paddle": "ts-node -r tsconfig-paths/register scripts/sync-paddle-customers.ts"
+    "sync:paddle": "ts-node -r tsconfig-paths/register scripts/sync-paddle-customers.ts",
+    "migrate:billing": "ts-node -r tsconfig-paths/register scripts/migrate-billing-to-customer.ts",
+    "seed:admin": "ts-node -r tsconfig-paths/register scripts/create-admin.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.42",

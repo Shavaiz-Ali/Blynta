@@ -1,7 +1,21 @@
+/**
+ * sync-paddle-customers.ts
+ *
+ * Reconciliation script: walks all Paddle customers and ensures every matched
+ * Blynta user has an up-to-date Customer document in MongoDB.
+ *
+ * Updated to write to the Customer collection instead of User.paddleCustomerId
+ * (which was removed from the User schema in the billing refactor).
+ *
+ * Run with:
+ *   npx ts-node -r tsconfig-paths/register scripts/sync-paddle-customers.ts
+ */
+
 import * as mongoose from 'mongoose';
 import * as dotenv from 'dotenv';
 import { Paddle, Environment } from '@paddle/paddle-node-sdk';
 import { UserSchema } from '../src/users/schemas/user.schema';
+import { CustomerSchema } from '../src/billing/schemas/customer.schema';
 
 dotenv.config();
 
@@ -22,14 +36,10 @@ async function syncPaddleCustomers() {
   console.log('='.repeat(60));
 
   const mongoUri = process.env.MONGO_URI;
-  if (!mongoUri) {
-    throw new Error('MONGO_URI is not defined in .env');
-  }
+  if (!mongoUri) throw new Error('MONGO_URI is not defined in .env');
 
   const apiKey = process.env.PADDLE_API_KEY;
-  if (!apiKey) {
-    throw new Error('PADDLE_API_KEY is not defined in .env');
-  }
+  if (!apiKey) throw new Error('PADDLE_API_KEY is not defined in .env');
 
   const env = process.env.PADDLE_ENV || 'sandbox';
   const paddleEnvironment =
@@ -42,11 +52,15 @@ async function syncPaddleCustomers() {
   console.log('✅ Connected to MongoDB.');
 
   console.log(`💳 Initializing Paddle SDK (${env} environment)...`);
-  const paddle = new Paddle(apiKey, {
-    environment: paddleEnvironment,
-  });
+  const paddle = new Paddle(apiKey, { environment: paddleEnvironment });
 
-  const UserModel = mongoose.model('User', UserSchema);
+  const UserModel = mongoose.models['User']
+    ? (mongoose.model('User') as any)
+    : mongoose.model('User', UserSchema);
+
+  const CustomerModel = mongoose.models['Customer']
+    ? (mongoose.model('Customer') as any)
+    : mongoose.model('Customer', CustomerSchema);
 
   const summary: SyncSummary = {
     totalPaddleCustomers: 0,
@@ -91,33 +105,43 @@ async function syncPaddleCustomers() {
       try {
         const user = await UserModel.findOne({ email });
 
-        if (user) {
-          if (!user.paddleCustomerId) {
-            user.paddleCustomerId = customerId;
-            await user.save();
-            summary.usersUpdated++;
-            console.log(
-              `✨ [UPDATED] User ${email} (DB ID: ${user._id}) -> Set paddleCustomerId = ${customerId} (Paddle status: ${status})`,
-            );
-          } else if (user.paddleCustomerId === customerId) {
-            summary.usersAlreadySynced++;
-            console.log(
-              `✓ [SYNCED] User ${email} (DB ID: ${user._id}) already synced with ${customerId}`,
-            );
-          } else {
-            // DB had a different paddleCustomerId; update to latest found
-            const oldId = user.paddleCustomerId;
-            user.paddleCustomerId = customerId;
-            await user.save();
-            summary.idMismatchesUpdated++;
-            console.log(
-              `🔄 [REPLACED] User ${email} had ID ${oldId}, updated to current Paddle ID ${customerId}`,
-            );
-          }
-        } else {
+        if (!user) {
           summary.unmatchedPaddleCustomers++;
           console.log(
-            `ℹ️ [NO DB MATCH] Paddle customer ${customerId} (${email}, status: ${status}) does not exist in DB.`,
+            `ℹ️ [NO DB MATCH] Paddle customer ${customerId} (${email}, status: ${status}) — no Blynta user.`,
+          );
+          continue;
+        }
+
+        // Work with the Customer collection, not user.paddleCustomerId
+        const existingCustomer = await CustomerModel.findOne({
+          userId: user._id,
+        });
+
+        if (!existingCustomer) {
+          // Create a new Customer document
+          await CustomerModel.create({
+            userId: user._id,
+            paddleCustomerId: customerId,
+          });
+          summary.usersUpdated++;
+          console.log(
+            `✨ [CREATED]  User ${email} (${user._id}) → Customer with paddleCustomerId=${customerId} (Paddle: ${status})`,
+          );
+        } else if (existingCustomer.paddleCustomerId === customerId) {
+          summary.usersAlreadySynced++;
+          console.log(
+            `✓  [SYNCED]   User ${email} (${user._id}) already has Customer ${customerId}`,
+          );
+        } else {
+          // Mismatch — update to the latest Paddle ID
+          const oldId = existingCustomer.paddleCustomerId;
+          await CustomerModel.findByIdAndUpdate(existingCustomer._id, {
+            $set: { paddleCustomerId: customerId },
+          });
+          summary.idMismatchesUpdated++;
+          console.log(
+            `🔄 [REPLACED] User ${email} Customer ID: ${oldId} → ${customerId}`,
           );
         }
       } catch (err: any) {
@@ -146,14 +170,14 @@ async function syncPaddleCustomers() {
     `  - Archived customers:               ${summary.archivedPaddleCustomers}`,
   );
   console.log(
-    `Users updated with paddleCustomerId:  ${summary.usersUpdated}`,
+    `Customer docs created/updated:        ${summary.usersUpdated}`,
   );
   console.log(
     `Users already synced:                 ${summary.usersAlreadySynced}`,
   );
   if (summary.idMismatchesUpdated > 0) {
     console.log(
-      `User ID mismatches re-assigned:      ${summary.idMismatchesUpdated}`,
+      `Customer ID mismatches fixed:        ${summary.idMismatchesUpdated}`,
     );
   }
   console.log(
@@ -161,7 +185,7 @@ async function syncPaddleCustomers() {
   );
   if (summary.errors > 0) {
     console.log(
-      `Errors encountered:                   ${summary.errors}`,
+      `Errors encountered:                  ${summary.errors}`,
     );
   }
   console.log('='.repeat(60));

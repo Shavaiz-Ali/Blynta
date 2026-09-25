@@ -7,10 +7,24 @@ import { UsersModule } from '../users/users.module';
 import { MailModule } from '../mail/mail.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { ActivitiesModule } from '../activities/activities.module';
+import {
+  ProcessedPaddleEvent,
+  ProcessedPaddleEventSchema,
+} from './schemas/processed-paddle-event.schema';
+import { Customer, CustomerSchema } from './schemas/customer.schema';
+import {
+  SubscriptionEvent,
+  SubscriptionEventSchema,
+} from './schemas/subscription-event.schema';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]),
+    MongooseModule.forFeature([
+      { name: User.name, schema: UserSchema },
+      { name: Customer.name, schema: CustomerSchema },
+      { name: SubscriptionEvent.name, schema: SubscriptionEventSchema },
+      { name: ProcessedPaddleEvent.name, schema: ProcessedPaddleEventSchema },
+    ]),
     UsersModule,
     MailModule,
     NotificationsModule,

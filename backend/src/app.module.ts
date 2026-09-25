@@ -18,6 +18,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { ActivitiesModule } from './activities/activities.module';
 import { SharesModule } from './share/shares.module';
 import { YouTubeModule } from './youtube/youtube.module';
+import { AdminModule } from './admin/admin.module';
 
 const logger = new Logger('MongooseModule');
 
@@ -73,6 +74,7 @@ const logger = new Logger('MongooseModule');
     RedisModule,
     SharesModule,
     YouTubeModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

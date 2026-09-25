@@ -110,14 +110,21 @@ export class MailService {
     email: string,
     plan: string,
     credits: number,
+    /** Optional stable job ID — BullMQ silently skips if already queued/processed */
+    dedupeJobId?: string,
   ): Promise<void> {
     this.logger.log(
-      `Queueing subscription activated email to ${email} for plan ${plan}`,
+      `Queueing subscription activated email to ${email} for plan ${plan}${dedupeJobId ? ` (jobId: ${dedupeJobId})` : ''}`,
     );
     await this.mailQueue.add(
       MAIL_JOBS.SEND_SUBSCRIPTION_ACTIVATED,
       { email, plan, credits },
-      DEFAULT_JOB_OPTIONS,
+      {
+        ...DEFAULT_JOB_OPTIONS,
+        // BullMQ dedup: if a job with this ID is already in the queue
+        // (waiting, delayed, or active), the new add() is silently ignored.
+        ...(dedupeJobId ? { jobId: dedupeJobId } : {}),
+      },
     );
   }
 }
