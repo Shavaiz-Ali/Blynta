@@ -5,9 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { User, UserDocument } from '../../users/schemas/user.schema';
+import * as bcrypt from 'bcrypt';
+import { User, UserDocument, UserRole, UserPlan } from '../../users/schemas/user.schema';
 import { Customer, CustomerDocument } from '../../billing/schemas/customer.schema';
-import { Job, JobDocument } from '../../jobs/schemas/job.schema';
+import { Job, JobDocument, JobStatus } from '../../jobs/schemas/job.schema';
 import {
   Activity,
   ActivityActorType,
@@ -20,7 +21,9 @@ import {
 import { ActivitiesService } from '../../activities/activities.service';
 import { ListUsersAdminDto } from '../dto/list-users-admin.dto';
 import { UpdateUserAdminDto } from '../dto/update-user-admin.dto';
+import { CreateAdminUserDto } from '../dto/create-admin.dto';
 import { PaginatedResult } from '../dto/list-query.dto';
+import { generateReferralCode } from '../../users/utils/generate-referral-code';
 
 const SENSITIVE_FIELDS =
   '-password -refreshTokenHash -otpCode -passwordResetToken -otpExpiresAt -passwordResetExpiresAt';
@@ -54,9 +57,9 @@ export class AdminUsersService {
     if (dto.plan) {
       filter.plan = dto.plan;
     }
-    if (dto.role) {
-      filter.role = dto.role;
-    }
+    // Only list users with role USER by default, unless explicitly querying for another role
+    filter.role = dto.role || UserRole.USER;
+
     if (dto.isActive !== undefined) {
       filter.isActive = dto.isActive;
     }
@@ -94,107 +97,192 @@ export class AdminUsersService {
     };
   }
 
-  async getUserDetail(userId: string): Promise<{
-    user: UserDocument;
-    customer: CustomerDocument | null;
-    recentActivities: ActivityDocument[];
-    jobsCount: number;
-  }> {
-    const userObjectId = this.toObjectId(userId);
+  async createAdminUser(
+    dto: CreateAdminUserDto,
+    adminId: string,
+  ): Promise<UserDocument> {
+    const email = dto.email.toLowerCase().trim();
+    const existing = await this.userModel.findOne({ email }).exec();
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    if (existing) {
+      existing.role = UserRole.ADMIN;
+      existing.emailVerified = true;
+      existing.isActive = true;
+      if (dto.name) existing.name = dto.name;
+      existing.password = hashedPassword;
+      await existing.save();
+
+      await this.activitiesService.create({
+        userId: existing._id,
+        actorType: ActivityActorType.ADMIN,
+        actorId: this.toObjectId(adminId),
+        category: ActivityCategory.ACCOUNT,
+        type: ActivityType.AUTH_PROFILE_UPDATE,
+        status: ActivityStatus.SUCCESS,
+        severity: ActivitySeverity.WARNING,
+        title: 'User Promoted to Admin',
+        description: `User ${email} was promoted to administrator`,
+      });
+
+      const sanitized = existing.toObject();
+      delete (sanitized as any).password;
+      return sanitized as UserDocument;
+    }
+
+    let referralCode = generateReferralCode();
+    while (await this.userModel.exists({ referralCode })) {
+      referralCode = generateReferralCode();
+    }
+
+    const newAdmin = await this.userModel.create({
+      email,
+      password: hashedPassword,
+      name: dto.name || 'Admin',
+      role: UserRole.ADMIN,
+      plan: UserPlan.BUSINESS,
+      creditsBalance: 500,
+      emailVerified: true,
+      isActive: true,
+      isWelcomed: true,
+      referralCode,
+    });
+
+    await this.activitiesService.create({
+      userId: newAdmin._id,
+      actorType: ActivityActorType.ADMIN,
+      actorId: this.toObjectId(adminId),
+      category: ActivityCategory.ACCOUNT,
+      type: ActivityType.AUTH_REGISTER,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.INFO,
+      title: 'Administrator Created',
+      description: `New administrator account created for ${email}`,
+    });
+
+    const sanitized = newAdmin.toObject();
+    delete (sanitized as any).password;
+    return sanitized as UserDocument;
+  }
+
+  async getUserDetail(id: string): Promise<any> {
+    const userObjectId = this.toObjectId(id);
 
     const user = await this.userModel
       .findById(userObjectId)
       .select(SENSITIVE_FIELDS)
+      .populate('referredBy', 'email name')
       .lean()
       .exec();
 
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const [customer, recentActivities, jobsCount] = await Promise.all([
+    const [customer, recentJobs, stats] = await Promise.all([
       this.customerModel.findOne({ userId: userObjectId }).lean().exec(),
-      this.activityModel
+      this.jobModel
         .find({ userId: userObjectId })
         .sort({ createdAt: -1 })
         .limit(10)
         .lean()
         .exec(),
-      this.jobModel.countDocuments({ userId: userObjectId }).exec(),
+      this.calculateUserStats(userObjectId),
     ]);
 
     return {
-      user: user as unknown as UserDocument,
-      customer: customer as unknown as CustomerDocument | null,
-      recentActivities: recentActivities as unknown as ActivityDocument[],
-      jobsCount,
+      user,
+      customer: customer ?? null,
+      recentJobs: recentJobs ?? [],
+      stats,
+    };
+  }
+
+  private async calculateUserStats(userId: Types.ObjectId): Promise<any> {
+    const [totalJobs, completedJobs, failedJobs, totalEvents] =
+      await Promise.all([
+        this.jobModel.countDocuments({ userId }).exec(),
+        this.jobModel.countDocuments({ userId, status: JobStatus.COMPLETED }).exec(),
+        this.jobModel.countDocuments({ userId, status: JobStatus.FAILED }).exec(),
+        this.activityModel.countDocuments({ userId }).exec(),
+      ]);
+
+    return {
+      totalJobs,
+      completedJobs,
+      failedJobs,
+      totalEvents,
     };
   }
 
   async updateUser(
-    userId: string,
+    id: string,
     dto: UpdateUserAdminDto,
     adminId: string,
   ): Promise<UserDocument> {
-    const userObjectId = this.toObjectId(userId);
-    const adminObjectId = this.toObjectId(adminId);
+    const userObjectId = this.toObjectId(id);
 
-    const existingUser = await this.userModel.findById(userObjectId).exec();
-    if (!existingUser) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+    const user = await this.userModel.findById(userObjectId).exec();
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const updatePayload: Partial<User> = {};
     const changes: Record<string, { before: any; after: any }> = {};
 
-    if (dto.role !== undefined && dto.role !== existingUser.role) {
-      changes.role = { before: existingUser.role, after: dto.role };
-      updatePayload.role = dto.role;
-    }
-    if (dto.isActive !== undefined && dto.isActive !== existingUser.isActive) {
-      changes.isActive = { before: existingUser.isActive, after: dto.isActive };
-      updatePayload.isActive = dto.isActive;
-    }
-    if (dto.name !== undefined && dto.name !== existingUser.name) {
-      changes.name = { before: existingUser.name, after: dto.name };
-      updatePayload.name = dto.name;
-    }
-    if (
-      dto.emailVerified !== undefined &&
-      dto.emailVerified !== existingUser.emailVerified
-    ) {
-      changes.emailVerified = {
-        before: existingUser.emailVerified,
-        after: dto.emailVerified,
-      };
-      updatePayload.emailVerified = dto.emailVerified;
+    if (dto.role !== undefined && dto.role !== user.role) {
+      changes.role = { before: user.role, after: dto.role };
+      user.role = dto.role;
     }
 
-    const updatedUser = await this.userModel
-      .findByIdAndUpdate(userObjectId, { $set: updatePayload }, { new: true })
+    if (dto.isActive !== undefined && dto.isActive !== user.isActive) {
+      changes.isActive = { before: user.isActive, after: dto.isActive };
+      user.isActive = dto.isActive;
+    }
+
+    if (
+      dto.emailVerified !== undefined &&
+      dto.emailVerified !== user.emailVerified
+    ) {
+      changes.emailVerified = {
+        before: user.emailVerified,
+        after: dto.emailVerified,
+      };
+      user.emailVerified = dto.emailVerified;
+    }
+
+    if (dto.name !== undefined && dto.name !== user.name) {
+      changes.name = { before: user.name, after: dto.name };
+      user.name = dto.name;
+    }
+
+    if (Object.keys(changes).length === 0) {
+      return user;
+    }
+
+    await user.save();
+
+    await this.activitiesService.create({
+      userId: user._id,
+      actorType: ActivityActorType.ADMIN,
+      actorId: this.toObjectId(adminId),
+      category: ActivityCategory.ACCOUNT,
+      type: ActivityType.AUTH_PROFILE_UPDATE,
+      status: ActivityStatus.SUCCESS,
+      severity: ActivitySeverity.WARNING,
+      title: 'User Profile Updated by Admin',
+      description: `Admin updated user ${user.email} (${Object.keys(changes).join(', ')})`,
+      metadata: {
+        reason: dto.reason,
+        changes,
+      },
+    });
+
+    const updated = await this.userModel
+      .findById(userObjectId)
       .select(SENSITIVE_FIELDS)
       .lean()
       .exec();
 
-    // Log admin activity audit record
-    await this.activitiesService.create({
-      userId: userObjectId,
-      actorType: ActivityActorType.ADMIN,
-      actorId: adminObjectId,
-      category: ActivityCategory.ACCOUNT,
-      type: ActivityType.AUTH_PROFILE_UPDATE,
-      title: 'Admin updated user details',
-      description: `Reason: ${dto.reason}`,
-      status: ActivityStatus.SUCCESS,
-      severity: ActivitySeverity.INFO,
-      entityType: 'user',
-      entityId: userObjectId,
-      metadata: {
-        changes,
-        reason: dto.reason,
-      },
-    });
-
-    return updatedUser as unknown as UserDocument;
+    return updated as unknown as UserDocument;
   }
 }

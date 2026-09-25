@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { NotificationList } from "./NotificationList";
-import { useUnreadCountQuery } from "../queries";
+import { useUnreadCountQuery, useMarkAllAsReadMutation } from "../queries";
 
 /* -------------------------------------------------------------------------- */
 /*                            NotificationDropdown                            */
@@ -23,9 +23,14 @@ export function NotificationDropdown({
   className,
 }: NotificationDropdownProps) {
   const { data: unreadData } = useUnreadCountQuery();
+  const markAllAsRead = useMarkAllAsReadMutation();
 
   const unreadCount = unreadData?.count ?? 0;
   const hasUnread = unreadCount > 0;
+
+  const handleMarkAllAsRead = () => {
+    markAllAsRead.mutate();
+  };
 
   return (
     <div
@@ -46,6 +51,22 @@ export function NotificationDropdown({
             </span>
           )}
         </div>
+
+        {/* ── Mark all as read button — only shown when there are unread ── */}
+        {hasUnread && (
+          <button
+            onClick={handleMarkAllAsRead}
+            disabled={markAllAsRead.isPending}
+            className={cn(
+              "text-[11px] font-medium text-primary hover:text-primary/80 transition-colors",
+              "disabled:opacity-50 disabled:cursor-not-allowed",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded"
+            )}
+            aria-label="Mark all notifications as read"
+          >
+            {markAllAsRead.isPending ? "Marking…" : "Mark all as read"}
+          </button>
+        )}
       </div>
 
       {/* ── Divider ── */}
@@ -65,3 +86,4 @@ export function NotificationDropdown({
     </div>
   );
 }
+

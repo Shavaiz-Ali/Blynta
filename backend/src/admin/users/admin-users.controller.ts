@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
   ValidationPipe,
@@ -15,6 +16,7 @@ import type { AuthenticatedUser } from '../../auth/jwt.strategy';
 import { AdminUsersService } from './admin-users.service';
 import { ListUsersAdminDto } from '../dto/list-users-admin.dto';
 import { UpdateUserAdminDto } from '../dto/update-user-admin.dto';
+import { CreateAdminUserDto } from '../dto/create-admin.dto';
 
 @Controller('admin/users')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -27,6 +29,21 @@ export class AdminUsersController {
     query: ListUsersAdminDto,
   ) {
     return this.adminUsersService.listUsers(query);
+  }
+
+  @Post('create-admin')
+  async createAdmin(
+    @Body(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    )
+    dto: CreateAdminUserDto,
+    @CurrentAdmin() admin: AuthenticatedUser,
+  ) {
+    return this.adminUsersService.createAdminUser(dto, admin.userId);
   }
 
   @Get(':id')

@@ -42,6 +42,9 @@ import { AdminNotificationsService } from './notifications/admin-notifications.s
 import { AdminAuditController } from './audit/admin-audit.controller';
 import { AdminAuditService } from './audit/admin-audit.service';
 
+import { AdminDashboardController } from './dashboard/admin-dashboard.controller';
+import { AdminDashboardService } from './dashboard/admin-dashboard.service';
+
 @Module({
   imports: [
     MongooseModule.forFeature([
@@ -61,6 +64,7 @@ import { AdminAuditService } from './audit/admin-audit.service';
     BillingModule,
   ],
   controllers: [
+    AdminDashboardController,
     AdminUsersController,
     AdminBillingController,
     AdminJobsController,
@@ -70,6 +74,7 @@ import { AdminAuditService } from './audit/admin-audit.service';
   providers: [
     AdminGuard,
     JwtAuthGuard,
+    AdminDashboardService,
     AdminUsersService,
     AdminBillingService,
     AdminJobsService,
@@ -79,6 +84,7 @@ import { AdminAuditService } from './audit/admin-audit.service';
   exports: [
     AdminGuard,
     JwtAuthGuard,
+    AdminDashboardService,
     AdminUsersService,
     AdminBillingService,
     AdminJobsService,
