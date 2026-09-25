@@ -58,10 +58,11 @@ async function bootstrap() {
   });
   instance.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  const frontendOrigin = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+  const origins = process.env.ALLOWED_ORIGINS?.split(',') ?? [];
 
   app.enableCors({
-    origin: [frontendOrigin, 'http://127.0.0.1:3000', 'http://localhost:3000'],
+    origin: [...origins, 'http://127.0.0.1:3000', 'http://localhost:3000'],
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
