@@ -59,12 +59,14 @@ async function bootstrap() {
   instance.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 
-  const origins = process.env.ALLOWED_ORIGINS?.split(',') ?? [];
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') ?? [])
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
-  console.log(origins)
 
+  logger.log('allowedOrigins', allowedOrigins);
   app.enableCors({
-    origin: [...origins, 'http://127.0.0.1:3000', 'http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],

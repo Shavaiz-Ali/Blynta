@@ -12,7 +12,7 @@ export type YouTubeConnectionDocument = YouTubeConnection & Document;
  */
 @Schema({ timestamps: true })
 export class YouTubeConnection {
-  @Prop({ type: Types.ObjectId, required: true, index: true })
+  @Prop({ type: Types.ObjectId, required: true })
   userId: Types.ObjectId;
 
   @Prop({ required: true })
