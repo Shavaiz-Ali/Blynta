@@ -137,6 +137,7 @@ export interface HighlightDetectionResult {
 }
 
 const SDK_MAX_RETRIES = 0;
+const DIRECT_MAX_OUTPUT_TOKENS = 8192;
 
 const CHUNK_CHAR_BUDGET = 3000; // ~750 tokens of transcript text per chunk
 const CHUNK_MAX_OUTPUT_TOKENS = 2500; // generous room for hidden reasoning + final JSON
@@ -290,18 +291,49 @@ export class HighlightDetectionService {
       : `Full Video Transcript:\n${transcriptText}`;
 
     try {
-      const result = await generateObject({
+      const request = {
         model: this.model,
         schemaName: 'HighlightsResponse',
         schemaDescription: 'List of video highlights and metadata',
         schema: HighlightsResponseSchema,
         system: systemPrompt,
-        prompt: userPrompt,
+        prompt: `${userPrompt}\n\nReturn at most ${FINAL_HIGHLIGHT_COUNT} highlights in one complete JSON object. Keep descriptions concise.`,
         temperature: 0.3,
+        maxOutputTokens: DIRECT_MAX_OUTPUT_TOKENS,
         maxRetries: 2,
-      });
+      };
+      let parsedObj: z.infer<typeof HighlightsResponseSchema>;
+      try {
+        parsedObj = (await generateObject(request)).object;
+      } catch (error) {
+        if (!NoObjectGeneratedError.isInstance(error)) throw error;
 
-      const parsedObj = result.object;
+        this.logger.warn(
+          `Highlight response invalid: finishReason=${error.finishReason}, outputChars=${error.text?.length ?? 0}`,
+        );
+        // Only recover complete, schema-valid JSON. Never invent missing fields
+        // or salvage a truncated list of clips.
+        const recovered = this.recoverHighlightResponse(error.text);
+        if (recovered) {
+          parsedObj = recovered;
+        } else {
+          this.logger.warn(
+            'Retrying highlight generation once with stricter JSON instructions',
+          );
+          parsedObj = (
+            await generateObject({
+              ...request,
+              temperature: 0.1,
+              maxOutputTokens:
+                error.finishReason === 'length'
+                  ? DIRECT_MAX_OUTPUT_TOKENS * 2
+                  : DIRECT_MAX_OUTPUT_TOKENS,
+              prompt: `${userPrompt}\n\nReturn only one complete JSON object matching the schema, without Markdown or commentary. Return at most ${FINAL_HIGHLIGHT_COUNT} highlights and keep descriptions concise.`,
+            })
+          ).object;
+        }
+      }
+
       const dtos = this.toDto(parsedObj);
       const merged = this.mergeCandidates(dtos);
       const topHighlights = merged
@@ -316,17 +348,36 @@ export class HighlightDetectionService {
         highlights: topHighlights,
       };
     } catch (e: any) {
+      if (NoObjectGeneratedError.isInstance(e)) {
+        this.logger.error(
+          `Invalid highlight output: finishReason=${e.finishReason}, outputChars=${e.text?.length ?? 0}`,
+        );
+      }
       this.logger.error(
         `Highlight detection failed: ${e instanceof Error ? e.message : e}`,
       );
       this.logFullErrorBody(e, 'detectHighlightsDirect error');
-      return {
-        videoTitle: '',
-        videoDescription: '',
-        keywords: '',
-        hashtags: [],
-        highlights: [],
-      };
+      // Let the processor record a highlight_detection failure, rather than
+      // caching an empty result and advancing to cutting/finalizing.
+      throw new Error(
+        `Highlight detection failed: ${e instanceof Error ? e.message : String(e)}`,
+        { cause: e },
+      );
+    }
+  }
+
+  private recoverHighlightResponse(
+    text: string | undefined,
+  ): z.infer<typeof HighlightsResponseSchema> | null {
+    if (!text) return null;
+    const json = text
+      .trim()
+      .replace(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/i, '$1');
+    try {
+      const result = HighlightsResponseSchema.safeParse(JSON.parse(json));
+      return result.success ? result.data : null;
+    } catch {
+      return null;
     }
   }
 

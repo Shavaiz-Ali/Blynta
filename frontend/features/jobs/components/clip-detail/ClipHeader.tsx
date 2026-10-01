@@ -30,6 +30,7 @@ export interface ClipHeaderProps {
   isDownloading: boolean;
   onShare: () => void;
   onPublishYouTube?: () => void;
+  onSchedule?: () => void;
   hasTranscript: boolean;
   onOpenTranscript: () => void;
   sourceUrl?: string;
@@ -52,6 +53,7 @@ export function ClipHeader({
   isDownloading,
   onShare,
   onPublishYouTube,
+  onSchedule,
   hasTranscript,
   onOpenTranscript,
   sourceUrl,
@@ -182,7 +184,9 @@ export function ClipHeader({
                   },
                 ]
               : []),
-            { label: "Schedule ? coming soon", disabled: true, icon: <CalendarIcon /> },
+            ...(onSchedule
+              ? [{ label: "Schedule post", onClick: onSchedule, icon: <CalendarIcon /> }]
+              : []),
             ...(sourceUrl
               ? [
                   {

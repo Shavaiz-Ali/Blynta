@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/features/auth/queries";
 import { useJobs } from "@/features/jobs";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
@@ -12,17 +11,17 @@ import { UpgradeBanner } from "./UpgradeBanner";
 import { HeroInput } from "./HeroInput";
 import { ActivePipelineBanner } from "./ActivePipelineBanner";
 import { JobsCard } from "./JobsCard";
-import { JobsSkeleton } from "./JobsSkeleton";
 import { AttentionNeeded } from "./AttentionNeeded";
 import { AlertTriangleIcon } from "../icons";
 
 export function DashboardHome() {
-  const router = useRouter();
   const { data: profile, isLoading: profileLoading } = useCurrentUser();
   const {
     data: jobsResult,
     isLoading: jobsLoading,
     error: jobsError,
+    refetch,
+    isFetching,
   } = useJobs();
   const jobs = jobsResult?.jobs ?? [];
 
@@ -65,29 +64,28 @@ export function DashboardHome() {
 
       {/* ── Recent Projects / Clips Section ── */}
       <div className="min-w-0">
-        {jobsLoading ? (
-          <JobsSkeleton />
-        ) : jobsError ? (
+        {jobsError ? (
           <div className="rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm text-center">
             <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
             <p className="text-sm font-semibold text-foreground">
               Couldn&apos;t load your clips
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              {(jobsError as any)?.message ||
+              {jobsError.message ||
                 "Please refresh the page to try again."}
             </p>
             <AppButton
               variant="outline"
               size="sm"
               className="mt-4"
-              onClick={() => router.refresh()}
+              disabled={isFetching}
+              onClick={() => void refetch()}
             >
-              Refresh
+              {isFetching ? "Retrying..." : "Try again"}
             </AppButton>
           </div>
         ) : (
-          <JobsCard jobs={jobs} />
+          <JobsCard jobs={jobs} isLoading={jobsLoading} />
         )}
       </div>
 

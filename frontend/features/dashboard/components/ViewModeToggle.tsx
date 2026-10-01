@@ -25,7 +25,7 @@ export function ViewModeToggle({ mode, onChange, className }: ViewModeToggleProp
           label: (
             <span className="flex items-center gap-1.5" title="Grid View (Thumbnails)">
               <LayoutGridIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Grid</span>
+              <span className="sr-only sm:not-sr-only">Grid</span>
             </span>
           ),
         },
@@ -34,7 +34,7 @@ export function ViewModeToggle({ mode, onChange, className }: ViewModeToggleProp
           label: (
             <span className="flex items-center gap-1.5" title="List View">
               <ListIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">List</span>
+              <span className="sr-only sm:not-sr-only">List</span>
             </span>
           ),
         },

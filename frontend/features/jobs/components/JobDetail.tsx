@@ -22,6 +22,7 @@ import { VideoMetadataKit } from "./VideoMetadataKit";
 import { CaptionStylingCard } from "./CaptionStylingCard";
 import { FailedStateCard } from "./FailedStateCard";
 import { JobDetailSkeleton } from "./JobDetailSkeleton";
+import { ScheduleDialog } from "./ScheduleDialog";
 
 // Re-exports for backwards compatibility
 export { PipelineStepper } from "./PipelineStepper";
@@ -42,6 +43,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
 
   const [activeClipIndex, setActiveClipIndex] = React.useState(0);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
 
   // Sync with clip query param if provided
   React.useEffect(() => {
@@ -135,6 +137,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
             job={job}
             activeClipIndex={safeClipIndex}
             onSelectClip={(idx) => setActiveClipIndex(idx)}
+            onSchedule={() => setScheduleOpen(true)}
           />
 
           {/* Two-Column Studio Grid Layout */}
@@ -198,6 +201,18 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
             Try another video
           </AppButton>
         </div>
+      )}
+
+      {/* Delete Clip Confirmation Dialog */}
+      {activeClip && (
+        <ScheduleDialog
+          open={scheduleOpen}
+          onOpenChange={setScheduleOpen}
+          jobId={getJobId(job)}
+          clipId={getClipId(activeClip)}
+          clipTitle={activeHighlight?.clipTitle || job.videoTitle || `Clip ${safeClipIndex + 1}`}
+          clipDescription={activeHighlight?.clipDescription || job.videoDescription}
+        />
       )}
 
       {/* Delete Clip Confirmation Dialog */}

@@ -18,7 +18,6 @@ import {
   formatDate,
   getJobThumbnail,
   getJobDurationFormatted,
-  isProcessingStatus,
 } from "@/features/dashboard/utils";
 import {
   ChevronLeftIcon,
@@ -152,7 +151,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   return (
     <DashboardLayout headerContent={headerContent}>
       {/* ── Level 2: Media Detail Header Lockup ── */}
-      <div className="flex flex-col gap-6 pb-6 border-b border-border/70">
+      <div className="flex flex-col gap-4 pb-7 border-b border-border/60">
         {/* Back Link */}
         <div>
           <Link
@@ -165,10 +164,14 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
         </div>
 
         {/* Source Media Banner Container */}
-        <AppCard className="gap-5" useDefaultClasses={true}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 min-w-0 flex-1">
+        <AppCard
+          className="gap-0 overflow-hidden p-0!"
+          contentClassName="flex flex-col p-0! lg:flex-row lg:items-stretch"
+          useDefaultClasses={false}
+        >
+          <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-stretch">
             {/* 16:9 Thumbnail */}
-            <div className="relative h-24 w-40 sm:h-28 sm:w-48 rounded-lg bg-muted/40 overflow-hidden shrink-0 border border-border/70 select-none shadow-xs">
+            <div className="relative aspect-video w-full shrink-0 overflow-hidden border-b border-border/70 bg-muted/40 select-none sm:aspect-auto sm:w-56 sm:min-h-32 sm:border-r sm:border-b-0">
               {thumbnail ? (
                 <img
                   src={thumbnail}
@@ -191,7 +194,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
             </div>
 
             {/* Video metadata details */}
-            <div className="space-y-2 min-w-0 flex-1">
+            <div className="min-w-0 flex-1 space-y-2 px-4 py-3 sm:self-center sm:px-5">
               <div className="flex items-center gap-2 flex-wrap">
                 {isCompleted ? (
                   <Badge variant="secondary" className="gap-1 bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold">
@@ -250,7 +253,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
           </div>
 
           {/* Right Action Menu */}
-          <div className="flex items-center gap-2 self-end lg:self-center shrink-0">
+          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-4 py-3 lg:border-t-0 lg:border-l lg:self-stretch">
             {isFailed && (
               <AppButton
                 variant="default"
@@ -330,34 +333,34 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
         </div>
       ) : (
         /* Stage 4 (Cutting & Captioning) and Completed Stage: Live Shorts Grid */
-        <div className="space-y-5">
+        <div className="space-y-6 pt-1">
           {/* Live Cutting Notice Banner when in Stage 4 */}
           {isCuttingClips && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-primary/30 bg-gradient-to-r from-primary/10 via-card to-card shadow-xs backdrop-blur-sm">
+            <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/60 p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary border border-primary/30 shrink-0">
-                  <FilmIcon className="h-4.5 w-4.5 animate-pulse" />
+                <div className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
+                  <FilmIcon className="h-4.5 w-4.5" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="text-xs font-bold text-foreground">
-                      Stage 4: Cutting &amp; Captioning Shorts
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Preparing your clips
                     </h4>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary animate-ping" />
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                       {clipsCount} of {totalHighlightsCount} ready
                     </span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Rendering 9:16 vertical shorts &amp; burning animated subtitles. Finished clips are ready to preview below in real time!
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We&apos;re formatting vertical video and captions. Finished clips appear below automatically.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 self-end sm:self-center shrink-0">
-                <div className="h-2 w-28 sm:w-36 rounded-full bg-muted/70 overflow-hidden border border-border/50">
+              <div className="flex w-full items-center gap-3 sm:w-auto sm:min-w-48 shrink-0">
+                <div className="h-1.5 flex-1 sm:w-36 rounded-full bg-muted overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-primary/80 to-primary rounded-full transition-all duration-500"
+                    className="h-full bg-primary rounded-full transition-all duration-500"
                     style={{
                       width: `${Math.max(
                         10,
@@ -366,7 +369,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
                     }}
                   />
                 </div>
-                <span className="text-xs font-mono font-bold text-primary">
+                <span className="w-9 text-right text-xs font-semibold tabular-nums text-foreground">
                   {Math.round((clipsCount / Math.max(1, totalHighlightsCount)) * 100)}%
                 </span>
               </div>
@@ -374,15 +377,15 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
           )}
 
           {/* Section Heading for Completed or Cutting Stage */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h3 className="text-xl font-bold tracking-tight text-foreground">
-                Generated Shorts
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <h2 className="text-xl font-semibold tracking-tight text-foreground">
+                Your clips
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
                 {isCuttingClips
-                  ? `${clipsCount} of ${totalHighlightsCount} viral shorts generated so far. Remaining clips rendering...`
-                  : `${clipsCount} viral short ${clipsCount === 1 ? "clip" : "clips"} extracted from this long-form video.`}
+                  ? `${clipsCount} ready now. ${Math.max(0, totalHighlightsCount - clipsCount)} still processing.`
+                  : `${clipsCount} ${clipsCount === 1 ? "clip" : "clips"} generated from this video.`}
               </p>
             </div>
           </div>

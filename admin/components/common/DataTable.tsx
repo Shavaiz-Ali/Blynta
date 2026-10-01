@@ -1,16 +1,22 @@
 "use client";
 
-import * as React from "react";
-import { cn } from "@/lib/utils";
+import { isValidElement, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { AppButton } from "./AppButton";
-import { AppSelect } from "./AppSelect";
-import { AppSpinner } from "./AppSpinner";
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface Column<T> {
   key: string;
   header: string;
-  render?: (item: T) => React.ReactNode;
+  render?: (row: T) => ReactNode;
   sortable?: boolean;
   className?: string;
 }
@@ -20,6 +26,7 @@ export interface DataTableProps<T> {
   data: T[];
   loading?: boolean;
   emptyMessage?: string;
+  onRowClick?: (row: T) => void;
   pagination?: {
     page: number;
     limit: number;
@@ -31,168 +38,190 @@ export interface DataTableProps<T> {
   sorting?: {
     sortBy?: string;
     sortOrder?: "asc" | "desc";
-    onSortChange: (sortBy: string, sortOrder: "asc" | "desc") => void;
+    onSortChange: (key: string, order: "asc" | "desc") => void;
   };
-  onRowClick?: (item: T) => void;
 }
 
-export function DataTable<T extends Record<string, any>>({
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest("a, button, input, select, textarea, summary"));
+}
+
+function renderCellContent(value: unknown): ReactNode {
+  if (value === null || value === undefined || value === "") return "—";
+  if (isValidElement(value) || Array.isArray(value)) return value as ReactNode;
+
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const label = record.email ?? record.name ?? record.title ?? record.label ?? record.id ?? record._id;
+    return typeof label === "string" || typeof label === "number" ? String(label) : "—";
+  }
+
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
+
+export function DataTable<T extends { _id?: string; id?: string }>({
   columns,
   data,
   loading = false,
-  emptyMessage = "No records found.",
+  emptyMessage = "No records match these filters.",
   pagination,
   sorting,
   onRowClick,
 }: DataTableProps<T>) {
-  const handleSort = (columnKey: string) => {
-    if (!sorting) return;
-    if (sorting.sortBy === columnKey) {
-      const nextOrder = sorting.sortOrder === "asc" ? "desc" : "asc";
-      sorting.onSortChange(columnKey, nextOrder);
-    } else {
-      sorting.onSortChange(columnKey, "desc");
-    }
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const visibleColumns = columns.filter((column) => !hiddenColumns.includes(column.key));
+
+  const openRow = (row: T, event: MouseEvent<HTMLTableRowElement>) => {
+    if (!onRowClick || isInteractiveTarget(event.target)) return;
+    onRowClick(row);
+  };
+
+  const openRowWithKeyboard = (row: T, event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (!onRowClick || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    onRowClick(row);
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="relative overflow-x-auto rounded-lg border border-border bg-card shadow-xs">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <tr>
-              {columns.map((col) => (
-                <th
-                  key={col.key}
-                  className={cn(
-                    "px-4 py-3.5",
-                    col.sortable && "cursor-pointer select-none hover:text-foreground",
-                    col.className
-                  )}
-                  onClick={() => col.sortable && handleSort(col.key)}
+    <div className="min-w-0 space-y-3" aria-busy={loading}>
+      <details className="w-fit text-sm">
+        <summary className="cursor-pointer rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Columns
+        </summary>
+        <div className="flex flex-wrap gap-4 py-3">
+          {columns.map((column) => {
+            const isVisible = !hiddenColumns.includes(column.key);
+            return (
+              <label key={column.key} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={isVisible}
+                  disabled={visibleColumns.length === 1 && isVisible}
+                  onChange={(event) =>
+                    setHiddenColumns((current) =>
+                      event.target.checked
+                        ? current.filter((key) => key !== column.key)
+                        : [...current, column.key]
+                    )
+                  }
+                />
+                {column.header || "Actions"}
+              </label>
+            );
+          })}
+        </div>
+      </details>
+
+      <div className="overflow-x-auto rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {visibleColumns.map((column) => (
+                <TableHead
+                  key={column.key}
+                  className={column.className}
+                  aria-sort={
+                    sorting?.sortBy === column.key
+                      ? sorting.sortOrder === "asc"
+                        ? "ascending"
+                        : "descending"
+                      : undefined
+                  }
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span>{col.header}</span>
-                    {col.sortable && sorting && (
-                      <span className="text-muted-foreground/70">
-                        {sorting.sortBy === col.key ? (
-                          sorting.sortOrder === "asc" ? (
-                            <ArrowUp className="size-3.5 text-primary" />
-                          ) : (
-                            <ArrowDown className="size-3.5 text-primary" />
-                          )
-                        ) : (
-                          <ArrowUpDown className="size-3.5 opacity-50" />
-                        )}
+                  {column.sortable && sorting ? (
+                    <AppButton
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        sorting.onSortChange(
+                          column.key,
+                          sorting.sortBy === column.key && sorting.sortOrder === "asc"
+                            ? "desc"
+                            : "asc"
+                        )
+                      }
+                    >
+                      {column.header}
+                      <span aria-hidden="true">
+                        {sorting.sortBy === column.key
+                          ? sorting.sortOrder === "asc"
+                            ? "↑"
+                            : "↓"
+                          : "↕"}
                       </span>
-                    )}
-                  </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {loading ? (
-              Array.from({ length: Math.min(5, pagination?.limit || 5) }).map((_, rIdx) => (
-                <tr key={rIdx} className="animate-pulse">
-                  {columns.map((col, cIdx) => (
-                    <td key={cIdx} className="px-4 py-4">
-                      <div className="h-4 w-3/4 rounded bg-muted" />
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : data.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="px-4 py-12 text-center text-muted-foreground">
-                  {emptyMessage}
-                </td>
-              </tr>
-            ) : (
-              data.map((row, idx) => (
-                <tr
-                  key={row.id || row._id || idx}
-                  className={cn(
-                    "transition-colors hover:bg-muted/40",
-                    onRowClick && "cursor-pointer"
+                    </AppButton>
+                  ) : (
+                    column.header
                   )}
-                  onClick={() => onRowClick && onRowClick(row)}
-                >
-                  {columns.map((col) => (
-                    <td key={col.key} className={cn("px-4 py-3.5 text-foreground align-middle", col.className)}>
-                      {col.render ? col.render(row) : row[col.key] !== undefined ? String(row[col.key]) : "—"}
-                    </td>
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 5 }, (_, index) => (
+                <TableRow key={index}>
+                  {visibleColumns.map((column) => (
+                    <TableCell key={column.key}>
+                      <Skeleton className="h-5 w-full" />
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))
+            ) : data.length > 0 ? (
+              data.map((row, index) => (
+                <TableRow
+                  key={row._id || row.id || index}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={(event) => openRow(row, event)}
+                  onKeyDown={(event) => openRowWithKeyboard(row, event)}
+                  className={cn(onRowClick && "cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none")}
+                >
+                  {visibleColumns.map((column) => (
+                    <TableCell key={column.key} className={column.className}>
+                      {renderCellContent(
+                        column.render
+                          ? column.render(row)
+                          : row[column.key as keyof T]
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell colSpan={visibleColumns.length} className="py-12 text-center text-muted-foreground">
+                  {emptyMessage}
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
 
       {pagination && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-muted-foreground px-1">
-          <div className="flex items-center gap-2">
-            <span>
-              Showing {pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.limit + 1} to{" "}
-              {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} entries
-            </span>
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+          <span>{pagination.total.toLocaleString()} records</span>
+          <div className="flex flex-wrap items-center gap-3">
             {pagination.onLimitChange && (
-              <div className="flex items-center gap-1.5 ml-4">
-                <span className="text-xs">Per page:</span>
+              <label className="flex items-center gap-2">
+                Rows
                 <select
+                  className="rounded-md border bg-background p-1"
                   value={pagination.limit}
-                  onChange={(e) => pagination.onLimitChange!(Number(e.target.value))}
-                  className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:border-ring focus:outline-none"
+                  onChange={(event) => pagination.onLimitChange?.(Number(event.target.value))}
                 >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
+                  {[10, 25, 50, 100].map((limit) => <option key={limit}>{limit}</option>)}
                 </select>
-              </div>
+              </label>
             )}
-          </div>
-
-          <div className="flex items-center gap-1">
-            <AppButton
-              variant="outline"
-              size="icon-sm"
-              disabled={pagination.page <= 1 || loading}
-              onClick={() => pagination.onPageChange(1)}
-              title="First Page"
-            >
-              <ChevronsLeft className="size-3.5" />
+            <AppButton variant="outline" size="sm" disabled={loading || pagination.page <= 1} onClick={() => pagination.onPageChange(pagination.page - 1)}>
+              Previous
             </AppButton>
-            <AppButton
-              variant="outline"
-              size="icon-sm"
-              disabled={pagination.page <= 1 || loading}
-              onClick={() => pagination.onPageChange(pagination.page - 1)}
-              title="Previous Page"
-            >
-              <ChevronLeft className="size-3.5" />
-            </AppButton>
-            <span className="px-3 text-xs font-medium text-foreground">
-              Page {pagination.page} of {Math.max(1, pagination.totalPages)}
-            </span>
-            <AppButton
-              variant="outline"
-              size="icon-sm"
-              disabled={pagination.page >= pagination.totalPages || loading}
-              onClick={() => pagination.onPageChange(pagination.page + 1)}
-              title="Next Page"
-            >
-              <ChevronRight className="size-3.5" />
-            </AppButton>
-            <AppButton
-              variant="outline"
-              size="icon-sm"
-              disabled={pagination.page >= pagination.totalPages || loading}
-              onClick={() => pagination.onPageChange(pagination.totalPages)}
-              title="Last Page"
-            >
-              <ChevronsRight className="size-3.5" />
+            <span>Page {pagination.page} of {Math.max(1, pagination.totalPages)}</span>
+            <AppButton variant="outline" size="sm" disabled={loading || pagination.page >= pagination.totalPages} onClick={() => pagination.onPageChange(pagination.page + 1)}>
+              Next
             </AppButton>
           </div>
         </div>
@@ -200,3 +229,5 @@ export function DataTable<T extends Record<string, any>>({
     </div>
   );
 }
+
+export { DataTable as AppDataTable };

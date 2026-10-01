@@ -104,7 +104,7 @@ export function ClipsLibrary() {
       ? undefined
       : (statusFilter as JobStatus);
 
-  const { data, isLoading, error } = useJobs({
+  const { data, isLoading, error, refetch, isFetching } = useJobs({
     status: apiStatus,
     page,
     limit: LIMIT,
@@ -210,9 +210,9 @@ export function ClipsLibrary() {
       </div>
 
       {/* ── Filter, Search & View Controls Toolbar ── */}
-      <AppCard className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 " useDefaultClasses={true}>
+      <AppCard className="py-0" contentClassName="flex-col gap-4 lg:flex-row lg:items-center" useDefaultClasses={true}>
         {/* Left: Status Filter Tabs using AppTabs */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+        <div className="min-w-0 flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
           <AppTabs
             value={statusFilter}
             onValueChange={(val) => setStatusFilter(val as StatusFilter)}
@@ -265,7 +265,7 @@ export function ClipsLibrary() {
 
       {/* ── Content Area ── */}
       {isLoading ? (
-        <ClipsLibrarySkeleton viewMode={viewMode} />
+        <ClipsLibrarySkeleton viewMode={viewMode} showHeader={false} />
       ) : error ? (
         <AppCard className="p-8 text-center border-destructive/30" useDefaultClasses={false}>
           <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
@@ -279,9 +279,10 @@ export function ClipsLibrary() {
             variant="outline"
             size="sm"
             className="mt-4"
-            onClick={() => router.refresh()}
+            disabled={isFetching}
+            onClick={() => void refetch()}
           >
-            Try again
+            {isFetching ? "Retrying..." : "Try again"}
           </AppButton>
         </AppCard>
       ) : statusFilter === "all" && total === 0 ? (

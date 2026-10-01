@@ -81,7 +81,7 @@ export const navGroups: NavGroup[] = [
   {
     title: "Publish",
     items: [
-      { label: "Calendar", href: "/jobs", icon: ClockIcon },
+      { label: "Calendar", href: "/calendar", icon: ClockIcon },
       {
         label: "Social Accounts",
         href: "/social-accounts",

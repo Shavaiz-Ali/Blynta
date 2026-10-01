@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { adminUsersApi } from "./api";
 import { CreateAdminPayload, ListUsersParams, UpdateUserPayload } from "./types";
+import { getErrorMessage } from "@/lib/errors";
 
 export const adminUserKeys = {
   all: ["admin-users"] as const,
@@ -10,6 +11,7 @@ export const adminUserKeys = {
   details: () => [...adminUserKeys.all, "detail"] as const,
   detail: (id: string) => [...adminUserKeys.details(), id] as const,
 };
+export const adminUsersKeys = adminUserKeys;
 
 export function useAdminUsersQuery(params?: ListUsersParams) {
   return useQuery({
@@ -32,12 +34,12 @@ export function useUpdateAdminUserMutation(userId: string) {
   return useMutation({
     mutationFn: (payload: UpdateUserPayload) =>
       adminUsersApi.updateUser(userId, payload),
-    onSuccess: (updatedUser) => {
+    onSuccess: () => {
       toast.success("User updated successfully");
       queryClient.invalidateQueries({ queryKey: adminUserKeys.all });
     },
-    onError: (err: any) => {
-      toast.error(err?.message || "Failed to update user");
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, "Failed to update user"));
     },
   });
 }
@@ -51,8 +53,8 @@ export function useCreateAdminMutation() {
       toast.success("Admin account created successfully");
       queryClient.invalidateQueries({ queryKey: adminUserKeys.all });
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.message || err?.message || "Failed to create admin");
+    onError: (error: unknown) => {
+      toast.error(getErrorMessage(error, "Failed to create admin"));
     },
   });
 }

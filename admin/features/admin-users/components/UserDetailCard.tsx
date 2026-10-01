@@ -2,14 +2,9 @@
 
 import * as React from "react";
 import { UserDetailResponse } from "../types";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { AppBadge as Badge } from "@/components/common/primitives";
+import { AppCard as Card, AppCardContent as CardContent, AppCardHeader as CardHeader, AppCardTitle as CardTitle } from "@/components/common/primitives";
+import { AppSeparator as Separator } from "@/components/common/primitives";
 import {
   User,
   Mail,
@@ -57,16 +52,17 @@ const subStatusVariant: Record<string, "default" | "secondary" | "outline" | "de
 
 interface UserDetailCardProps {
   detail: UserDetailResponse;
+  onAdjustCredits?: () => void;
 }
 
-export function UserDetailCard({ detail }: UserDetailCardProps) {
+export function UserDetailCard({ detail, onAdjustCredits }: UserDetailCardProps) {
   const { user, customer, recentActivities = [], stats, jobsCount } = detail;
 
   const statItems = [
     { label: "Total Jobs", value: stats?.totalJobs ?? jobsCount ?? 0, icon: <Briefcase className="size-4 text-primary" /> },
-    { label: "Completed", value: stats?.completedJobs ?? 0, icon: <CheckCircle2 className="size-4 text-emerald-500" /> },
+    { label: "Completed", value: stats?.completedJobs ?? 0, icon: <CheckCircle2 className="size-4 text-primary" /> },
     { label: "Failed", value: stats?.failedJobs ?? 0, icon: <XCircle className="size-4 text-destructive" /> },
-    { label: "Events", value: stats?.totalEvents ?? recentActivities.length, icon: <BarChart3 className="size-4 text-amber-500" /> },
+    { label: "Events", value: stats?.totalEvents ?? recentActivities.length, icon: <BarChart3 className="size-4 text-primary" /> },
   ];
 
   return (
@@ -119,13 +115,24 @@ export function UserDetailCard({ detail }: UserDetailCardProps) {
               value={<span className="capitalize">{user.plan}</span>}
             />
             <InfoRow
-              icon={<Coins className="size-4" />}
-              label="Credits"
+              icon={<Coins className="size-4 text-primary" />}
+              label="Credits Balance"
               value={
-                <span>
-                  <span className="text-foreground">{user.creditsBalance.toLocaleString()} remaining</span>
-                  <span className="text-muted-foreground text-xs ml-2">({user.totalCreditsUsed.toLocaleString()} used total)</span>
-                </span>
+                <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="min-w-0">
+                    <span className="text-foreground font-bold">{user.creditsBalance.toLocaleString()} minutes remaining</span>
+                    <span className="mt-1 block text-xs text-muted-foreground sm:ml-2 sm:mt-0 sm:inline">({user.totalCreditsUsed.toLocaleString()} used total)</span>
+                  </span>
+                  {onAdjustCredits && (
+                    <button
+                      type="button"
+                      onClick={onAdjustCredits}
+                      className="px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary dark:text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                    >
+                      Adjust Credits
+                    </button>
+                  )}
+                </div>
               }
             />
             {user.referralCode && (
@@ -240,10 +247,10 @@ export function UserDetailCard({ detail }: UserDetailCardProps) {
           <CardContent>
             <div className="divide-y divide-border">
               {recentActivities.slice(0, 8).map((act) => (
-                <div key={act._id} className="flex items-start gap-3 py-3">
+                <div key={act._id} className="flex flex-wrap items-start gap-3 py-3 sm:flex-nowrap">
                   <div className="mt-0.5 shrink-0">
                     {act.status === "completed" || act.status === "success" ? (
-                      <CheckCircle2 className="size-4 text-emerald-500" />
+                      <CheckCircle2 className="size-4 text-primary" />
                     ) : act.status === "failed" || act.status === "error" ? (
                       <XCircle className="size-4 text-destructive" />
                     ) : (
@@ -256,7 +263,7 @@ export function UserDetailCard({ detail }: UserDetailCardProps) {
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">{act.description}</p>
                     )}
                   </div>
-                  <div className="shrink-0 text-right">
+                  <div className="ml-7 shrink-0 text-left sm:ml-0 sm:text-right">
                     <Badge variant="outline" className="text-xs capitalize">{act.category}</Badge>
                     <p className="text-xs text-muted-foreground mt-1">
                       {format(new Date(act.createdAt), "MMM d, h:mm a")}

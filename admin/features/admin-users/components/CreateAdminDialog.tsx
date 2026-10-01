@@ -5,19 +5,13 @@ import { adminUsersApi } from "../api";
 import { CreateAdminPayload } from "../types";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { AppDialog as Dialog, AppDialogContent as DialogContent, AppDialogHeader as DialogHeader, AppDialogTitle as DialogTitle, AppDialogDescription as DialogDescription, AppDialogFooter as DialogFooter } from "@/components/common/primitives";
+import { AppButton as Button } from "@/components/common/primitives";
+import { AppInput as Input } from "@/components/common/primitives";
+import { AppLabel as Label } from "@/components/common/primitives";
 import { ShieldCheck, Loader2, Eye, EyeOff } from "lucide-react";
 import { adminUserKeys } from "../queries";
+import { getErrorMessage } from "@/lib/errors";
 
 interface CreateAdminDialogProps {
   open: boolean;
@@ -60,8 +54,8 @@ export function CreateAdminDialog({ open, onOpenChange }: CreateAdminDialogProps
       queryClient.invalidateQueries({ queryKey: adminUserKeys.all });
       onOpenChange(false);
       setForm({ email: "", password: "", name: "" });
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.message || "Failed to create admin");
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, "Failed to create admin"));
     } finally {
       setIsPending(false);
     }

@@ -69,6 +69,91 @@ import {
 import { buildHighlightSystemPrompt } from '../prompts/highlight-detection.prompts';
 
 describe('HighlightDetectionService & Schemas', () => {
+  describe('Google response recovery', () => {
+    const segments = [
+      { startTime: 0, endTime: 30, text: 'Hello world transcript' },
+    ];
+    const response = {
+      videoTitle: 'Recovered video',
+      highlights: [
+        {
+          startTime: 5,
+          endTime: 25,
+          reason: 'Good hook',
+          score: 0.9,
+          clipTitle: 'A highlight',
+          clipDescription: 'A complete moment',
+        },
+      ],
+    };
+    let service: HighlightDetectionService;
+
+    beforeEach(() => {
+      mockGenerateObject.mockReset();
+      service = new HighlightDetectionService({
+        get: (key: string, fallback?: string) =>
+          key === 'LLM_API_KEY' ? 'test-key' : fallback,
+      } as ConfigService);
+    });
+
+    it('recovers fenced JSON only after validating the schema', async () => {
+      mockGenerateObject.mockRejectedValueOnce(
+        new MockNoObjectGeneratedError({
+          text: '```json\n' + JSON.stringify(response) + '\n```',
+          finishReason: 'stop',
+        }),
+      );
+      const result = await service.detectHighlightsWithMetadata(segments);
+      expect(result.videoTitle).toBe('Recovered video');
+      expect(result.highlights).toHaveLength(1);
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['stop', 'length'])(
+      'retries malformed output with finishReason=%s',
+      async (finishReason) => {
+        mockGenerateObject
+          .mockRejectedValueOnce(
+            new MockNoObjectGeneratedError({
+              text: '{"highlights": [',
+              finishReason,
+            }),
+          )
+          .mockResolvedValueOnce({
+            object: HighlightsResponseSchema.parse(response),
+          });
+        const result = await service.detectHighlightsWithMetadata(segments);
+        expect(result.highlights).toHaveLength(1);
+        expect(mockGenerateObject).toHaveBeenCalledTimes(2);
+        expect(mockGenerateObject.mock.calls[1][0]).toMatchObject({
+          temperature: 0.1,
+          maxOutputTokens: finishReason === 'length' ? 16384 : 8192,
+        });
+      },
+    );
+
+    it('throws after the bounded retry instead of returning zero clips', async () => {
+      mockGenerateObject.mockRejectedValue(
+        new MockNoObjectGeneratedError({
+          text: '{"highlights":[{}]}',
+          finishReason: 'stop',
+        }),
+      );
+      await expect(service.detectHighlights(segments)).rejects.toThrow(
+        'Highlight detection failed',
+      );
+      expect(mockGenerateObject).toHaveBeenCalledTimes(2);
+    });
+
+    it('propagates API errors without a JSON retry', async () => {
+      mockGenerateObject.mockRejectedValueOnce(new Error('Invalid API key'));
+      await expect(service.detectHighlights(segments)).rejects.toThrow(
+        'Invalid API key',
+      );
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('System Prompt Generation', () => {
     it('should generate long-form duration rule for videos >= 10 minutes (600s)', () => {
       const prompt = buildHighlightSystemPrompt(600);

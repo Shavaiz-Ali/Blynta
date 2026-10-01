@@ -1,4 +1,5 @@
 export type PublicationStatus =
+  | "scheduled"
   | "queued"
   | "uploading"
   | "processing"
@@ -39,6 +40,8 @@ export interface ClipPublication {
   externalId?: string;
   externalUrl?: string;
   publishedAt?: string;
+  scheduledAt?: string;
+  metadata?: { timezone?: string; [key: string]: unknown };
   error?: string;
   createdAt: string;
   updatedAt: string;
@@ -51,6 +54,16 @@ export interface PublishToYouTubeInput {
   tags?: string[];
   categoryId?: string;
   thumbnailKey?: string;
+}
+
+export interface ScheduleYouTubeInput extends PublishToYouTubeInput {
+  scheduledAt: string;
+  timezone?: string;
+}
+
+export interface ScheduleRangeParams {
+  from?: string;
+  to?: string;
 }
 
 export interface ThumbnailPresignedResponse {

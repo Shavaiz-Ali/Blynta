@@ -86,7 +86,7 @@ export function StatsBar({ profile, totalClips, creditsResetText }: StatsBarProp
 
 export function StatsBarSkeleton() {
   return (
-    <div className="flex items-center gap-6 px-4 py-3 rounded-xl border border-border/60 bg-muted/20">
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/20">
       {[0, 1, 2].map((i) => (
         <React.Fragment key={i}>
           <div className="flex items-center gap-2.5">

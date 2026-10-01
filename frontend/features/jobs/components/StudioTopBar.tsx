@@ -30,6 +30,7 @@ interface StudioTopBarProps {
   activeClipIndex: number;
   onSelectClip: (index: number) => void;
   onOpenTranscript?: () => void;
+  onSchedule?: () => void;
 }
 
 function SoonBadge({ className }: { className?: string }) {
@@ -50,6 +51,7 @@ export function StudioTopBar({
   activeClipIndex,
   onSelectClip,
   onOpenTranscript,
+  onSchedule,
 }: StudioTopBarProps) {
   const meta = STATUS_META[job.status] ?? STATUS_META[JobStatus.COMPLETED];
   const completedClips =
@@ -191,13 +193,13 @@ export function StudioTopBar({
             <AppButton
               variant="outline"
               size="sm"
-              disabled
-              className="h-8 text-xs font-medium text-muted-foreground opacity-60 cursor-not-allowed shadow-2xs gap-1.5"
+              onClick={onSchedule}
+              disabled={!onSchedule}
+              className="h-8 text-xs font-semibold shadow-2xs gap-1.5"
               icon={<CalendarIcon className="h-3.5 w-3.5" />}
-              title="Push to Scheduled Social Queue — Coming Soon"
+              title="Schedule this clip"
             >
               <span>Schedule</span>
-              <SoonBadge />
             </AppButton>
           </div>
         </div>

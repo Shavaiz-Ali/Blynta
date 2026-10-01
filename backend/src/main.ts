@@ -63,8 +63,8 @@ async function bootstrap() {
     .map((origin) => origin.trim())
     .filter(Boolean);
 
+  console.log(allowedOrigins);
 
-  logger.log('allowedOrigins', allowedOrigins);
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,

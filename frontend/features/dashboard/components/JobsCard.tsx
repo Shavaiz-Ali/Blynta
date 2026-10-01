@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { JobsSkeleton } from "./JobsSkeleton";
 import { Job, JobStatus } from "@/features/jobs";
 import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
 import { JobCardGrid } from "./JobCardGrid";
@@ -53,8 +53,7 @@ function EmptyStateTips() {
   );
 }
 
-export function JobsCard({ jobs }: { jobs: Job[] }) {
-  const router = useRouter();
+export function JobsCard({ jobs, isLoading = false }: { jobs: Job[]; isLoading?: boolean }) {
 
   // Persistent view mode state
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
@@ -78,6 +77,8 @@ export function JobsCard({ jobs }: { jobs: Job[] }) {
       j.status === JobStatus.DETECTING_HIGHLIGHTS ||
       j.status === JobStatus.CUTTING_CLIPS
   ).length;
+
+  if (isLoading) return <JobsSkeleton viewMode={viewMode} />;
 
   return (
     <div className="space-y-4">

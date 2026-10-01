@@ -6,9 +6,18 @@ export type SubStatus =
   | "paused"
   | "unknown";
 
+export interface AdminCustomerUser {
+  _id: string;
+  email?: string;
+  name?: string;
+  role?: string;
+  plan?: string;
+  creditsBalance?: number;
+}
+
 export interface AdminCustomerItem {
   _id: string;
-  userId: string;
+  userId: string | AdminCustomerUser;
   userEmail?: string;
   userName?: string;
   plan: string;
@@ -35,37 +44,6 @@ export interface ListCustomersParams {
 
 export interface PaginatedCustomersResponse {
   data: AdminCustomerItem[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
-export interface AdminSubscriptionEvent {
-  _id: string;
-  userId: string;
-  userEmail?: string;
-  eventType: string;
-  paddleEventId?: string;
-  plan?: string;
-  status?: string;
-  creditsDelta?: number;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
-}
-
-export interface ListEventsParams {
-  page?: number;
-  limit?: number;
-  userId?: string;
-  eventType?: string;
-  sortOrder?: "asc" | "desc";
-}
-
-export interface PaginatedEventsResponse {
-  data: AdminSubscriptionEvent[];
   meta: {
     page: number;
     limit: number;

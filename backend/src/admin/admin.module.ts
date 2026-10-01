@@ -19,6 +19,10 @@ import {
   NotificationSchema,
 } from '../notifications/schemas/notification.schema';
 import { NOTIFICATIONS_QUEUE } from '../notifications/notifications.constants';
+import { JOBS_QUEUE } from '../jobs/jobs.constants';
+import { YOUTUBE_PUBLISHING_QUEUE } from '../youtube/youtube.constants';
+import { MAIL_QUEUE } from '../mail/mail.constants';
+import { ACTIVITIES_QUEUE } from '../activities/activities.constants';
 
 import { ActivitiesModule } from '../activities/activities.module';
 import { PaddleModule } from '../paddle/paddle.module';
@@ -56,9 +60,13 @@ import { AdminDashboardService } from './dashboard/admin-dashboard.service';
       { name: Activity.name, schema: ActivitySchema },
       { name: Notification.name, schema: NotificationSchema },
     ]),
-    BullModule.registerQueue({
-      name: NOTIFICATIONS_QUEUE,
-    }),
+    BullModule.registerQueue(
+      { name: NOTIFICATIONS_QUEUE },
+      { name: JOBS_QUEUE },
+      { name: YOUTUBE_PUBLISHING_QUEUE },
+      { name: MAIL_QUEUE },
+      { name: ACTIVITIES_QUEUE },
+    ),
     ActivitiesModule,
     PaddleModule,
     BillingModule,

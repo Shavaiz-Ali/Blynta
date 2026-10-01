@@ -8,26 +8,19 @@ const SESSION_COOKIE_NAMES = [
 ];
 
 function hasSessionCookie(request: NextRequest): boolean {
-  return SESSION_COOKIE_NAMES.some((name) => !!request.cookies.get(name));
+  return SESSION_COOKIE_NAMES.some((name) => Boolean(request.cookies.get(name)));
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { nextUrl } = request;
-  const isLoggedIn = hasSessionCookie(request);
 
-  const isAuthPage = nextUrl.pathname.startsWith("/login");
-
-  if (isAuthPage) {
+  if (nextUrl.pathname.startsWith("/login") || hasSessionCookie(request)) {
     return NextResponse.next();
   }
 
-  if (!isLoggedIn) {
-    const loginUrl = new URL("/login", nextUrl);
-    loginUrl.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
+  const loginUrl = new URL("/login", nextUrl);
+  loginUrl.searchParams.set("callbackUrl", nextUrl.pathname + nextUrl.search);
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {

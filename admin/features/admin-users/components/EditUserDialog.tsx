@@ -1,27 +1,14 @@
 "use client";
 
 import * as React from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import { AppDialog as Dialog, AppDialogContent as DialogContent, AppDialogHeader as DialogHeader, AppDialogTitle as DialogTitle, AppDialogDescription as DialogDescription, AppDialogFooter as DialogFooter } from "@/components/common/primitives";
+import { AppButton as Button } from "@/components/common/primitives";
+import { AppInput as Input } from "@/components/common/primitives";
+import { AppLabel as Label } from "@/components/common/primitives";
+import { AppTextarea as Textarea } from "@/components/common/primitives";
+import { AppSwitch as Switch } from "@/components/common/primitives";
+import { AppSelect as Select, AppSelectContent as SelectContent, AppSelectItem as SelectItem, AppSelectTrigger as SelectTrigger, AppSelectValue as SelectValue } from "@/components/common/primitives";
+import { AppSeparator as Separator } from "@/components/common/primitives";
 import { AdminUserItem, UpdateUserPayload, UserRole } from "../types";
 import { useUpdateAdminUserMutation } from "../queries";
 import { AlertTriangle, Loader2 } from "lucide-react";
@@ -33,23 +20,13 @@ interface EditUserDialogProps {
 }
 
 export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps) {
-  const [name, setName] = React.useState("");
-  const [role, setRole] = React.useState<UserRole>("user");
-  const [isActive, setIsActive] = React.useState(true);
-  const [emailVerified, setEmailVerified] = React.useState(false);
+  const [name, setName] = React.useState(user?.name || "");
+  const [role, setRole] = React.useState<UserRole>(user?.role || "user");
+  const [isActive, setIsActive] = React.useState(user?.isActive ?? true);
+  const [emailVerified, setEmailVerified] = React.useState(user?.emailVerified ?? false);
   const [reason, setReason] = React.useState("");
 
   const mutation = useUpdateAdminUserMutation(user?._id ?? "");
-
-  React.useEffect(() => {
-    if (user) {
-      setName(user.name || "");
-      setRole(user.role);
-      setIsActive(user.isActive);
-      setEmailVerified(user.emailVerified);
-      setReason("");
-    }
-  }, [user]);
 
   const isDirty =
     name !== (user?.name || "") ||
@@ -151,7 +128,7 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
           {isDirty && (
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-reason" className="flex items-center gap-1.5">
-                <AlertTriangle className="size-3.5 text-amber-500" />
+                <AlertTriangle className="size-3.5 text-primary" />
                 Reason for change <span className="text-destructive">*</span>
               </Label>
               <Textarea

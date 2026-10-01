@@ -35,6 +35,7 @@ import {
 import { ShareDialog } from "@/features/shares";
 import { PublishToYouTubeDialog } from "@/features/youtube";
 import { toast } from "sonner";
+import { ScheduleDialog } from "./ScheduleDialog";
 
 export interface ClipDetailViewProps {
   jobId: string;
@@ -60,6 +61,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
 
   const [shareOpen, setShareOpen] = React.useState(false);
   const [youtubePublishOpen, setYoutubePublishOpen] = React.useState(false);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [transcriptOpen, setTranscriptOpen] = React.useState(false);
   const [videoPlayerOpen, setVideoPlayerOpen] = React.useState(false);
@@ -371,6 +373,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
           isDownloading={isDownloading}
           onShare={() => setShareOpen(true)}
           onPublishYouTube={() => setYoutubePublishOpen(true)}
+          onSchedule={() => setScheduleOpen(true)}
           hasTranscript={Boolean(job.transcript?.length)}
           onOpenTranscript={() => setTranscriptOpen(true)}
           sourceUrl={job.sourceUrl}
@@ -434,6 +437,15 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         hasTranscript={Boolean(job.transcript?.length)}
         onDownloadTranscript={handleDownloadTranscript}
         onDownloadSubtitles={handleDownloadSubtitles}
+      />
+
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        jobId={jobId}
+        clipId={String(activeClip._id || activeClip.id || clipId)}
+        clipTitle={clipTitle}
+        clipDescription={activeHighlight?.clipDescription || job.videoDescription}
       />
 
       {/* Transcript Dialog */}

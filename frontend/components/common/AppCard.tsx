@@ -72,7 +72,7 @@ export function AppCard({
         </CardHeader>
       )}
 
-      {children && <CardContent className={cn(contentClassName, "!p-3!", useDefaultClasses && "flex justify-between w-full")}>{children}</CardContent>}
+      {children && <CardContent className={cn("p-3", useDefaultClasses && "flex justify-between w-full", contentClassName)}>{children}</CardContent>}
 
       {footer && <CardFooter className={footerClassName}>{footer}</CardFooter>}
     </Card>

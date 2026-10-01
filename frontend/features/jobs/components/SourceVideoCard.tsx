@@ -54,6 +54,7 @@ export function SourceVideoCard({ job, viewMode = "grid" }: SourceVideoCardProps
           isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
         )}
         useDefaultClasses={true}
+        contentClassName="flex-col gap-4 sm:flex-row sm:items-center"
       >
         <div className="flex items-center gap-3.5 min-w-0 flex-1">
           {/* 16:9 Thumbnail preview */}

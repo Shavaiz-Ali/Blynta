@@ -7,6 +7,8 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Patch,
+  Param,
   Query,
   Request,
   Res,
@@ -18,6 +20,7 @@ import type { Response } from 'express';
 import { YouTubeOAuthService } from './youtube-oauth.service';
 import { YouTubePublishingService } from './youtube-publishing.service';
 import { YouTubeNotConnectedException } from './exceptions/youtube-not-connected.exception';
+import { RescheduleYouTubePublicationDto } from './dto/schedule-youtube-publication.dto';
 
 @Controller('youtube')
 export class YouTubeController {
@@ -119,6 +122,46 @@ export class YouTubeController {
       },
     );
     return { success: true, data: result };
+  }
+
+  @Get('schedules')
+  @UseGuards(AuthGuard('jwt'))
+  async getSchedules(
+    @Request() req,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.youtubePublishingService.getSchedules(req.user.userId, {
+      from,
+      to,
+    });
+  }
+
+  @Patch('schedules/:publicationId')
+  @UseGuards(AuthGuard('jwt'))
+  async reschedule(
+    @Request() req,
+    @Param('publicationId') publicationId: string,
+    @Body() dto: RescheduleYouTubePublicationDto,
+  ) {
+    return this.youtubePublishingService.reschedulePublication(
+      req.user.userId,
+      publicationId,
+      dto.scheduledAt,
+      dto.timezone,
+    );
+  }
+
+  @Delete('schedules/:publicationId')
+  @UseGuards(AuthGuard('jwt'))
+  async cancelSchedule(
+    @Request() req,
+    @Param('publicationId') publicationId: string,
+  ) {
+    return this.youtubePublishingService.cancelScheduledPublication(
+      req.user.userId,
+      publicationId,
+    );
   }
 
   /**

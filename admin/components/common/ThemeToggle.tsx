@@ -1,46 +1,5 @@
 "use client";
-
-import * as React from "react";
 import { useTheme } from "next-themes";
-import { Sun as SunIcon, Moon as MoonIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-export function ThemeToggle({ className }: { className?: string }) {
-  const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return (
-      <div
-        className={cn(
-          "h-9 w-9 rounded-xl bg-muted/60 border border-border/70 animate-pulse",
-          className
-        )}
-      />
-    );
-  }
-
-  const isDark = resolvedTheme === "dark";
-
-  return (
-    <button
-      type="button"
-      onClick={() => setTheme(isDark ? "light" : "dark")}
-      className={cn(
-        "relative inline-flex h-9 w-9 items-center justify-center rounded-xl bg-muted/60 border border-border/70 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer",
-        className
-      )}
-      aria-label={`Switch to ${isDark ? "light" : "dark"} mode`}
-    >
-      {isDark ? (
-        <SunIcon className="h-4 w-4 text-foreground" />
-      ) : (
-        <MoonIcon className="h-4 w-4 text-foreground" />
-      )}
-    </button>
-  );
-}
+import { SunMoon } from "lucide-react";
+import { AppButton } from "./AppButton";
+export function ThemeToggle() { const { resolvedTheme, setTheme } = useTheme(); return <AppButton variant="ghost" size="icon" aria-label="Toggle color theme" onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}><SunMoon className="size-4" /></AppButton>; }

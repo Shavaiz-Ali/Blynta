@@ -17,6 +17,7 @@ import {
 import { YouTubeOAuthService } from './youtube-oauth.service';
 import { YouTubeNotConnectedException } from './exceptions/youtube-not-connected.exception';
 import { PublishToYouTubeDto } from './dto/publish-to-youtube.dto';
+import { ScheduleYouTubePublicationDto } from './dto/schedule-youtube-publication.dto';
 import { JobsService } from '../jobs/jobs.service';
 import {
   YOUTUBE_PUBLISHING_QUEUE,
@@ -28,6 +29,7 @@ import * as crypto from 'crypto';
 
 /** Statuses that block a new publication (an upload is already in progress). */
 const ACTIVE_PUBLICATION_STATUSES: PublicationStatus[] = [
+  PublicationStatus.SCHEDULED,
   PublicationStatus.QUEUED,
   PublicationStatus.UPLOADING,
   PublicationStatus.PROCESSING,
@@ -175,6 +177,148 @@ export class YouTubePublishingService {
         privacyStatus: saved.privacyStatus,
       },
     };
+  }
+
+  async scheduleClip(
+    userId: string,
+    jobId: string,
+    clipId: string,
+    dto: ScheduleYouTubePublicationDto,
+  ) {
+    await this.jobsService.getClipForDownload(userId, jobId, clipId);
+
+    const connection =
+      await this.youtubeOAuthService.findConnectionByUserId(userId);
+    if (!connection) throw new YouTubeNotConnectedException();
+
+    const existing = await this.publicationModel
+      .findOne({
+        userId: new Types.ObjectId(userId),
+        jobId: new Types.ObjectId(jobId),
+        clipId,
+        platform: PublicationPlatform.YOUTUBE,
+        status: { $in: ACTIVE_PUBLICATION_STATUSES },
+      })
+      .exec();
+    if (existing) {
+      throw new ConflictException(
+        'This clip already has an active or scheduled YouTube publication.',
+      );
+    }
+
+    const scheduledAt = new Date(dto.scheduledAt);
+    const publication = await this.publicationModel.create({
+      userId: new Types.ObjectId(userId),
+      jobId: new Types.ObjectId(jobId),
+      clipId,
+      platform: PublicationPlatform.YOUTUBE,
+      status: PublicationStatus.SCHEDULED,
+      title: dto.title,
+      description: dto.description,
+      privacyStatus: dto.privacyStatus,
+      tags: dto.tags,
+      categoryId: dto.categoryId,
+      thumbnailKey: dto.thumbnailKey,
+      scheduledAt,
+      metadata: dto.timezone ? { timezone: dto.timezone } : undefined,
+    });
+
+    await this.enqueueScheduledPublication(publication, userId);
+    return { success: true, publication };
+  }
+
+  async getSchedules(userId: string, range?: { from?: string; to?: string }) {
+    const scheduledAt: Record<string, Date | boolean> = { $exists: true };
+    if (range?.from) scheduledAt.$gte = new Date(range.from);
+    if (range?.to) scheduledAt.$lte = new Date(range.to);
+
+    const publications = await this.publicationModel
+      .find({
+        userId: new Types.ObjectId(userId),
+        scheduledAt,
+      })
+      .sort({ scheduledAt: 1 })
+      .exec();
+    return { publications };
+  }
+
+  async reschedulePublication(
+    userId: string,
+    publicationId: string,
+    scheduledAtValue: string,
+    timezone?: string,
+  ) {
+    const publication = await this.findOwnedScheduledPublication(
+      userId,
+      publicationId,
+    );
+    await this.removeScheduledQueueJob(publicationId);
+    publication.scheduledAt = new Date(scheduledAtValue);
+    publication.metadata = {
+      ...(publication.metadata ?? {}),
+      ...(timezone ? { timezone } : {}),
+    };
+    await publication.save();
+    await this.enqueueScheduledPublication(publication, userId);
+    return { success: true, publication };
+  }
+
+  async cancelScheduledPublication(userId: string, publicationId: string) {
+    const publication = await this.findOwnedScheduledPublication(
+      userId,
+      publicationId,
+    );
+    await this.removeScheduledQueueJob(publicationId);
+    await publication.deleteOne();
+    return { success: true };
+  }
+
+  private async findOwnedScheduledPublication(
+    userId: string,
+    publicationId: string,
+  ) {
+    const publication = await this.publicationModel
+      .findOne({
+        _id: publicationId,
+        userId: new Types.ObjectId(userId),
+        status: PublicationStatus.SCHEDULED,
+      })
+      .exec();
+    if (!publication)
+      throw new NotFoundException('Scheduled publication not found.');
+    return publication;
+  }
+
+  private scheduledQueueJobId(publicationId: string) {
+    return `scheduled-publication-${publicationId}`;
+  }
+
+  private async removeScheduledQueueJob(publicationId: string) {
+    const queued = await this.youtubeQueue.getJob(
+      this.scheduledQueueJobId(publicationId),
+    );
+    if (queued) await queued.remove();
+  }
+
+  private async enqueueScheduledPublication(
+    publication: ClipPublicationDocument,
+    userId: string,
+  ) {
+    const publicationId = publication._id.toString();
+    await this.youtubeQueue.add(
+      YOUTUBE_JOB_TYPES.UPLOAD,
+      {
+        publicationId,
+        jobId: publication.jobId.toString(),
+        clipId: publication.clipId,
+        userId,
+      },
+      {
+        delay: Math.max(0, publication.scheduledAt.getTime() - Date.now()),
+        jobId: this.scheduledQueueJobId(publicationId),
+        removeOnComplete: true,
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------

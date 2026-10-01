@@ -39,11 +39,13 @@ describe('AdminUsers Module', () => {
   };
 
   const jobModelMock = {
+    find: jest.fn(),
     countDocuments: jest.fn(),
   };
 
   const activityModelMock = {
     find: jest.fn(),
+    countDocuments: jest.fn(),
   };
 
   const activitiesServiceMock = {
@@ -118,8 +120,10 @@ describe('AdminUsers Module', () => {
     it('assembles user + customer + recent activities + job count in one call', async () => {
       userModelMock.findById.mockReturnValue({
         select: jest.fn().mockReturnValue({
-          lean: jest.fn().mockReturnValue({
-            exec: jest.fn().mockResolvedValue(mockUserDoc),
+          populate: jest.fn().mockReturnValue({
+            lean: jest.fn().mockReturnValue({
+              exec: jest.fn().mockResolvedValue(mockUserDoc),
+            }),
           }),
         }),
       });
@@ -133,7 +137,7 @@ describe('AdminUsers Module', () => {
         }),
       });
 
-      activityModelMock.find.mockReturnValue({
+      jobModelMock.find.mockReturnValue({
         sort: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
             lean: jest.fn().mockReturnValue({
@@ -143,27 +147,42 @@ describe('AdminUsers Module', () => {
         }),
       });
 
-      jobModelMock.countDocuments.mockReturnValue({
-        exec: jest.fn().mockResolvedValue(3),
-      });
+      jobModelMock.countDocuments
+        .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(3) })
+        .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(2) })
+        .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(1) });
+      activityModelMock.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(4) });
 
       const result = await controller.getUserDetail(mockTargetUserId);
       expect(result.user).toBeDefined();
       expect(result.customer).toBeDefined();
-      expect(result.recentActivities).toHaveLength(1);
-      expect(result.jobsCount).toBe(3);
+      expect(result.recentJobs).toHaveLength(1);
+      expect(result.stats).toEqual({
+        totalJobs: 3,
+        completedJobs: 2,
+        failedJobs: 1,
+        totalEvents: 4,
+      });
     });
   });
 
   describe('updateUser (mutating endpoint)', () => {
     it('updates user fields AND writes an Activity audit entry with actorType ADMIN and actorId', async () => {
-      userModelMock.findById.mockReturnValue({
-        exec: jest.fn().mockResolvedValue({
-          ...mockUserDoc,
-          role: UserRole.USER,
-          isActive: true,
-        }),
-      });
+      const userDocument = {
+        ...mockUserDoc,
+        role: UserRole.USER,
+        isActive: true,
+        save: jest.fn().mockResolvedValue(undefined),
+      };
+      userModelMock.findById
+        .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(userDocument) })
+        .mockReturnValueOnce({
+          select: jest.fn().mockReturnValue({
+            lean: jest.fn().mockReturnValue({
+              exec: jest.fn().mockResolvedValue({ ...mockUserDoc, role: UserRole.ADMIN }),
+            }),
+          }),
+        });
 
       userModelMock.findByIdAndUpdate.mockReturnValue({
         select: jest.fn().mockReturnValue({
@@ -201,10 +220,10 @@ describe('AdminUsers Module', () => {
       expect(activitiesServiceMock.create).toHaveBeenCalledTimes(1);
       expect(activitiesServiceMock.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: expect.any(Types.ObjectId),
+          userId: expect.anything(),
           actorType: ActivityActorType.ADMIN,
-          actorId: expect.any(Types.ObjectId),
-          description: expect.stringContaining('Promoted to admin'),
+          actorId: expect.anything(),
+          description: expect.stringContaining('role'),
           metadata: expect.objectContaining({
             reason: 'Promoted to admin by superadmin support ticket #42',
           }),

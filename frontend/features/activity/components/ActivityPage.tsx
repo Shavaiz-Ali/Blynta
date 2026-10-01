@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { InviteMembersDialog } from "@/features/dashboard/components/InviteMembersDialog";
 import { AppButton } from "@/components/common/AppButton";
 import { AppCard } from "@/components/common/AppCard";
 import { ActivityFilterBar } from "./ActivityFilterBar";
@@ -22,8 +23,11 @@ import {
   RefreshCwIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  UserPlusIcon,
+  UserIcon,
 } from "@/features/dashboard/icons";
 import { cn } from "@/lib/utils";
+import type { UserPlan } from "@/features/auth/types";
 
 /* -------------------------------------------------------------------------- */
 /*                               Stats Cards                                  */
@@ -82,49 +86,119 @@ function StatCard({
 /* -------------------------------------------------------------------------- */
 
 function EmptyState({
-  filtered,
+  category,
+  hasQueryFilters,
+  plan,
   onReset,
+  onInvite,
 }: {
-  filtered: boolean;
+  category?: ActivityCategory;
+  hasQueryFilters: boolean;
+  plan: UserPlan;
   onReset: () => void;
+  onInvite: () => void;
 }) {
   const router = useRouter();
+
+  const content = React.useMemo(() => {
+    if (hasQueryFilters) {
+      return {
+        title: "No activity matching filters",
+        description: "Try changing your search keywords or status to find what you're looking for.",
+        buttonLabel: "Reset All Filters",
+        icon: <ActivityIcon className="h-6 w-6 text-muted-foreground" />,
+        buttonIcon: <RefreshCwIcon className="h-3.5 w-3.5" />,
+        action: onReset,
+        variant: "outline" as const,
+      };
+    }
+
+    switch (category) {
+      case ActivityCategory.REFERRAL:
+        return {
+          title: "No referral activity yet",
+          description: "Invite friends to Blynta and earn bonus credits when they join through your referral link.",
+          buttonLabel: "Invite now",
+          icon: <UserPlusIcon className="h-6 w-6 text-primary" />,
+          buttonIcon: <UserPlusIcon className="h-3.5 w-3.5" />,
+          action: onInvite,
+          variant: "default" as const,
+        };
+      case ActivityCategory.JOB:
+        return {
+          title: "No video jobs yet",
+          description: "Turn a long video into polished, shareable clips and your processing history will appear here.",
+          buttonLabel: "Create clips now",
+          icon: <FilmIcon className="h-6 w-6 text-primary" />,
+          buttonIcon: <PlusIcon className="h-3.5 w-3.5" />,
+          action: () => router.push("/dashboard"),
+          variant: "default" as const,
+        };
+      case ActivityCategory.CREDIT:
+        return {
+          title: "No credit activity yet",
+          description: plan === "free"
+            ? "Upgrade your plan for more credits and room to create more clips."
+            : "Credit usage and balance adjustments will appear here as you create clips.",
+          buttonLabel: plan === "free" ? "Upgrade now" : "View billing",
+          icon: <CoinsIcon className="h-6 w-6 text-amber-500" />,
+          buttonIcon: <CreditCardIcon className="h-3.5 w-3.5" />,
+          action: () => router.push("/billing"),
+          variant: "default" as const,
+        };
+      case ActivityCategory.BILLING:
+        return {
+          title: "No billing activity yet",
+          description: plan === "free"
+            ? "Choose a paid plan when you need more credits and higher creation limits."
+            : "Plan changes, renewals, and payment events will appear here.",
+          buttonLabel: plan === "free" ? "Upgrade now" : "Manage billing",
+          icon: <CreditCardIcon className="h-6 w-6 text-violet-500" />,
+          buttonIcon: <CreditCardIcon className="h-3.5 w-3.5" />,
+          action: () => router.push("/billing"),
+          variant: "default" as const,
+        };
+      case ActivityCategory.ACCOUNT:
+        return {
+          title: "No account activity yet",
+          description: "Profile, sign-in, and security events will appear here as they happen.",
+          buttonLabel: "View profile",
+          icon: <UserIcon className="h-6 w-6 text-primary" />,
+          buttonIcon: <UserIcon className="h-3.5 w-3.5" />,
+          action: () => router.push("/profile"),
+          variant: "outline" as const,
+        };
+      default:
+        return {
+          title: "No activity recorded yet",
+          description: "Create your first clips to start building your account activity timeline.",
+          buttonLabel: "Create clips now",
+          icon: <ActivityIcon className="h-6 w-6 text-primary" />,
+          buttonIcon: <PlusIcon className="h-3.5 w-3.5" />,
+          action: () => router.push("/dashboard"),
+          variant: "default" as const,
+        };
+    }
+  }, [category, hasQueryFilters, onInvite, onReset, plan, router]);
 
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
       <div className="h-14 w-14 rounded-2xl bg-muted/70 border border-border/60 flex items-center justify-center mb-3.5 shadow-2xs">
-        <ActivityIcon className="h-6 w-6 text-muted-foreground" />
+        {content.icon}
       </div>
-      <h3 className="text-base font-bold text-foreground">
-        {filtered ? "No activity matching filters" : "No activity recorded yet"}
-      </h3>
+      <h3 className="text-base font-bold text-foreground">{content.title}</h3>
       <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-5">
-        {filtered
-          ? "Try changing your search keywords, category, or status to find what you're looking for."
-          : "Your timeline will track video conversions, AI rendering jobs, credit deductions, and logins."}
+        {content.description}
       </p>
-
-      {filtered ? (
-        <AppButton
-          variant="outline"
-          size="sm"
-          onClick={onReset}
-          className="text-xs font-semibold cursor-pointer shadow-2xs"
-          icon={<RefreshCwIcon className="h-3.5 w-3.5" />}
-        >
-          Reset All Filters
-        </AppButton>
-      ) : (
-        <AppButton
-          variant="default"
-          size="sm"
-          onClick={() => router.push("/dashboard")}
-          className="text-xs font-semibold cursor-pointer shadow-sm"
-          icon={<PlusIcon className="h-3.5 w-3.5" />}
-        >
-          Create First Video
-        </AppButton>
-      )}
+      <AppButton
+        variant={content.variant}
+        size="sm"
+        onClick={content.action}
+        className="h-9 text-xs font-semibold cursor-pointer shadow-sm"
+        icon={content.buttonIcon}
+      >
+        {content.buttonLabel}
+      </AppButton>
     </div>
   );
 }
@@ -149,6 +223,7 @@ export function ActivityPage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [page, setPage] = React.useState(1);
+  const [inviteOpen, setInviteOpen] = React.useState(false);
 
   // Debounce search input
   React.useEffect(() => {
@@ -213,6 +288,7 @@ export function ActivityPage() {
   };
 
   const isFiltered = Boolean(activeCategory || activeStatus || searchQuery.trim());
+  const hasQueryFilters = Boolean(activeStatus || searchQuery.trim());
 
   const headerContent = (
     <div className="flex-1 min-w-0 flex items-center justify-between">
@@ -343,7 +419,13 @@ export function ActivityPage() {
               contentClassName="p-0 divide-y divide-border/30 w-full"
             >
               {activities.length === 0 ? (
-                <EmptyState filtered={isFiltered} onReset={handleResetFilters} />
+                <EmptyState
+                  category={activeCategory}
+                  hasQueryFilters={hasQueryFilters}
+                  plan={profile?.plan ?? "free"}
+                  onReset={handleResetFilters}
+                  onInvite={() => setInviteOpen(true)}
+                />
               ) : (
                 activities.map((activity) => (
                   <ActivityItem key={activity._id} activity={activity} />
@@ -398,6 +480,7 @@ export function ActivityPage() {
           </div>
         )}
       </div>
+      <InviteMembersDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </DashboardLayout>
   );
 }

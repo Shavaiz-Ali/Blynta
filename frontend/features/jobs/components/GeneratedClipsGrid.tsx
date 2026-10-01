@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clip, Highlight, Job, JobStatus } from "@/features/jobs";
+import { Highlight, Job, JobStatus } from "@/features/jobs";
 import { GeneratedClipCard } from "./GeneratedClipCard";
 import { AppTabs } from "@/components/common/AppTabs";
 import { AppInput } from "@/components/common/AppInput";
@@ -14,7 +14,6 @@ import {
 } from "@/features/dashboard/icons";
 import { AppButton } from "@/components/common/AppButton";
 import { AppCard } from "@/components/common";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 export interface GeneratedClipsGridProps {
@@ -46,80 +45,73 @@ function ClipGeneratingSkeletonCard({
     <AppCard
       className={cn(
         "group relative flex flex-col overflow-hidden text-left",
-        "border border-primary/40 bg-card animate-pulse transition-all",
+        "border border-border/70 bg-card/60 transition-colors",
         "p-0!"
       )}
       useDefaultClasses={false}
       contentClassName="!p-0 py-0!"
     >
       {/* ── Media Area: same 16:10 box as GeneratedClipCard's thumbnail ── */}
-      <div className="relative aspect-[16/10] w-full bg-gradient-to-b from-muted/70 via-primary/5 to-muted/90 flex flex-col items-center justify-between p-3 select-none overflow-hidden">
+      <div className="relative aspect-[16/10] w-full bg-muted/30 flex flex-col items-center justify-between p-4 select-none overflow-hidden border-b border-border/60">
         {/* Top Badges */}
         <div className="w-full flex items-center justify-between z-10">
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/20 text-primary text-[10px] font-bold border border-primary/30 shadow-2xs backdrop-blur-md">
+          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-background/80 text-primary text-[10px] font-semibold border border-border/70 backdrop-blur-md">
             <span className="relative flex h-1.5 w-1.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
               <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
             </span>
             <span>Cutting Clip</span>
           </div>
 
           {score && (
-            <span className="px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-md text-white text-[10px] font-mono font-bold border border-white/10">
-              {score}% Virality
+            <span className="px-2 py-1 rounded-md bg-background/80 backdrop-blur-md text-foreground text-[10px] font-semibold border border-border/70">
+              {score}% score
             </span>
           )}
         </div>
 
         {/* Center Live Processing Graphic (compact to fit the 16:10 box) */}
-        <div className="flex flex-col items-center text-center space-y-1.5 my-auto z-10 px-2">
-          <div className="relative flex items-center justify-center">
-            <div className="absolute h-10 w-10 rounded-full bg-primary/25 animate-ping opacity-60" />
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 border border-primary/35 text-primary shadow-md backdrop-blur-xs">
-              <FilmIcon className="h-4 w-4 animate-pulse" />
-            </div>
+        <div className="flex flex-col items-center text-center space-y-2 my-auto z-10 px-2">
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 border border-primary/20 text-primary">
+              <FilmIcon className="h-4 w-4" />
           </div>
           <div className="space-y-0.5">
             <p className="text-xs font-bold text-foreground">
               Cutting &amp; Captioning
             </p>
             <p className="text-[10px] text-muted-foreground">
-              Burning 9:16 dynamic subtitles...
+              Formatting video and captions
             </p>
           </div>
         </div>
 
         {/* Bottom Shimmer Bar */}
         <div className="w-full space-y-1.5 z-10">
-          <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
             <span className="flex items-center gap-1">
-              <ClockIcon className="h-3 w-3 animate-spin text-primary" />
+              <ClockIcon className="h-3 w-3 text-primary" />
               <span>Rendering</span>
             </span>
             <span className="text-primary font-semibold">In Progress</span>
           </div>
-          <div className="w-full h-1 rounded-full bg-muted overflow-hidden border border-border/40">
-            <div className="h-full bg-primary animate-pulse w-3/4 rounded-full" />
+          <div className="w-full h-1 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-primary/80 animate-pulse w-3/4 rounded-full" />
           </div>
         </div>
       </div>
 
       {/* ── Card Content: mirrors GeneratedClipCard body rows ── */}
-      <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+      <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
-            <Badge
-              variant="outline"
-              className="text-[10px] font-mono px-1.5 py-0 uppercase"
-            >
-              Short #{index + 1}
-            </Badge>
-            <span className="text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border/50">
+            <span className="text-[10px] font-medium text-muted-foreground">
+              Clip {String(index + 1).padStart(2, "0")}
+            </span>
+            <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
               {style}
             </span>
           </div>
 
-          <h4 className="text-sm font-bold text-foreground line-clamp-1 leading-snug">
+          <h4 className="text-sm font-semibold text-foreground line-clamp-1 leading-snug">
             {title}
           </h4>
 
@@ -131,9 +123,9 @@ function ClipGeneratingSkeletonCard({
         </div>
 
         {/* Bottom Controls Row */}
-        <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
-          <div className="h-8 w-24 rounded-md bg-muted/80 animate-pulse" />
-          <div className="h-8 w-8 rounded-md bg-muted/60 animate-pulse" />
+        <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-muted-foreground">Available when ready</span>
+          <div className="h-7 w-7 rounded-md bg-muted/60 animate-pulse" />
         </div>
       </div>
     </AppCard>
@@ -149,8 +141,8 @@ export function GeneratedClipsGrid({ job }: GeneratedClipsGridProps) {
   const [sortBy, setSortBy] = React.useState<SortOption>("score_desc");
   const [searchQuery, setSearchQuery] = React.useState("");
 
-  const clips = job.clips ?? [];
-  const highlights = job.highlights ?? [];
+  const clips = React.useMemo(() => job.clips ?? [], [job.clips]);
+  const highlights = React.useMemo(() => job.highlights ?? [], [job.highlights]);
   const isCuttingClips = job.status === JobStatus.CUTTING_CLIPS;
   const isEarlyProcessing =
     job.status === JobStatus.PENDING ||
@@ -206,7 +198,7 @@ export function GeneratedClipsGrid({ job }: GeneratedClipsGridProps) {
   // Filter and sort finished clips
   const filteredAndSortedClips = React.useMemo(() => {
     return pairedClips
-      .filter(({ clip, highlight, index }) => {
+      .filter(({ highlight, index }) => {
         const score = highlight?.score ? highlight.score * 100 : 85;
         if (impactFilter === "high" && score < 80) return false;
         if (impactFilter === "medium" && (score < 60 || score >= 80)) return false;
@@ -269,10 +261,10 @@ export function GeneratedClipsGrid({ job }: GeneratedClipsGridProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Filter & Search Toolbar (shown when clips exist or cutting) ── */}
       {(clips.length > 0 || isCuttingClips) && (
-        <AppCard className="gap-4">
+        <div className="flex flex-col gap-3 border-y border-border/60 py-4 lg:flex-row lg:items-center lg:justify-between">
           {/* Left: Impact Filter Pills using AppTabs */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
             <AppTabs
@@ -309,34 +301,34 @@ export function GeneratedClipsGrid({ job }: GeneratedClipsGridProps) {
           {/* Right: Search & Sort controls */}
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Search clips */}
-            <div className="min-w-[180px] sm:min-w-[220px]">
+            <div className="min-w-[200px] sm:min-w-[240px]">
               <AppInput
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search clip titles, hooks..."
-                size="default"
+                size="sm"
                 prefixIcon={<SearchIcon className="h-3.5 w-3.5" />}
                 className="bg-background/80"
               />
             </div>
 
             {/* Sort dropdown */}
-            <div className="w-[140px]">
+            <div className="w-[160px]">
               <AppSelect
                 value={sortBy}
                 onValueChange={(val) => setSortBy(val as SortOption)}
-                size="default"
+                size="sm"
                 placeholder="Sort by"
                 className="bg-background/80"
                 options={[
-                  { value: "score_desc", label: "Score (High to Low)" },
+                  { value: "score_desc", label: "Highest score" },
                   { value: "duration_desc", label: "Duration (Longest)" },
                   { value: "time_asc", label: "Video Timeline" },
                 ]}
               />
             </div>
           </div>
-        </AppCard>
+        </div>
       )}
 
       {/* ── Clips Grid: Finished Clips + Real-time Skeleton Loaders ── */}
@@ -362,7 +354,7 @@ export function GeneratedClipsGrid({ job }: GeneratedClipsGridProps) {
           </AppButton>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
           {/* 1. Finished Clips */}
           {filteredAndSortedClips.map(({ clip, highlight, index }) => (
             <GeneratedClipCard

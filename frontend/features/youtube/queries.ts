@@ -16,6 +16,8 @@ import {
   ThumbnailPresignedResponse,
   ListPublicationsParams,
   UserPublicationsResponse,
+  ScheduleYouTubeInput,
+  ScheduleRangeParams,
 } from "./types";
 
 export const youtubeQueryKeys = {
@@ -26,6 +28,8 @@ export const youtubeQueryKeys = {
   userPublications: (params?: ListPublicationsParams) =>
     [...youtubeQueryKeys.all, "userPublications", params] as const,
   categories: () => [...youtubeQueryKeys.all, "categories"] as const,
+  schedules: (params?: ScheduleRangeParams) =>
+    [...youtubeQueryKeys.all, "schedules", params] as const,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -192,6 +196,85 @@ export function usePublishToYouTube(
       });
     },
     ...opts,
+  });
+}
+
+export function useSchedules(params?: ScheduleRangeParams) {
+  return useQuery({
+    queryKey: youtubeQueryKeys.schedules(params),
+    queryFn: async () => {
+      const { data } = await axiosClient.get<{ publications: ClipPublication[] }>(
+        "/youtube/schedules",
+        { params }
+      );
+      return data.publications ?? [];
+    },
+  });
+}
+
+export function useScheduleToYouTube(jobId: string, clipId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: ScheduleYouTubeInput) => {
+      const { data } = await axiosClient.post<{ publication: ClipPublication }>(
+        `/jobs/${jobId}/clips/${clipId}/publications/youtube/schedule`,
+        input
+      );
+      return data.publication;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: youtubeQueryKeys.all });
+    },
+  });
+}
+
+export interface ScheduleClipRequest {
+  jobId: string;
+  clipId: string;
+  input: ScheduleYouTubeInput;
+}
+
+export function useScheduleClipsToYouTube() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (requests: ScheduleClipRequest[]) => {
+      return Promise.all(
+        requests.map(async ({ jobId, clipId, input }) => {
+          const { data } = await axiosClient.post<{ publication: ClipPublication }>(
+            `/jobs/${jobId}/clips/${clipId}/publications/youtube/schedule`,
+            input
+          );
+          return data.publication;
+        })
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: youtubeQueryKeys.all });
+    },
+  });
+}
+
+export function useReschedulePublication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, scheduledAt, timezone }: { id: string; scheduledAt: string; timezone?: string }) => {
+      const { data } = await axiosClient.patch<{ publication: ClipPublication }>(
+        `/youtube/schedules/${id}`,
+        { scheduledAt, timezone }
+      );
+      return data.publication;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: youtubeQueryKeys.all }),
+  });
+}
+
+export function useCancelScheduledPublication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await axiosClient.delete(`/youtube/schedules/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: youtubeQueryKeys.all }),
   });
 }
 

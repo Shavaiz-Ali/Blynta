@@ -5,6 +5,8 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { YouTubePublishingService } from './youtube-publishing.service';
 import { YouTubeOAuthService } from './youtube-oauth.service';
+import { YouTubeApiService } from './youtube-api.service';
+import { R2Service } from '../storage/r2.service';
 import { JobsService } from '../jobs/jobs.service';
 import {
   ClipPublication,
@@ -21,7 +23,11 @@ describe('YouTubePublishingService', () => {
   const mockFindOne = jest.fn();
   const mockFind = jest.fn();
   const mockFindById = jest.fn();
-  const mockQueue = { add: jest.fn().mockResolvedValue({}) };
+  const mockCreate = jest.fn();
+  const mockQueue = {
+    add: jest.fn().mockResolvedValue({}),
+    getJob: jest.fn().mockResolvedValue(null),
+  };
   const mockOAuthService = {
     findConnectionByUserId: jest.fn(),
     revokeAndDelete: jest.fn(),
@@ -40,6 +46,7 @@ describe('YouTubePublishingService', () => {
   (MockPublicationModel as any).findOne = mockFindOne;
   (MockPublicationModel as any).find = mockFind;
   (MockPublicationModel as any).findById = mockFindById;
+  (MockPublicationModel as any).create = mockCreate;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -59,6 +66,8 @@ describe('YouTubePublishingService', () => {
           provide: YouTubeOAuthService,
           useValue: mockOAuthService,
         },
+        { provide: YouTubeApiService, useValue: {} },
+        { provide: R2Service, useValue: {} },
         {
           provide: JobsService,
           useValue: mockJobsService,
@@ -67,6 +76,55 @@ describe('YouTubePublishingService', () => {
     }).compile();
 
     service = module.get<YouTubePublishingService>(YouTubePublishingService);
+  });
+
+  describe('scheduleClip', () => {
+    const userId = new Types.ObjectId().toString();
+    const jobId = new Types.ObjectId().toString();
+    const clipId = 'clip_01';
+
+    it('persists a scheduled publication and adds a delayed upload job', async () => {
+      const publicationId = new Types.ObjectId();
+      const scheduledAt = new Date(Date.now() + 3_600_000);
+      const publication = {
+        _id: publicationId,
+        userId: new Types.ObjectId(userId),
+        jobId: new Types.ObjectId(jobId),
+        clipId,
+        status: PublicationStatus.SCHEDULED,
+        scheduledAt,
+      };
+      mockJobsService.getClipForDownload.mockResolvedValue({
+        clip: { r2ObjectKey: 'clip.mp4' },
+      });
+      mockOAuthService.findConnectionByUserId.mockResolvedValue({
+        channelId: 'UC123',
+      });
+      mockFindOne.mockReturnValue({ exec: jest.fn().mockResolvedValue(null) });
+      mockCreate.mockResolvedValue(publication);
+
+      const result = await service.scheduleClip(userId, jobId, clipId, {
+        title: 'Scheduled Short',
+        privacyStatus: 'private',
+        scheduledAt: scheduledAt.toISOString(),
+        timezone: 'Asia/Karachi',
+      });
+
+      expect(result.publication.status).toBe(PublicationStatus.SCHEDULED);
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        'youtube-upload',
+        expect.objectContaining({
+          publicationId: publicationId.toString(),
+          jobId,
+          clipId,
+          userId,
+        }),
+        expect.objectContaining({
+          delay: expect.any(Number),
+          jobId: `scheduled-publication-${publicationId.toString()}`,
+        }),
+      );
+    });
   });
 
   describe('getConnectionStatus', () => {

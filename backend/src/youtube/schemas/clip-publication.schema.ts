@@ -13,6 +13,7 @@ export enum PublicationPlatform {
 }
 
 export enum PublicationStatus {
+  SCHEDULED = 'scheduled',
   QUEUED = 'queued',
   UPLOADING = 'uploading',
   PROCESSING = 'processing',
@@ -106,6 +107,10 @@ export class ClipPublication {
   @Prop()
   publishedAt: Date;
 
+  /** When a scheduled publication should be handed to the upload queue. */
+  @Prop({ type: Date, index: true })
+  scheduledAt: Date;
+
   /** Optional platform-specific metadata for debugging / future use. */
   @Prop({ type: Object })
   metadata: Record<string, unknown>;
@@ -117,3 +122,4 @@ export const ClipPublicationSchema =
 // Prevent two active uploads of the same clip to the same platform simultaneously.
 // Note: we allow multiple publications per clip (for retries), hence no global unique.
 ClipPublicationSchema.index({ jobId: 1, clipId: 1, platform: 1, status: 1 });
+ClipPublicationSchema.index({ userId: 1, scheduledAt: 1, status: 1 });

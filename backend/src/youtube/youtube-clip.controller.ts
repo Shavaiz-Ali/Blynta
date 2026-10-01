@@ -10,6 +10,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { YouTubePublishingService } from './youtube-publishing.service';
 import { PublishToYouTubeDto } from './dto/publish-to-youtube.dto';
+import { ScheduleYouTubePublicationDto } from './dto/schedule-youtube-publication.dto';
 
 @Controller('jobs/:jobId/clips/:clipId/publications')
 @UseGuards(AuthGuard('jwt'))
@@ -27,6 +28,21 @@ export class YouTubeClipController {
     @Body() dto: PublishToYouTubeDto,
   ) {
     return this.youtubePublishingService.publishClip(
+      req.user.userId,
+      jobId,
+      clipId,
+      dto,
+    );
+  }
+
+  @Post('youtube/schedule')
+  async scheduleToYouTube(
+    @Request() req,
+    @Param('jobId') jobId: string,
+    @Param('clipId') clipId: string,
+    @Body() dto: ScheduleYouTubePublicationDto,
+  ) {
+    return this.youtubePublishingService.scheduleClip(
       req.user.userId,
       jobId,
       clipId,

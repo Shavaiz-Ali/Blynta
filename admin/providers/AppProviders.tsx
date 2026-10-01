@@ -1,32 +1,12 @@
 "use client";
-
-import * as React from "react";
+import { useState, type ReactNode } from "react";
 import { SessionProvider } from "next-auth/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryProvider } from "./QueryProvider";
 import { Toaster } from "@/components/ui/sonner";
-
-export interface AppProvidersProps {
-  children: React.ReactNode;
-}
-
+export type AppProvidersProps = { children: ReactNode };
 export function AppProviders({ children }: AppProvidersProps) {
-  return (
-    <SessionProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="system"
-        enableSystem
-        disableTransitionOnChange
-      >
-        <TooltipProvider>
-          <QueryProvider>
-            {children}
-            <Toaster position="top-right" closeButton richColors />
-          </QueryProvider>
-        </TooltipProvider>
-      </ThemeProvider>
-    </SessionProvider>
-  );
+  const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, retry: (count, error) => count < 1 && !("status" in error && [401, 403].includes(Number(error.status))) } } }));
+  return <SessionProvider><QueryClientProvider client={client}><ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange><TooltipProvider>{children}<Toaster /></TooltipProvider></ThemeProvider></QueryClientProvider></SessionProvider>;
 }

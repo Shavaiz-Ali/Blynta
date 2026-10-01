@@ -46,8 +46,8 @@ export function LoginForm() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="rounded-2xl border border-border/80 bg-card/90 text-card-foreground shadow-2xl backdrop-blur-xl p-6 sm:p-8 space-y-6 transition-all">
+    <div className="mx-auto min-w-0 w-full max-w-md">
+      <div className="space-y-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm sm:p-8">
         {/* Header */}
         <div className="text-center space-y-2">
           <div className="mx-auto size-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center shadow-xs ring-1 ring-primary/20">
@@ -61,7 +61,12 @@ export function LoginForm() {
           </p>
         </div>
 
-        {/* Error Alert */}
+        {error && (
+          <div role="alert" className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -91,7 +96,7 @@ export function LoginForm() {
           <AppButton
             type="submit"
             size="lg"
-            className="w-full mt-2 font-semibold shadow-md hover:shadow-lg transition-all"
+            className="mt-2 w-full font-semibold"
             isLoading={loading}
           >
             Sign In to Admin

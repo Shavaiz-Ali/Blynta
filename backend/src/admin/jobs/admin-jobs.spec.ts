@@ -1,9 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
+import { getQueueToken } from '@nestjs/bullmq';
 import { Types } from 'mongoose';
 import { AdminJobsService } from './admin-jobs.service';
 import { AdminJobsController } from './admin-jobs.controller';
 import { Job, JobStatus, SourcePlatform } from '../../jobs/schemas/job.schema';
+import { JOBS_QUEUE } from '../../jobs/jobs.constants';
+import { YOUTUBE_PUBLISHING_QUEUE } from '../../youtube/youtube.constants';
+import { NOTIFICATIONS_QUEUE } from '../../notifications/notifications.constants';
+import { MAIL_QUEUE } from '../../mail/mail.constants';
+import { ACTIVITIES_QUEUE } from '../../activities/activities.constants';
+import { ActivitiesService } from '../../activities/activities.service';
 
 describe('AdminJobs Module', () => {
   let controller: AdminJobsController;
@@ -29,6 +36,14 @@ describe('AdminJobs Module', () => {
     aggregate: jest.fn(),
   };
 
+  const queueMock = {
+    add: jest.fn(),
+    getJobCounts: jest.fn(),
+    isPaused: jest.fn(),
+  };
+
+  const activitiesServiceMock = { create: jest.fn() };
+
   beforeEach(async () => {
     jest.clearAllMocks();
 
@@ -40,6 +55,14 @@ describe('AdminJobs Module', () => {
           provide: getModelToken(Job.name),
           useValue: jobModelMock,
         },
+        ...[
+          JOBS_QUEUE,
+          YOUTUBE_PUBLISHING_QUEUE,
+          NOTIFICATIONS_QUEUE,
+          MAIL_QUEUE,
+          ACTIVITIES_QUEUE,
+        ].map((name) => ({ provide: getQueueToken(name), useValue: queueMock })),
+        { provide: ActivitiesService, useValue: activitiesServiceMock },
       ],
     }).compile();
 

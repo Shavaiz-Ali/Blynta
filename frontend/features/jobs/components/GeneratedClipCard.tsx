@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   PlayIcon,
-  SparklesIcon,
   ClockIcon,
   DownloadIcon,
   TrashIcon,
@@ -20,7 +19,6 @@ import { AppButton } from "@/components/common/AppButton";
 import { AppDropdown } from "@/components/common/AppDropdown";
 import { AppDialog } from "@/components/common/AppDialog";
 import { AppCard } from "@/components/common/AppCard";
-import { Badge } from "@/components/ui/badge";
 
 export interface GeneratedClipCardProps {
   job: Job;
@@ -117,8 +115,8 @@ export function GeneratedClipCard({
       <AppCard
         onClick={handleOpenClip}
         className={cn(
-          "group relative flex flex-col  overflow-hidden transition-all duration-200 text-left border border-border/80 bg-card",
-          "hover:border-primary/40 hover:shadow-sm hover:-translate-y-0.5 cursor-pointer p-0!"
+          "group relative flex flex-col overflow-hidden transition-all duration-200 text-left border border-border/70 bg-card/70",
+          "hover:border-primary/35 hover:shadow-lg hover:shadow-black/5 cursor-pointer p-0!"
         )}
         useDefaultClasses={false}
         contentClassName="!p-0 py-0!"
@@ -143,19 +141,19 @@ export function GeneratedClipCard({
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent pointer-events-none" />
 
           {/* Viral Score Badge (Top Left) */}
-          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-md border border-white/15 text-white shadow-xs">
-            <SparklesIcon className="h-3 w-3 text-amber-400" />
-            <span className="text-[11px] font-bold tracking-tight">
+          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-white/15 text-white shadow-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span className="text-[11px] font-semibold tracking-tight">
               {scorePercent}
             </span>
-            <span className="text-[9px] text-white/70 font-medium uppercase tracking-wider">
-              Viral Score
+            <span className="text-[9px] text-white/65 font-medium uppercase tracking-wider">
+              score
             </span>
           </div>
 
           {/* Hook Badge (Top Right) */}
           {hookStyle && (
-            <div className="absolute top-2.5 right-2.5 max-w-[120px] truncate px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md border border-white/10 text-[10px] font-medium text-white/90">
+            <div className="absolute top-3 right-3 max-w-[140px] truncate px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-medium uppercase tracking-wide text-white/80">
               {hookStyle}
             </div>
           )}
@@ -175,22 +173,23 @@ export function GeneratedClipCard({
 
           {/* Play Icon Hover Overlay */}
           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30 backdrop-blur-[2px]">
-            <div className="h-10 w-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md transform scale-90 group-hover:scale-100 transition-transform">
+            <div className="h-11 w-11 rounded-full bg-white text-black flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
               <PlayIcon className="h-4 w-4 ml-0.5" />
             </div>
           </div>
         </div>
 
         {/* ── Content Body ── */}
-        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+        <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 uppercase">
-                Clip #{clipIndex + 1}
-              </Badge>
+            <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+              <span className="font-medium uppercase tracking-wider">
+                Clip {String(clipIndex + 1).padStart(2, "0")}
+              </span>
+              <span>{formatDuration(durationSec)}</span>
             </div>
 
-            <h4 className="text-sm font-bold text-foreground line-clamp-1 leading-snug group-hover:text-primary transition-colors">
+            <h4 className="text-base font-semibold text-foreground line-clamp-1 leading-snug group-hover:text-primary transition-colors">
               {clipTitle}
             </h4>
 
@@ -202,14 +201,14 @@ export function GeneratedClipCard({
           </div>
 
           {/* Bottom Controls Row */}
-          <div className="pt-2 border-t border-border/60 flex items-center justify-between gap-2">
+          <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
             <AppButton
               variant="outline"
               size="sm"
               onClick={handleOpenClip}
               icon={<ArrowRightIcon className="h-3.5 w-3.5" />}
               iconPosition="right"
-              className="h-8 text-xs font-semibold hover:border-primary hover:text-primary shadow-2xs"
+              className="h-8 text-xs font-medium hover:border-primary hover:text-primary"
             >
               Open clip
             </AppButton>

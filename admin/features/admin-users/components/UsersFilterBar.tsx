@@ -1,15 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { AppInput as Input } from "@/components/common/primitives";
+import { AppButton as Button } from "@/components/common/primitives";
+import { AppSelect as Select, AppSelectContent as SelectContent, AppSelectItem as SelectItem, AppSelectTrigger as SelectTrigger, AppSelectValue as SelectValue } from "@/components/common/primitives";
 import { Search, X } from "lucide-react";
 import { ListUsersParams, UserPlan } from "../types";
 
@@ -20,15 +14,8 @@ export interface UsersFilterBarProps {
 }
 
 export function UsersFilterBar({ filters, onFilterChange, onReset }: UsersFilterBarProps) {
-  const [searchValue, setSearchValue] = React.useState(filters.search || "");
-
-  React.useEffect(() => {
-    setSearchValue(filters.search || "");
-  }, [filters.search]);
-
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onFilterChange({ search: searchValue, page: 1 });
   };
 
   const hasActiveFilters =
@@ -39,22 +26,22 @@ export function UsersFilterBar({ filters, onFilterChange, onReset }: UsersFilter
   return (
     <div className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-card rounded-xl border border-border p-4 shadow-sm">
       {/* Search */}
-      <form onSubmit={handleSearchSubmit} className="flex-1 w-full flex items-center gap-2">
+      <form onSubmit={handleSearchSubmit} className="flex w-full min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
           <Input
             type="text"
             placeholder="Search by name, email, referral code..."
-            value={searchValue}
-            onChange={(e) => setSearchValue(e.target.value)}
+            value={filters.search || ""}
+            onChange={(e) => onFilterChange({ search: e.target.value || undefined, page: 1 })}
             className="pl-9"
           />
         </div>
-        <Button type="submit" size="sm">Search</Button>
+        <Button type="submit" size="sm" className="w-full sm:w-auto">Search</Button>
       </form>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
         {/* Plan filter */}
         <Select
           value={filters.plan || "all"}
@@ -62,7 +49,7 @@ export function UsersFilterBar({ filters, onFilterChange, onReset }: UsersFilter
             onFilterChange({ plan: val === "all" ? undefined : (val as UserPlan), page: 1 })
           }
         >
-          <SelectTrigger size="sm" className="min-w-[110px]">
+          <SelectTrigger size="sm" className="w-full sm:min-w-[110px]">
             <SelectValue placeholder="All Plans" />
           </SelectTrigger>
           <SelectContent>
@@ -85,7 +72,7 @@ export function UsersFilterBar({ filters, onFilterChange, onReset }: UsersFilter
             })
           }
         >
-          <SelectTrigger size="sm" className="min-w-[120px]">
+          <SelectTrigger size="sm" className="w-full sm:min-w-[120px]">
             <SelectValue placeholder="All Statuses" />
           </SelectTrigger>
           <SelectContent>

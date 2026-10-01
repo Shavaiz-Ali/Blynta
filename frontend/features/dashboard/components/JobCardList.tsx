@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Job, JobStatus } from "@/features/jobs";
 import { cn } from "@/lib/utils";
 import {
-  STATUS_META,
   platformIcon,
   getJobDisplayTitle,
   formatDate,
@@ -36,7 +35,6 @@ export function JobCardList({ job }: JobCardListProps) {
   const clipsCount = job.clips?.length ?? 0;
   const isProcessing = isProcessingStatus(job.status);
   const isCompleted = job.status === JobStatus.COMPLETED;
-  const isFailed = job.status === JobStatus.FAILED;
 
   const handleRowClick = () => {
     router.push(`/my-clips/${job._id || job.id}`);
@@ -45,15 +43,17 @@ export function JobCardList({ job }: JobCardListProps) {
   return (
     <AppCard
       onClick={handleRowClick}
+      useDefaultClasses={false}
+      contentClassName="flex flex-col p-0! sm:flex-row sm:items-stretch"
       className={cn(
-        "group relative flex items-center justify-between gap-4 hover:border-primary/40 hover:shadow-sm transition-all duration-200 cursor-pointer rounded-lg",
+        "group relative gap-0 overflow-hidden p-0! hover:border-primary/40 hover:shadow-sm transition-all duration-200 cursor-pointer rounded-lg",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
       )}
     >
       {/* ── Left side: 16:9 mini-thumbnail + Info ── */}
-      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col sm:flex-row sm:items-stretch">
         {/* Compact Thumbnail Container */}
-        <div className="relative h-14 sm:h-16 w-24 sm:w-28 shrink-0 rounded-lg overflow-hidden bg-muted/40 border border-border/60 select-none">
+        <div className="relative aspect-video w-full shrink-0 overflow-hidden border-b border-border/60 bg-muted/40 select-none sm:aspect-auto sm:w-44 sm:min-h-24 sm:border-r sm:border-b-0">
           {thumbnail ? (
             <img
               src={thumbnail}
@@ -74,7 +74,7 @@ export function JobCardList({ job }: JobCardListProps) {
         </div>
 
         {/* Title and metadata */}
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1 px-4 py-3 sm:self-center">
           <div className="flex items-center gap-2">
             <span className="shrink-0">{platformIcon(job.sourcePlatform, "h-3.5 w-3.5")}</span>
             <h4 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
@@ -102,7 +102,7 @@ export function JobCardList({ job }: JobCardListProps) {
       </div>
 
       {/* ── Right side: Status + Actions ── */}
-      <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
+      <div className="flex shrink-0 items-center justify-end gap-3 border-t border-border/60 px-4 py-3 sm:border-t-0 sm:pl-0" onClick={(e) => e.stopPropagation()}>
         {/* Status Pill */}
         {isCompleted ? (
           <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold gap-1">
