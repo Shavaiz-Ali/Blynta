@@ -75,12 +75,12 @@ export function PlayerScrubber({
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="group/progress relative h-2.5 flex items-center cursor-pointer touch-none"
+      className="group/progress relative flex h-3 cursor-pointer touch-none items-center"
     >
       {/* Hover Time Tooltip */}
       {hoverTime !== null && (
         <div
-          className="absolute -top-7 -translate-x-1/2 bg-black/85 backdrop-blur-sm border border-white/20 text-white text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded shadow pointer-events-none"
+          className="pointer-events-none absolute -top-8 -translate-x-1/2 rounded-md border border-white/15 bg-[#07101f]/95 px-2 py-1 font-mono text-[10px] font-semibold text-white shadow-lg backdrop-blur-sm"
           style={{ left: `${hoverPosition}%` }}
         >
           {formatTimestamp(hoverTime)}
@@ -88,22 +88,22 @@ export function PlayerScrubber({
       )}
 
       {/* Rail Background */}
-      <div className="w-full h-1 group-hover/progress:h-1.5 rounded-full bg-white/20 transition-all overflow-hidden relative">
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/15 transition-all group-hover/progress:h-2">
         {/* Buffered progress */}
         <div
-          className="absolute h-full bg-white/30 transition-all"
+          className="absolute h-full bg-white/20 transition-all"
           style={{ width: `${bufferedPercent}%` }}
         />
         {/* Played progress */}
         <div
-          className="absolute h-full bg-primary transition-all"
+          className="absolute h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all"
           style={{ width: `${playedPercent}%` }}
         />
       </div>
 
       {/* Scrubbing Handle Knob */}
       <div
-        className="absolute h-3 w-3 rounded-full bg-primary border-2 border-white shadow-md -translate-x-1/2 scale-0 group-hover/progress:scale-100 transition-transform pointer-events-none"
+        className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 scale-0 rounded-full border-2 border-white bg-primary shadow-lg transition-transform group-hover/progress:scale-100"
         style={{ left: `${playedPercent}%` }}
       />
     </div>

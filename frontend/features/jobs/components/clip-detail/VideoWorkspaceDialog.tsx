@@ -11,17 +11,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertTriangleIcon,
   DownloadIcon,
-  LockIcon,
-  PaletteIcon,
-  PlayIcon,
   RefreshCwIcon,
-  ScissorsIcon,
-  SlidersIcon,
-  TypeIcon,
 } from "@/features/dashboard/icons";
 import { cn } from "@/lib/utils";
 import { ClipMediaStage, MEDIA_STAGE_STYLE } from "../player";
@@ -47,18 +40,6 @@ export interface VideoWorkspaceDialogProps {
   onDownloadTranscript?: () => void;
   onDownloadSubtitles?: () => void;
 }
-
-/**
- * Editing tools that will live in this workspace. Declared once so the rail
- * already reflects the final architecture - playback today, editing next.
- * They stay disabled until the tools exist: nothing here pretends to work.
- */
-const EDITOR_TOOLS = [
-  { value: "trim", label: "Trim", icon: <ScissorsIcon className="h-3 w-3" /> },
-  { value: "captions", label: "Captions", icon: <TypeIcon className="h-3 w-3" /> },
-  { value: "framing", label: "Framing", icon: <SlidersIcon className="h-3 w-3" /> },
-  { value: "branding", label: "Branding", icon: <PaletteIcon className="h-3 w-3" /> },
-];
 
 /**
  * Media workspace for a generated short.
@@ -92,14 +73,14 @@ export function VideoWorkspaceDialog({
       <DialogContent
         showCloseButton={false}
         className={cn(
-          "flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] flex-col gap-0 overflow-hidden rounded-xl border border-border/80 bg-popover p-0 text-sm ring-1 ring-foreground/10",
-          "max-w-[calc(100vw-1.5rem)] sm:max-w-[min(56rem,calc(100vw-3rem))]"
+          "flex max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] flex-col gap-0 overflow-hidden rounded-2xl border border-primary/15 bg-popover p-0 text-sm shadow-2xl shadow-black/40 ring-1 ring-foreground/10",
+          "max-w-[calc(100vw-1rem)] sm:max-w-[min(52rem,calc(100vw-3rem))]"
         )}
       >
         {/* Header: clip identity, export, close */}
-        <header className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3 sm:px-5">
+        <header className="flex items-start justify-between gap-3 border-b border-border/70 bg-card/80 px-4 py-3.5 sm:px-5">
           <div className="min-w-0 flex-1">
-            <DialogTitle className="truncate text-sm font-semibold tracking-tight text-foreground">
+            <DialogTitle className="truncate text-base font-semibold tracking-tight text-foreground">
               {title}
             </DialogTitle>
             <DialogDescription className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -110,6 +91,7 @@ export function VideoWorkspaceDialog({
                 {aspectLabel}
               </Badge>
               {context && <span className="truncate">{context}</span>}
+              <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />Ready to preview</span>
             </DialogDescription>
           </div>
 
@@ -119,7 +101,7 @@ export function VideoWorkspaceDialog({
               size="sm"
               onClick={onDownload}
               disabled={isDownloading}
-              className="cursor-pointer gap-1.5"
+              className="hidden cursor-pointer gap-1.5 sm:inline-flex"
             >
               <DownloadIcon className="h-3.5 w-3.5" />
               <span>{isDownloading ? "Preparing..." : "Download"}</span>
@@ -209,34 +191,6 @@ export function VideoWorkspaceDialog({
           ) : null}
         </div>
 
-        {/* Editor rail: playback is live, editing tools plug in here later */}
-        <div className="flex items-center justify-between gap-3 border-t border-border/70 px-4 py-2 sm:px-5">
-          <Tabs value="preview" className="w-auto">
-            <TabsList variant="line" size="xs" className="gap-3 border-b-0">
-              <TabsTrigger value="preview" size="xs" className="cursor-default">
-                <PlayIcon className="h-3 w-3 fill-current" />
-                <span>Preview</span>
-              </TabsTrigger>
-              {EDITOR_TOOLS.map((tool) => (
-                <TabsTrigger
-                  key={tool.value}
-                  value={tool.value}
-                  size="xs"
-                  disabled
-                  aria-label={`${tool.label} - not available yet`}
-                >
-                  {tool.icon}
-                  <span>{tool.label}</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-
-          <p className="hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
-            <LockIcon className="h-3 w-3" />
-            Editing tools are not available yet
-          </p>
-        </div>
       </DialogContent>
     </Dialog>
   );

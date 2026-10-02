@@ -40,12 +40,13 @@ export function PlayerControls({
   return (
     <div className="flex items-center justify-between gap-2 text-white">
       {/* Left: Play/Pause, Volume, Time */}
-      <div className="flex items-center gap-2">
+      <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
         {/* Play / Pause Toggle */}
         <button
           type="button"
           onClick={onTogglePlay}
-          className="h-8 w-8 rounded-lg hover:bg-white/15 flex items-center justify-center text-white transition-colors cursor-pointer"
+          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/20 transition-colors hover:bg-primary/80"
+          aria-label={isPlaying ? "Pause video" : "Play video"}
           title={isPlaying ? "Pause (Space)" : "Play (Space)"}
         >
           {isPlaying ? (
@@ -61,11 +62,12 @@ export function PlayerControls({
         </button>
 
         {/* Volume / Mute with Slide Out */}
-        <div className="flex items-center group/vol">
+        <div className="group/vol flex items-center">
           <button
             type="button"
             onClick={onToggleMute}
-            className="h-8 w-8 rounded-lg hover:bg-white/15 flex items-center justify-center text-white transition-colors cursor-pointer"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            aria-label={isMuted ? "Unmute video" : "Mute video"}
             title={isMuted ? "Unmute (M)" : "Mute (M)"}
           >
             {isMuted || volume === 0 ? (
@@ -90,13 +92,13 @@ export function PlayerControls({
             step={0.05}
             value={isMuted ? 0 : volume}
             onChange={onVolumeChange}
-            className="w-0 group-hover/vol:w-14 transition-all duration-200 h-1 bg-white/30 accent-primary rounded-full cursor-pointer opacity-0 group-hover/vol:opacity-100"
+            className="hidden h-1 w-0 cursor-pointer rounded-full bg-white/20 accent-primary opacity-0 transition-all duration-200 group-hover/vol:w-14 group-hover/vol:opacity-100 sm:block"
             title="Volume"
           />
         </div>
 
         {/* Time Stamp Display */}
-        <div className="text-[11px] font-mono text-white/90 tabular-nums">
+        <div className="truncate font-mono text-[10px] tabular-nums text-white/90 sm:text-[11px]">
           <span>{formatTimestamp(currentTime)}</span>
           <span className="text-white/40 mx-1">/</span>
           <span className="text-white/70">{formatTimestamp(duration)}</span>
@@ -104,12 +106,12 @@ export function PlayerControls({
       </div>
 
       {/* Right: Playback Speed, Loop, Fullscreen */}
-      <div className="flex items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
         {/* Speed toggle */}
         <button
           type="button"
           onClick={onCyclePlaybackRate}
-          className="h-7 px-1.5 rounded-lg hover:bg-white/15 text-[10px] font-mono font-bold text-white/90 transition-colors"
+          className="h-8 cursor-pointer rounded-lg px-2 font-mono text-[10px] font-bold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
           title="Change Speed"
         >
           {playbackRate}x
@@ -120,8 +122,8 @@ export function PlayerControls({
           type="button"
           onClick={onToggleLoop}
           className={cn(
-            "h-7 w-7 rounded-lg hover:bg-white/15 flex items-center justify-center transition-colors cursor-pointer",
-            isLooping ? "text-primary" : "text-white/70"
+            "flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-white/10",
+            isLooping ? "bg-primary/15 text-blue-300" : "text-white/70 hover:text-white"
           )}
           title={isLooping ? "Disable Loop (L)" : "Enable Loop (L)"}
         >
@@ -137,7 +139,8 @@ export function PlayerControls({
         <button
           type="button"
           onClick={onToggleFullscreen}
-          className="h-7 w-7 rounded-lg hover:bg-white/15 flex items-center justify-center text-white/90 transition-colors cursor-pointer"
+          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           title={isFullscreen ? "Exit Fullscreen (F)" : "Fullscreen (F)"}
         >
           {isFullscreen ? (

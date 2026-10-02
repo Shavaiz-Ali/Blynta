@@ -139,7 +139,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       activeHighlight?.reason ||
       (job?.videoTitle ? `Watch this high-retention AI extracted short clip from ${job.videoTitle}.` : "")
     );
-  }, [activeHighlight, job?.videoTitle]);
+  }, [activeHighlight, job]);
 
   const clipKeywords = React.useMemo(() => {
     const list = new Set<string>();
@@ -154,7 +154,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       ["shorts", "viral", "video"].forEach((k) => list.add(k));
     }
     return Array.from(list).slice(0, 30);
-  }, [job?.keywords, activeHighlight?.tags]);
+  }, [job, activeHighlight?.tags]);
 
   const clipHashtags = React.useMemo(() => {
     const list = new Set<string>();
@@ -231,16 +231,6 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       toast.error(msg);
     } finally {
       setIsDownloading(false);
-    }
-  };
-
-  const handleShare = async () => {
-    const url = window.location.href;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("Clip link copied to clipboard!");
-    } catch {
-      toast.error("Failed to copy link");
     }
   };
 
@@ -363,10 +353,11 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       {/* Content spans the same width as every other workspace page, so it lines
         up with the top bar. Sections are composed, not stretched: text keeps a
         reading width and the supporting content sits in cards. */}
-      <div className="w-full space-y-5 pb-14">
+      <div className="w-full space-y-6 pb-14">
         {/* Context + review utilities */}
         <ClipHeader
           backHref={`/my-clips/${jobId}`}
+          title={clipTitle}
           clipIndex={clipIndex}
           totalClips={totalClips}
           onDownload={handleDownload}
@@ -383,39 +374,47 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         {/* Review stage: compact hero - the clip leads, its information follows */}
         <section
           aria-label="Clip review"
-          className="grid items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-6"
+          className="relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
         >
-          <ClipPreview
-            posterUrl={job.thumbnailUrl}
-            clipTitle={clipTitle}
-            clipIndex={clipIndex}
-            startTime={activeClip.startTime}
-            endTime={activeClip.endTime}
-            onOpenViewer={() => setVideoPlayerOpen(true)}
-            className="w-[8.5rem] shrink-0 sm:w-[10rem]"
-          />
-          <ClipInformation
-            job={job}
-            clip={activeClip}
-            highlight={activeHighlight}
-            clipTitle={clipTitle}
-            clipIndex={clipIndex}
-            totalClips={totalClips}
-            sourceHref={`/my-clips/${jobId}`}
-            onWatch={() => setVideoPlayerOpen(true)}
-            className="max-w-3xl sm:min-h-[17.75rem]"
-          />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-primary/[0.08] to-transparent" />
+          <div className="relative grid items-center gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)] lg:gap-10 lg:p-8">
+            <div className="mx-auto w-full max-w-[18rem] lg:mx-0">
+              <ClipPreview
+                posterUrl={job.thumbnailUrl}
+                clipTitle={clipTitle}
+                clipIndex={clipIndex}
+                startTime={activeClip.startTime}
+                endTime={activeClip.endTime}
+                onOpenViewer={() => setVideoPlayerOpen(true)}
+                className="w-full"
+              />
+            </div>
+            <ClipInformation
+              job={job}
+              clip={activeClip}
+              highlight={activeHighlight}
+              clipTitle={clipTitle}
+              clipIndex={clipIndex}
+              totalClips={totalClips}
+              sourceHref={`/my-clips/${jobId}`}
+              onWatch={() => setVideoPlayerOpen(true)}
+              className="min-w-0 py-1 lg:py-4"
+            />
+          </div>
         </section>
 
-        {/* Why this clip was generated */}
-        <AIInsights highlight={activeHighlight} />
-
-        {/* Read-only publishing content */}
-        <PublishingPackage
-          job={job}
-          highlight={activeHighlight}
-          clipTitle={clipTitle}
-        />
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)]">
+          <AIInsights
+            highlight={activeHighlight}
+            plan={profile?.plan}
+            onSchedule={() => setScheduleOpen(true)}
+          />
+          <PublishingPackage
+            job={job}
+            highlight={activeHighlight}
+            clipTitle={clipTitle}
+          />
+        </div>
       </div>
 
       {/* Media workspace: watch now, edit later */}

@@ -58,16 +58,9 @@ export function JobsCard({ jobs, isLoading = false }: { jobs: Job[]; isLoading?:
   // Persistent view mode state
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
 
-  React.useEffect(() => {
-    const saved = localStorage.getItem("blynta_dashboard_view_mode") as ViewMode;
-    if (saved === "grid" || saved === "list") {
-      setViewMode(saved);
-    }
-  }, []);
-
   const handleViewModeChange = (mode: ViewMode) => {
     setViewMode(mode);
-    localStorage.setItem("blynta_dashboard_view_mode", mode);
+    localStorage.setItem("blynta_dashboard_view_mode_v2", mode);
   };
 
   const activeCount = jobs.filter(
@@ -81,23 +74,22 @@ export function JobsCard({ jobs, isLoading = false }: { jobs: Job[]; isLoading?:
   if (isLoading) return <JobsSkeleton viewMode={viewMode} />;
 
   return (
-    <div className="space-y-4">
+    <section className="space-y-4 rounded-2xl border border-border/70 bg-card/30 p-4 shadow-xs sm:p-5">
       {/* ── Unified Section Header & Controls ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-        <div className="flex items-center gap-2.5">
-          <h3 className="text-base sm:text-lg font-bold tracking-tight text-foreground">
-            Recent Projects
-          </h3>
-          {activeCount > 0 ? (
-            <span className="text-xs font-mono font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              {activeCount} active
-            </span>
-          ) : (
-            <span className="text-xs font-mono font-medium text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
-              {jobs.length} total
-            </span>
-          )}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-base font-bold tracking-tight text-foreground sm:text-lg">Recent projects</h3>
+            {activeCount > 0 ? (
+              <span className="flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 font-mono text-xs font-semibold text-primary">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+                {activeCount} active
+              </span>
+            ) : (
+              <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-xs font-medium text-muted-foreground">{jobs.length} total</span>
+            )}
+          </div>
+          <p className="mt-0.5 text-xs text-muted-foreground">Continue reviewing your latest videos and generated clips.</p>
         </div>
 
         {jobs.length > 0 && (
@@ -131,7 +123,7 @@ export function JobsCard({ jobs, isLoading = false }: { jobs: Job[]; isLoading?:
           <EmptyStateTips />
         </div>
       ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {jobs.slice(0, 9).map((job) => (
             <JobCardGrid key={job._id || job.id} job={job} />
           ))}
@@ -143,6 +135,6 @@ export function JobsCard({ jobs, isLoading = false }: { jobs: Job[]; isLoading?:
           ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }

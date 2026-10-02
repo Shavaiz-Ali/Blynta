@@ -25,18 +25,18 @@ export function PlayerTopBar({
   return (
     <div
       className={cn(
-        "absolute top-3 inset-x-3 flex items-center justify-between z-30 transition-opacity duration-300 pointer-events-none",
+        "pointer-events-none absolute inset-x-3 top-3 z-30 flex items-center justify-between transition-opacity duration-300",
         showControls || !isPlaying ? "opacity-100" : "opacity-0"
       )}
     >
       {/* Left: Badge & Loop Status */}
-      <div className="flex items-center gap-1.5 pointer-events-auto">
-        <span className="inline-flex items-center rounded-lg bg-black/75 backdrop-blur-md text-white px-2.5 py-1 text-[10px] font-mono font-bold border border-white/15 shadow-sm">
+      <div className="pointer-events-auto flex items-center gap-1.5">
+        <span className="inline-flex items-center rounded-full border border-white/15 bg-[#07101f]/85 px-2.5 py-1 text-[10px] font-semibold text-white shadow-lg backdrop-blur-md">
           {badgeText}
         </span>
 
         {isLooping && (
-          <span className="inline-flex items-center gap-1 rounded-lg bg-black/75 backdrop-blur-md text-primary px-2 py-0.5 text-[10px] font-mono font-semibold border border-primary/25 shadow-sm">
+          <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/15 px-2 py-1 text-[10px] font-semibold text-blue-300 shadow-lg backdrop-blur-md">
             <svg
               className="h-3 w-3 animate-spin"
               style={{ animationDuration: "10s" }}

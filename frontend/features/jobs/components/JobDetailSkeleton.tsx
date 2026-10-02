@@ -11,7 +11,7 @@ import { AspectRatio } from "@/components/ui/aspect-ratio";
  */
 export function ClipWorkspaceSkeleton() {
   return (
-    <div className="w-full space-y-5 pb-14" role="status" aria-label="Loading clip review">
+    <div className="w-full space-y-6 pb-14" role="status" aria-label="Loading clip review">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
         <div className="flex items-center gap-2.5">
@@ -29,46 +29,45 @@ export function ClipWorkspaceSkeleton() {
       </div>
 
       {/* Compact hero */}
-      <div className="grid items-start gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-6">
-        <div className="w-[8.5rem] shrink-0 sm:w-[10rem]">
+      <div className="grid items-center gap-6 rounded-2xl border border-border/80 bg-card p-4 sm:p-6 lg:grid-cols-[minmax(15rem,18rem)_minmax(0,1fr)] lg:gap-10 lg:p-8">
+        <div className="mx-auto w-full max-w-[18rem] lg:mx-0">
           <AspectRatio ratio={9 / 16}>
             <Skeleton className="h-full w-full rounded-lg" />
           </AspectRatio>
         </div>
-        <div className="min-h-[14rem] space-y-3.5 sm:min-h-[17.75rem]">
+        <div className="space-y-5">
           <Skeleton className="h-3 w-36" />
           <div className="space-y-2">
-            <Skeleton className="h-6 w-3/5" />
+            <Skeleton className="h-9 w-3/5" />
             <Skeleton className="h-4 w-full max-w-prose" />
             <Skeleton className="h-4 w-2/3 max-w-prose" />
           </div>
-          <Skeleton className="h-3 w-1/2" />
-          <Skeleton className="h-7 w-28 rounded-lg" />
+          <div className="grid gap-2 sm:grid-cols-3"><Skeleton className="h-16 rounded-xl" /><Skeleton className="h-16 rounded-xl" /><Skeleton className="h-16 rounded-xl" /></div>
+          <Skeleton className="h-9 w-32 rounded-lg" />
         </div>
       </div>
 
-      {/* AI insight card */}
-      <AppCard
-        size="sm"
-        title="AI insight"
-        headerAction={<Skeleton className="h-5 w-28 rounded-md" />}
-        contentClassName="px-3 pb-0"
-      >
-        <div className="grid w-full gap-x-8 gap-y-3.5 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
-          <div className="space-y-1.5">
-            <Skeleton className="h-3 w-36" />
-            <Skeleton className="h-4 w-full max-w-prose" />
-            <Skeleton className="h-4 w-1/2" />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)]">
+        <AppCard
+          size="sm"
+          title="AI insight"
+          headerAction={<Skeleton className="h-5 w-28 rounded-md" />}
+          contentClassName="px-3 pb-0"
+        >
+          <div className="grid w-full gap-x-8 gap-y-3.5 md:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-36" />
+              <Skeleton className="h-4 w-full max-w-prose" />
+              <Skeleton className="h-4 w-1/2" />
+            </div>
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-4 w-full" />
+            </div>
           </div>
-          <div className="space-y-1.5">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-4 w-full" />
-          </div>
-        </div>
-      </AppCard>
+        </AppCard>
 
-      {/* Publishing content cards */}
-      <div className="space-y-3">
+        <div className="space-y-3 rounded-2xl border border-border/80 bg-card p-5">
         <div className="flex items-center justify-between">
           <Skeleton className="h-4 w-40" />
           <Skeleton className="h-7 w-20 rounded-lg" />
@@ -87,6 +86,7 @@ export function ClipWorkspaceSkeleton() {
               </div>
             </AppCard>
           ))}
+        </div>
         </div>
       </div>
     </div>

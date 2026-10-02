@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Job, JobStatus } from "@/features/jobs";
 import { cn } from "@/lib/utils";
@@ -46,7 +47,7 @@ export function JobCardList({ job }: JobCardListProps) {
       useDefaultClasses={false}
       contentClassName="flex flex-col p-0! sm:flex-row sm:items-stretch"
       className={cn(
-        "group relative gap-0 overflow-hidden p-0! hover:border-primary/40 hover:shadow-sm transition-all duration-200 cursor-pointer rounded-lg",
+        "group relative gap-0 cursor-pointer overflow-hidden rounded-xl p-0! transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/35 hover:bg-card/90 hover:shadow-sm",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
       )}
     >
@@ -55,12 +56,14 @@ export function JobCardList({ job }: JobCardListProps) {
         {/* Compact Thumbnail Container */}
         <div className="relative aspect-video w-full shrink-0 overflow-hidden border-b border-border/60 bg-muted/40 select-none sm:aspect-auto sm:w-44 sm:min-h-24 sm:border-r sm:border-b-0">
           {thumbnail ? (
-            <img
+            <Image
               src={thumbnail}
               alt={job.videoTitle || "Thumbnail"}
               onError={() => setImgError(true)}
-              className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-              loading="lazy"
+              fill
+              unoptimized
+              sizes="176px"
+              className="object-cover transition-[transform,filter] duration-300 group-hover:scale-[1.015] group-hover:brightness-95"
             />
           ) : (
             <div className="h-full w-full flex items-center justify-center bg-card">
@@ -77,7 +80,7 @@ export function JobCardList({ job }: JobCardListProps) {
         <div className="min-w-0 flex-1 space-y-1 px-4 py-3 sm:self-center">
           <div className="flex items-center gap-2">
             <span className="shrink-0">{platformIcon(job.sourcePlatform, "h-3.5 w-3.5")}</span>
-            <h4 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+            <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
               {getJobDisplayTitle(job, 80)}
             </h4>
           </div>

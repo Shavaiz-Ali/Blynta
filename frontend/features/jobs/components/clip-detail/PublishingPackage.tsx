@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Highlight, Job } from "@/features/jobs";
-import { AppCard } from "@/components/common";
 import { AppDropdown } from "@/components/common/AppDropdown";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +39,7 @@ export function PublishingPackage({
   className,
 }: PublishingPackageProps) {
   const [copied, setCopied] = React.useState(false);
+  const [copiedField, setCopiedField] = React.useState<string | null>(null);
   const copiedTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   React.useEffect(() => {
@@ -86,7 +86,7 @@ export function PublishingPackage({
 
   const packageText = `${clipTitle}\n\n${descriptionText}\n\n${hashtags.join(" ")}`;
 
-  const copy = React.useCallback((text: string, label: string) => {
+  const copy = React.useCallback((text: string, label: string, field?: string) => {
     if (!text) {
       toast.error(`Nothing to copy for ${label.toLowerCase()}`);
       return;
@@ -95,8 +95,12 @@ export function PublishingPackage({
       .writeText(text)
       .then(() => {
         setCopied(true);
+        setCopiedField(field ?? null);
         if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
-        copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+        copiedTimeoutRef.current = setTimeout(() => {
+          setCopied(false);
+          setCopiedField(null);
+        }, 2000);
         toast.success(`${label} copied`);
       })
       .catch(() => toast.error("Failed to copy"));
@@ -142,12 +146,14 @@ export function PublishingPackage({
   ];
 
   return (
-    <section className={cn("space-y-3", className)} aria-label="Publishing content">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <SendIcon className="h-3.5 w-3.5 text-primary" />
-          Publishing content
-        </h2>
+    <section className={cn("overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs", className)} aria-label="Publishing content">
+      <div className="flex items-start justify-between gap-3 border-b border-border/70 px-5 py-4 sm:px-6">
+        <div>
+          <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
+            Ready-to-publish content
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">Copy everything at once or use individual fields.</p>
+        </div>
 
         <AppDropdown
           align="end"
@@ -159,7 +165,7 @@ export function PublishingPackage({
               size="sm"
               aria-label="Copy publishing content"
               title="Copy publishing content"
-              className="cursor-pointer gap-1.5 text-muted-foreground hover:text-foreground"
+              className="cursor-pointer gap-1.5 border border-border/70 bg-background text-muted-foreground hover:text-foreground"
             >
               {copied ? (
                 <CheckIcon className="h-3.5 w-3.5 text-emerald-500" />
@@ -173,50 +179,92 @@ export function PublishingPackage({
         />
       </div>
 
-      {/* One card per content type — read-only review, never a form */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <AppCard
-          size="sm"
-          title="Title"
-          titleClassName={CARD_LABEL_CLASS}
-          contentClassName="px-3 pb-0"
+      <div className="grid gap-px bg-border/70 sm:grid-cols-2">
+        <ContentBlock
+          label="Title"
+          className="sm:col-span-2"
+          action={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => copy(clipTitle, "Title", "title")}
+              aria-label="Copy title"
+              title="Copy title"
+              className="cursor-pointer text-muted-foreground hover:text-foreground"
+            >
+              {copiedField === "title" ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> : <CopyIcon className="h-3.5 w-3.5" />}
+            </Button>
+          }
         >
-          <p className="select-text text-sm font-semibold leading-relaxed text-foreground">
-            {clipTitle}
-          </p>
-        </AppCard>
-
-        <AppCard
-          size="sm"
-          title="SEO keywords"
-          titleClassName={CARD_LABEL_CLASS}
-          contentClassName="px-3 pb-0"
+          <p className="select-text text-base font-semibold leading-6 text-foreground">{clipTitle}</p>
+        </ContentBlock>
+        <ContentBlock
+          label="Description"
+          className="sm:row-span-2"
+          action={
+            <FieldCopyButton
+              label="description"
+              copied={copiedField === "description"}
+              onClick={() => copy(descriptionText, "Description", "description")}
+            />
+          }
         >
-          <p className="select-text text-sm leading-relaxed text-muted-foreground">
-            {keywords.join(" \u00b7 ")}
-          </p>
-        </AppCard>
-
-        <AppCard
-          size="sm"
-          title="Description"
-          titleClassName={CARD_LABEL_CLASS}
-          contentClassName="px-3 pb-0"
+          <p className="select-text text-sm leading-6 text-muted-foreground">{descriptionText}</p>
+        </ContentBlock>
+        <ContentBlock
+          label="SEO keywords"
+          action={
+            <FieldCopyButton
+              label="SEO keywords"
+              copied={copiedField === "keywords"}
+              onClick={() => copy(keywords.join(", "), "SEO keywords", "keywords")}
+            />
+          }
         >
-          <p className="max-w-prose select-text text-sm leading-relaxed text-muted-foreground">
-            {descriptionText}
-          </p>
-        </AppCard>
-
-        <AppCard
-          size="sm"
-          title="Hashtags"
-          titleClassName={CARD_LABEL_CLASS}
-          contentClassName="px-3 pb-0"
+          <div className="flex flex-wrap gap-1.5">{keywords.map((keyword) => <span key={keyword} className="rounded-md border border-border/70 bg-muted/40 px-2 py-1 text-xs text-muted-foreground">{keyword}</span>)}</div>
+        </ContentBlock>
+        <ContentBlock
+          label="Hashtags"
+          action={
+            <FieldCopyButton
+              label="hashtags"
+              copied={copiedField === "hashtags"}
+              onClick={() => copy(hashtags.join(" "), "Hashtags", "hashtags")}
+            />
+          }
         >
-          <p className="select-text text-sm leading-relaxed text-primary">{hashtags.join("  ")}</p>
-        </AppCard>
+          <div className="flex flex-wrap gap-x-2 gap-y-1">{hashtags.map((hashtag) => <span key={hashtag} className="select-text text-sm font-medium text-primary">{hashtag}</span>)}</div>
+        </ContentBlock>
       </div>
     </section>
+  );
+}
+
+function FieldCopyButton({ label, copied, onClick }: { label: string; copied: boolean; onClick: () => void }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-xs"
+      onClick={onClick}
+      aria-label={`Copy ${label}`}
+      title={`Copy ${label}`}
+      className="cursor-pointer text-muted-foreground hover:text-foreground"
+    >
+      {copied ? <CheckIcon className="h-3.5 w-3.5 text-emerald-500" /> : <CopyIcon className="h-3.5 w-3.5" />}
+    </Button>
+  );
+}
+
+function ContentBlock({ label, action, className, children }: { label: string; action?: React.ReactNode; className?: string; children: React.ReactNode }) {
+  return (
+    <div className={cn("min-w-0 space-y-2.5 bg-card px-5 py-4 sm:px-6", className)}>
+      <div className="flex items-center justify-between gap-3">
+        <span className={CARD_LABEL_CLASS}>{label}</span>
+        {action}
+      </div>
+      {children}
+    </div>
   );
 }

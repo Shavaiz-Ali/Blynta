@@ -20,7 +20,7 @@ export function PlayerOverlay({
       {/* Buffering Spinner */}
       {isBuffering && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/30 backdrop-blur-[1px]">
-          <div className="h-10 w-10 rounded-full border-3 border-primary border-t-transparent animate-spin" />
+          <div className="h-10 w-10 animate-spin rounded-full border-3 border-white/25 border-t-primary" />
         </div>
       )}
 
@@ -47,7 +47,7 @@ export function PlayerOverlay({
         <button
           type="button"
           onClick={onTogglePlay}
-          className="absolute inset-0 m-auto h-14 w-14 rounded-2xl bg-black/50 hover:bg-black/70 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-xl z-10 cursor-pointer"
+          className="absolute inset-0 z-10 m-auto flex h-16 w-16 cursor-pointer items-center justify-center rounded-full border border-white/25 bg-primary/90 text-primary-foreground shadow-2xl shadow-black/50 backdrop-blur-md transition-all hover:scale-105 hover:bg-primary active:scale-95"
           aria-label="Play video"
         >
           <svg className="h-6 w-6 fill-current translate-x-0.5 text-white" viewBox="0 0 24 24">

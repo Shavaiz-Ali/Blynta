@@ -15,7 +15,6 @@ import { JobsSkeleton } from "@/features/dashboard/components/JobsSkeleton";
 import { ViewModeToggle, ViewMode } from "@/features/dashboard/components/ViewModeToggle";
 import { JobCardGrid } from "@/features/dashboard/components/JobCardGrid";
 import { JobCardList } from "@/features/dashboard/components/JobCardList";
-import { cn } from "@/lib/utils";
 import {
   FilmIcon,
   AlertTriangleIcon,
@@ -96,14 +95,6 @@ export function MyClipsClient() {
   const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
   const LIMIT = 24;
 
-  // Load saved view mode
-  React.useEffect(() => {
-    const saved = localStorage.getItem("blynta_clips_view_mode") as ViewMode;
-    if (saved === "grid" || saved === "list") {
-      setViewMode(saved);
-    }
-  }, []);
-
   const handleViewModeChange = (mode: ViewMode) => {
     setViewMode(mode);
     localStorage.setItem("blynta_clips_view_mode", mode);
@@ -128,11 +119,6 @@ export function MyClipsClient() {
 
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
-
-  // Reset to page 1 when filter changes
-  React.useEffect(() => {
-    setPage(1);
-  }, [filter]);
 
   const headerContent = (
     <div className="flex-1 min-w-0 flex items-center justify-between">
@@ -166,7 +152,10 @@ export function MyClipsClient() {
           {/* Filter Pills Tabs */}
           <AppTabs
             value={filter}
-            onValueChange={(val) => setFilter(val as FilterValue)}
+            onValueChange={(val) => {
+              setFilter(val as FilterValue);
+              setPage(1);
+            }}
             tabs={FILTER_OPTIONS.map((opt) => ({
               value: opt.value,
               label: opt.label,
@@ -189,7 +178,7 @@ export function MyClipsClient() {
             Couldn&apos;t load your clips
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            {(error as any)?.message || "Please refresh the page to try again."}
+            {error instanceof Error ? error.message : "Please refresh the page to try again."}
           </p>
         </div>
       ) : filter === "all" && total === 0 ? (
@@ -242,7 +231,7 @@ export function MyClipsClient() {
         <div className="space-y-6">
           {/* Grid or List Display */}
           {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
               {jobs.map((job) => (
                 <JobCardGrid
                   key={job._id || job.id}

@@ -23,6 +23,7 @@ import {
 
 export interface ClipHeaderProps {
   backHref: string;
+  title: string;
   /** Zero-based index of the active clip. */
   clipIndex: number;
   totalClips: number;
@@ -47,6 +48,7 @@ export interface ClipHeaderProps {
  */
 export function ClipHeader({
   backHref,
+  title,
   clipIndex,
   totalClips,
   onDownload,
@@ -60,21 +62,21 @@ export function ClipHeader({
   onDelete,
 }: ClipHeaderProps) {
   return (
-    <header className="flex items-center justify-between gap-3 border-b border-border/70 pb-3">
+    <header className="flex flex-col gap-3 border-b border-border/70 pb-4 sm:flex-row sm:items-center sm:justify-between">
       {/* Context */}
       <div className="flex min-w-0 items-center gap-2.5">
         <Link
           href={backHref}
           aria-label="Back to generated shorts"
           title="Back to generated shorts"
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-border/70 bg-card text-muted-foreground shadow-xs transition-colors hover:bg-muted hover:text-foreground"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </Link>
 
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold tracking-tight text-foreground">
-            Clip review
+          <p className="max-w-[min(65vw,36rem)] truncate text-sm font-semibold tracking-tight text-foreground sm:max-w-[20rem] lg:max-w-[32rem]">
+            {title}
           </p>
           <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
             Short {clipIndex + 1} of {Math.max(totalClips, 1)}
@@ -83,7 +85,7 @@ export function ClipHeader({
       </div>
 
       {/* Utility actions */}
-      <div className="flex shrink-0 items-center gap-1.5">
+      <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
         {onPublishYouTube && (
           <Tooltip>
             <TooltipTrigger
@@ -93,7 +95,7 @@ export function ClipHeader({
                   size="sm"
                   onClick={onPublishYouTube}
                   aria-label="Publish to YouTube"
-                  className="cursor-pointer gap-1.5"
+                  className="h-9 flex-1 cursor-pointer gap-1.5 px-4 sm:flex-none"
                 >
                   <YouTubeIcon className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Publish</span>
@@ -112,7 +114,7 @@ export function ClipHeader({
                 size="sm"
                 onClick={onShare}
                 aria-label="Share clip link"
-                className="cursor-pointer gap-1.5 text-muted-foreground hover:text-foreground"
+                className="hidden h-9 cursor-pointer gap-1.5 text-muted-foreground hover:text-foreground md:inline-flex"
               >
                 <Share2Icon className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Share</span>
@@ -131,7 +133,7 @@ export function ClipHeader({
                   size="sm"
                   onClick={onOpenTranscript}
                   aria-label="Open transcript"
-                  className="cursor-pointer gap-1.5 text-muted-foreground hover:text-foreground"
+                  className="hidden h-9 cursor-pointer gap-1.5 text-muted-foreground hover:text-foreground lg:inline-flex"
                 >
                   <FileTextIcon className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Transcript</span>
@@ -147,7 +149,7 @@ export function ClipHeader({
           size="sm"
           onClick={onDownload}
           disabled={isDownloading}
-          className="cursor-pointer gap-1.5"
+          className="h-9 flex-1 cursor-pointer gap-1.5 px-4 sm:flex-none"
         >
           <DownloadIcon className="h-3.5 w-3.5" />
           <span>{isDownloading ? "Preparing..." : "Download"}</span>
@@ -159,7 +161,7 @@ export function ClipHeader({
               variant="ghost"
               size="icon-sm"
               aria-label="More actions"
-              className="cursor-pointer text-muted-foreground hover:text-foreground"
+              className="h-9 w-9 cursor-pointer text-muted-foreground hover:text-foreground"
             >
               <MoreVerticalIcon className="h-4 w-4" />
             </Button>

@@ -22,12 +22,12 @@ import { cn } from "@/lib/utils";
  * keeps the whole dialog on screen without any internal scrolling.
  */
 export const MEDIA_STAGE_STYLE = {
-  "--media-stage-h": "min(58dvh, 30rem)",
+  "--media-stage-h": "min(76dvh, 42rem)",
   height: "var(--media-stage-h)",
 } as React.CSSProperties;
 
 /** Space reserved under the video for the docked playback bar + padding. */
-const VIDEO_BOX_HEIGHT_CLASS = "h-[calc(var(--media-stage-h)-6.5rem)]";
+const VIDEO_BOX_HEIGHT_CLASS = "h-[calc(var(--media-stage-h)-6rem)]";
 
 /**
  * Desktop media stage used by the clip workspace dialog.
@@ -79,8 +79,17 @@ export function ClipMediaStage({
             } as React.CSSProperties)
           : MEDIA_STAGE_STYLE
       }
-      className={cn("relative w-full overflow-hidden bg-black", className)}
+      className={cn("relative isolate w-full overflow-hidden bg-[#020817]", className)}
     >
+      {poster && !sourceFailed && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-[-3rem] -z-10 scale-110 bg-cover bg-center opacity-25 blur-3xl saturate-150"
+          style={{ backgroundImage: `url(${JSON.stringify(poster).slice(1, -1)})` }}
+        />
+      )}
+      <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_50%_40%,rgba(37,99,235,0.14),transparent_42%),linear-gradient(to_bottom,rgba(2,8,23,0.35),rgba(2,8,23,0.92))]" />
+
       <div className="flex h-full w-full flex-col">
         {sourceFailed ? (
           /* Recovery state: the stream exists but the element could not load it */
@@ -125,10 +134,10 @@ export function ClipMediaStage({
         ) : (
           <>
             {/* Media area: the video is centred and height-constrained, never stretched */}
-            <div className="flex min-h-0 flex-1 items-center justify-center p-3 sm:p-4">
+            <div className="flex min-h-0 flex-1 items-center justify-center p-3 sm:p-5">
               <div
                 className={cn(
-                  "relative aspect-[9/16] max-h-full overflow-hidden rounded-lg bg-black ring-1 ring-white/10",
+                  "relative aspect-[9/16] max-h-full overflow-hidden rounded-xl bg-black shadow-2xl shadow-black/70 ring-1 ring-white/20",
                   VIDEO_BOX_HEIGHT_CLASS
                 )}
               >
@@ -156,7 +165,7 @@ export function ClipMediaStage({
             </div>
 
             {/* Docked playback bar: full-width timeline and transport controls */}
-            <div className="shrink-0 space-y-2 border-t border-white/10 bg-black px-4 pb-2.5 pt-2 sm:px-5">
+            <div className="shrink-0 space-y-2.5 border-t border-white/10 bg-[#07101f]/95 px-4 pb-3 pt-2.5 backdrop-blur-xl sm:px-5">
               <PlayerScrubber
                 duration={player.duration}
                 currentTime={player.currentTime}

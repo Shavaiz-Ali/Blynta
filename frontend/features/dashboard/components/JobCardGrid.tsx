@@ -3,10 +3,9 @@
 import * as React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { Job, JobStatus, SourcePlatform } from "@/features/jobs";
+import { Job, JobStatus } from "@/features/jobs";
 import { cn } from "@/lib/utils";
 import {
-  STATUS_META,
   platformIcon,
   getJobDisplayTitle,
   formatDate,
@@ -38,8 +37,6 @@ export function JobCardGrid({ job }: JobCardGridProps) {
   const clipsCount = job.clips?.length ?? 0;
   const isProcessing = isProcessingStatus(job.status);
   const isCompleted = job.status === JobStatus.COMPLETED;
-  const isFailed = job.status === JobStatus.FAILED;
-
   const handleCardClick = () => {
     router.push(`/my-clips/${job._id || job.id}`);
   };
@@ -48,8 +45,8 @@ export function JobCardGrid({ job }: JobCardGridProps) {
     <AppCard
       onClick={handleCardClick}
       className={cn(
-        "group relative flex flex-col overflow-hidden transition-all duration-300 p-0 rounded-lg",
-        "hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 cursor-pointer text-left",
+        "group relative flex flex-col overflow-hidden rounded-xl p-0 text-left transition-[border-color,box-shadow,background-color] duration-200",
+        "cursor-pointer hover:border-primary/35 hover:bg-card/90 hover:shadow-md hover:shadow-black/10",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]"
       )}
       useDefaultClasses={false}
@@ -58,12 +55,14 @@ export function JobCardGrid({ job }: JobCardGridProps) {
       {/* ── 16:9 Thumbnail Container ── */}
       <div className="relative aspect-video w-full bg-muted/40 overflow-hidden select-none">
         {thumbnail ? (
-          <img
+          <Image
             src={thumbnail}
             alt={job.videoTitle || "Video thumbnail"}
             onError={() => setImgError(true)}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
+            fill
+            unoptimized
+            sizes="(min-width: 1536px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition-[transform,filter] duration-300 group-hover:scale-[1.015] group-hover:brightness-90"
           />
         ) : (
           <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-card via-muted/30 to-background">
@@ -90,10 +89,10 @@ export function JobCardGrid({ job }: JobCardGridProps) {
           {duration}
         </div>
 
-        {/* Hover Play Button Overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30 backdrop-blur-[2px]">
-          <div className="h-11 w-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg shadow-primary/30 transform scale-90 group-hover:scale-100 transition-transform">
-            <PlayIcon className="h-4 w-4 ml-0.5" />
+        {/* Quiet hover affordance without obscuring the thumbnail. */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+          <div className="flex h-10 w-10 scale-95 items-center justify-center rounded-full border border-white/20 bg-background/90 text-foreground shadow-xl transition-transform duration-200 group-hover:scale-100">
+            <PlayIcon className="ml-0.5 h-4 w-4 fill-current" />
           </div>
         </div>
 
@@ -108,7 +107,7 @@ export function JobCardGrid({ job }: JobCardGridProps) {
       {/* ── Content Details ── */}
       <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
         <div>
-          <h4 className="text-sm font-semibold text-foreground line-clamp-2 leading-snug group-hover:text-primary transition-colors">
+          <h4 className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">
             {getJobDisplayTitle(job, 65)}
           </h4>
           <p className="text-[11px] text-muted-foreground mt-1 flex items-center gap-2">

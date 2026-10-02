@@ -38,9 +38,9 @@ export function ClipPreview({
       aria-label={`Watch ${clipTitle}`}
       title="Open media workspace"
       className={cn(
-        "group relative block w-full overflow-hidden rounded-lg bg-muted/40 text-left",
-        "ring-1 ring-border/70 shadow-sm transition-all duration-200",
-        "hover:ring-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
+        "group relative block w-full overflow-hidden rounded-xl bg-muted/40 text-left",
+        "ring-1 ring-border/80 shadow-xl shadow-black/20 transition-all duration-300",
+        "hover:-translate-y-0.5 hover:ring-primary/50 hover:shadow-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
         "cursor-pointer",
         className
       )}
@@ -50,7 +50,7 @@ export function ClipPreview({
           <img
             src={posterUrl}
             alt=""
-            className="absolute inset-0 h-full w-full object-cover transition-opacity duration-300 group-hover:opacity-85"
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.025]"
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/20 text-muted-foreground">
@@ -64,8 +64,8 @@ export function ClipPreview({
 
         {/* Play affordance */}
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-background/90 text-foreground shadow-lg ring-1 ring-border backdrop-blur-sm transition-all duration-200 group-hover:scale-105 group-hover:bg-primary group-hover:text-primary-foreground group-hover:ring-primary/40">
-            <PlayIcon className="h-4 w-4 fill-current pl-0.5" />
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-background/90 text-foreground shadow-xl ring-1 ring-white/20 backdrop-blur-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground group-hover:ring-primary/40">
+            <PlayIcon className="h-5 w-5 fill-current pl-0.5" />
           </span>
         </div>
 
