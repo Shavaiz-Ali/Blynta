@@ -35,7 +35,7 @@ export function UserDropdown() {
           icon: <LogOut />,
           separator: true,
           onClick: () => {
-            void signOut({ redirectTo: "/signed-out" });
+            void signOut({ redirectTo: "/auth/logged-out" });
           },
         },
       ]}

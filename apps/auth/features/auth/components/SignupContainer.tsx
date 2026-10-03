@@ -31,6 +31,14 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref") || undefined;
+  const source = searchParams.get("from");
+  const logoutMode =
+    searchParams.get("mode") === "product-logout" &&
+    (source === "main" || source === "studio");
+  const loginUrl = logoutMode
+    ? `/login?mode=product-logout&from=${source}`
+    : "/login";
+  const redirectTo = logoutMode ? loginUrl : "/continue";
 
   const { data: fetchedProviders, isLoading: providersLoading } =
     useEnabledProviders({
@@ -68,17 +76,18 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
           email: currentEmail,
           password: currentPassword,
           redirect: false,
+          redirectTo,
         });
 
         if (result?.error) {
           toast.info("Account verified. Please sign in with your credentials.");
-          router.push("/login");
+          router.push(loginUrl);
           return;
         }
 
-        window.location.assign("/continue");
+        window.location.assign(redirectTo);
       } catch {
-        router.push("/login");
+        router.push(loginUrl);
       }
     },
     onError: (err) => {
@@ -116,7 +125,7 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
       `Connecting to ${provider.charAt(0).toUpperCase() + provider.slice(1)}...`,
     );
     try {
-      await signIn(provider, { redirectTo: "/continue" }); // Auth.js handles the redirect automatically
+      await signIn(provider, { redirectTo });
     } catch {
       // signIn() with OAuth redirects away; an error here is unexpected.
       toast.error(`Failed to connect to ${provider}. Please try again.`);
@@ -160,7 +169,7 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
         <p className="text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link
-            href="/login"
+            href={loginUrl}
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
             Sign in

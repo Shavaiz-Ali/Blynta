@@ -13,7 +13,6 @@ export function productProxy(clientId: string) {
         "/forgot-password",
         "/reset-password",
         "/verify-email",
-        "/signed-out",
         "/auth/",
         "/share/",
       ].some((prefix) => path.startsWith(prefix))

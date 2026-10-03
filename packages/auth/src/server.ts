@@ -54,6 +54,20 @@ export function configuredUrl(name: string) {
   return url;
 }
 
+/** Auth.js redirects locally first; only configured consumer origins are used. */
+export function productLogoutLanding(product: "main" | "studio") {
+  return function GET() {
+    const destination = new URL(
+      "/product-logout",
+      configuredUrl("AUTH_APP_URL"),
+    );
+    destination.searchParams.set("from", product);
+    const response = NextResponse.redirect(destination);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  };
+}
+
 type BackendSession = {
   id: string;
   email: string;

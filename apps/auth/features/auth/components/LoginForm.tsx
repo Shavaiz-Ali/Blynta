@@ -20,12 +20,15 @@ export interface LoginFormProps {
   className?: string;
   /** Enabled provider strings from GET /auth/providers (e.g. ["local","google","facebook"]) */
   enabledProviders?: AuthProvider[];
+  /** Product logout stays on the central account UI until explicit continuation. */
+  redirectTo?: string;
 }
 
 function LoginForm({
   showForgotPassword = true,
   className,
   enabledProviders,
+  redirectTo = "/continue",
 }: LoginFormProps) {
   const { data: fetchedProviders, isLoading: providersLoading } =
     useEnabledProviders({
@@ -58,7 +61,7 @@ function LoginForm({
       `Connecting to ${provider.charAt(0).toUpperCase() + provider.slice(1)}...`,
     );
     try {
-      await signIn(provider, { redirectTo: "/continue" }); // Auth.js handles the redirect automatically
+      await signIn(provider, { redirectTo });
     } catch {
       // signIn() with OAuth redirects away; an error here is unexpected.
       toast.error(`Failed to connect to ${provider}. Please try again.`);
@@ -77,6 +80,7 @@ function LoginForm({
         email,
         password,
         redirect: false,
+        redirectTo,
       });
     } catch {
       const message = "Unable to reach the sign-in service. Please try again.";
@@ -102,8 +106,8 @@ function LoginForm({
       return;
     }
 
-    toast.success("Signed in successfully! Redirecting...");
-    window.location.assign("/continue");
+    toast.success("Signed in successfully!");
+    window.location.assign(redirectTo);
   };
 
   const activeProviders = fetchedProviders ??

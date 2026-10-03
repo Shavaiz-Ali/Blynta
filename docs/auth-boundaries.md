@@ -40,14 +40,20 @@ flowchart TD
 ```
 
 Normal product sign-out revokes only its child credential, clears its own
-Auth.js cookie, and redirects to `/signed-out`. That public page offers an
-explicit sign-in link. Later navigation to a protected route may silently
-create a new product session through the still-valid central identity; this
-is intentional. Local logout does not revoke other sessions in the same
+Auth.js cookie, and redirects through the product `/auth/logged-out` route
+to central Auth `/product-logout?from=main|studio`. This clears only the pending
+SSO-request cookie and opens `/login?mode=product-logout&from=main|studio`.
+An existing central identity sees its account with an explicit Continue link,
+Use another account, and global sign-out. There is no automatic authorization
+or redirect to a product. Without a central session the normal login UI appears;
+credentials, social login and signup in this mode return to the account UI.
+Continue explicitly opens the fixed product `/auth/start`. Later independent
+navigation to a protected product route can still silently authorize through
+the valid central identity; that remains intentional SSO behavior. Local logout does not revoke other sessions in the same
 product on separate devices.
 
 The explicit global consumer action is the POST-backed sign-out form on central
-Auth's `/logout` page, linked from product logout-complete pages. It removes the
+Auth's `/logout` page, linked from the central account landing. It removes the
 central root, making all linked consumer credentials and previously issued API
 tokens invalid. Other hosts' cookies remain until their next validation clears
 them; they cannot authenticate while their root is missing. Admin is unaffected.
@@ -166,7 +172,7 @@ unchanged; role promotion must use existing trusted administration tooling.
 - Backend SSO service/controller, new Admin authentication controller, JWT
   strategy, rate limits, Admin guards and their security tests.
 - Admin auth entry, login, callback and protected layout; consumer dropdowns
-  and public signed-out pages; central authorize decoder and global logout copy.
+  and product logout redirect routes; central logout/account landing, authorize decoder and global logout copy.
 - HTTP integration fixture/suite, local setup, environment registries and Vercel
   environment documentation.
 
@@ -178,8 +184,8 @@ Concrete source paths changed for this boundary correction:
 | Backend sessions | `backend/src/auth/sso.service.ts`, `sso.controller.ts`, `admin-auth.controller.ts`, `jwt.strategy.ts`, `auth.module.ts`, `auth-rate-limit.guard.ts` |
 | Backend authorization/tests | `backend/src/admin/guards/admin.guard.ts`, `admin.guard.spec.ts`, `backend/src/admin/admin-guards.spec.ts`, `backend/src/auth/admin-auth.controller.spec.ts`, `consumer-social.spec.ts`, `sso.service.spec.ts` |
 | Admin | `apps/admin/auth.ts`, `app/(auth)/login/page.tsx`, `app/(main)/layout.tsx`, `app/auth/start/route.ts`, `app/auth/callback/route.ts`, `features/admin-auth/components/LoginForm.tsx` |
-| Consumer logout | `apps/app/features/dashboard/components/UserDropdown.tsx`, `apps/studio/components/common/UserDropdown.tsx`, both products' `app/signed-out/page.tsx` |
-| Central Auth | `apps/auth/auth.ts`, `app/authorize/route.ts`, `app/logout/page.tsx` |
+| Consumer logout | `apps/app/features/dashboard/components/UserDropdown.tsx`, `apps/studio/components/common/UserDropdown.tsx`, both products' `app/auth/logged-out/route.ts` (old `app/signed-out/page.tsx` removed) |
+| Central Auth | `apps/auth/auth.ts`, `app/authorize/route.ts`, `app/logout/page.tsx`, `app/product-logout/route.ts`, `app/(auth)/login/page.tsx`, `features/auth/components/LoginForm.tsx`, `SignupContainer.tsx` |
 | Integration/setup | `backend/test/sso-fixture.ts`, `scripts/test-sso.mjs`, `scripts/setup-local-auth.mjs` |
 | Configuration/docs | Consumer registry references in frontend/backend `.env*` files, Admin local flag/secret override and `.env.example`, `README.md`, `docs/vercel-services.md`, this report and historical audit notices |
 
@@ -192,9 +198,13 @@ Use two tabs per product and inspect cookie metadata without copying values.
 
 1. Sign in at Main, then Studio: silent SSO, same existing user.
 2. Sign in first at Studio, then Main: same result in the other direction.
-3. Sign out of Main: public signed-out page stays visible; Studio and Admin stay
-   authenticated in their tabs. Reopen protected Main: silent consumer re-entry.
-4. Repeat local logout from Studio; Main and Admin remain authenticated.
+3. Sign out of Main: land on central Auth account UI; Main remains without a
+   product session even after refreshing Auth. Studio and Admin stay authenticated.
+   Click Continue to Blynta App: only then does Main acquire a new product session.
+4. Repeat from Studio: Main and Admin stay authenticated; Auth shows the account
+   and Studio remains logged out until explicit Continue. Try Use another account
+   and, with no central session, credentials/social/signup: remain on Auth until
+   Continue. Check a stale pending SSO request is cleared without revoking identity.
 5. With Main or Studio signed in as a normal user, open Admin root: dedicated
    email/password form, no consumer authorization redirect or Admin shell.
 6. Submit normal-user credentials to Admin: rejected, no Admin session cookie.
@@ -221,7 +231,7 @@ Validation completed so far:
 - The expanded isolated HTTP suite passes with real Next/Auth.js/Nest code and
   synthetic persistence: both SSO directions, provider discovery, normal-user
   Admin rejection, valid Admin dashboard, role removal, all four logout cases,
-  issued-token revocation, silent re-entry, malformed cookies, state/PKCE/replay,
+  issued-token revocation, explicit re-entry, malformed cookies, state/PKCE/replay,
   CSRF and recovery. Two HTTP tab clients share a cookie jar; actual client-side
   BroadcastChannel and stale rendered-tab behavior remain on the manual checklist.
 - Shared auth and all four affected frontends pass TypeScript checks; backend
@@ -234,3 +244,20 @@ The HTTP harness uses Webpack for its isolated development servers because the
 retained Studio Next version produced stale routes on Turbopack cache reuse.
 This does not alter application development/build configuration. Real provider
 consent, production Mongo/Redis, and Vercel deployments remain manual checks.
+
+## Logout landing update
+
+The product signed-out pages were removed. No environment changes are needed: the
+redirect routes use existing AUTH_APP_URL, MAIN_APP_URL and STUDIO_APP_URL values.
+Admin authentication and backend revocation policy are unchanged. Central Auth
+has no Proxy redirect for login; the logout mode never calls `/continue` or
+`/authorize` automatically. Fixed product selection rejects arbitrary destinations.
+
+This UX update passes the full HTTP regression suite and a focused logout run,
+including Main/Studio session absence on the central page, sibling/Admin
+continuity, reload and account-switch forms, stale pending-request deletion,
+anonymous credentials returning to the account UI, and explicit continuation.
+Shared auth and all four frontends pass type checks; modified central Auth files
+pass lint; Auth/Main/Studio production builds and changed-code formatting pass.
+Real OAuth consent remains a manual check. Deploy the updated Auth, Main and
+Studio frontends; no backend or Admin policy change is needed for this UX update.
