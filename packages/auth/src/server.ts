@@ -1,5 +1,6 @@
 import "./types";
 import { callIdentity } from "./identity-client";
+import { authSecret } from "./backend";
 export { callIdentity, IdentityRequestError } from "./identity-client";
 import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
@@ -61,6 +62,7 @@ type BackendSession = {
   accessToken: string;
   accessTokenExpires: number;
   expiresAt: number;
+  sessionKind?: "consumer" | "admin";
 };
 type Transaction = {
   state: string;
@@ -79,8 +81,8 @@ const options = () => ({
   path: "/",
   maxAge: 600,
 });
-const transactionSecret = () => {
-  const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+const transactionSecret = (clientId: string) => {
+  const secret = authSecret(clientId);
   if (!secret || secret.startsWith("replace-with-"))
     throw new Error(
       "Configure an independent AUTH_SECRET for this application",
@@ -128,7 +130,7 @@ export function startAuthorization(
       cookieName(clientId),
       await encode({
         token: { ...transaction },
-        secret: transactionSecret(),
+        secret: transactionSecret(clientId),
         salt: cookieName(clientId),
         maxAge: 600,
       }),
@@ -148,7 +150,7 @@ async function readTransaction(
   if (!raw || typeof state !== "string") throw new Error("Invalid transaction");
   const decoded = await decode({
     token: raw,
-    secret: transactionSecret(),
+    secret: transactionSecret(clientId),
     salt: cookieName(clientId),
   });
   if (
@@ -177,7 +179,7 @@ async function readTransaction(
 export function createProductAuth(clientId: string, appEnv: string) {
   return NextAuth({
     pages: { signIn: "/login", error: "/login" },
-    secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+    secret: authSecret(clientId),
     session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
     cookies: {
       sessionToken: {
@@ -224,14 +226,58 @@ export function createProductAuth(clientId: string, appEnv: string) {
         },
       }),
     ],
-    ...sessionCallbacks(),
+    ...sessionCallbacks("consumer", "product"),
   });
 }
 
-export function sessionCallbacks(): Pick<
-  NextAuthConfig,
-  "callbacks" | "events"
-> {
+/** Admin deliberately has no SSO or social provider and ignores consumer rollout flags. */
+export function createAdminAuth() {
+  return NextAuth({
+    pages: { signIn: "/login", error: "/login" },
+    secret: authSecret("blynta-admin"),
+    session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
+    cookies: {
+      sessionToken: {
+        name: `${process.env.NODE_ENV === "production" ? "__Host-" : ""}blynta-admin-session`,
+        options: {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+        },
+      },
+    },
+    providers: [
+      Credentials({
+        credentials: { email: {}, password: {} },
+        async authorize(credentials) {
+          if (
+            typeof credentials.email !== "string" ||
+            typeof credentials.password !== "string"
+          )
+            return null;
+          try {
+            const result = await callIdentity<BackendSession>("admin/login", {
+              email: credentials.email,
+              password: credentials.password,
+            });
+            return result.role === "admin" && result.sessionKind === "admin"
+              ? result
+              : null;
+          } catch {
+            return null;
+          }
+        },
+      }),
+    ],
+    ...sessionCallbacks("admin", "product"),
+  });
+}
+
+export function sessionCallbacks(
+  kind: "consumer" | "admin" = "consumer",
+  logoutScope: "product" | "all" = "product",
+): Pick<NextAuthConfig, "callbacks" | "events"> {
   return {
     callbacks: {
       async jwt({ token, user }) {
@@ -240,6 +286,7 @@ export function sessionCallbacks(): Pick<
           Object.assign(token, {
             id: identity.id,
             role: identity.role,
+            sessionKind: identity.sessionKind || "consumer",
             sessionToken: identity.sessionToken,
             expiresAt: identity.expiresAt,
             accessToken: identity.accessToken,
@@ -251,7 +298,14 @@ export function sessionCallbacks(): Pick<
         try {
           const fresh = await callIdentity<
             Omit<BackendSession, "sessionToken" | "expiresAt">
-          >("sso/session", { sessionToken: token.sessionToken });
+          >(kind === "admin" ? "admin/session" : "sso/session", {
+            sessionToken: token.sessionToken,
+          });
+          if (
+            kind === "admin" &&
+            (fresh.role !== "admin" || fresh.sessionKind !== "admin")
+          )
+            return null;
           Object.assign(token, fresh);
           token.email = fresh.email;
         } catch {
@@ -274,9 +328,9 @@ export function sessionCallbacks(): Pick<
           "token" in message &&
           typeof message.token?.sessionToken === "string"
         )
-          await callIdentity("sso/logout", {
+          await callIdentity(kind === "admin" ? "admin/logout" : "sso/logout", {
             sessionToken: message.token.sessionToken,
-            scope: "all",
+            scope: logoutScope,
           });
       },
     },

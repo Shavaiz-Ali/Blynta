@@ -10,11 +10,20 @@ import { createHash, randomBytes } from 'crypto';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/schemas/user.schema';
 
 export const digest = (value: string) =>
   createHash('sha256').update(value).digest('base64url');
 const SESSION_TTL = 7 * 24 * 60 * 60;
-type Identity = { userId: string; root?: string; expiresAt: number };
+export type SessionKind = 'consumer' | 'admin';
+type Identity = {
+  userId: string;
+  root?: string;
+  expiresAt: number;
+  kind?: SessionKind;
+};
+const consumerClient = (client: string) =>
+  ['blynta-main', 'blynta-studio'].includes(client);
 export type AuthorizationRequest = {
   client_id: string;
   redirect_uri: string;
@@ -34,6 +43,8 @@ export class SsoService {
   ) {}
 
   validateRequest(request: AuthorizationRequest) {
+    if (!consumerClient(request.client_id))
+      throw new BadRequestException('Invalid authorization request');
     let clients: Record<string, string[]>;
     try {
       clients = JSON.parse(
@@ -78,9 +89,10 @@ export class SsoService {
     userId: string,
     root?: string,
     expiresAt = Date.now() + SESSION_TTL * 1000,
+    kind: SessionKind = 'consumer',
   ) {
     const secret = randomBytes(32).toString('base64url');
-    const identity: Identity = { userId, root, expiresAt };
+    const identity: Identity = { userId, root, expiresAt, kind };
     await this.redis.set(
       `sso:session:${digest(secret)}`,
       JSON.stringify(identity),
@@ -111,7 +123,7 @@ export class SsoService {
   async authorize(secret: string, request: AuthorizationRequest) {
     this.validateRequest(request);
     const identity = await this.identity(secret);
-    if (identity.root)
+    if (identity.root || identity.kind === 'admin')
       throw new UnauthorizedException('Central identity required');
     const code = randomBytes(32).toString('base64url');
     await this.redis.set(
@@ -142,6 +154,7 @@ export class SsoService {
   }) {
     if (
       body.grant_type !== 'authorization_code' ||
+      !consumerClient(body.client_id) ||
       !/^[A-Za-z0-9_-]{43}$/.test(body.code || '') ||
       !/^[A-Za-z0-9._~-]{43,128}$/.test(body.code_verifier || '')
     )
@@ -174,10 +187,15 @@ export class SsoService {
     return { ...session, ...(await this.token(session.sessionToken)) };
   }
 
-  async token(secret: string) {
+  async token(secret: string, kind: SessionKind = 'consumer') {
     const identity = await this.identity(secret);
     const user = await this.users.findById(identity.userId);
-    if (!user) throw new UnauthorizedException('Session expired');
+    if (
+      !user ||
+      (identity.kind || 'consumer') !== kind ||
+      (kind === 'admin' && user.role !== UserRole.ADMIN)
+    )
+      throw new UnauthorizedException('Session expired');
     const accessToken = await this.jwt.signAsync(
       {
         sub: identity.userId,
@@ -191,6 +209,7 @@ export class SsoService {
       id: identity.userId,
       email: user.email,
       role: user.role,
+      sessionKind: kind,
       accessToken,
       accessTokenExpires: Date.now() + 300000,
     };
@@ -207,10 +226,17 @@ export class SsoService {
         !(await this.redis.exists(`sso:session:${identity.root}`)))
     )
       throw new UnauthorizedException();
+    return identity.kind || 'consumer';
   }
 
-  async revoke(secret: string, all = false) {
+  async revoke(secret: string, all = false, kind: SessionKind = 'consumer') {
     const key = `sso:session:${digest(secret)}`;
+    const current = await this.redis.get(key);
+    if (
+      current &&
+      ((JSON.parse(current) as Identity).kind || 'consumer') !== kind
+    )
+      throw new UnauthorizedException();
     if (all) {
       const raw = await this.redis.get(key);
       if (raw) {

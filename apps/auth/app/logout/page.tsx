@@ -9,8 +9,11 @@ export default function LogoutPage() {
         await signOut({ redirectTo: "/login" });
       }}
     >
-      <p>Sign out of your current Blynta session across all products.</p>
-      <AppButton type="submit">Sign out of Blynta</AppButton>
+      <p>
+        Sign out of Blynta Auth, App and Studio. Your Admin session stays signed
+        in.
+      </p>
+      <AppButton type="submit">Sign out of all consumer apps</AppButton>
     </form>
   );
 }

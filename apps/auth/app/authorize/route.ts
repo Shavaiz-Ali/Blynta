@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
+import { authSecret } from "@blynta/auth/backend";
 import { auth, identityCookieName } from "@/auth";
 import { callIdentity, IdentityRequestError } from "@blynta/auth/server";
 
@@ -56,10 +57,10 @@ export async function GET(request: Request) {
   }
   const token = await getToken({
     req: request,
-    secret: process.env.AUTH_SECRET!,
+    secret: authSecret("blynta-identity"),
     cookieName: identityCookieName,
     salt: identityCookieName,
-  });
+  }).catch(() => null);
   if (typeof token?.sessionToken !== "string")
     return new Response("Sign-in required", { status: 401 });
   try {

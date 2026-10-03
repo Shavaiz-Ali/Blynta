@@ -8,9 +8,13 @@ import {
 
 await test("Identity transport", async (t) => {
   const previous = Object.fromEntries(
-    ["BACKEND_URL", "NEXT_PUBLIC_BACKEND_URL", "SSO_BRIDGE_SECRET"].map(
-      (key) => [key, process.env[key]],
-    ),
+    [
+      "BACKEND_SERVICE_URL",
+      "BACKEND_URL",
+      "NEXT_PUBLIC_BACKEND_URL",
+      "SSO_BRIDGE_SECRET",
+      "NODE_ENV",
+    ].map((key) => [key, process.env[key]]),
   );
   let status = 200;
   let body = { success: true, data: { id: "synthetic-user" } };
@@ -23,6 +27,7 @@ await test("Identity transport", async (t) => {
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   process.env.BACKEND_URL = `http://127.0.0.1:${server.address().port}`;
+  delete process.env.BACKEND_SERVICE_URL;
   process.env.SSO_BRIDGE_SECRET = "synthetic-bridge";
   const credentials = {
     email: "synthetic@example.invalid",
@@ -43,6 +48,31 @@ await test("Identity transport", async (t) => {
       assert.deepEqual(await callIdentity("sso/login", credentials, true), {
         id: "synthetic-user",
       });
+    },
+  );
+  await t.test(
+    "runtime binding wins over the public URL and permits internal HTTP in production",
+    async () => {
+      const backend = process.env.BACKEND_URL;
+      const mode = process.env.NODE_ENV;
+      process.env.BACKEND_SERVICE_URL = backend;
+      process.env.BACKEND_URL = "https://unreachable.example.invalid";
+      process.env.NODE_ENV = "production";
+      try {
+        assert.deepEqual(await callIdentity("sso/login", credentials, true), {
+          id: "synthetic-user",
+        });
+        delete process.env.BACKEND_SERVICE_URL;
+        process.env.BACKEND_URL = backend;
+        await assert.rejects(callIdentity("sso/login", credentials, true), {
+          code: "backend_configuration",
+        });
+      } finally {
+        delete process.env.BACKEND_SERVICE_URL;
+        process.env.BACKEND_URL = backend;
+        if (mode === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = mode;
+      }
     },
   );
   for (const [httpStatus, backendCode, expectedCode] of [

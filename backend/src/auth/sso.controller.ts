@@ -24,7 +24,7 @@ class IdentityDto extends createZodDto(
 class LogoutDto extends createZodDto(
   z.object({
     sessionToken: z.string().length(43),
-    scope: z.enum(['product', 'all']).default('all'),
+    scope: z.enum(['product', 'all']).default('product'),
   }),
 ) {}
 class AuthorizeDto extends createZodDto(

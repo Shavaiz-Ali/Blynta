@@ -40,7 +40,9 @@ export async function getEnabledProviders(
 ): Promise<AuthProvider[]> {
   const { revalidate = isDev ? 0 : 60, debug = isDev } = options;
   const backendUrl =
-    process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
+    process.env.BACKEND_SERVICE_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const log = (msg: string, meta?: unknown) => {
     if (!debug) return;

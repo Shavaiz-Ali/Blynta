@@ -1,0 +1,141 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "admin": {
+      "root": "apps/admin",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_SERVICE_URL"
+        }
+      ],
+      "installCommand": "pnpm --dir ../.. install --frozen-lockfile",
+      "buildCommand": "pnpm run build"
+    },
+    "app": {
+      "root": "apps/app",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_SERVICE_URL"
+        }
+      ],
+      "installCommand": "pnpm --dir ../.. install --frozen-lockfile",
+      "buildCommand": "pnpm run build"
+    },
+    "auth": {
+      "root": "apps/auth",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_SERVICE_URL"
+        }
+      ],
+      "installCommand": "pnpm --dir ../.. install --frozen-lockfile",
+      "buildCommand": "pnpm run build"
+    },
+    "studio": {
+      "root": "apps/studio",
+      "framework": "nextjs",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "backend",
+          "format": "url",
+          "env": "BACKEND_SERVICE_URL"
+        }
+      ],
+      "installCommand": "pnpm --dir ../.. install --frozen-lockfile",
+      "buildCommand": "pnpm run build"
+    },
+    "web": {
+      "root": "apps/web",
+      "framework": "nextjs",
+      "installCommand": "pnpm --dir ../.. install --frozen-lockfile",
+      "buildCommand": "pnpm run build"
+    },
+    "backend": {
+      "root": "backend",
+      "framework": "nestjs",
+      "installCommand": "npm ci",
+      "buildCommand": "npm run build"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.blynta.com"
+        }
+      ],
+      "destination": {
+        "service": "admin"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "app.blynta.com"
+        }
+      ],
+      "destination": {
+        "service": "app"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "auth.blynta.com"
+        }
+      ],
+      "destination": {
+        "service": "auth"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "studio.blynta.com"
+        }
+      ],
+      "destination": {
+        "service": "studio"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "has": [
+        {
+          "type": "host",
+          "value": "api.blynta.com"
+        }
+      ],
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "web"
+      }
+    }
+  ]
+}

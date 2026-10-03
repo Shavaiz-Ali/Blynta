@@ -22,13 +22,14 @@ export class AuthRateLimitGuard implements CanActivate {
       1,
       key,
     )) as number;
-    const limit = req.path.endsWith('/sso/session')
-      ? 3000
-      : req.path.startsWith('/auth/sso/')
-        ? 600
-        : req.path.endsWith('/providers')
-          ? 300
-          : 30;
+    const limit =
+      req.path.endsWith('/sso/session') || req.path.endsWith('/admin/session')
+        ? 3000
+        : req.path.startsWith('/auth/sso/')
+          ? 600
+          : req.path.endsWith('/providers')
+            ? 300
+            : 30;
     if (typeof req.body?.email === 'string') {
       const account = createHash('sha256')
         .update(req.body.email.trim().toLowerCase())

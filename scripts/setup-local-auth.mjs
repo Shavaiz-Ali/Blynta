@@ -68,10 +68,13 @@ const bridge =
   (usable(backend.SSO_BRIDGE_SECRET) && backend.SSO_BRIDGE_SECRET) ||
   (usable(identity.SSO_BRIDGE_SECRET) && identity.SSO_BRIDGE_SECRET) ||
   randomBytes(32).toString("base64url");
+const identitySecret = usable(identity.BLYNTA_AUTH_SECRET)
+  ? identity.BLYNTA_AUTH_SECRET
+  : identity.AUTH_SECRET;
 const authSecret =
-  usable(identity.AUTH_SECRET) &&
-  ![bridge, backend.JWT_SECRET].includes(identity.AUTH_SECRET)
-    ? identity.AUTH_SECRET
+  usable(identitySecret) &&
+  ![bridge, backend.JWT_SECRET].includes(identitySecret)
+    ? identitySecret
     : randomBytes(32).toString("base64url");
 const identityDefaults = {
   ...origins,
@@ -99,6 +102,7 @@ updateEnvironment("apps/auth/.env.local", {
     ]),
   ),
   AUTH_SECRET: authSecret,
+  BLYNTA_AUTH_SECRET: authSecret,
   SSO_BRIDGE_SECRET: bridge,
   ...providers,
 });
@@ -106,7 +110,13 @@ const usedSecrets = new Set(
   [authSecret, bridge, backend.JWT_SECRET].filter(Boolean),
 );
 for (const { directory, originKey, environment } of products) {
+  const secretKey = {
+    "apps/app": "BLYNTA_APP_AUTH_SECRET",
+    "apps/studio": "BLYNTA_STUDIO_AUTH_SECRET",
+    "apps/admin": "BLYNTA_ADMIN_AUTH_SECRET",
+  }[directory];
   const existingSecret =
+    (usable(environment[secretKey]) && environment[secretKey]) ||
     (usable(environment.AUTH_SECRET) && environment.AUTH_SECRET) ||
     (usable(environment.NEXTAUTH_SECRET) && environment.NEXTAUTH_SECRET);
   const productSecret =
@@ -125,13 +135,13 @@ for (const { directory, originKey, environment } of products) {
       }).map(([key, fallback]) => [key, environment[key] || fallback]),
     ),
     AUTH_SECRET: productSecret,
-    CENTRAL_AUTH_ENABLED: "true",
+    [secretKey]: productSecret,
+    CENTRAL_AUTH_ENABLED: directory === "apps/admin" ? "false" : "true",
   });
 }
 const clients = {
   "blynta-main": [`${origins.MAIN_APP_URL}/auth/callback`],
   "blynta-studio": [`${origins.STUDIO_APP_URL}/auth/callback`],
-  "blynta-admin": [`${origins.ADMIN_APP_URL}/auth/callback`],
 };
 const allowedOrigins = new Set(
   (backend.ALLOWED_ORIGINS || "")
@@ -148,7 +158,13 @@ updateEnvironment("backend/.env", {
     ]),
   ),
   SSO_BRIDGE_SECRET: bridge,
-  SSO_CLIENTS: backend.SSO_CLIENTS || JSON.stringify(clients),
+  SSO_CLIENTS: JSON.stringify(
+    Object.fromEntries(
+      Object.entries(
+        backend.SSO_CLIENTS ? JSON.parse(backend.SSO_CLIENTS) : clients,
+      ).filter(([client]) => ["blynta-main", "blynta-studio"].includes(client)),
+    ),
+  ),
   ALLOWED_ORIGINS: [...allowedOrigins].join(","),
   ALLOW_LEGACY_AUTH_TOKENS: "false",
 });

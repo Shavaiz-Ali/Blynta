@@ -26,7 +26,9 @@ export async function callIdentity<T>(
   bridge = false,
 ): Promise<T> {
   const backend =
-    process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL;
+    process.env.BACKEND_SERVICE_URL ||
+    process.env.BACKEND_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL;
   const bridgeSecret = process.env.SSO_BRIDGE_SECRET;
   if (!backend || (bridge && !bridgeSecret)) {
     throw new IdentityRequestError("backend_configuration");
@@ -40,9 +42,10 @@ export async function callIdentity<T>(
       url.hash ||
       (url.protocol !== "https:" &&
         !(
-          process.env.NODE_ENV !== "production" &&
           url.protocol === "http:" &&
-          ["localhost", "127.0.0.1"].includes(url.hostname)
+          (Boolean(process.env.BACKEND_SERVICE_URL) ||
+            (process.env.NODE_ENV !== "production" &&
+              ["localhost", "127.0.0.1"].includes(url.hostname)))
         ))
     )
       throw new Error("Invalid backend origin");

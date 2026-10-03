@@ -1,11 +1,7 @@
+import { authSecret, backendUrl } from "@blynta/auth/backend";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { authConfig } from "./auth.config";
-
-const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5001";
 
 interface BackendUser {
   id: string;
@@ -23,7 +19,7 @@ async function callBackend<T>(
   path: string,
   body: Record<string, string>,
 ): Promise<T> {
-  const res = await fetch(`${BACKEND_URL}${path}`, {
+  const res = await fetch(`${backendUrl()}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -46,7 +42,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
   trustHost: true,
   session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  secret: authSecret("blynta-admin"),
   providers: [
     Credentials({
       credentials: {

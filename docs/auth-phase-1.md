@@ -1,5 +1,7 @@
 # Phase 1: centralized authentication
 
+> Historical audit: Admin and logout policy have since changed. See [current authentication boundaries](auth-boundaries.md).
+
 ## Trace of the implementation before Phase 1 changes
 
 The repository has three relying products and one identity frontend. No folder restructuring is required.

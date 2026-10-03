@@ -23,21 +23,28 @@ const env = {
   ...origins,
   NODE_ENV: "development",
   CENTRAL_AUTH_ENABLED: "true",
+  BACKEND_SERVICE_URL: backend,
   BACKEND_URL: backend,
+  BLYNTA_APP_AUTH_SECRET: "synthetic-bound-main-secret-32-characters",
+  BLYNTA_ADMIN_AUTH_SECRET: "synthetic-bound-admin-secret-32-characters",
+  BLYNTA_STUDIO_AUTH_SECRET: "synthetic-bound-studio-secret-32-characters",
+  BLYNTA_AUTH_SECRET: "synthetic-bound-identity-secret-32-characters",
   NEXT_PUBLIC_BACKEND_URL: backend,
   NEXT_PUBLIC_API_URL: backend,
   SSO_BRIDGE_SECRET: "synthetic-integration-bridge-secret",
   JWT_SECRET: "synthetic-integration-jwt-secret",
-  GOOGLE_CLIENT_ID: "",
-  GOOGLE_CLIENT_SECRET: "",
-  FACEBOOK_CLIENT_ID: "",
-  FACEBOOK_CLIENT_SECRET: "",
+  GOOGLE_CLIENT_ID: "synthetic-google-client",
+  GOOGLE_CLIENT_SECRET: "synthetic-google-secret",
+  FACEBOOK_CLIENT_ID: "synthetic-facebook-client",
+  FACEBOOK_CLIENT_SECRET: "synthetic-facebook-secret",
   BLYNTA_TEST_FIXTURE: "true",
   TS_NODE_PREFER_TS_EXTS: "true",
   SSO_CLIENTS: JSON.stringify(
     Object.fromEntries(
       products
-        .slice(0, 3)
+        .filter(([, , client]) =>
+          ["blynta-main", "blynta-studio"].includes(client),
+        )
         .map(([, port, client]) => [
           client,
           [`http://localhost:${port}/auth/callback`],
@@ -227,6 +234,54 @@ class Browser {
     assert.ok(!result.url.includes("error="), "Credential login failed");
     return this.request(result.url);
   }
+  async adminLogin(email = "admin@example.test", success = true) {
+    const own = origins.ADMIN_APP_URL;
+    const csrf = await (await this.request(own + "/api/auth/csrf")).json();
+    const response = await this.request(
+      own + "/api/auth/callback/credentials",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "x-auth-return-redirect": "1",
+          origin: own,
+        },
+        body: new URLSearchParams({
+          email,
+          password: "Test-password-123",
+          csrfToken: csrf.csrfToken,
+          callbackUrl: own + "/",
+        }),
+      },
+    );
+    const result = await response.json();
+    if (!success) return result;
+    assert.ok(!result.url.includes("error="), "Admin credential login failed");
+    const session = await (
+      await this.request(own + "/api/auth/session")
+    ).json();
+    assert.equal(session.user?.role, "admin");
+    return { session };
+  }
+  async logout(port) {
+    const own = "http://localhost:" + port;
+    const csrf = await (await this.request(own + "/api/auth/csrf")).json();
+    return (
+      await this.request(own + "/api/auth/signout", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "x-auth-return-redirect": "1",
+          origin: own,
+        },
+        body: new URLSearchParams({
+          csrfToken: csrf.csrfToken,
+          callbackUrl:
+            port === 3100 || port === 3102 ? "/signed-out" : "/login",
+        }),
+      })
+    ).json();
+  }
   async product(port, returnTo, login = false, email) {
     const origin = `http://localhost:${port}`;
     const start = await this.request(
@@ -285,6 +340,7 @@ try {
       [
         "node_modules/next/dist/bin/next",
         "dev",
+        "--webpack",
         "-p",
         String(port),
         "-H",
@@ -303,6 +359,25 @@ try {
   console.log(
     "PASS: all four frontend dev servers and isolated Nest backend started",
   );
+  const discovery = new Browser();
+  const consumerProviders = await (
+    await discovery.request(origins.AUTH_APP_URL + "/api/auth/providers")
+  ).json();
+  assert.deepEqual(Object.keys(consumerProviders).sort(), [
+    "credentials",
+    "facebook",
+    "google",
+  ]);
+  const enabledProviders = await (
+    await discovery.request(origins.AUTH_APP_URL + "/api/providers")
+  ).json();
+  assert.ok(
+    JSON.stringify(enabledProviders).includes("google") &&
+      JSON.stringify(enabledProviders).includes("facebook"),
+  );
+  console.log(
+    "PASS: central consumer Google/Facebook registration and enabled-provider discovery are retained",
+  );
   for (const [app, port] of products.slice(0, 3)) {
     const anonymous = new Browser();
     const protectedPage = await anonymous.request(
@@ -318,15 +393,22 @@ try {
       protectedPage,
       `http://localhost:${port}`,
     );
-    assert.equal(
-      new URL(loginEntry.headers.get("location"), `http://localhost:${port}`)
-        .pathname,
-      "/auth/start",
-    );
+    if (port === 3101) {
+      assert.equal(loginEntry.status, 200);
+      assert.ok((await loginEntry.text()).includes("Admin Portal"));
+    } else
+      assert.equal(
+        new URL(loginEntry.headers.get("location"), "http://localhost:" + port)
+          .pathname,
+        "/auth/start",
+      );
     const configured = await (
       await anonymous.request(`http://localhost:${port}/api/auth/providers`)
     ).json();
-    assert.deepEqual(Object.keys(configured), ["blynta"]);
+    assert.deepEqual(
+      Object.keys(configured),
+      port === 3101 ? ["credentials"] : ["blynta"],
+    );
     console.log(
       `PASS: ${app} protects routes and exposes only central code exchange`,
     );
@@ -358,6 +440,10 @@ try {
     await standalone.request(`${origins.MAIN_APP_URL}/api/auth/session`)
   ).json();
   assert.equal(standaloneSession.user?.email, "existing@example.test");
+  assert.equal(
+    (await standalone.request(origins.ADMIN_APP_URL + "/")).status,
+    307,
+  );
   console.log(
     "PASS: standalone Auth login → continue → Main dashboard session",
   );
@@ -421,17 +507,28 @@ try {
   );
   assert.ok((await csrfAttempt.json()).url.includes("MissingCSRF"));
   console.log("PASS: credential login requires Auth.js CSRF protection");
-  const admin = await studio.product(3101, "/");
-  const denied = await fetch(backend + "/admin/probe", {
-    headers: { authorization: `Bearer ${admin.session.accessToken}` },
-  });
-  assert.equal(denied.status, 403);
-  console.log(
-    "PASS: ordinary authenticated user remains denied by backend AdminGuard",
+  const normalAdmin = await studio.adminLogin("existing@example.test", false);
+  assert.ok(normalAdmin.url.includes("error="));
+  assert.equal(
+    (
+      await (
+        await studio.request(origins.ADMIN_APP_URL + "/api/auth/session")
+      ).json()
+    )?.user,
+    undefined,
   );
-  const adminPage = await studio.request("http://localhost:3101/");
-  assert.ok((await adminPage.text()).includes("Administrator access required"));
-  console.log("PASS: non-admin frontend routes show the authorization denial");
+  assert.equal((await studio.request(origins.ADMIN_APP_URL + "/")).status, 307);
+  assert.equal(
+    (
+      await fetch(backend + "/admin/probe", {
+        headers: { authorization: "Bearer " + main.session.accessToken },
+      })
+    ).status,
+    403,
+  );
+  console.log(
+    "PASS: consumer identity cannot establish Admin session or enter Admin UI/API",
+  );
   const direct = await new Browser().request(first.callbackUrl);
   assert.equal(direct.status, 400);
   const replay = await studio.request(first.callbackUrl);
@@ -564,13 +661,13 @@ try {
   );
 
   const administrator = new Browser();
-  const privileged = await administrator.product(
-    3101,
-    "/",
-    true,
-    "admin@example.test",
-  );
+  const privileged = await administrator.adminLogin();
   assert.equal(privileged.session.user.role, "admin");
+  const privilegedPage = await administrator.request(
+    origins.ADMIN_APP_URL + "/",
+  );
+  assert.equal(privilegedPage.status, 200);
+  assert.ok((await privilegedPage.text()).includes("Blynta Admin"));
   assert.equal(
     (
       await fetch(backend + "/admin/probe", {
@@ -579,7 +676,34 @@ try {
     ).status,
     200,
   );
-  console.log("PASS: Admin → Auth → login → authoritative admin authorization");
+  console.log(
+    "PASS: Admin credentials → independent session → authoritative admin authorization",
+  );
+  await fetch(backend + "/test/admin-role?role=user");
+  assert.equal(
+    (
+      await (
+        await administrator.request(origins.ADMIN_APP_URL + "/api/auth/session")
+      ).json()
+    )?.user,
+    undefined,
+  );
+  assert.equal(
+    (await administrator.request(origins.ADMIN_APP_URL + "/")).status,
+    307,
+  );
+  assert.equal(
+    (
+      await fetch(backend + "/admin/probe", {
+        headers: { authorization: "Bearer " + privileged.session.accessToken },
+      })
+    ).status,
+    401,
+  );
+  await fetch(backend + "/test/admin-role?role=admin");
+  console.log(
+    "PASS: current role removal invalidates Admin session, UI and previously issued API token",
+  );
   const mainBrowser = new Browser();
   await mainBrowser.product(3100, "/dashboard", true);
   console.log("PASS: Main → Auth → email/password → Main");
@@ -601,22 +725,11 @@ try {
   );
   assert.equal(anonymousInvalid.status, 400);
   console.log("PASS: authorization endpoint refuses an unregistered callback");
-  const csrf = await (
-    await studio.request("http://localhost:3100/api/auth/csrf")
-  ).json();
-  await studio.request("http://localhost:3100/api/auth/signout", {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-      "x-auth-return-redirect": "1",
-      origin: origins.MAIN_APP_URL,
-    },
-    body: new URLSearchParams({ csrfToken: csrf.csrfToken, callbackUrl: "/" }),
-  });
+  await studio.logout(3103);
   assert.equal(
     (
       await (
-        await studio.request("http://localhost:3102/api/auth/session")
+        await studio.request(origins.STUDIO_APP_URL + "/api/auth/session")
       ).json()
     )?.user,
     undefined,
@@ -624,28 +737,14 @@ try {
   assert.equal(
     (
       await fetch(backend + "/users/me", {
-        headers: { authorization: `Bearer ${first.session.accessToken}` },
+        headers: { authorization: "Bearer " + main.session.accessToken },
       })
     ).status,
     401,
   );
+  await studio.product(3100, "/dashboard", true);
   console.log(
-    "PASS: logout revokes central identity, sibling product session and already-issued access tokens",
-  );
-  for (const port of [3100, 3101, 3102]) {
-    const blocked = await studio.request(
-      `http://localhost:${port}${port === 3101 ? "/" : "/dashboard"}`,
-    );
-    assert.equal(blocked.status, 307);
-    assert.equal(
-      new URL(blocked.headers.get("location"), `http://localhost:${port}`)
-        .pathname,
-      "/login",
-    );
-  }
-  await studio.product(3102, "/dashboard", true);
-  console.log(
-    "PASS: revoked central cookie returns to login and permits a fresh sign-in",
+    "PASS: explicit central logout revokes consumer sessions and permits fresh login",
   );
   const post = (path, body, headers = {}) =>
     fetch(backend + path, {
@@ -712,50 +811,73 @@ try {
     ["auth", 3103],
   ]) {
     const browser = new Browser();
-    const local = await browser.product(
+    const app = await browser.product(
       3100,
       "/dashboard",
       true,
-      `logout-${name}@example.test`,
+      "logout-" + name + "@example.test",
     );
-    await browser.product(3102, "/editor/synthetic-project");
-    if (port === 3101) await browser.product(3101, "/");
-    const own = `http://localhost:${port}`;
-    const csrf = await (await browser.request(`${own}/api/auth/csrf`)).json();
-    await browser.request(`${own}/api/auth/signout`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/x-www-form-urlencoded",
-        "x-auth-return-redirect": "1",
-        origin: own,
-      },
-      body: new URLSearchParams({
-        csrfToken: csrf.csrfToken,
-        callbackUrl: "/",
-      }),
-    });
-    assert.equal(
-      (
-        await (
-          await browser.request(`${origins.STUDIO_APP_URL}/api/auth/session`)
-        ).json()
-      )?.user,
-      undefined,
-    );
-    assert.equal(
-      (
-        await fetch(backend + "/users/me", {
-          headers: { authorization: `Bearer ${local.session.accessToken}` },
-        })
-      ).status,
-      401,
-    );
+    const studioSession = await browser.product(3102, "/dashboard");
+    const admin = await browser.adminLogin();
+    // Two tabs share the browser cookie jar; each revalidates its own product.
+    const secondTab = new Browser();
+    secondTab.cookies = browser.cookies;
+    const result = await browser.logout(port);
+    if (port === 3100 || port === 3102) {
+      assert.ok(result.url.endsWith("/signed-out"));
+      assert.equal((await browser.request(result.url)).status, 200);
+    }
+    for (const [testPort, alive] of [
+      [3100, port !== 3100 && port !== 3103],
+      [3102, port !== 3102 && port !== 3103],
+      [3101, port !== 3101],
+      [3103, port !== 3103],
+    ]) {
+      const session = await (
+        await secondTab.request(
+          "http://localhost:" + testPort + "/api/auth/session",
+        )
+      ).json();
+      assert.equal(
+        !!session?.user,
+        alive,
+        name + " logout affected port " + testPort,
+      );
+    }
+    for (const [token, alive] of [
+      [app.session.accessToken, port !== 3100 && port !== 3103],
+      [studioSession.session.accessToken, port !== 3102 && port !== 3103],
+      [admin.session.accessToken, port !== 3101],
+    ]) {
+      assert.equal(
+        (
+          await fetch(backend + "/users/me", {
+            headers: { authorization: "Bearer " + token },
+          })
+        ).status,
+        alive ? 200 : 401,
+      );
+    }
+    if (port === 3100 || port === 3102)
+      await browser.product(port, "/dashboard");
     console.log(
-      `PASS: ${name} logout revokes linked products and issued API token`,
+      "PASS: " +
+        name +
+        " logout isolation across two shared-cookie tabs, issued API tokens and silent consumer re-entry",
     );
   }
+  const malformed = new Browser();
+  malformed.cookies.set("blynta-admin-session", {
+    value: "malformed",
+    path: "/",
+  });
+  assert.equal(
+    (await malformed.request(origins.ADMIN_APP_URL + "/")).status,
+    307,
+  );
+  console.log("PASS: malformed Admin cookie fails closed");
   console.log(
-    "All isolated HTTP SSO integration checks passed. OAuth consent and real MongoDB/mail delivery remain deployment checks.",
+    "All isolated HTTP auth boundary checks passed. Real OAuth consent and deployment remain manual checks.",
   );
 } finally {
   stop();

@@ -21,6 +21,7 @@ describe('AdminGuard', () => {
     const context = createMockContext({
       userId: 'admin-123',
       role: UserRole.ADMIN,
+      sessionKind: 'admin',
       email: 'admin@blynta.com',
     });
 

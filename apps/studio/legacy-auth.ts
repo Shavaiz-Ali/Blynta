@@ -1,3 +1,4 @@
+import { authSecret } from "@blynta/auth/backend";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -28,7 +29,7 @@ async function callBackend(
   return json.data;
 }
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
+  secret: authSecret("blynta-studio"),
   pages: { signIn: "/login", error: "/login" },
   session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
   // Both apps must explicitly configure matching cookie domain/name/secret for SSO.

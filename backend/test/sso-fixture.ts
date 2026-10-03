@@ -1,6 +1,6 @@
 /** Local integration fixture: real Nest/AuthService/bcrypt/JWT, in-memory users and Redis. No external accounts or databases. */
 import 'reflect-metadata';
-import { Controller, Get, Module, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Module, Req, Query, UseGuards } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -11,6 +11,7 @@ import { AuthController } from '../src/auth/auth.controller';
 import { AuthService } from '../src/auth/auth.service';
 import { AuthProviderConfigService } from '../src/auth/auth-provider-config.service';
 import { SsoController } from '../src/auth/sso.controller';
+import { AdminAuthController } from '../src/auth/admin-auth.controller';
 import { SsoService } from '../src/auth/sso.service';
 import { AuthRateLimitGuard } from '../src/auth/auth-rate-limit.guard';
 import { SsoBridgeGuard } from '../src/auth/sso-bridge.guard';
@@ -133,6 +134,11 @@ class FixtureController {
     return { allowed: true };
   }
   // Test-only verification code fixture, bound to loopback test server. Never registered by AppModule.
+  @Get('test/admin-role') adminRole(@Query('role') role: string) {
+    if (role === 'admin' || role === 'user')
+      accounts.get('admin@example.test')!.role = role;
+    return { updated: true };
+  }
   @Get('test/otp') otp() {
     return { otp: accounts.get('signup@example.test')?.otp };
   }
@@ -143,7 +149,12 @@ class FixtureController {
 
 @Module({
   imports: [PassportModule],
-  controllers: [AuthController, SsoController, FixtureController],
+  controllers: [
+    AuthController,
+    SsoController,
+    AdminAuthController,
+    FixtureController,
+  ],
   providers: [
     AuthService,
     SsoService,
@@ -168,8 +179,9 @@ class FixtureController {
     {
       provide: AuthProviderConfigService,
       useValue: {
-        getEnabledProviders: () => ['local'],
-        isProviderEnabled: () => false,
+        getEnabledProviders: () => ['local', 'google', 'facebook'],
+        isProviderEnabled: (provider: string) =>
+          ['google', 'facebook'].includes(provider),
       },
     },
     {

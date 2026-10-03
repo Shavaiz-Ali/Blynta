@@ -11,7 +11,19 @@ import { toast } from "sonner";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/";
+  const requested = searchParams.get("callbackUrl") || "/";
+  let callbackUrl = "/";
+  try {
+    const decoded = decodeURIComponent(requested);
+    if (
+      requested.startsWith("/") &&
+      !decoded.startsWith("//") &&
+      !/[\\\u0000-\u0020]/.test(decoded)
+    )
+      callbackUrl = requested;
+  } catch {
+    /* Invalid return paths go to the console root. */
+  }
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");

@@ -13,6 +13,7 @@ export default async function MainAdminLayout({
   if (!session?.user) redirect("/login");
 
   const hasAdminAccess = can(session.user.role, "users.read");
+  if (!hasAdminAccess || session.user.role !== "admin") redirect("/login");
 
   return (
     <SidebarProvider>

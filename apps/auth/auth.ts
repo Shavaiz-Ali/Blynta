@@ -1,3 +1,4 @@
+import { authSecret } from "@blynta/auth/backend";
 import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
@@ -24,10 +25,11 @@ type Identity = {
   expiresAt: number;
   accessTokenExpires: number;
 };
-const shared = sessionCallbacks();
+const shared = sessionCallbacks("consumer", "all");
 export const identityCookieName = `${process.env.NODE_ENV === "production" ? "__Host-" : ""}blynta-identity-session`;
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  secret: process.env.AUTH_SECRET,
+  secret: authSecret("blynta-identity"),
+  trustHost: true,
   logger: {
     error(error) {
       if (error instanceof CredentialsSignin) {

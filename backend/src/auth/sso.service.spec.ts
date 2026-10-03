@@ -24,7 +24,7 @@ describe('Blynta centralized identity security', () => {
   const users = { findById: jest.fn(() => Promise.resolve(user)) };
   const verifier = 'a'.repeat(43);
   const request = {
-    client_id: 'studio',
+    client_id: 'blynta-studio',
     redirect_uri: 'http://localhost:3002/auth/callback',
     response_type: 'code',
     state: 's'.repeat(43),
@@ -40,9 +40,9 @@ describe('Blynta centralized identity security', () => {
       NODE_ENV: 'test',
       SSO_BRIDGE_SECRET: 'test-bridge',
       SSO_CLIENTS: JSON.stringify({
-        studio: [request.redirect_uri],
-        main: ['http://localhost:3000/auth/callback'],
-        admin: ['http://localhost:3001/auth/callback'],
+        'blynta-studio': [request.redirect_uri],
+        'blynta-main': ['http://localhost:3000/auth/callback'],
+        'blynta-admin': ['http://localhost:3001/auth/callback'],
       }),
     });
     service = new SsoService(
@@ -72,9 +72,8 @@ describe('Blynta centralized identity security', () => {
   }
 
   it.each([
-    ['studio', request.redirect_uri],
-    ['main', 'http://localhost:3000/auth/callback'],
-    ['admin', 'http://localhost:3001/auth/callback'],
+    ['blynta-studio', request.redirect_uri],
+    ['blynta-main', 'http://localhost:3000/auth/callback'],
   ])('hands the existing identity to %s', async (client_id, redirect_uri) => {
     const identity = await service.createIdentity('existing-user');
     const authorization = await service.authorize(identity.sessionToken, {
@@ -119,7 +118,7 @@ describe('Blynta centralized identity security', () => {
     for (const changes of [
       { code_verifier: '' },
       { code_verifier: 'b'.repeat(43) },
-      { client_id: 'main' },
+      { client_id: 'blynta-main' },
       { redirect_uri: exchange.redirect_uri + '/evil' },
     ])
       await expect(
@@ -152,7 +151,7 @@ describe('Blynta centralized identity security', () => {
     const { identity } = await grant();
     const second = await service.authorize(identity.sessionToken, {
       ...request,
-      client_id: 'main',
+      client_id: 'blynta-main',
       redirect_uri: 'http://localhost:3000/auth/callback',
     });
     expect(second.code).toHaveLength(43);

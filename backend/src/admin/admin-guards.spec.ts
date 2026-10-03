@@ -6,6 +6,8 @@ import { AdminBillingController } from './billing/admin-billing.controller';
 import { AdminJobsController } from './jobs/admin-jobs.controller';
 import { AdminNotificationsController } from './notifications/admin-notifications.controller';
 import { AdminAuditController } from './audit/admin-audit.controller';
+import { AdminDashboardController } from './dashboard/admin-dashboard.controller';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 describe('Admin Controllers - AdminGuard Enforcement', () => {
   const controllers = [
@@ -14,6 +16,7 @@ describe('Admin Controllers - AdminGuard Enforcement', () => {
     AdminJobsController,
     AdminNotificationsController,
     AdminAuditController,
+    AdminDashboardController,
   ];
 
   const adminGuard = new AdminGuard();
@@ -32,6 +35,9 @@ describe('Admin Controllers - AdminGuard Enforcement', () => {
       // 1. Verify that the controller has guards applied
       const guards = Reflect.getMetadata('__guards__', ControllerClass);
       expect(guards).toBeDefined();
+      expect(guards).toEqual(
+        expect.arrayContaining([JwtAuthGuard, AdminGuard]),
+      );
 
       // 2. Verify non-admin gets 403 Forbidden
       const nonAdminCtx = createMockContext({
@@ -51,6 +57,7 @@ describe('Admin Controllers - AdminGuard Enforcement', () => {
       const adminCtx = createMockContext({
         userId: 'admin-user',
         role: UserRole.ADMIN,
+        sessionKind: 'admin',
         email: 'admin@blynta.com',
       });
 

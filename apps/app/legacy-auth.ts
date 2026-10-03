@@ -1,3 +1,4 @@
+import { authSecret, backendUrl } from "@blynta/auth/backend";
 /**
  * auth.ts — Main Auth.js (next-auth v5) configuration.
  *
@@ -18,14 +19,6 @@ import { authConfig } from "./auth.config";
 // ---------------------------------------------------------------------------
 // Backend API helper
 // ---------------------------------------------------------------------------
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-
-if (!BACKEND_URL) {
-  throw new Error(
-    "NEXT_PUBLIC_BACKEND_URL is not set. Add it to .env.local (e.g. http://localhost:5001)",
-  );
-}
 
 /** Shape returned by the NestJS backend inside the `data` envelope. */
 interface BackendUser {
@@ -49,7 +42,7 @@ async function callBackend<T>(
   path: string,
   body: Record<string, string>,
 ): Promise<T> {
-  const res = await fetch(`${BACKEND_URL}${path}`, {
+  const res = await fetch(`${backendUrl()}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -81,7 +74,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   debug: false,
   session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
 
-  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+  secret: authSecret("blynta-main"),
 
   providers: [
     // ------------------------------------------------------------------

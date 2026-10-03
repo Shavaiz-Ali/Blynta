@@ -1,4 +1,5 @@
 import { SsoService } from './sso.service';
+import { AdminAuthController } from './admin-auth.controller';
 import { SsoController } from './sso.controller';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { SsoBridgeGuard } from './sso-bridge.guard';
@@ -50,7 +51,7 @@ const DEFAULT_JWT_EXPIRES_IN = '7d';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController, SsoController],
+  controllers: [AuthController, SsoController, AdminAuthController],
   providers: [
     JwtStrategy,
     AuthService,

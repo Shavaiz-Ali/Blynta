@@ -155,7 +155,7 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
           className="rounded-lg text-xs text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
           onClick={() => {
             toast.info("Logged out of session.");
-            signOut({ callbackUrl: "/login" });
+            signOut({ callbackUrl: "/signed-out" });
           }}
         >
           Log out

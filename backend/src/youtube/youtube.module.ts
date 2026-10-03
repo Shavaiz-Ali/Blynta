@@ -34,7 +34,7 @@ import { StorageModule } from '../storage/storage.module';
     YouTubeOAuthService,
     YouTubeApiService,
     YouTubePublishingService,
-    YouTubeProcessor,
+    ...(process.env.VERCEL ? [] : [YouTubeProcessor]),
   ],
   exports: [
     YouTubePublishingService,
