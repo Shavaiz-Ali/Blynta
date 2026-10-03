@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./server": "./src/server.ts",
+    "./client": "./src/client.ts",
     "./backend": "./src/backend.ts",
     "./proxy": "./src/proxy.ts"
   },

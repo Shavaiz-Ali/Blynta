@@ -1,5 +1,6 @@
 "use client";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { logoutProduct } from "@blynta/auth/client";
 import { AppDropdownMenu } from "./AppDropdownMenu";
 import { AppButton } from "./AppButton";
 import { AppAvatar } from "./AppAvatar";
@@ -35,7 +36,7 @@ export function UserDropdown() {
           icon: <LogOut />,
           separator: true,
           onClick: () => {
-            void signOut({ redirectTo: "/auth/logged-out" });
+            void logoutProduct();
           },
         },
       ]}

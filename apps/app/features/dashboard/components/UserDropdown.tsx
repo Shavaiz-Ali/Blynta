@@ -1,7 +1,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { signOut } from "next-auth/react";
+import { logoutProduct } from "@blynta/auth/client";
 import { useTheme } from "next-themes";
 import type { UserProfile } from "@/features/auth/types";
 import {
@@ -155,7 +155,7 @@ export function UserDropdown({ profile }: { profile: UserProfile }) {
           className="rounded-lg text-xs text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
           onClick={() => {
             toast.info("Logged out of session.");
-            signOut({ callbackUrl: "/auth/logged-out" });
+            void logoutProduct();
           }}
         >
           Log out

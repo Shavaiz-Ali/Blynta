@@ -6,6 +6,12 @@ import { authSecret } from "./backend";
 export function productProxy(clientId: string) {
   return async function proxy(request: NextRequest) {
     const path = request.nextUrl.pathname;
+    // Old bundles/bookmarks must not render a removed page or restart consumer SSO.
+    if (
+      path === "/signed-out" &&
+      ["blynta-main", "blynta-studio"].includes(clientId)
+    )
+      return NextResponse.redirect(new URL("/auth/logged-out", request.url));
     if (
       [
         "/login",

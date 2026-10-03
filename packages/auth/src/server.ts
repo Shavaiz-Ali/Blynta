@@ -191,6 +191,7 @@ async function readTransaction(
 
 /** Per-product Auth.js encrypted cookie contains the opaque server credential, never the public session JSON. */
 export function createProductAuth(clientId: string, appEnv: string) {
+  const shared = sessionCallbacks("consumer", "product");
   return NextAuth({
     pages: { signIn: "/login", error: "/login" },
     secret: authSecret(clientId),
@@ -240,7 +241,18 @@ export function createProductAuth(clientId: string, appEnv: string) {
         },
       }),
     ],
-    ...sessionCallbacks("consumer", "product"),
+    ...shared,
+    callbacks: {
+      ...shared.callbacks,
+      async redirect({ url, baseUrl }) {
+        const destination = new URL(url, baseUrl);
+        if (destination.origin !== new URL(baseUrl).origin) return baseUrl;
+        // Accept sign-out requests from cached bundles without restoring the old page.
+        if (destination.pathname === "/signed-out")
+          return new URL("/auth/logged-out", baseUrl).href;
+        return destination.href;
+      },
+    },
   });
 }
 

@@ -267,7 +267,7 @@ class Browser {
     assert.equal(session.user?.role, "admin");
     return { session };
   }
-  async logout(port) {
+  async logout(port, destination) {
     const own = "http://localhost:" + port;
     const csrf = await (await this.request(own + "/api/auth/csrf")).json();
     return (
@@ -281,7 +281,9 @@ class Browser {
         body: new URLSearchParams({
           csrfToken: csrf.csrfToken,
           callbackUrl:
-            port === 3100 || port === 3102 ? "/auth/logged-out" : "/login",
+            destination || port === 3100 || port === 3102
+              ? "/auth/logged-out"
+              : "/login",
         }),
       })
     ).json();
@@ -858,9 +860,21 @@ try {
         value: "stale-pending-request",
         path: "/",
       });
-    const result = await browser.logout(port);
+    const result = await browser.logout(
+      port,
+      port === 3100 || port === 3102 ? "/signed-out" : undefined,
+    );
     if (port === 3100 || port === 3102) {
       assert.ok(result.url.endsWith("/auth/logged-out"));
+      const obsolete = await browser.request(
+        "http://localhost:" + port + "/signed-out",
+      );
+      assert.equal(obsolete.status, 307);
+      assert.equal(
+        new URL(obsolete.headers.get("location"), "http://localhost:" + port)
+          .pathname,
+        "/auth/logged-out",
+      );
       const relay = await browser.request(result.url);
       const destination = new URL(relay.headers.get("location"));
       assert.equal(destination.origin, origins.AUTH_APP_URL);

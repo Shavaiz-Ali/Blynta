@@ -261,3 +261,9 @@ Shared auth and all four frontends pass type checks; modified central Auth files
 pass lint; Auth/Main/Studio production builds and changed-code formatting pass.
 Real OAuth consent remains a manual check. Deploy the updated Auth, Main and
 Studio frontends; no backend or Admin policy change is needed for this UX update.
+
+The subsequent [deployed logout diagnosis](logout-redirect-fix.md) records public
+old-build evidence, the exact former dropdown callbacks, and the additional
+client navigation guard and server compatibility redirects. The obsolete
+`/signed-out` pages stay removed; direct old requests now redirect to the central
+landing. Studio's session watcher cannot restart SSO during explicit logout.
