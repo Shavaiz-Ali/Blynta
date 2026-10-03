@@ -23,7 +23,7 @@ export type SourceVideoDocument = SourceVideo & Document;
  */
 @Schema({ timestamps: true })
 export class SourceVideo {
-  @Prop({ required: true, enum: SourcePlatform })
+  @Prop({ type: String, required: true, enum: SourcePlatform })
   platform: SourcePlatform;
 
   @Prop({ required: true })

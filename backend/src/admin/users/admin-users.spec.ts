@@ -6,7 +6,10 @@ import { AdminUsersController } from './admin-users.controller';
 import { User, UserPlan, UserRole } from '../../users/schemas/user.schema';
 import { Customer } from '../../billing/schemas/customer.schema';
 import { Job } from '../../jobs/schemas/job.schema';
-import { Activity, ActivityActorType } from '../../activities/schemas/activity.schema';
+import {
+  Activity,
+  ActivityActorType,
+} from '../../activities/schemas/activity.schema';
 import { ActivitiesService } from '../../activities/activities.service';
 
 describe('AdminUsers Module', () => {
@@ -151,7 +154,9 @@ describe('AdminUsers Module', () => {
         .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(3) })
         .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(2) })
         .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(1) });
-      activityModelMock.countDocuments.mockReturnValue({ exec: jest.fn().mockResolvedValue(4) });
+      activityModelMock.countDocuments.mockReturnValue({
+        exec: jest.fn().mockResolvedValue(4),
+      });
 
       const result = await controller.getUserDetail(mockTargetUserId);
       expect(result.user).toBeDefined();
@@ -175,11 +180,15 @@ describe('AdminUsers Module', () => {
         save: jest.fn().mockResolvedValue(undefined),
       };
       userModelMock.findById
-        .mockReturnValueOnce({ exec: jest.fn().mockResolvedValue(userDocument) })
+        .mockReturnValueOnce({
+          exec: jest.fn().mockResolvedValue(userDocument),
+        })
         .mockReturnValueOnce({
           select: jest.fn().mockReturnValue({
             lean: jest.fn().mockReturnValue({
-              exec: jest.fn().mockResolvedValue({ ...mockUserDoc, role: UserRole.ADMIN }),
+              exec: jest
+                .fn()
+                .mockResolvedValue({ ...mockUserDoc, role: UserRole.ADMIN }),
             }),
           }),
         });
@@ -203,15 +212,11 @@ describe('AdminUsers Module', () => {
         reason: 'Promoted to admin by superadmin support ticket #42',
       };
 
-      const result = await controller.updateUser(
-        mockTargetUserId,
-        updateDto,
-        {
-          userId: mockAdminId,
-          email: 'superadmin@blynta.com',
-          role: UserRole.ADMIN,
-        },
-      );
+      const result = await controller.updateUser(mockTargetUserId, updateDto, {
+        userId: mockAdminId,
+        email: 'superadmin@blynta.com',
+        role: UserRole.ADMIN,
+      });
 
       // Primary write check
       expect(result.role).toBe(UserRole.ADMIN);

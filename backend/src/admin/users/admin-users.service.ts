@@ -6,8 +6,16 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as bcrypt from 'bcrypt';
-import { User, UserDocument, UserRole, UserPlan } from '../../users/schemas/user.schema';
-import { Customer, CustomerDocument } from '../../billing/schemas/customer.schema';
+import {
+  User,
+  UserDocument,
+  UserRole,
+  UserPlan,
+} from '../../users/schemas/user.schema';
+import {
+  Customer,
+  CustomerDocument,
+} from '../../billing/schemas/customer.schema';
 import { Job, JobDocument, JobStatus } from '../../jobs/schemas/job.schema';
 import {
   Activity,
@@ -47,7 +55,9 @@ export class AdminUsersService {
     return new Types.ObjectId(id);
   }
 
-  async listUsers(dto: ListUsersAdminDto): Promise<PaginatedResult<UserDocument>> {
+  async listUsers(
+    dto: ListUsersAdminDto,
+  ): Promise<PaginatedResult<UserDocument>> {
     const page = Math.max(1, dto.page || 1);
     const limit = Math.min(100, Math.max(1, dto.limit || 25));
     const skip = (page - 1) * limit;
@@ -202,8 +212,12 @@ export class AdminUsersService {
     const [totalJobs, completedJobs, failedJobs, totalEvents] =
       await Promise.all([
         this.jobModel.countDocuments({ userId }).exec(),
-        this.jobModel.countDocuments({ userId, status: JobStatus.COMPLETED }).exec(),
-        this.jobModel.countDocuments({ userId, status: JobStatus.FAILED }).exec(),
+        this.jobModel
+          .countDocuments({ userId, status: JobStatus.COMPLETED })
+          .exec(),
+        this.jobModel
+          .countDocuments({ userId, status: JobStatus.FAILED })
+          .exec(),
         this.activityModel.countDocuments({ userId }).exec(),
       ]);
 

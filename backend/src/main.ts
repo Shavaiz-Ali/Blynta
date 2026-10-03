@@ -58,12 +58,27 @@ async function bootstrap() {
   });
   instance.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-
   const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') ?? [])
     .map((origin) => origin.trim())
     .filter(Boolean);
 
-  console.log(allowedOrigins);
+  if (
+    allowedOrigins.some((origin) => {
+      const url = new URL(origin);
+      return (
+        origin === '*' ||
+        url.origin !== origin ||
+        (url.protocol !== 'https:' &&
+          !(
+            process.env.NODE_ENV !== 'production' &&
+            url.protocol === 'http:' &&
+            ['localhost', '127.0.0.1'].includes(url.hostname)
+          ))
+      );
+    })
+  ) {
+    throw new Error('ALLOWED_ORIGINS must contain exact origins');
+  }
 
   app.enableCors({
     origin: allowedOrigins,

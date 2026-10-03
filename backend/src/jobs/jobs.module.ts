@@ -13,10 +13,11 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MailModule } from '../mail/mail.module';
 import { ActivitiesModule } from '../activities/activities.module';
 import { JobsReconciliationService } from './jobs-reconciliation.service';
+import { StudioAssetSchema } from '../studio/studio.schemas';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Job.name, schema: JobSchema }]),
+    MongooseModule.forFeature([{ name: Job.name, schema: JobSchema }, { name: 'StudioAsset', schema: StudioAssetSchema }]),
     BullModule.registerQueue({ name: JOBS_QUEUE }),
     UsersModule,
     MediaModule,

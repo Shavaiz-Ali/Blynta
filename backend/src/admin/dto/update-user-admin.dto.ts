@@ -24,7 +24,9 @@ export class UpdateUserAdminDto {
   @IsBoolean()
   emailVerified?: boolean;
 
-  @IsNotEmpty({ message: 'A reason is required for administrative user updates' })
+  @IsNotEmpty({
+    message: 'A reason is required for administrative user updates',
+  })
   @IsString()
   reason: string;
 }

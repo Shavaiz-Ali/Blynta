@@ -208,13 +208,25 @@ export class UsersService {
     ) {
       return false;
     }
-    return bcrypt.compare(otp, user.otpCode);
+    if (!(await bcrypt.compare(otp, user.otpCode))) return false;
+    const consumed = await this.userModel.updateOne(
+      {
+        _id: userId,
+        otpCode: user.otpCode,
+        otpExpiresAt: { $gt: new Date() },
+      },
+      {
+        $set: { emailVerified: true },
+        $unset: { otpCode: 1, otpExpiresAt: 1 },
+      },
+    );
+    return consumed.modifiedCount === 1;
   }
 
   async markEmailVerified(userId: string): Promise<void> {
     await this.userModel.updateOne(
       { _id: userId },
-      { emailVerified: true, otpCode: undefined, otpExpiresAt: undefined },
+      { $set: { emailVerified: true } },
     );
   }
 
@@ -245,16 +257,24 @@ export class UsersService {
     return null;
   }
 
-  async resetPassword(userId: string, newPassword: string): Promise<void> {
+  async resetPassword(
+    userId: string,
+    newPassword: string,
+    expectedTokenHash: string,
+  ): Promise<boolean> {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.userModel.updateOne(
-      { _id: userId },
+    const consumed = await this.userModel.updateOne(
       {
-        password: hashedPassword,
-        passwordResetToken: undefined,
-        passwordResetExpiresAt: undefined,
+        _id: userId,
+        passwordResetToken: expectedTokenHash,
+        passwordResetExpiresAt: { $gt: new Date() },
+      },
+      {
+        $set: { password: hashedPassword },
+        $unset: { passwordResetToken: 1, passwordResetExpiresAt: 1 },
       },
     );
+    return consumed.modifiedCount === 1;
   }
 
   async updateAvatar(

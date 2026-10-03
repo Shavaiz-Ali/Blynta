@@ -1,3 +1,4 @@
+import { SsoService } from './sso.service';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
@@ -33,6 +34,7 @@ export class AuthService {
     private mailService: MailService,
     private jwtService: JwtService,
     private activitiesService: ActivitiesService,
+    private sso: SsoService,
   ) {}
 
   async signup(dto: CreateUserDto) {
@@ -66,7 +68,7 @@ export class AuthService {
 
   async validateLogin(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmailWithPassword(dto.email);
-    if (!user || !user.password) {
+    if (!user || !user.isActive || !user.password) {
       throw new InvalidCredentialsException();
     }
     const isValid = await this.usersService.validatePassword(
@@ -116,6 +118,8 @@ export class AuthService {
       avatarUrl: dto.avatarUrl,
     });
 
+    if (!user.isActive) throw new InvalidCredentialsException();
+
     if (!user.hasLoggedInOnce) {
       await this.mailService.queueWelcomeEmail(user.email, user.name);
     }
@@ -146,6 +150,14 @@ export class AuthService {
     });
 
     return { id, email: user.email, role: user.role, accessToken };
+  }
+
+  async verifyIdentityToken(token: string): Promise<{ sub: string }> {
+    try {
+      return await this.jwtService.verifyAsync<{ sub: string }>(token);
+    } catch {
+      throw new InvalidCredentialsException();
+    }
   }
 
   private generateOtp(): string {
@@ -248,7 +260,14 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired reset link');
     }
 
-    await this.usersService.resetPassword(user._id.toString(), newPassword);
+    const consumed = await this.usersService.resetPassword(
+      user._id.toString(),
+      newPassword,
+      user.passwordResetToken!,
+    );
+    if (!consumed)
+      throw new BadRequestException('Invalid or expired reset link');
+    await this.sso.revokeUser(user._id.toString());
 
     await this.activitiesService.queueCreate({
       userId: user._id,

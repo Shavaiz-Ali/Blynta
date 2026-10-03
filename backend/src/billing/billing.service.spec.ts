@@ -104,14 +104,23 @@ describe('BillingService', () => {
       providers: [
         BillingService,
         { provide: PaddleService, useValue: paddleService },
-        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
+        },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: MailService, useValue: mailService },
         { provide: ActivitiesService, useValue: activitiesService },
         { provide: getModelToken(User.name), useValue: userModel },
         { provide: getModelToken(Customer.name), useValue: customerModel },
-        { provide: getModelToken(SubscriptionEvent.name), useValue: subscriptionEventModel },
-        { provide: getModelToken(ProcessedPaddleEvent.name), useValue: processedEventModel },
+        {
+          provide: getModelToken(SubscriptionEvent.name),
+          useValue: subscriptionEventModel,
+        },
+        {
+          provide: getModelToken(ProcessedPaddleEvent.name),
+          useValue: processedEventModel,
+        },
       ],
     }).compile();
 
@@ -136,8 +145,12 @@ describe('BillingService', () => {
       status: 'active',
       customData: { blyntaUserId: String(userId) },
       items: [{ price: { id: priceId, productId: 'pro_xxx' } }],
-      currentBillingPeriod: { endsAt: new Date(Date.now() + 30 * 86400_000).toISOString() },
-      scheduledChange: scheduledAction ? { action: scheduledAction, effectiveAt: new Date().toISOString() } : null,
+      currentBillingPeriod: {
+        endsAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
+      },
+      scheduledChange: scheduledAction
+        ? { action: scheduledAction, effectiveAt: new Date().toISOString() }
+        : null,
     });
 
     beforeEach(() => {
@@ -183,7 +196,8 @@ describe('BillingService', () => {
 
       // findByIdAndUpdate on userModel is the credit-writing call
       // It should be called for plan update but creditsBalance must NOT be present
-      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock.calls;
+      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock
+        .calls;
       for (const call of userUpdateCalls) {
         const updateDoc = call[1];
         expect(updateDoc?.$set?.creditsBalance).toBeUndefined();
@@ -198,7 +212,8 @@ describe('BillingService', () => {
         'subscription.updated',
       );
 
-      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock.calls;
+      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock
+        .calls;
       for (const call of userUpdateCalls) {
         expect(call[1]?.$set?.creditsBalance).toBeUndefined();
       }
@@ -211,7 +226,9 @@ describe('BillingService', () => {
         'subscription.updated',
       );
 
-      expect(mailService.queueSubscriptionActivatedEmail).not.toHaveBeenCalled();
+      expect(
+        mailService.queueSubscriptionActivatedEmail,
+      ).not.toHaveBeenCalled();
     });
   });
 
@@ -261,18 +278,23 @@ describe('BillingService', () => {
           status: 'active',
           customData: { blyntaUserId: String(userId) },
           items: [{ price: { id: priceId, productId: 'pro_xxx' } }],
-          currentBillingPeriod: { endsAt: new Date(Date.now() + 30 * 86400_000).toISOString() },
+          currentBillingPeriod: {
+            endsAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
+          },
         },
         'evt_upgrade',
         'subscription.created',
       );
 
-      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock.calls;
+      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock
+        .calls;
       const creditUpdateCall = userUpdateCalls.find(
         (call) => call[1]?.$set?.creditsBalance !== undefined,
       );
       expect(creditUpdateCall).toBeDefined();
-      expect(creditUpdateCall[1].$set.creditsBalance).toBe(PLAN_CREDITS[UserPlan.PRO]);
+      expect(creditUpdateCall[1].$set.creditsBalance).toBe(
+        PLAN_CREDITS[UserPlan.PRO],
+      );
     });
 
     it('should send subscription activated email on real upgrade', async () => {
@@ -283,13 +305,17 @@ describe('BillingService', () => {
           status: 'active',
           customData: { blyntaUserId: String(userId) },
           items: [{ price: { id: priceId, productId: 'pro_xxx' } }],
-          currentBillingPeriod: { endsAt: new Date(Date.now() + 30 * 86400_000).toISOString() },
+          currentBillingPeriod: {
+            endsAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
+          },
         },
         'evt_upgrade_email',
         'subscription.created',
       );
 
-      expect(mailService.queueSubscriptionActivatedEmail).toHaveBeenCalledTimes(1);
+      expect(mailService.queueSubscriptionActivatedEmail).toHaveBeenCalledTimes(
+        1,
+      );
     });
   });
 
@@ -341,12 +367,15 @@ describe('BillingService', () => {
         'transaction.completed',
       );
 
-      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock.calls;
+      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock
+        .calls;
       const creditCall = userUpdateCalls.find(
         (call) => call[1]?.$set?.creditsBalance !== undefined,
       );
       expect(creditCall).toBeDefined();
-      expect(creditCall[1].$set.creditsBalance).toBe(PLAN_CREDITS[UserPlan.PRO]);
+      expect(creditCall[1].$set.creditsBalance).toBe(
+        PLAN_CREDITS[UserPlan.PRO],
+      );
     });
   });
 
@@ -434,7 +463,8 @@ describe('BillingService', () => {
         'subscription.created',
       );
 
-      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock.calls;
+      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock
+        .calls;
       const creditCall = userUpdateCalls.find(
         (call) => call[1]?.$set?.creditsResetAt !== undefined,
       );
@@ -461,7 +491,8 @@ describe('BillingService', () => {
         'subscription.created',
       );
 
-      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock.calls;
+      const userUpdateCalls = (userModel.findByIdAndUpdate as jest.Mock).mock
+        .calls;
       const creditCall = userUpdateCalls.find(
         (call) => call[1]?.$set?.creditsResetAt !== undefined,
       );
@@ -524,13 +555,17 @@ describe('BillingService', () => {
           status: 'active',
           customData: { blyntaUserId: String(userId) },
           items: [{ price: { id: 'pri_pro_monthly', productId: 'pro_x' } }],
-          scheduledChange: { action: 'cancel', effectiveAt: new Date().toISOString() },
+          scheduledChange: {
+            action: 'cancel',
+            effectiveAt: new Date().toISOString(),
+          },
         },
         'evt_audit_no_credits',
         'subscription.updated',
       );
 
-      const createCalls = (subscriptionEventModel.create as jest.Mock).mock.calls;
+      const createCalls = (subscriptionEventModel.create as jest.Mock).mock
+        .calls;
       if (createCalls.length > 0) {
         const auditDoc = createCalls[createCalls.length - 1][0];
         expect(auditDoc.creditsGranted).toBe(0);
@@ -568,7 +603,8 @@ describe('BillingService', () => {
         'subscription.created',
       );
 
-      const createCalls = (subscriptionEventModel.create as jest.Mock).mock.calls;
+      const createCalls = (subscriptionEventModel.create as jest.Mock).mock
+        .calls;
       if (createCalls.length > 0) {
         const auditDoc = createCalls[createCalls.length - 1][0];
         expect(auditDoc.creditsGranted).toBe(PLAN_CREDITS[UserPlan.PRO]);

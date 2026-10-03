@@ -1,4 +1,4 @@
-import { ExecutionContext, ForbiddenException, } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { AdminGuard } from './guards/admin.guard';
 import { UserRole } from '../users/schemas/user.schema';
 import { AdminUsersController } from './users/admin-users.controller';

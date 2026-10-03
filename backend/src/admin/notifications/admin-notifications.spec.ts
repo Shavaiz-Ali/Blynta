@@ -82,14 +82,11 @@ describe('AdminNotifications Module', () => {
         reason: 'Monthly infrastructure upgrade',
       };
 
-      const result = await controller.broadcast(
-        broadcastDto,
-        {
-          userId: mockAdminId,
-          email: 'admin@blynta.com',
-          role: UserRole.ADMIN,
-        },
-      );
+      const result = await controller.broadcast(broadcastDto, {
+        userId: mockAdminId,
+        email: 'admin@blynta.com',
+        role: UserRole.ADMIN,
+      });
 
       // Verify recipient matching & queueing
       expect(result.queuedCount).toBe(2);
@@ -119,7 +116,9 @@ describe('AdminNotifications Module', () => {
         expect.objectContaining({
           actorType: ActivityActorType.ADMIN,
           actorId: expect.any(Types.ObjectId),
-          description: expect.stringContaining('Monthly infrastructure upgrade'),
+          description: expect.stringContaining(
+            'Monthly infrastructure upgrade',
+          ),
           metadata: expect.objectContaining({
             recipientCount: 2,
             reason: 'Monthly infrastructure upgrade',

@@ -107,6 +107,11 @@ export class R2Service {
     }
   }
 
+  async objectInfo(objectKey: string) {
+    const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }));
+    return { size: result.ContentLength, contentType: result.ContentType };
+  }
+
   /**
    * Downloads an R2 object back to a local temp path.
    * Needed because ffmpeg/whisper.cpp operate on real files, not remote URLs.

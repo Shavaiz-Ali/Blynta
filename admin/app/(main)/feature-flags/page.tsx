@@ -1,1 +1,0 @@
-import { CapabilityView } from "@/features/admin-system/CapabilityView"; export default function Page() { return <CapabilityView kind="flags" title="Feature flags" description="Environment and audience controls for platform features." />; }

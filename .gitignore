@@ -1,0 +1,9 @@
+node_modules/
+.turbo/
+.env*
+!.env.example
+!.env.sso.example
+*.log
+.pnpm-store/
+.test-results/
+.migration/

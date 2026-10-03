@@ -7,7 +7,10 @@ import { Customer } from '../../billing/schemas/customer.schema';
 import { SubscriptionEvent } from '../../billing/schemas/subscription-event.schema';
 import { CreditAdjustment } from '../schemas/credit-adjustment.schema';
 import { User, UserPlan, UserRole } from '../../users/schemas/user.schema';
-import { Activity, ActivityActorType } from '../../activities/schemas/activity.schema';
+import {
+  Activity,
+  ActivityActorType,
+} from '../../activities/schemas/activity.schema';
 import { ActivitiesService } from '../../activities/activities.service';
 import { PaddleService } from '../../paddle/paddle.service';
 import { BillingService } from '../../billing/billing.service';
@@ -208,10 +211,9 @@ describe('AdminBilling Module', () => {
       );
 
       // Paddle SDK check
-      expect(paddleServiceMock.paddle.subscriptions.cancel).toHaveBeenCalledWith(
-        'sub_test_123',
-        { effectiveFrom: 'immediately' },
-      );
+      expect(
+        paddleServiceMock.paddle.subscriptions.cancel,
+      ).toHaveBeenCalledWith('sub_test_123', { effectiveFrom: 'immediately' });
 
       // Billing service check
       expect(billingServiceMock.revertSubscriptionToFree).toHaveBeenCalledWith(

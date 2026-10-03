@@ -19,6 +19,7 @@ import { ActivitiesModule } from './activities/activities.module';
 import { SharesModule } from './share/shares.module';
 import { YouTubeModule } from './youtube/youtube.module';
 import { AdminModule } from './admin/admin.module';
+import { StudioModule } from './studio/studio.module';
 
 const logger = new Logger('MongooseModule');
 
@@ -75,6 +76,7 @@ const logger = new Logger('MongooseModule');
     SharesModule,
     YouTubeModule,
     AdminModule,
+    StudioModule,
   ],
   controllers: [AppController],
   providers: [AppService],

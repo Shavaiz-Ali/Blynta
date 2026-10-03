@@ -7,7 +7,10 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Customer, CustomerDocument } from '../../billing/schemas/customer.schema';
+import {
+  Customer,
+  CustomerDocument,
+} from '../../billing/schemas/customer.schema';
 import {
   SubscriptionEvent,
   SubscriptionEventDocument,
@@ -140,15 +143,16 @@ export class AdminBillingService {
         .exec(),
       this.userModel
         .findById(userObjectId)
-        .select('email name plan creditsBalance creditsResetAt totalCreditsUsed')
+        .select(
+          'email name plan creditsBalance creditsResetAt totalCreditsUsed',
+        )
         .lean()
         .exec(),
     ]);
 
     return {
       customer: customer as unknown as CustomerDocument | null,
-      subscriptionEvents:
-        events as unknown as SubscriptionEventDocument[],
+      subscriptionEvents: events as unknown as SubscriptionEventDocument[],
       creditAdjustments:
         creditAdjustments as unknown as CreditAdjustmentDocument[],
       user: user as unknown as Partial<UserDocument> | null,

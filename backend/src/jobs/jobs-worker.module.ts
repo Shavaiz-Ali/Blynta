@@ -16,6 +16,8 @@ import { MailModule } from '../mail/mail.module';
 import { ActivitiesModule } from '../activities/activities.module';
 import { CommonModule } from '../common/common.module';
 import { Connection } from 'mongoose';
+import { StudioModule } from '../studio/studio.module';
+import { StudioProcessor } from '../studio/studio.processor';
 
 const logger = new Logger('JobsWorkerMongoose');
 
@@ -58,7 +60,9 @@ const logger = new Logger('JobsWorkerMongoose');
     NotificationsModule,
     MailModule,
     ActivitiesModule,
+    StudioModule,
+    BullModule.registerQueue({ name: 'studio' }),
   ],
-  providers: [JobsService, JobsProcessor, JobsReconciliationService],
+  providers: [JobsService, JobsProcessor, JobsReconciliationService, StudioProcessor],
 })
 export class JobsWorkerModule {}

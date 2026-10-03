@@ -13,7 +13,10 @@ import {
   CreditAdjustmentSchema,
 } from './schemas/credit-adjustment.schema';
 import { Job, JobSchema } from '../jobs/schemas/job.schema';
-import { Activity, ActivitySchema } from '../activities/schemas/activity.schema';
+import {
+  Activity,
+  ActivitySchema,
+} from '../activities/schemas/activity.schema';
 import {
   Notification,
   NotificationSchema,

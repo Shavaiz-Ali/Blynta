@@ -1,3 +1,7 @@
+import { SsoService } from './sso.service';
+import { SsoController } from './sso.controller';
+import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { SsoBridgeGuard } from './sso-bridge.guard';
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -46,8 +50,15 @@ const DEFAULT_JWT_EXPIRES_IN = '7d';
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController],
-  providers: [JwtStrategy, AuthService, AuthProviderConfigService],
+  controllers: [AuthController, SsoController],
+  providers: [
+    JwtStrategy,
+    AuthService,
+    AuthProviderConfigService,
+    SsoService,
+    AuthRateLimitGuard,
+    SsoBridgeGuard,
+  ],
   exports: [PassportModule, JwtModule],
 })
 export class AuthModule {}

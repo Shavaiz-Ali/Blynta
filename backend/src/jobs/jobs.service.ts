@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -17,6 +18,7 @@ import { JobAccessDeniedException } from '../common/exceptions';
 import { UsersService } from '../users/users.service';
 import { JOBS_QUEUE, JOBS_TYPES } from './jobs.constants';
 import { R2Service } from '../storage/r2.service';
+import type { StudioAsset } from '../studio/studio.schemas';
 import { ActivitiesService } from '../activities/activities.service';
 import {
   ActivityActorType,
@@ -37,6 +39,7 @@ export class JobsService {
     private configService: ConfigService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
+    @Optional() @InjectModel('StudioAsset') private studioAssets?: Model<StudioAsset>,
   ) {}
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
@@ -231,7 +234,7 @@ export class JobsService {
     for (const clip of job.clips) {
       if (clip.r2ObjectKey) {
         try {
-          await this.r2Service.deleteFile(clip.r2ObjectKey);
+          if (!(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))) await this.r2Service.deleteFile(clip.r2ObjectKey);
         } catch (err) {
           this.logger.warn(
             `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,
@@ -275,7 +278,7 @@ export class JobsService {
     // by the processor's finally block after the job completed.
     if (clip.r2ObjectKey) {
       try {
-        await this.r2Service.deleteFile(clip.r2ObjectKey);
+        if (!(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))) await this.r2Service.deleteFile(clip.r2ObjectKey);
       } catch (err) {
         this.logger.warn(
           `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,

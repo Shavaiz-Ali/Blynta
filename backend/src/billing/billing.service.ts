@@ -33,10 +33,7 @@ import {
   ProcessedPaddleEvent,
   ProcessedPaddleEventDocument,
 } from './schemas/processed-paddle-event.schema';
-import {
-  Customer,
-  CustomerDocument,
-} from './schemas/customer.schema';
+import { Customer, CustomerDocument } from './schemas/customer.schema';
 import {
   SubscriptionEvent,
   SubscriptionEventDocument,
@@ -315,15 +312,14 @@ export class BillingService {
     const priceId = this.paddleService.getPriceIdForPlan(dto.plan);
 
     try {
-      const transaction =
-        await this.paddleService.paddle.transactions.create({
-          customerId,
-          items: [{ priceId, quantity: 1 }],
-          customData: {
-            blyntaUserId: String(user._id),
-            requestedPlan: dto.plan,
-          },
-        });
+      const transaction = await this.paddleService.paddle.transactions.create({
+        customerId,
+        items: [{ priceId, quantity: 1 }],
+        customData: {
+          blyntaUserId: String(user._id),
+          requestedPlan: dto.plan,
+        },
+      });
 
       let checkoutUrl = transaction.checkout?.url;
       if (!checkoutUrl) {
@@ -540,8 +536,7 @@ export class BillingService {
 
     try {
       const subId =
-        paddleSubscriptionId ||
-        `cust_${paddleCustomerId || String(user._id)}`;
+        paddleSubscriptionId || `cust_${paddleCustomerId || String(user._id)}`;
       const upgradeDedupeKey = `billing:upgrade:${subId}`;
 
       await this.notificationsService.queueCreateIfNotExists({
@@ -787,9 +782,7 @@ export class BillingService {
     const scheduledChangeAction = scheduledChange?.action ?? null;
     const scheduledChangeAt =
       scheduledChange?.effectiveAt || scheduledChange?.effective_at
-        ? new Date(
-            scheduledChange.effectiveAt || scheduledChange.effective_at,
-          )
+        ? new Date(scheduledChange.effectiveAt || scheduledChange.effective_at)
         : null;
 
     let userEmail: string | undefined;

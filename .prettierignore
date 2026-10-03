@@ -1,0 +1,22 @@
+# Installed dependencies, build output and local recovery snapshots
+**/node_modules/**
+**/.next/**
+**/.turbo/**
+**/dist/**
+**/build/**
+**/out/**
+**/coverage/**
+.git/**
+.migration/**
+.pnpm-store/**
+.test-results/**
+
+# Generated declarations, dependency locks and private environment files
+**/next-env.d.ts
+backend/src/users/schemas/user.schema.js
+backend/src/users/utils/generate-referral-code.js
+**/*.tsbuildinfo
+pnpm-lock.yaml
+**/package-lock.json
+**/yarn.lock
+**/.env*

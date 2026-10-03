@@ -8,9 +8,7 @@ import {
   NOTIFICATIONS_QUEUE,
   NOTIFICATION_JOBS,
 } from '../../notifications/notifications.constants';
-import {
-  NotificationCategory,
-} from '../../notifications/schemas/notification.schema';
+import { NotificationCategory } from '../../notifications/schemas/notification.schema';
 import {
   ActivityActorType,
   ActivityCategory,

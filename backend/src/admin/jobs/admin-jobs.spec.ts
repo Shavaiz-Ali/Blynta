@@ -61,7 +61,10 @@ describe('AdminJobs Module', () => {
           NOTIFICATIONS_QUEUE,
           MAIL_QUEUE,
           ACTIVITIES_QUEUE,
-        ].map((name) => ({ provide: getQueueToken(name), useValue: queueMock })),
+        ].map((name) => ({
+          provide: getQueueToken(name),
+          useValue: queueMock,
+        })),
         { provide: ActivitiesService, useValue: activitiesServiceMock },
       ],
     }).compile();

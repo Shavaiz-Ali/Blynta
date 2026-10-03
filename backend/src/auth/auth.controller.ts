@@ -1,4 +1,6 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { SsoBridgeGuard } from './sso-bridge.guard';
 import { AuthService } from './auth.service';
 import { AuthProviderConfigService } from './auth-provider-config.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
@@ -12,6 +14,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
+@UseGuards(AuthRateLimitGuard)
 export class AuthController {
   constructor(
     private authService: AuthService,
@@ -35,6 +38,7 @@ export class AuthController {
   }
 
   @Post('google')
+  @UseGuards(SsoBridgeGuard)
   async googleLogin(@Body() dto: SocialLoginDto) {
     const enabled = await this.providerConfigService.isProviderEnabled(
       AuthProvider.GOOGLE,
@@ -44,6 +48,7 @@ export class AuthController {
   }
 
   @Post('facebook')
+  @UseGuards(SsoBridgeGuard)
   async facebookLogin(@Body() dto: SocialLoginDto) {
     const enabled = await this.providerConfigService.isProviderEnabled(
       AuthProvider.FACEBOOK,

@@ -18,13 +18,23 @@ function generateReferralCode(length = 8): string {
 // User schema definition for direct Mongoose access
 const UserSchema = new mongoose.Schema(
   {
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
     password: { type: String, select: true },
     name: { type: String, trim: true },
     avatarUrl: { type: String },
     emailVerified: { type: Boolean, default: true },
     role: { type: String, enum: ['user', 'admin'], default: 'admin' },
-    plan: { type: String, enum: ['free', 'pro', 'business'], default: 'business' },
+    plan: {
+      type: String,
+      enum: ['free', 'pro', 'business'],
+      default: 'business',
+    },
     isActive: { type: Boolean, default: true },
     isWelcomed: { type: Boolean, default: true },
     creditsBalance: { type: Number, default: 500 },
@@ -33,7 +43,7 @@ const UserSchema = new mongoose.Schema(
     referralCode: { type: String, required: true, unique: true },
     successfulReferralCount: { type: Number, default: 0 },
   },
-  { timestamps: true, collection: 'users' }
+  { timestamps: true, collection: 'users' },
 );
 
 function parseArgs() {
@@ -63,10 +73,7 @@ function parseArgs() {
     'admin@blynta84269713!';
 
   const name =
-    parsed.name ||
-    positional[2] ||
-    process.env.ADMIN_NAME ||
-    'Blynta Admin';
+    parsed.name || positional[2] || process.env.ADMIN_NAME || 'Blynta Admin';
 
   return { email: email.toLowerCase().trim(), password, name: name.trim() };
 }
@@ -89,7 +96,9 @@ async function createAdmin() {
   const hashedPassword = await bcrypt.hash(password, 10);
 
   if (existingUser) {
-    console.log(`User with email "${email}" already exists. Promoting to Admin & updating password...`);
+    console.log(
+      `User with email "${email}" already exists. Promoting to Admin & updating password...`,
+    );
 
     existingUser.role = 'admin';
     existingUser.emailVerified = true;

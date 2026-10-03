@@ -55,7 +55,6 @@ async function migrate() {
     ? mongoose.model('User')
     : mongoose.model('User', LegacyUserSchema);
 
-
   const CustomerModel = mongoose.models['Customer']
     ? (mongoose.model('Customer') as any)
     : mongoose.model('Customer', CustomerSchema);
@@ -101,8 +100,7 @@ async function migrate() {
           (user as any).paddleSubscriptionStatus || undefined,
         paddleScheduledChangeAction:
           (user as any).paddleScheduledChangeAction ?? null,
-        paddleScheduledChangeAt:
-          (user as any).paddleScheduledChangeAt ?? null,
+        paddleScheduledChangeAt: (user as any).paddleScheduledChangeAt ?? null,
       });
 
       summary.migrated++;
@@ -131,9 +129,7 @@ async function migrate() {
   console.log(
     '\n⚠️   NOTE: Old paddle* fields on User are KEPT intentionally.',
   );
-  console.log(
-    '    After verifying the new path works in production, run a',
-  );
+  console.log('    After verifying the new path works in production, run a');
   console.log('    follow-up migration to unset them via $unset.\n');
 
   await mongoose.disconnect();

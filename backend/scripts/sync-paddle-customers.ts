@@ -169,9 +169,7 @@ async function syncPaddleCustomers() {
   console.log(
     `  - Archived customers:               ${summary.archivedPaddleCustomers}`,
   );
-  console.log(
-    `Customer docs created/updated:        ${summary.usersUpdated}`,
-  );
+  console.log(`Customer docs created/updated:        ${summary.usersUpdated}`);
   console.log(
     `Users already synced:                 ${summary.usersAlreadySynced}`,
   );
@@ -184,9 +182,7 @@ async function syncPaddleCustomers() {
     `Paddle customers without DB user:     ${summary.unmatchedPaddleCustomers}`,
   );
   if (summary.errors > 0) {
-    console.log(
-      `Errors encountered:                  ${summary.errors}`,
-    );
+    console.log(`Errors encountered:                  ${summary.errors}`);
   }
   console.log('='.repeat(60));
 

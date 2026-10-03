@@ -159,7 +159,11 @@ export class MailProcessor extends WorkerHost {
 
       case MAIL_JOBS.SEND_PASSWORD_RESET: {
         const { email, resetToken } = job.data;
-        const resetUrl = `${this.frontendUrl}/reset-password?token=${resetToken}`;
+        const resetOrigin = this.configService.get<string>(
+          'AUTH_APP_URL',
+          this.frontendUrl,
+        );
+        const resetUrl = `${resetOrigin}/reset-password?token=${resetToken}`;
         const { subject, html } = passwordResetEmailTemplate(resetUrl);
         await this.sendEmail(email, subject, html);
         break;

@@ -1,19 +1,23 @@
 version: 1
 applications:
-  - appRoot: frontend
+  - appRoot: apps/app
     frontend:
       phases:
         preBuild:
           commands:
-            - npm ci
+            - cp .amplify.npmrc .npmrc
+            - corepack enable
+            - corepack prepare pnpm@11.19.0 --activate
+            - pnpm install --frozen-lockfile
         build:
           commands:
-            - npm run build
+            - pnpm exec turbo run build --filter=@blynta/app
+      buildPath: /
       artifacts:
-        baseDirectory: .next
+        baseDirectory: apps/app/.next
         files:
-          - '**/*'
+          - "**/*"
       cache:
         paths:
-          - node_modules/**/*
-          - .next/cache/**/*
+          - node_modules/.pnpm/**/*
+          - apps/app/.next/cache/**/*

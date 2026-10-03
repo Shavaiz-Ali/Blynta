@@ -3,10 +3,21 @@ import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Model } from 'mongoose';
-import { User, UserDocument, UserPlan, UserRole } from '../../users/schemas/user.schema';
+import {
+  User,
+  UserDocument,
+  UserPlan,
+  UserRole,
+} from '../../users/schemas/user.schema';
 import { Job, JobDocument, JobStatus } from '../../jobs/schemas/job.schema';
-import { Customer, CustomerDocument } from '../../billing/schemas/customer.schema';
-import { Activity, ActivityDocument } from '../../activities/schemas/activity.schema';
+import {
+  Customer,
+  CustomerDocument,
+} from '../../billing/schemas/customer.schema';
+import {
+  Activity,
+  ActivityDocument,
+} from '../../activities/schemas/activity.schema';
 import { JOBS_QUEUE } from '../../jobs/jobs.constants';
 import { YOUTUBE_PUBLISHING_QUEUE } from '../../youtube/youtube.constants';
 import { NOTIFICATIONS_QUEUE } from '../../notifications/notifications.constants';
@@ -134,16 +145,27 @@ export class AdminDashboardService {
     private readonly activitiesQueue: Queue,
   ) {}
 
-  async getDashboardOverview(requestedRange?: string): Promise<DashboardOverviewResult> {
-    const range: DashboardRange = requestedRange && requestedRange in DASHBOARD_RANGE_DAYS
-      ? requestedRange as DashboardRange
-      : '30d';
+  async getDashboardOverview(
+    requestedRange?: string,
+  ): Promise<DashboardOverviewResult> {
+    const range: DashboardRange =
+      requestedRange && requestedRange in DASHBOARD_RANGE_DAYS
+        ? (requestedRange as DashboardRange)
+        : '30d';
     const rangeDays = DASHBOARD_RANGE_DAYS[range];
     const now = new Date();
-    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfDay = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const rangeStart = new Date(now.getTime() - (rangeDays - 1) * 24 * 60 * 60 * 1000);
-    const previousRangeStart = new Date(rangeStart.getTime() - rangeDays * 24 * 60 * 60 * 1000);
+    const rangeStart = new Date(
+      now.getTime() - (rangeDays - 1) * 24 * 60 * 60 * 1000,
+    );
+    const previousRangeStart = new Date(
+      rangeStart.getTime() - rangeDays * 24 * 60 * 60 * 1000,
+    );
 
     const [
       totalUsers,
@@ -172,26 +194,55 @@ export class AdminDashboardService {
       clipMetrics,
     ] = await Promise.all([
       this.userModel.countDocuments({ role: UserRole.USER }).exec(),
-      this.userModel.countDocuments({ isActive: true, role: UserRole.USER }).exec(),
-      this.userModel.countDocuments({ createdAt: { $gte: sevenDaysAgo }, role: UserRole.USER }).exec(),
-      this.userModel.countDocuments({ plan: UserPlan.FREE, role: UserRole.USER }).exec(),
-      this.userModel.countDocuments({ plan: UserPlan.PRO, role: UserRole.USER }).exec(),
-      this.userModel.countDocuments({ plan: UserPlan.BUSINESS, role: UserRole.USER }).exec(),
+      this.userModel
+        .countDocuments({ isActive: true, role: UserRole.USER })
+        .exec(),
+      this.userModel
+        .countDocuments({
+          createdAt: { $gte: sevenDaysAgo },
+          role: UserRole.USER,
+        })
+        .exec(),
+      this.userModel
+        .countDocuments({ plan: UserPlan.FREE, role: UserRole.USER })
+        .exec(),
+      this.userModel
+        .countDocuments({ plan: UserPlan.PRO, role: UserRole.USER })
+        .exec(),
+      this.userModel
+        .countDocuments({ plan: UserPlan.BUSINESS, role: UserRole.USER })
+        .exec(),
       this.jobModel.countDocuments({}).exec(),
-      this.jobModel.countDocuments({ status: JobStatus.COMPLETED, updatedAt: { $gte: startOfDay } }).exec(),
-      this.jobModel.countDocuments({ status: JobStatus.FAILED, updatedAt: { $gte: startOfDay } }).exec(),
+      this.jobModel
+        .countDocuments({
+          status: JobStatus.COMPLETED,
+          updatedAt: { $gte: startOfDay },
+        })
+        .exec(),
+      this.jobModel
+        .countDocuments({
+          status: JobStatus.FAILED,
+          updatedAt: { $gte: startOfDay },
+        })
+        .exec(),
       this.jobModel.countDocuments({ status: JobStatus.PENDING }).exec(),
-      this.jobModel.countDocuments({
-        status: {
-          $in: [
-            JobStatus.TRANSCRIBING,
-            JobStatus.DETECTING_HIGHLIGHTS,
-            JobStatus.CUTTING_CLIPS,
-          ],
-        },
-      }).exec(),
-      this.customerModel.countDocuments({ paddleSubscriptionStatus: 'active' }).exec(),
-      this.customerModel.countDocuments({ paddleSubscriptionStatus: 'past_due' }).exec(),
+      this.jobModel
+        .countDocuments({
+          status: {
+            $in: [
+              JobStatus.TRANSCRIBING,
+              JobStatus.DETECTING_HIGHLIGHTS,
+              JobStatus.CUTTING_CLIPS,
+            ],
+          },
+        })
+        .exec(),
+      this.customerModel
+        .countDocuments({ paddleSubscriptionStatus: 'active' })
+        .exec(),
+      this.customerModel
+        .countDocuments({ paddleSubscriptionStatus: 'past_due' })
+        .exec(),
       this.activityModel
         .find()
         .populate('actorId', 'email name role')
@@ -217,7 +268,9 @@ export class AdminDashboardService {
         {
           $group: {
             _id: {
-              date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+              date: {
+                $dateToString: { format: '%Y-%m-%d', date: '$createdAt' },
+              },
               status: '$status',
             },
             count: { $sum: 1 },
@@ -231,7 +284,9 @@ export class AdminDashboardService {
         { $match: { 'clips.createdAt': { $gte: rangeStart } } },
         {
           $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$clips.createdAt' } },
+            _id: {
+              $dateToString: { format: '%Y-%m-%d', date: '$clips.createdAt' },
+            },
             count: { $sum: 1 },
           },
         },
@@ -247,58 +302,73 @@ export class AdminDashboardService {
         },
       ]),
       this.fetchQueueHealth(),
-      this.userModel.countDocuments({
-        role: UserRole.USER,
-        createdAt: { $gte: rangeStart },
-      }).exec(),
-      this.userModel.countDocuments({
-        role: UserRole.USER,
-        createdAt: { $gte: previousRangeStart, $lt: rangeStart },
-      }).exec(),
+      this.userModel
+        .countDocuments({
+          role: UserRole.USER,
+          createdAt: { $gte: rangeStart },
+        })
+        .exec(),
+      this.userModel
+        .countDocuments({
+          role: UserRole.USER,
+          createdAt: { $gte: previousRangeStart, $lt: rangeStart },
+        })
+        .exec(),
       this.jobModel.countDocuments({ createdAt: { $gte: rangeStart } }).exec(),
-      this.jobModel.countDocuments({
-        createdAt: { $gte: previousRangeStart, $lt: rangeStart },
-      }).exec(),
-      this.jobModel.aggregate<{
-        total: number;
-        generatedToday: number;
-        generatedInPeriod: number;
-        generatedInPreviousPeriod: number;
-      }>([
-        { $unwind: { path: '$clips', preserveNullAndEmptyArrays: false } },
-        {
-          $group: {
-            _id: null,
-            total: { $sum: 1 },
-            generatedToday: {
-              $sum: { $cond: [{ $gte: ['$clips.createdAt', startOfDay] }, 1, 0] },
-            },
-            generatedInPeriod: {
-              $sum: { $cond: [{ $gte: ['$clips.createdAt', rangeStart] }, 1, 0] },
-            },
-            generatedInPreviousPeriod: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $gte: ['$clips.createdAt', previousRangeStart] },
-                      { $lt: ['$clips.createdAt', rangeStart] },
-                    ],
-                  },
-                  1,
-                  0,
-                ],
+      this.jobModel
+        .countDocuments({
+          createdAt: { $gte: previousRangeStart, $lt: rangeStart },
+        })
+        .exec(),
+      this.jobModel
+        .aggregate<{
+          total: number;
+          generatedToday: number;
+          generatedInPeriod: number;
+          generatedInPreviousPeriod: number;
+        }>([
+          { $unwind: { path: '$clips', preserveNullAndEmptyArrays: false } },
+          {
+            $group: {
+              _id: null,
+              total: { $sum: 1 },
+              generatedToday: {
+                $sum: {
+                  $cond: [{ $gte: ['$clips.createdAt', startOfDay] }, 1, 0],
+                },
+              },
+              generatedInPeriod: {
+                $sum: {
+                  $cond: [{ $gte: ['$clips.createdAt', rangeStart] }, 1, 0],
+                },
+              },
+              generatedInPreviousPeriod: {
+                $sum: {
+                  $cond: [
+                    {
+                      $and: [
+                        { $gte: ['$clips.createdAt', previousRangeStart] },
+                        { $lt: ['$clips.createdAt', rangeStart] },
+                      ],
+                    },
+                    1,
+                    0,
+                  ],
+                },
               },
             },
           },
-        },
-        { $project: { _id: 0 } },
-      ]).then((rows) => rows[0] || {
-        total: 0,
-        generatedToday: 0,
-        generatedInPeriod: 0,
-        generatedInPreviousPeriod: 0,
-      }),
+          { $project: { _id: 0 } },
+        ])
+        .then(
+          (rows) =>
+            rows[0] || {
+              total: 0,
+              generatedToday: 0,
+              generatedInPeriod: 0,
+              generatedInPreviousPeriod: 0,
+            },
+        ),
     ]);
 
     // Calculate MRR: Pro = $19/mo ($1900 cents), Business = $49/mo ($4900 cents)
@@ -306,10 +376,15 @@ export class AdminDashboardService {
     const paidCount = proUsersCount + businessUsersCount;
 
     // Calculate all-time job success rate
-    const completedAllTime = jobStatusAgg.find((s) => s._id === JobStatus.COMPLETED)?.count || 0;
-    const failedAllTime = jobStatusAgg.find((s) => s._id === JobStatus.FAILED)?.count || 0;
+    const completedAllTime =
+      jobStatusAgg.find((s) => s._id === JobStatus.COMPLETED)?.count || 0;
+    const failedAllTime =
+      jobStatusAgg.find((s) => s._id === JobStatus.FAILED)?.count || 0;
     const totalFinished = completedAllTime + failedAllTime;
-    const successRate = totalFinished > 0 ? Math.round((completedAllTime / totalFinished) * 100) : 100;
+    const successRate =
+      totalFinished > 0
+        ? Math.round((completedAllTime / totalFinished) * 100)
+        : 100;
     const percentChange = (current: number, previous: number): number => {
       if (previous === 0) return current === 0 ? 0 : 100;
       return Math.round(((current - previous) / previous) * 1000) / 10;
@@ -317,7 +392,10 @@ export class AdminDashboardService {
 
     // Build a complete daily timeline so charts include zero-activity days.
     const dateMapUser: Record<string, number> = {};
-    const dateMapJob: Record<string, { completed: number; failed: number; total: number }> = {};
+    const dateMapJob: Record<
+      string,
+      { completed: number; failed: number; total: number }
+    > = {};
     const dateMapClip: Record<string, number> = {};
 
     for (let i = rangeDays - 1; i >= 0; i--) {
@@ -353,22 +431,28 @@ export class AdminDashboardService {
       }
     }
 
-    const userGrowthSeries = Object.entries(dateMapUser).map(([date, newUsers]) => ({
-      date,
-      newUsers,
-    }));
+    const userGrowthSeries = Object.entries(dateMapUser).map(
+      ([date, newUsers]) => ({
+        date,
+        newUsers,
+      }),
+    );
 
-    const jobActivitySeries = Object.entries(dateMapJob).map(([date, stats]) => ({
-      date,
-      completed: stats.completed,
-      failed: stats.failed,
-      total: stats.total,
-    }));
+    const jobActivitySeries = Object.entries(dateMapJob).map(
+      ([date, stats]) => ({
+        date,
+        completed: stats.completed,
+        failed: stats.failed,
+        total: stats.total,
+      }),
+    );
 
-    const clipActivitySeries = Object.entries(dateMapClip).map(([date, generated]) => ({
-      date,
-      generated,
-    }));
+    const clipActivitySeries = Object.entries(dateMapClip).map(
+      ([date, generated]) => ({
+        date,
+        generated,
+      }),
+    );
 
     // Status distribution mapping
     const STATUS_LABELS: Record<string, string> = {
@@ -391,13 +475,8 @@ export class AdminDashboardService {
 
     const recentAudit = recentActivities.map((act: any) => {
       const adminEmail =
-        act.actorId?.email ||
-        act.userId?.email ||
-        'system@blynta.com';
-      const adminName =
-        act.actorId?.name ||
-        act.userId?.name ||
-        'System';
+        act.actorId?.email || act.userId?.email || 'system@blynta.com';
+      const adminName = act.actorId?.name || act.userId?.name || 'System';
 
       return {
         _id: act._id.toString(),
@@ -407,7 +486,12 @@ export class AdminDashboardService {
         category: act.category || 'system',
         action: act.type || act.action || 'system.event',
         title: act.title || 'System Event',
-        reason: act.description || act.title || act.reason || act.type || 'Activity logged',
+        reason:
+          act.description ||
+          act.title ||
+          act.reason ||
+          act.type ||
+          'Activity logged',
         severity: act.severity || 'info',
         status: act.status || 'success',
         createdAt: act.createdAt || new Date(),
@@ -451,7 +535,10 @@ export class AdminDashboardService {
         newUsersInPeriod,
         jobsInPeriod,
         clipsInPeriod: clipMetrics.generatedInPeriod,
-        userGrowthRate: percentChange(newUsersInPeriod, newUsersInPreviousPeriod),
+        userGrowthRate: percentChange(
+          newUsersInPeriod,
+          newUsersInPreviousPeriod,
+        ),
         jobGrowthRate: percentChange(jobsInPeriod, jobsInPreviousPeriod),
         clipGrowthRate: percentChange(
           clipMetrics.generatedInPeriod,
@@ -469,11 +556,27 @@ export class AdminDashboardService {
 
   private async fetchQueueHealth(): Promise<QueueMetric[]> {
     const queueDefs = [
-      { queue: this.jobsQueue, name: 'media-processing', label: 'Media Worker Pipeline' },
-      { queue: this.youtubeQueue, name: 'youtube-publishing', label: 'YouTube Publisher' },
-      { queue: this.notificationsQueue, name: 'notifications', label: 'Notifications Engine' },
+      {
+        queue: this.jobsQueue,
+        name: 'media-processing',
+        label: 'Media Worker Pipeline',
+      },
+      {
+        queue: this.youtubeQueue,
+        name: 'youtube-publishing',
+        label: 'YouTube Publisher',
+      },
+      {
+        queue: this.notificationsQueue,
+        name: 'notifications',
+        label: 'Notifications Engine',
+      },
       { queue: this.mailQueue, name: 'mail', label: 'Transactional Mail' },
-      { queue: this.activitiesQueue, name: 'activities', label: 'Activity & Audit Log' },
+      {
+        queue: this.activitiesQueue,
+        name: 'activities',
+        label: 'Activity & Audit Log',
+      },
     ];
 
     const results: QueueMetric[] = [];
@@ -481,7 +584,14 @@ export class AdminDashboardService {
     for (const def of queueDefs) {
       try {
         const [counts, isPaused] = await Promise.all([
-          def.queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed', 'paused'),
+          def.queue.getJobCounts(
+            'waiting',
+            'active',
+            'completed',
+            'failed',
+            'delayed',
+            'paused',
+          ),
           def.queue.isPaused().catch(() => false),
         ]);
 
@@ -497,7 +607,9 @@ export class AdminDashboardService {
           isHealthy: true,
         });
       } catch (err) {
-        this.logger.warn(`Could not fetch BullMQ counts for queue ${def.name}: ${err instanceof Error ? err.message : err}`);
+        this.logger.warn(
+          `Could not fetch BullMQ counts for queue ${def.name}: ${err instanceof Error ? err.message : err}`,
+        );
         results.push({
           name: def.name,
           label: def.label,

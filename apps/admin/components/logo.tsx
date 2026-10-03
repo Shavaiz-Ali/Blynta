@@ -1,0 +1,13 @@
+export function BlyntaLogo({ size = "sm" }: { size?: "sm" | "md" | "lg" }) {
+  return (
+    <span
+      className={
+        size === "lg"
+          ? "text-2xl font-semibold tracking-tight"
+          : "text-lg font-semibold tracking-tight"
+      }
+    >
+      Blynta<span className="text-primary">.</span>
+    </span>
+  );
+}

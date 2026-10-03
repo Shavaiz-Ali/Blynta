@@ -34,7 +34,8 @@ export class AdminJobsService {
     @InjectModel(Job.name) private readonly jobModel: Model<JobDocument>,
     @InjectQueue(JOBS_QUEUE) private readonly jobsQueue: Queue,
     @InjectQueue(YOUTUBE_PUBLISHING_QUEUE) private readonly youtubeQueue: Queue,
-    @InjectQueue(NOTIFICATIONS_QUEUE) private readonly notificationsQueue: Queue,
+    @InjectQueue(NOTIFICATIONS_QUEUE)
+    private readonly notificationsQueue: Queue,
     @InjectQueue(MAIL_QUEUE) private readonly mailQueue: Queue,
     @InjectQueue(ACTIVITIES_QUEUE) private readonly activitiesQueue: Queue,
     private readonly activitiesService: ActivitiesService,
@@ -220,11 +221,27 @@ export class AdminJobsService {
 
   async getQueueStats(): Promise<any[]> {
     const queueDefs = [
-      { queue: this.jobsQueue, name: 'media-processing', label: 'Media Worker Pipeline' },
-      { queue: this.youtubeQueue, name: 'youtube-publishing', label: 'YouTube Publisher' },
-      { queue: this.notificationsQueue, name: 'notifications', label: 'Notifications Engine' },
+      {
+        queue: this.jobsQueue,
+        name: 'media-processing',
+        label: 'Media Worker Pipeline',
+      },
+      {
+        queue: this.youtubeQueue,
+        name: 'youtube-publishing',
+        label: 'YouTube Publisher',
+      },
+      {
+        queue: this.notificationsQueue,
+        name: 'notifications',
+        label: 'Notifications Engine',
+      },
       { queue: this.mailQueue, name: 'mail', label: 'Transactional Mail' },
-      { queue: this.activitiesQueue, name: 'activities', label: 'Activity & Audit Log' },
+      {
+        queue: this.activitiesQueue,
+        name: 'activities',
+        label: 'Activity & Audit Log',
+      },
     ];
 
     const results: any[] = [];
