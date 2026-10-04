@@ -6,6 +6,7 @@ import {
   ConflictException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { StudioService } from './studio.service';
@@ -241,6 +242,13 @@ describe('Blynta clip to editable Studio project', () => {
     await expect(
       service.fromClip(owner, { ...body, userId: owner }),
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(projects.create).not.toHaveBeenCalled();
+  });
+  it('reports storage authentication or connectivity failures as unavailable, not missing media', async () => {
+    storage.fileExists.mockRejectedValueOnce(new Error('AccessDenied'));
+    await expect(service.fromClip(owner, body)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
     expect(projects.create).not.toHaveBeenCalled();
   });
   it('reopens an initialized project on repeated clicks without another import', async () => {

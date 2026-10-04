@@ -28,6 +28,8 @@ export function NewProjectDialog({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const pending = useRef(false);
+  const [phase, setPhase] = useState<"uploading" | "processing">("uploading");
   const [mode, setMode] = useState(initialMode);
   async function launch(project: Project) {
     try {
@@ -41,15 +43,17 @@ export function NewProjectDialog({
     }
   }
   async function upload(file?: File) {
-    if (!file) return;
+    if (!file || pending.current) return;
+    pending.current = true;
     setBusy(true);
+    setPhase("uploading");
     setError("");
     try {
       const project = await studioApi.create(
         name || file.name.replace(/\.[^.]+$/, ""),
         ratio,
       );
-      const asset = await uploadMedia(project.id, file);
+      const asset = await uploadMedia(project.id, file, setPhase);
       project.assets = [asset];
       project.clips = [makeClip(asset)];
       const saved = await studioApi.save(project.id, project.revision || 0, {
@@ -64,6 +68,7 @@ export function NewProjectDialog({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to open this file.");
     } finally {
+      pending.current = false;
       setBusy(false);
     }
   }
@@ -75,9 +80,13 @@ export function NewProjectDialog({
       }}
       title="New project"
       description="Upload media or start with an empty timeline."
+      size="lg"
+      contentClassName="max-h-[90dvh] overflow-y-auto"
+      dismissible={!busy}
+      showCloseButton={!busy}
     >
       <div className="grid gap-4">
-        <div className="new-project-choices">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[
             {
               id: "upload",
@@ -93,16 +102,21 @@ export function NewProjectDialog({
             },
           ].map((choice) => (
             <AppButton
+              type="button"
               key={choice.id}
-              variant={mode === choice.id ? "secondary" : "outline"}
-              className="project-choice"
+              variant="outline"
+              className={`h-auto min-w-0 justify-start whitespace-normal rounded-xl p-4 text-left [&>span]:w-full [&>span>span]:min-w-0 [&>span>span]:w-full [&>span>span]:whitespace-normal ${mode === choice.id ? "border-primary/50 bg-primary/10" : "border-border bg-card hover:bg-muted/50"}`}
               aria-pressed={mode === choice.id}
               disabled={busy}
               onClick={() => setMode(choice.id as "blank" | "upload")}
             >
-              <choice.icon />
-              <strong>{choice.title}</strong>
-              <span>{choice.description}</span>
+              <span className="flex min-w-0 flex-col items-start gap-2">
+                <choice.icon className="h-5 w-5" />
+                <strong className="text-sm leading-5">{choice.title}</strong>
+                <span className="text-xs leading-5 text-muted-foreground">
+                  {choice.description}
+                </span>
+              </span>
             </AppButton>
           ))}
         </div>
@@ -128,7 +142,7 @@ export function NewProjectDialog({
         />
         {mode === "upload" && (
           <div
-            className="upload-zone"
+            className="flex min-w-0 flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 px-4 py-7 text-center"
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
@@ -136,7 +150,13 @@ export function NewProjectDialog({
             }}
           >
             <Upload size={25} />
-            <strong>Drop your media here</strong>
+            <strong className="text-sm" role={busy ? "status" : undefined}>
+              {busy
+                ? phase === "uploading"
+                  ? "Uploading your media…"
+                  : "Preparing your media…"
+                : "Drop your media here"}
+            </strong>
             <span className="text-xs text-muted-foreground">
               MP4, WebM, MOV, audio, or images
             </span>
@@ -161,6 +181,8 @@ export function NewProjectDialog({
               disabled={busy}
               variant="outline"
               onClick={async () => {
+                if (pending.current) return;
+                pending.current = true;
                 setBusy(true);
                 setError("");
                 try {
@@ -174,6 +196,7 @@ export function NewProjectDialog({
                       : "Unable to create project",
                   );
                 } finally {
+                  pending.current = false;
                   setBusy(false);
                 }
               }}

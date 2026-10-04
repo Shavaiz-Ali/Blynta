@@ -1,0 +1,23 @@
+[
+  {
+    "width": 1440,
+    "overflow": false,
+    "uploadCalls": 1,
+    "completes": 0,
+    "errors": []
+  },
+  {
+    "width": 768,
+    "overflow": false,
+    "uploadCalls": 1,
+    "completes": 0,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "overflow": false,
+    "uploadCalls": 1,
+    "completes": 0,
+    "errors": []
+  }
+]

@@ -102,13 +102,26 @@ export class R2Service {
         new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
       );
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      const failure = error as {
+        name?: string;
+        $metadata?: { httpStatusCode?: number };
+      };
+      if (
+        failure.$metadata?.httpStatusCode === 404 ||
+        failure.name === 'NotFound' ||
+        failure.name === 'NoSuchKey'
+      )
+        return false;
+      // Authentication, configuration and connectivity failures are not missing files.
+      throw error;
     }
   }
 
   async objectInfo(objectKey: string) {
-    const result = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }));
+    const result = await this.client.send(
+      new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+    );
     return { size: result.ContentLength, contentType: result.ContentType };
   }
 

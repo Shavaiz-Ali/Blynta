@@ -381,11 +381,25 @@ export class StudioService {
       throw new ConflictException('Clip is not ready to edit');
     }
     let storageKey: string | undefined;
-    for (const candidate of clipMediaCandidates(clip, input.jobId, clipIndex)) {
-      if (await this.r2.fileExists(candidate)) {
-        storageKey = candidate;
-        break;
+    try {
+      for (const candidate of clipMediaCandidates(
+        clip,
+        input.jobId,
+        clipIndex,
+      )) {
+        if (await this.r2.fileExists(candidate)) {
+          storageKey = candidate;
+          break;
+        }
       }
+    } catch {
+      this.logger.error({
+        event: 'studio.clip-import.storage-unavailable',
+        ...context,
+      });
+      throw new ServiceUnavailableException(
+        'Clip storage is unavailable. Please try again later.',
+      );
     }
     if (!storageKey) {
       this.logger.warn({
