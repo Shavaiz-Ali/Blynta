@@ -4,7 +4,6 @@
   "packageManager": "pnpm@11.19.0",
   "scripts": {
     "dev": "turbo run dev",
-    "dev:backend": "npm --prefix backend run start:dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -13,7 +12,13 @@
     "format:check": "prettier --check \"**/*.{js,jsx,cjs,mjs,ts,tsx,json,css,scss,yaml,yml}\"",
     "test:sso": "node scripts/test-sso.mjs",
     "test:auth-errors": "node --test scripts/tests/identity-client.test.mjs",
-    "test:startup": "node scripts/test-startup.mjs"
+    "test:startup": "node scripts/test-startup.mjs",
+    "dev:backend": "npm --prefix backend run start:dev",
+    "dev:studio": "npm --prefix apps/studio run dev",
+    "dev:auth": "npm --prefix apps/auth run dev",
+    "dev:main": "npm --prefix apps/main run dev",
+    "dev:admin": "npm --prefix apps/admin run dev",
+    "dev:web": "npm --prefix web run dev"
   },
   "devDependencies": {
     "prettier": "3.9.6",
