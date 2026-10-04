@@ -1,0 +1,30 @@
+[
+  {
+    "width": 1440,
+    "overflow": false,
+    "jobRequests": 1,
+    "imports": 2,
+    "errors": []
+  },
+  {
+    "width": 1024,
+    "overflow": false,
+    "jobRequests": 1,
+    "imports": 2,
+    "errors": []
+  },
+  {
+    "width": 768,
+    "overflow": false,
+    "jobRequests": 1,
+    "imports": 2,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "overflow": false,
+    "jobRequests": 1,
+    "imports": 2,
+    "errors": []
+  }
+]

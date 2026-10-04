@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AppProviders } from "@/providers/AppProviders";
 import "./globals.css";
 import "./studio.css";
+import "./dashboard.css";
 import "./editor-layout.css";
 
 export const metadata: Metadata = {

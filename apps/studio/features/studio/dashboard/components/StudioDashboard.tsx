@@ -1,45 +1,47 @@
 "use client";
-import { useState } from "react";
-import {
-  Plus,
-  Search,
-  Grid2X2,
-  List,
-  ArrowUpRight,
-  FolderOpen,
-} from "lucide-react";
-import { AppButton } from "@blynta/ui";
-import { AppDialog } from "@blynta/ui";
-import { AppInput } from "@blynta/ui";
-import { AppSelect } from "@blynta/ui";
-import { AppTooltip } from "@/components/common/AppTooltip";
-import { StudioLogo } from "@/components/common/StudioLogo";
-import { ThemeToggle } from "@/components/common/ThemeToggle";
-import { UserDropdown } from "@/components/common/UserDropdown";
-import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
+import { useMemo, useState } from "react";
+import { Plus } from "lucide-react";
+import { AppButton, AppDialog, AppInput } from "@blynta/ui";
 import { useProjects } from "../../projects/hooks/useProjects";
 import { NewProjectDialog } from "../../projects/components/NewProjectDialog";
-import { ProjectCard } from "./ProjectCard";
 import type { Project } from "../../types";
 import { studioRequest } from "../../api";
 import { toast } from "sonner";
-import { blyntaUrl } from "@/config/env";
+import { StudioShell } from "./StudioShell";
+import { QuickStart, FromBlyntaDialog, type CreationMode } from "./QuickStart";
+import { ProjectsToolbar } from "./ProjectsToolbar";
+import { ProjectCollection, RecentProjects } from "./ProjectCollection";
+import {
+  ProjectsSkeleton,
+  ProjectsEmptyState,
+  ProjectsError,
+} from "./ProjectsStates";
+import { projectSource, type ProjectAction } from "../project-display";
+
 export function StudioDashboard() {
   return <DashboardWorkspace {...useProjects()} />;
 }
+
 export function DashboardWorkspace({
   projects,
   ready,
   error,
   update,
+  retry,
+  retrying,
+  prepare,
 }: {
   projects: Project[];
   ready: boolean;
   error?: string;
   update: (projects: Project[]) => Promise<void>;
+  retry?: () => void;
+  retrying?: boolean;
+  prepare?: (project: Project) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [newOpen, setNewOpen] = useState(false);
+  const [creation, setCreation] = useState<CreationMode | null>(null);
+  const [blyntaOpen, setBlyntaOpen] = useState(false);
   const [list, setList] = useState(false);
   const [sort, setSort] = useState("recent");
   const [filter, setFilter] = useState("all");
@@ -48,235 +50,244 @@ export function DashboardWorkspace({
     project: Project;
   } | null>(null);
   const [name, setName] = useState("");
-  async function onAction(type: "rename" | "duplicate" | "delete", project: Project) {
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const recent = useMemo(
+    () =>
+      [...projects]
+        .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .slice(0, 4),
+    [projects],
+  );
+  const importedCount = projects.filter((project) =>
+    projectSource(project).startsWith("Blynta"),
+  ).length;
+  const filtered = useMemo(
+    () =>
+      projects
+        .filter(
+          (project) =>
+            project.name.toLowerCase().includes(search.trim().toLowerCase()) &&
+            (filter === "all" ||
+              (filter === "blynta"
+                ? projectSource(project).startsWith("Blynta")
+                : projectSource(project) === filter)),
+        )
+        .sort((a, b) =>
+          sort === "name"
+            ? a.name.localeCompare(b.name)
+            : sort === "oldest"
+              ? Date.parse(a.updatedAt) - Date.parse(b.updatedAt)
+              : Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+        ),
+    [projects, search, filter, sort],
+  );
+  async function onAction(type: ProjectAction, project: Project) {
+    if (busy) return;
     if (type === "duplicate") {
+      setBusy(true);
       try {
-        await studioRequest(`projects/${project.id}/duplicate`, 'POST', {});
+        await studioRequest(`projects/${project.id}/duplicate`, "POST", {});
         await update(projects);
-      } catch (error) { toast.error(error instanceof Error ? error.message : "Could not duplicate project"); }
+        toast.success("Project duplicated");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Could not duplicate project",
+        );
+      } finally {
+        setBusy(false);
+      }
     } else {
       setAction({ type, project });
       setName(project.name);
+      setActionError("");
     }
   }
-  const recent = [...projects].sort(
-    (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
-  )[0];
-  const filtered = projects
-    .filter(
-      (p) =>
-        p.name.toLowerCase().includes(search.toLowerCase()) &&
-        (filter === "all" ||
-          (p.source ??
-            (p.demo
-              ? "Blynta Clip"
-              : p.assets.length
-                ? "Imported"
-                : "Studio")) === filter),
-    )
-    .sort((a, b) =>
-      sort === "name"
-        ? a.name.localeCompare(b.name)
-        : sort === "oldest"
-          ? Date.parse(a.updatedAt) - Date.parse(b.updatedAt)
-          : Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
-    );
+  async function saveAction() {
+    if (!action || busy) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      await update(
+        action.type === "delete"
+          ? projects.filter((project) => project.id !== action.project.id)
+          : projects.map((project) =>
+              project.id === action.project.id
+                ? {
+                    ...project,
+                    name: name.trim(),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : project,
+            ),
+      );
+      toast.success(
+        action.type === "delete" ? "Project deleted" : "Project renamed",
+      );
+      setAction(null);
+    } catch (error) {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Could not update project. Try again.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
-    <main className="min-h-screen bg-background">
-      <header className="studio-header">
-        <div className="flex items-center gap-5">
-          <StudioLogo />
-          <span className="border-l h-5" />
-          <span className="text-sm font-medium">Projects</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mr-3"
-            href={blyntaUrl}
-          >
-            Blynta
-            <ArrowUpRight size={14} />
-          </a>
-          <ThemeToggle />
-          <UserDropdown />
-        </div>
-      </header>
-      <div className="dashboard-body">
-        <div className="flex flex-wrap items-center justify-between gap-5">
+    <StudioShell
+      onNew={() => setCreation("blank")}
+      onBlynta={() => setBlyntaOpen(true)}
+    >
+      <div className="studio-dashboard-body">
+        <div className="workspace-page-heading">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Manage your Studio projects.
-            </p>
+            <p className="workspace-eyebrow">Your workspace</p>
+            <h1>Projects</h1>
+            <p>Create, organize, and keep your next edit moving.</p>
           </div>
-          <AppButton onClick={() => setNewOpen(true)} icon={<Plus />}>
+          <AppButton onClick={() => setCreation("blank")} icon={<Plus />}>
             New project
           </AppButton>
         </div>
-        <section className="mt-9">
-          {!!projects.length && (
-            <>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold">
-                  {sort === "recent" ? "Recent" : "Projects"}{" "}
-                  <span className="ml-2 font-normal text-muted-foreground">
-                    {projects.length}
-                  </span>
-                </h2>
+        <QuickStart onNew={setCreation} onBlynta={() => setBlyntaOpen(true)} />
+        {!ready && !error && (
+          <section
+            className="workspace-section studio-recent-projects"
+            aria-labelledby="loading-recent-heading"
+          >
+            <div className="workspace-section-heading">
+              <div>
+                <h2 id="loading-recent-heading">Recent projects</h2>
+                <p>Pick up where you left off</p>
               </div>
-              <div className="library-toolbar">
-                <AppInput
-                  prefixIcon={<Search size={15} />}
-                  aria-label="Search projects"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search projects"
-                  wrapperClassName="flex-1 min-w-40 max-w-sm"
-                />
-                <AppSelect
-                  aria-label="Filter projects"
-                  value={filter}
-                  onValueChange={setFilter}
-                  options={[
-                    { value: "all", label: "All sources" },
-                    ...["Studio", "Blynta Clip", "Blynta Job", "Imported"].map(
-                      (value) => ({ value, label: value }),
-                    ),
-                  ]}
-                  wrapperClassName="w-36!"
-                />
-                <AppSelect
-                  aria-label="Sort projects"
-                  value={sort}
-                  onValueChange={setSort}
-                  options={[
-                    { value: "recent", label: "Last edited" },
-                    { value: "name", label: "Name A–Z" },
-                    { value: "oldest", label: "Oldest first" },
-                  ]}
-                  wrapperClassName="w-36!"
-                />
-                <div className="flex gap-1 border rounded-md p-0.5">
-                  <AppTooltip content="Grid view">
-                    <AppButton
-                      aria-label="Grid view"
-                      aria-pressed={!list}
-                      variant={!list ? "secondary" : "ghost"}
-                      size="icon-sm"
-                      onClick={() => setList(false)}
-                    >
-                      <Grid2X2 />
-                    </AppButton>
-                  </AppTooltip>
-                  <AppTooltip content="List view">
-                    <AppButton
-                      aria-label="List view"
-                      aria-pressed={list}
-                      variant={list ? "secondary" : "ghost"}
-                      size="icon-sm"
-                      onClick={() => setList(true)}
-                    >
-                      <List />
-                    </AppButton>
-                  </AppTooltip>
-                </div>
-              </div>
-            </>
+            </div>
+            <ProjectsSkeleton />
+          </section>
+        )}
+        {ready && recent.length > 0 && (
+          <RecentProjects
+            projects={recent}
+            onAction={onAction}
+            onPrepare={prepare}
+            busy={busy}
+          />
+        )}
+        <section
+          id="all-projects"
+          className="workspace-section"
+          aria-labelledby="all-projects-heading"
+        >
+          <div className="workspace-section-heading">
+            <div>
+              <h2 id="all-projects-heading">
+                All projects{" "}
+                {ready && (
+                  <span className="workspace-count">{projects.length}</span>
+                )}
+              </h2>
+              <p>Your Studio projects, all in one place</p>
+            </div>
+          </div>
+          {(projects.length > 0 || (!ready && !error)) && (
+            <ProjectsToolbar
+              search={search}
+              onSearch={setSearch}
+              filter={filter}
+              onFilter={setFilter}
+              sort={sort}
+              onSort={setSort}
+              list={list}
+              onList={setList}
+            />
           )}
           {error && (
-            <p
-              role="alert"
-              className="mt-5 border rounded p-4 text-destructive text-sm"
-            >
-              {error}
-            </p>
+            <ProjectsError
+              error={error}
+              onRetry={() => retry?.()}
+              retrying={retrying}
+            />
           )}
           {!ready && !error ? (
-            <LoadingSkeleton />
-          ) : filtered.length ? (
-            <div className={`project-grid ${list ? "project-list" : ""}`}>
-              {filtered.map((p, i) => (
-                <ProjectCard
-                  key={p.id}
-                  project={p}
-                  index={i}
-                  recent={p.id === recent?.id}
-                  onAction={onAction}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <FolderOpen size={32} />
-              <h3>
-                {search || filter !== "all"
-                  ? "No matching projects"
-                  : "Create your first video"}
-              </h3>
-              <p>
-                {search || filter !== "all"
-                  ? "Try another search or clear your filters."
-                  : "Upload footage, start from scratch, or bring something over from Blynta."}
+            <ProjectsSkeleton />
+          ) : projects.length > 0 && filtered.length > 0 ? (
+            <>
+              <p className="project-result-count" role="status">
+                {filtered.length}{" "}
+                {filtered.length === 1 ? "project" : "projects"}
+                {search.trim() || filter !== "all" ? " found" : ""}
               </p>
-              <AppButton
-                variant="outline"
-                onClick={() => {
-                  if (search || filter !== "all") {
-                    setSearch("");
-                    setFilter("all");
-                  } else setNewOpen(true);
+              <ProjectCollection
+                projects={filtered}
+                list={list}
+                onAction={onAction}
+                onPrepare={prepare}
+                busy={busy}
+              />
+            </>
+          ) : (
+            !error && (
+              <ProjectsEmptyState
+                filtered={!!search.trim() || filter !== "all"}
+                onClear={() => {
+                  setSearch("");
+                  setFilter("all");
                 }}
-              >
-                {search || filter !== "all" ? "Clear filters" : "New project"}
-              </AppButton>
-            </div>
+                onNew={setCreation}
+                onBlynta={() => setBlyntaOpen(true)}
+              />
+            )
           )}
         </section>
-        <footer className="mt-10 border-t pt-5 text-xs text-muted-foreground">
-          Projects and media are saved to your Blynta account.
-        </footer>
       </div>
       <NewProjectDialog
-        open={newOpen}
-        onOpenChange={setNewOpen}
-        onCreate={(p) => update([p, ...projects])}
+        key={creation ?? "closed"}
+        open={!!creation}
+        initialMode={creation ?? "blank"}
+        onOpenChange={(open) => !open && setCreation(null)}
+        onCreate={(project) => update([project, ...projects])}
+      />
+      <FromBlyntaDialog
+        open={blyntaOpen}
+        onOpenChange={setBlyntaOpen}
+        importedCount={importedCount}
+        onImported={() => {
+          setFilter("blynta");
+          setSearch("");
+          setBlyntaOpen(false);
+          document
+            .getElementById("all-projects")
+            ?.scrollIntoView({ block: "start" });
+        }}
       />
       <AppDialog
         open={!!action}
-        onOpenChange={(v) => !v && setAction(null)}
+        onOpenChange={(open) => {
+          if (!open && !busy) setAction(null);
+        }}
         title={action?.type === "delete" ? "Delete project?" : "Rename project"}
         description={
           action?.type === "delete"
             ? `“${action.project.name}” will be removed from your account. This cannot be undone.`
-            : "Update the name shown in your library."
+            : "Update the name shown in your project library."
         }
         footer={
           <>
-            <AppButton variant="outline" onClick={() => setAction(null)}>
+            <AppButton
+              variant="outline"
+              disabled={busy}
+              onClick={() => setAction(null)}
+            >
               Cancel
             </AppButton>
             <AppButton
               disabled={action?.type === "rename" && !name.trim()}
+              isLoading={busy}
               variant={action?.type === "delete" ? "destructive" : "default"}
-              onClick={async () => {
-                if (!action) return;
-                try {
-                  await update(
-                    action.type === "delete"
-                      ? projects.filter((p) => p.id !== action.project.id)
-                      : projects.map((p) =>
-                          p.id === action.project.id
-                            ? {
-                                ...p,
-                                name: name.trim(),
-                                updatedAt: new Date().toISOString(),
-                              }
-                            : p,
-                        ),
-                  );
-                  setAction(null);
-                } catch {}
-              }}
+              onClick={saveAction}
             >
               {action?.type === "delete" ? "Delete project" : "Save name"}
             </AppButton>
@@ -288,10 +299,20 @@ export function DashboardWorkspace({
             label="Project name"
             autoFocus
             value={name}
+            maxLength={100}
+            disabled={busy}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) void saveAction();
+            }}
           />
         )}
+        {actionError && (
+          <p role="alert" className="text-sm text-destructive">
+            {actionError}
+          </p>
+        )}
       </AppDialog>
-    </main>
+    </StudioShell>
   );
 }

@@ -51,6 +51,7 @@ describe('Studio persistence and ownership', () => {
     updateOne: jest.Mock;
   };
   let storage: {
+    fileExists: jest.Mock;
     objectInfo: jest.Mock;
     getPresignedUploadUrl: jest.Mock;
     getSignedDownloadUrl: jest.Mock;
@@ -82,6 +83,7 @@ describe('Studio persistence and ownership', () => {
       updateOne: jest.fn(),
     };
     storage = {
+      fileExists: jest.fn(() => true),
       objectInfo: jest.fn(),
       getPresignedUploadUrl: jest.fn(() => 'signed-put'),
       getSignedDownloadUrl: jest.fn(() => 'signed-get'),

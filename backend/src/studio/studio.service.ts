@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -33,9 +34,12 @@ import type {
   StudioProject,
   StudioRender,
 } from './studio.schemas';
+import { JobStatus } from '../jobs/schemas/job.schema';
+import { clipMediaCandidates } from './clip-media';
 
 @Injectable()
 export class StudioService {
+  private readonly logger = new Logger(StudioService.name);
   constructor(
     @InjectModel('StudioProject') private projects: Model<StudioProject>,
     @InjectModel('StudioAsset') private media: Model<StudioAsset>,
@@ -325,24 +329,88 @@ export class StudioService {
     const input = parse(
       z
         .object({
-          jobId: z.string().regex(/^[a-f\d]{24}$/i),
-          clipId: z.string().regex(/^[a-f\d]{24}$/i),
+          jobId: z
+            .string()
+            .regex(/^[a-f\d]{24}$/i)
+            .transform((value) => value.toLowerCase()),
+          clipId: z
+            .string()
+            .regex(/^[a-f\d]{24}$/i)
+            .transform((value) => value.toLowerCase()),
         })
         .strict(),
       body,
     );
+    const context = { userId, jobId: input.jobId, clipId: input.clipId };
+    this.logger.debug({ event: 'studio.clip-import.request', ...context });
     const job = await this.jobs.findOne({ _id: input.jobId, userId });
-    const clip = job?.clips.find((c) => String(c._id) === input.clipId);
-    if (!job || !clip?.r2ObjectKey)
-      throw new NotFoundException('Clip media not found');
+    if (!job) {
+      this.logger.warn({
+        event: 'studio.clip-import.job-not-found',
+        ...context,
+      });
+      throw new NotFoundException('Clip not found');
+    }
+    const clipIndex = job.clips.findIndex(
+      (c) => String(c._id).toLowerCase() === input.clipId,
+    );
+    const clip = job.clips[clipIndex];
+    if (!clip) {
+      this.logger.warn({
+        event: 'studio.clip-import.clip-not-found',
+        ...context,
+      });
+      throw new NotFoundException('Clip not found');
+    }
     const importKey = `${input.jobId}:${input.clipId}`;
     const existing = await this.projects.findOne({ userId, importKey });
-    if (existing) return this.get(userId, String(existing._id));
+    if (existing) {
+      this.logger.debug({
+        event: 'studio.clip-import.reopen',
+        ...context,
+        projectId: String(existing._id),
+      });
+      return this.get(userId, String(existing._id));
+    }
+    if (clip.status && clip.status !== JobStatus.COMPLETED) {
+      this.logger.warn({
+        event: 'studio.clip-import.not-ready',
+        ...context,
+        status: clip.status,
+      });
+      throw new ConflictException('Clip is not ready to edit');
+    }
+    let storageKey: string | undefined;
+    for (const candidate of clipMediaCandidates(clip, input.jobId, clipIndex)) {
+      if (await this.r2.fileExists(candidate)) {
+        storageKey = candidate;
+        break;
+      }
+    }
+    if (!storageKey) {
+      this.logger.warn({
+        event: 'studio.clip-import.media-not-found',
+        ...context,
+        hasCanonicalKey: !!clip.r2ObjectKey,
+      });
+      throw new NotFoundException('Clip media is no longer available');
+    }
+    this.logger.debug({
+      event: 'studio.clip-import.media-resolved',
+      ...context,
+      storageKey,
+    });
+    const duration = clip.endTime - clip.startTime;
+    if (!Number.isFinite(duration) || duration <= 0 || duration > 3600)
+      throw new BadRequestException('Clip duration is not supported');
     const asset = {
       id: randomUUID(),
-      name: job.videoTitle || 'Blynta clip',
+      name:
+        job.highlights?.[clipIndex]?.clipTitle ||
+        job.videoTitle ||
+        'Blynta clip',
       kind: 'video' as const,
-      duration: clip.endTime - clip.startTime,
+      duration,
       origin: 'Blynta' as const,
       sourceGroup: 'Generated clips' as const,
     };
@@ -360,64 +428,86 @@ export class StudioService {
       source: 'Blynta Clip',
     });
     const projectId = String(project._id);
-    const transcript = job.transcript
-      .filter((s) => s.endTime > clip.startTime && s.startTime < clip.endTime)
-      .map((s) => ({
-        startTime: Math.max(0, s.startTime - clip.startTime),
-        endTime: Math.min(asset.duration, s.endTime - clip.startTime),
-        text: s.text,
-      }));
-    await this.media.create({
-      userId,
-      projectId,
-      assetId: asset.id,
-      storageKey: clip.r2ObjectKey,
-      name: asset.name,
-      kind: 'video',
-      duration: asset.duration,
-      status: 'ready',
-      sourceGroup: 'Generated clips',
-      transcript,
-      hasAudio: true,
-    });
-    if (job.sourceVideoId) {
-      const source = await this.sources.findById(job.sourceVideoId);
-      if (source?.videoObjectKey && source.videoDuration) {
-        const original = {
-          ...asset,
-          id: randomUUID(),
-          name: 'Original source',
-          duration: source.videoDuration,
-          sourceGroup: 'Original source' as const,
-        };
-        await this.media.create({
-          userId,
-          projectId,
-          assetId: original.id,
-          storageKey: source.videoObjectKey,
-          name: original.name,
-          kind: 'video',
-          duration: original.duration,
-          status: 'ready',
-          sourceGroup: 'Original source',
-          transcript: source.transcript,
-          hasAudio: true,
-        });
-        document.assets.push(original);
-        project.document = document;
-      }
-    }
-    // Publish the reuse key only after references are initialized.
-    project.importKey = importKey;
     try {
-      await project.save();
+      const transcript = (job.transcript || [])
+        .filter((s) => s.endTime > clip.startTime && s.startTime < clip.endTime)
+        .map((s) => ({
+          startTime: Math.max(0, s.startTime - clip.startTime),
+          endTime: Math.min(asset.duration, s.endTime - clip.startTime),
+          text: s.text,
+        }));
+      await this.media.create({
+        userId,
+        projectId,
+        assetId: asset.id,
+        storageKey,
+        name: asset.name,
+        kind: 'video',
+        duration: asset.duration,
+        status: 'ready',
+        sourceGroup: 'Generated clips',
+        transcript,
+        hasAudio: true,
+      });
+      if (job.sourceVideoId) {
+        const source = await this.sources.findById(job.sourceVideoId);
+        if (source?.videoObjectKey && source.videoDuration) {
+          const original = {
+            ...asset,
+            id: randomUUID(),
+            name: 'Original source',
+            duration: source.videoDuration,
+            sourceGroup: 'Original source' as const,
+          };
+          await this.media.create({
+            userId,
+            projectId,
+            assetId: original.id,
+            storageKey: source.videoObjectKey,
+            name: original.name,
+            kind: 'video',
+            duration: original.duration,
+            status: 'ready',
+            sourceGroup: 'Original source',
+            transcript: source.transcript || [],
+            hasAudio: true,
+          });
+          document.assets.push(original);
+          project.document = document;
+        }
+      }
+      // Publish the reuse key only after references are initialized.
+      project.importKey = importKey;
+      try {
+        await project.save();
+      } catch (error) {
+        if ((error as { code?: number }).code !== 11000) throw error;
+        await this.projects.deleteOne({ _id: projectId });
+        await this.media.deleteMany({ userId, projectId });
+        const winner = await this.projects.findOne({ userId, importKey });
+        if (!winner) throw error;
+        this.logger.debug({
+          event: 'studio.clip-import.concurrent-reopen',
+          ...context,
+          projectId: String(winner._id),
+        });
+        return this.get(userId, String(winner._id));
+      }
+      this.logger.log({
+        event: 'studio.clip-import.created',
+        ...context,
+        projectId,
+      });
     } catch (error) {
-      if ((error as { code?: number }).code !== 11000) throw error;
-      await this.projects.deleteOne({ _id: projectId });
+      // Incomplete imports must not leave empty projects or media references.
+      await this.projects.deleteOne({ _id: projectId, userId });
       await this.media.deleteMany({ userId, projectId });
-      const winner = await this.projects.findOne({ userId, importKey });
-      if (!winner) throw error;
-      return this.get(userId, String(winner._id));
+      this.logger.error({
+        event: 'studio.clip-import.failed',
+        ...context,
+        projectId,
+      });
+      throw error;
     }
     return this.get(userId, projectId);
   }

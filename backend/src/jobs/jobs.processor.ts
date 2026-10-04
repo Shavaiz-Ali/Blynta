@@ -2,7 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job as BullJob } from 'bullmq';
-import { Types } from 'mongoose';
+import { clipIdentity } from './clip-identity';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -608,7 +608,7 @@ export class JobsProcessor extends WorkerHost {
           clipsDir,
           `clip-${i + 1}-captioned.mp4`,
         );
-        const clipId = new Types.ObjectId();
+        const clipId = clipIdentity(existingClips[i], h);
 
         if (draft.status !== JobStatus.COMPLETED) {
           // Not yet completed — run the full cut/caption/upload pipeline.

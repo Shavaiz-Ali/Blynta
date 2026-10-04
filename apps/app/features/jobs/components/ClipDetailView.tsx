@@ -22,7 +22,7 @@ import {
   downloadTranscriptAsSrt,
   downloadTranscriptAsTxt,
 } from "./TranscriptDialog";
-import { ClipWorkspaceSkeleton } from "./JobDetailSkeleton";
+import { ClipDetailsSkeleton } from "./ClipDetailsSkeleton";
 import { getJobDisplayTitle } from "@/features/dashboard/utils";
 import {
   AIInsights,
@@ -36,7 +36,8 @@ import { ShareDialog } from "@/features/shares";
 import { PublishToYouTubeDialog } from "@/features/youtube";
 import { toast } from "sonner";
 import { ScheduleDialog } from "./ScheduleDialog";
-import { EditInStudioButton } from './clip-detail/EditInStudioButton';
+import { EditInStudioButton } from "./clip-detail/EditInStudioButton";
+import { cachedClipJob } from "../clip-details-cache";
 
 export interface ClipDetailViewProps {
   jobId: string;
@@ -58,7 +59,13 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { data: profile } = useCurrentUser();
-  const { data: job, isLoading, error } = useJob(jobId);
+  const {
+    data: job,
+    isLoading,
+    error,
+  } = useJob(jobId, {
+    placeholderData: () => cachedClipJob(queryClient, jobId, clipId),
+  });
 
   const [shareOpen, setShareOpen] = React.useState(false);
   const [youtubePublishOpen, setYoutubePublishOpen] = React.useState(false);
@@ -318,12 +325,12 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   if (isLoading) {
     return (
       <DashboardLayout headerContent={headerContent}>
-        <ClipWorkspaceSkeleton />
+        <ClipDetailsSkeleton />
       </DashboardLayout>
     );
   }
 
-  if (error || !job || !activeClip) {
+  if (!job || !activeClip) {
     return (
       <DashboardLayout headerContent={headerContent}>
         <div className="mx-auto my-12 max-w-lg rounded-xl border border-destructive/30 bg-card p-6 text-center">
@@ -365,7 +372,13 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
       <div className="w-full space-y-6 pb-14">
         {/* Context + review utilities */}
         <ClipHeader
-          studioAction={<EditInStudioButton jobId={jobId} clipId={String(activeClip._id || activeClip.id)} />}
+          studioAction={
+            <EditInStudioButton
+              jobId={jobId}
+              clipId={String(activeClip._id || activeClip.id)}
+              ready={!activeClip.status || activeClip.status === "completed"}
+            />
+          }
           backHref={`/my-clips/${jobId}`}
           title={clipTitle}
           clipIndex={clipIndex}
