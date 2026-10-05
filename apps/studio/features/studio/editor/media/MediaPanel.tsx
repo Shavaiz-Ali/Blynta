@@ -12,7 +12,7 @@ import {
   Search,
   PanelLeftClose,
 } from "lucide-react";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppSidebarItem, AppTabs } from "@blynta/ui";
 import { AppFileInput } from "@/components/common/AppFileInput";
 import { AppInput } from "@blynta/ui";
 import { AppTooltip } from "@/components/common/AppTooltip";
@@ -68,9 +68,12 @@ export function MediaPanel() {
       <nav className="tool-rail" aria-label="Editor tools">
         {tools.map((t) => (
           <AppTooltip key={t.name} content={t.name}>
-            <AppButton
-              variant={e.tool === t.name ? "secondary" : "ghost"}
-              className={`rail-button ${e.tool === t.name ? "active" : ""}`}
+            <AppSidebarItem
+              label={t.name}
+              icon={<t.icon />}
+              rail
+              active={e.tool === t.name}
+              className="editor-tool-item"
               aria-label={t.name}
               aria-pressed={e.tool === t.name}
               onClick={() => {
@@ -81,10 +84,7 @@ export function MediaPanel() {
                 e.setContextOpen(e.tool === t.name ? !e.contextOpen : true);
                 e.setTool(t.name);
               }}
-            >
-              <t.icon size={18} />
-              <span>{t.name}</span>
-            </AppButton>
+            />
           </AppTooltip>
         ))}
       </nav>
@@ -128,53 +128,33 @@ export function MediaPanel() {
                   </p>
                 )}
                 {e.tool === "Media" && (
-                  <div
-                    className="media-source-tabs"
-                    role="group"
-                    aria-label="Media sources"
-                  >
-                    {[
-                      { id: "all", label: "Library" },
-                      { id: "uploads", label: "Uploads" },
-                      { id: "generated", label: "Generated" },
-                    ].map((tab) => (
-                      <AppButton
-                        key={tab.id}
-                        size="sm"
-                        variant="ghost"
-                        className={source === tab.id ? "active" : ""}
-                        aria-pressed={source === tab.id}
-                        onClick={() => setSource(tab.id)}
-                      >
-                        {tab.label}
-                      </AppButton>
-                    ))}
-                  </div>
+                  <AppTabs
+                    variant="line"
+                    size="sm"
+                    value={source}
+                    onValueChange={setSource}
+                    className="mt-3"
+                    tabs={[
+                      { value: "all", label: "Library" },
+                      { value: "uploads", label: "Uploads" },
+                      { value: "generated", label: "Generated" },
+                    ]}
+                  />
                 )}
                 {e.tool === "Media" && (
-                  <div
-                    className="flex gap-1 mt-3"
-                    role="group"
-                    aria-label="Media filters"
-                  >
-                    {["all", "video", "image", "audio"].map((kind) => (
-                      <AppButton
-                        key={kind}
-                        size="xs"
-                        variant={filter === kind ? "secondary" : "ghost"}
-                        onClick={() => setFilter(kind)}
-                        aria-pressed={filter === kind}
-                      >
-                        {kind === "all"
-                          ? "All"
-                          : kind === "image"
-                            ? "Images"
-                            : kind === "video"
-                              ? "Video"
-                              : "Audio"}
-                      </AppButton>
-                    ))}
-                  </div>
+                  <AppTabs
+                    variant="pills"
+                    size="xs"
+                    value={filter}
+                    onValueChange={setFilter}
+                    className="mt-3"
+                    tabs={[
+                      { value: "all", label: "All" },
+                      { value: "video", label: "Video" },
+                      { value: "image", label: "Images" },
+                      { value: "audio", label: "Audio" },
+                    ]}
+                  />
                 )}
                 {(error || e.mediaError) && (
                   <p role="alert" className="text-xs text-destructive mt-3">

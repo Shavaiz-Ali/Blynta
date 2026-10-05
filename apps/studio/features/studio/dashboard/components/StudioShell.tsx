@@ -1,12 +1,13 @@
 "use client";
-
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AppButton,
+  AppHeader,
+  AppSidebar,
+  AppSidebarItem,
   Sheet,
   SheetContent,
-  SheetHeader,
   SheetTitle,
   SheetDescription,
 } from "@blynta/ui";
@@ -14,89 +15,102 @@ import {
   ArrowUpLeft,
   FolderOpen,
   Menu,
-  PanelLeftClose,
-  PanelLeftOpen,
+  PanelLeft,
   Plus,
   Clapperboard,
 } from "lucide-react";
 import { StudioLogo } from "@/components/common/StudioLogo";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { UserDropdown } from "@/components/common/UserDropdown";
-import { AppTooltip } from "@/components/common/AppTooltip";
 import { blyntaUrl } from "@/config/env";
 
 export function StudioSidebar({
   onNew,
   onBlynta,
   onNavigate,
+  collapsed = false,
 }: {
   onNew: () => void;
   onBlynta: () => void;
   onNavigate?: () => void;
+  collapsed?: boolean;
 }) {
+  const navigate = (action: () => void) => {
+    onNavigate?.();
+    action();
+  };
   return (
-    <div className="studio-sidebar-content">
-      <AppTooltip content="New project">
+    <div className="flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto">
+      <Link
+        href="/dashboard"
+        onClick={onNavigate}
+        className="flex h-14 shrink-0 items-center px-3.5 overflow-hidden"
+        aria-label="Blynta Studio projects"
+      >
+        <StudioLogo collapsed={collapsed} />
+      </Link>
+      <div className="mx-2.5 border-t border-border/50" />
+      <div className="px-2.5 pt-2">
         <AppButton
-          className="studio-nav-new"
-          onClick={() => {
-            onNavigate?.();
-            onNew();
-          }}
+          className="w-full h-8 text-xs"
+          size={collapsed ? "icon-sm" : "sm"}
           icon={<Plus />}
           aria-label="New project"
+          onClick={() => navigate(onNew)}
         >
-          <span className="studio-nav-label">New project</span>
+          {!collapsed && "New project"}
         </AppButton>
-      </AppTooltip>
-      <nav aria-label="Studio navigation" className="studio-navigation">
-        <AppTooltip content="Projects">
-          <Link
+      </div>
+      <nav
+        aria-label="Studio navigation"
+        className="flex flex-1 flex-col gap-3 px-2.5"
+      >
+        <div className="flex flex-col gap-2">
+          {!collapsed && (
+            <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+              Workspace
+            </p>
+          )}
+          <AppSidebarItem
+            label="Projects"
+            icon={<FolderOpen />}
+            active
+            collapsed={collapsed}
             href="/dashboard"
-            className="studio-nav-item active"
-            aria-current="page"
-            aria-label="Projects"
             onClick={onNavigate}
-          >
-            <FolderOpen size={18} />
-            <span className="studio-nav-label">Projects</span>
-          </Link>
-        </AppTooltip>
-        <p className="studio-nav-section studio-nav-label">LIBRARY</p>
-        <AppTooltip content="From Blynta">
-          <AppButton
-            variant="ghost"
-            className="studio-nav-item"
-            aria-label="From Blynta"
-            onClick={() => {
-              onNavigate?.();
-              onBlynta();
-            }}
-          >
-            <Clapperboard size={18} />
-            <span className="studio-nav-label">From Blynta</span>
-          </AppButton>
-        </AppTooltip>
+            renderLink={(props) => <Link href="/dashboard" {...props} />}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          {!collapsed && (
+            <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+              Library
+            </p>
+          )}
+          <AppSidebarItem
+            label="From Blynta"
+            icon={<Clapperboard />}
+            collapsed={collapsed}
+            onClick={() => navigate(onBlynta)}
+          />
+        </div>
       </nav>
-      <div className="studio-sidebar-bottom">
-        <p className="studio-nav-hint studio-nav-label">
-          Your media library and Blynta AI are available inside each project.
-        </p>
-        <AppTooltip content="Back to Blynta">
-          <a
-            href={blyntaUrl}
-            className="studio-nav-item"
-            aria-label="Back to Blynta"
-          >
-            <ArrowUpLeft size={18} />
-            <span className="studio-nav-label">Back to Blynta</span>
-          </a>
-        </AppTooltip>
+      <div className="mt-auto border-t border-border/60 p-2.5">
+        {!collapsed && (
+          <p className="px-3 pb-3 text-[11px] leading-5 text-muted-foreground">
+            Your media library and Blynta AI are available inside each project.
+          </p>
+        )}
+        <AppSidebarItem
+          label="Back to Blynta"
+          icon={<ArrowUpLeft />}
+          collapsed={collapsed}
+          href={blyntaUrl}
+        />
       </div>
     </div>
   );
 }
-
 export function StudioHeader({
   collapsed,
   onCollapse,
@@ -107,42 +121,37 @@ export function StudioHeader({
   onMenu: () => void;
 }) {
   return (
-    <header className="workspace-header">
-      <div className="flex min-w-0 items-center gap-3">
-        <AppButton
-          variant="ghost"
-          size="icon-sm"
-          className="studio-mobile-menu"
-          onClick={onMenu}
-          aria-label="Open Studio navigation"
-        >
-          <Menu />
-        </AppButton>
-        <AppTooltip content={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-          <AppButton
-            variant="ghost"
-            size="icon-sm"
-            className="studio-sidebar-toggle"
-            onClick={onCollapse}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            aria-expanded={!collapsed}
-            aria-controls="studio-sidebar"
-          >
-            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
-          </AppButton>
-        </AppTooltip>
-        <Link href="/dashboard" aria-label="Blynta Studio projects">
-          <StudioLogo />
-        </Link>
-      </div>
-      <div className="flex items-center gap-1">
-        <ThemeToggle />
-        <UserDropdown />
-      </div>
-    </header>
+    <AppHeader>
+      <AppButton
+        variant="ghost"
+        size="icon-sm"
+        className="md:hidden"
+        onClick={onMenu}
+        aria-label="Open Studio navigation"
+      >
+        <Menu />
+      </AppButton>
+      <AppButton
+        variant="ghost"
+        size="icon-sm"
+        className="hidden md:inline-flex"
+        onClick={onCollapse}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-expanded={!collapsed}
+        aria-controls="studio-sidebar"
+      >
+        <PanelLeft />
+      </AppButton>
+      <span className="hidden md:block h-5 w-px bg-border/80" />
+      <span className="flex-1 text-xs font-medium text-muted-foreground">
+        Studio <span className="mx-2 text-border">/</span>{" "}
+        <span className="text-foreground">Projects</span>
+      </span>
+      <ThemeToggle />
+      <UserDropdown />
+    </AppHeader>
   );
 }
-
 export function StudioShell({
   children,
   onNew,
@@ -155,27 +164,37 @@ export function StudioShell({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
-    <div className={`studio-workspace ${collapsed ? "sidebar-collapsed" : ""}`}>
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <a href="#studio-content" className="studio-skip-link">
         Skip to projects
       </a>
-      <StudioHeader
-        collapsed={collapsed}
-        onCollapse={() => setCollapsed(!collapsed)}
-        onMenu={() => setMobileOpen(true)}
-      />
-      <aside id="studio-sidebar" className="studio-sidebar">
-        <StudioSidebar onNew={onNew} onBlynta={onBlynta} />
-      </aside>
-      <main id="studio-content" className="studio-workspace-main" tabIndex={-1}>
-        {children}
-      </main>
+      <AppSidebar id="studio-sidebar" collapsed={collapsed}>
+        <StudioSidebar
+          collapsed={collapsed}
+          onNew={onNew}
+          onBlynta={onBlynta}
+        />
+      </AppSidebar>
+      <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        <StudioHeader
+          collapsed={collapsed}
+          onCollapse={() => setCollapsed(!collapsed)}
+          onMenu={() => setMobileOpen(true)}
+        />
+        <main
+          id="studio-content"
+          className="studio-workspace-main"
+          tabIndex={-1}
+        >
+          {children}
+        </main>
+      </div>
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetContent side="left" className="studio-navigation-sheet">
-          <SheetHeader>
-            <SheetTitle>Blynta Studio</SheetTitle>
-            <SheetDescription>Your editing workspace</SheetDescription>
-          </SheetHeader>
+        <SheetContent side="left" className="w-[240px] p-0 bg-sidebar">
+          <SheetTitle className="sr-only">Blynta Studio navigation</SheetTitle>
+          <SheetDescription className="sr-only">
+            Your editing workspace
+          </SheetDescription>
           <StudioSidebar
             onNew={onNew}
             onBlynta={onBlynta}

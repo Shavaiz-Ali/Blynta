@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BlyntaLogo } from "@/components/logo";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppHeader, AppSidebar, AppSidebarItem } from "@blynta/ui";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -159,84 +159,28 @@ function NavItem({
   onNavigate?: () => void;
 }) {
   const Comp = item.icon;
-
-  const inner = (
-    <>
-      <Comp
-        className={cn(
-          "h-4 w-4 shrink-0 transition-colors",
-          isActive
-            ? "text-primary-foreground"
-            : "text-muted-foreground group-hover:text-sidebar-accent-foreground!",
-        )}
-      />
-      {!isCollapsed && (
-        <>
-          <span className="truncate flex-1">{item.label}</span>
-          {item.badge && (
-            <Badge
-              variant={isActive ? "outline" : "secondary"}
-              className={cn(
-                "text-[10px] h-4 px-1.5 font-bold uppercase tracking-wider ml-auto",
-                isActive
-                  ? "bg-primary-foreground/20 text-primary-foreground border-transparent"
-                  : "bg-muted text-muted-foreground",
-                item.disabled && "opacity-60",
-              )}
-            >
-              {item.badge}
-            </Badge>
-          )}
-        </>
-      )}
-    </>
-  );
-
-  const baseCls = cn(
-    "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium transition-all w-full",
-    isCollapsed && "justify-center px-2",
-    item.disabled
-      ? "opacity-40 cursor-not-allowed text-muted-foreground"
-      : isActive
-        ? "bg-primary text-primary-foreground font-semibold shadow-xs"
-        : "text-muted-foreground hover:bg-sidebar-accent! dark:hover:text-foreground hover:text-sidebar-accent-foreground! cursor-pointer",
-  );
-
-  const element = item.disabled ? (
-    <button
-      key={item.label}
-      type="button"
-      disabled
-      title={isCollapsed ? `${item.label} — Coming soon` : "Coming soon"}
-      className={baseCls}
-    >
-      {inner}
-    </button>
-  ) : (
-    <Link
-      key={item.label}
+  return (
+    <AppSidebarItem
+      label={item.label}
+      icon={<Comp />}
+      active={isActive}
+      collapsed={isCollapsed}
+      disabled={item.disabled}
       href={item.href}
       onClick={onNavigate}
-      title={isCollapsed ? item.label : undefined}
-      className={baseCls}
-    >
-      {inner}
-    </Link>
+      badge={
+        item.badge ? (
+          <Badge
+            variant={isActive ? "outline" : "secondary"}
+            className="text-[10px] h-4 px-1.5 font-bold uppercase tracking-wider ml-auto"
+          >
+            {item.badge}
+          </Badge>
+        ) : undefined
+      }
+      renderLink={(props) => <Link href={item.href} {...props} />}
+    />
   );
-
-  if (isCollapsed) {
-    return (
-      <Tooltip>
-        <TooltipTrigger render={element} />
-        <TooltipContent side="right" className="text-xs">
-          {item.label}
-          {item.badge && ` — ${item.badge}`}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  return element;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -393,17 +337,12 @@ export function DashboardLayout({
   return (
     <div className="h-screen flex bg-background text-foreground overflow-hidden">
       {/* ── Desktop Collapsible Sidebar ── */}
-      <aside
-        className={cn(
-          "hidden md:flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground h-screen transition-all duration-300 ease-in-out",
-          isCollapsed ? "w-[60px]" : "w-[220px] lg:w-[240px]",
-        )}
-      >
+      <AppSidebar collapsed={isCollapsed}>
         <SidebarContent
           isCollapsed={isCollapsed}
           onOpenInvite={() => setInviteOpen(true)}
         />
-      </aside>
+      </AppSidebar>
 
       {/* ── Mobile Drawer (shadcn Sheet) ── */}
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -426,7 +365,7 @@ export function DashboardLayout({
       {/* ── Main Content Viewport ── */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-14 items-center gap-2 px-4 sm:px-5 bg-background/90 backdrop-blur-sm border-b border-border/70 shrink-0">
+        <AppHeader>
           {/* Mobile hamburger */}
           <AppButton
             type="button"
@@ -459,7 +398,7 @@ export function DashboardLayout({
           <div className="flex-1 min-w-0 flex items-center">
             {headerContent}
           </div>
-        </header>
+        </AppHeader>
 
         <main className="flex-1 min-w-0 w-full px-6 sm:px-8 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto">
           {children}

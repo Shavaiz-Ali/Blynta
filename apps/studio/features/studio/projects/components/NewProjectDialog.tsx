@@ -6,7 +6,7 @@ import { AppFileInput } from "@/components/common/AppFileInput";
 import { AppInput } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
-import { Upload, FilePlus2, ArrowRight } from "lucide-react";
+import { Upload, FilePlus2 } from "lucide-react";
 import { studioApi } from "../../api";
 import { uploadMedia } from "../media";
 import { makeClip } from "../document";
@@ -179,7 +179,9 @@ export function NewProjectDialog({
           <div className="grid gap-3">
             <AppButton
               disabled={busy}
-              variant="outline"
+              icon={<FilePlus2 />}
+              isLoading={busy}
+              variant="default"
               onClick={async () => {
                 if (pending.current) return;
                 pending.current = true;
@@ -201,9 +203,7 @@ export function NewProjectDialog({
                 }
               }}
             >
-              <FilePlus2 />
               Start blank
-              <ArrowRight />
             </AppButton>
           </div>
         )}

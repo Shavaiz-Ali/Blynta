@@ -157,7 +157,11 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
                 {resolvedIcon}
               </span>
             )}
-            {children != null && <span className="shrink-0">{children}</span>}
+            {children != null && (
+              <span className="inline-flex items-center justify-center gap-1.5 shrink-0">
+                {children}
+              </span>
+            )}
             {resolvedIcon && iconPosition === "right" && (
               <span className="shrink-0 inline-flex items-center">
                 {resolvedIcon}

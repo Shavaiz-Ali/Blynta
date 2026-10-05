@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AppResizeHandle } from "@/components/common/AppResizeHandle";
 import { useQuery } from "@tanstack/react-query";
 import { studioApi, studioKeys } from "../../api";
-import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
+import { EditorSkeleton } from "./EditorSkeleton";
 import { EditorContext, useEditorState } from "../hooks/useEditor";
 import { EditorToolbar } from "./EditorToolbar";
 import { MediaPanel } from "../media/MediaPanel";
@@ -99,7 +99,7 @@ export function EditorShell({ projectId }: { projectId: string }) {
     refetchOnWindowFocus: false,
   });
   const error = query.error?.message;
-  if (query.isPending && !error) return <LoadingSkeleton />;
+  if (query.isPending && !error) return <EditorSkeleton />;
   const project = query.data;
   if (error || !project || !session)
     return (

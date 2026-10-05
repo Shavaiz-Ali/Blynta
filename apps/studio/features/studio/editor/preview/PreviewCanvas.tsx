@@ -1,24 +1,12 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
-import {
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Volume2,
-  VolumeX,
-  Maximize,
-  Film,
-  Upload,
-} from "lucide-react";
+import { Film, Upload } from "lucide-react";
 import { AppButton } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
-import { AppPopover } from "@blynta/ui";
+import { PlayerControls } from "@blynta/ui/player";
 import { AppSlider } from "@/components/common/AppSlider";
-import { AppTooltip } from "@/components/common/AppTooltip";
 import { useEditor } from "../hooks/useEditor";
-import { formatTime } from "../utils/time";
 import { AppFileInput } from "@/components/common/AppFileInput";
 import { useMediaUpload } from "../media/useMediaUpload";
 import type { Clip, Asset } from "../../types";
@@ -148,6 +136,12 @@ function MediaLayer({
 }
 export function PreviewCanvas() {
   const e = useEditor();
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const update = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", update);
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
   const uploadFile = useRef<HTMLInputElement>(null);
   const { upload, busy, error } = useMediaUpload();
   const stage = useRef<HTMLDivElement>(null);
@@ -285,81 +279,27 @@ export function PreviewCanvas() {
         </p>
       )}
       <div className="preview-controls">
-        <div className="playback-controls">
-          <div className="flex items-center gap-1">
-            <AppTooltip content="Previous frame">
-              <AppButton
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Previous frame"
-                onClick={() => {
-                  e.seek(Math.max(0, e.playhead - 1 / 30));
-                }}
-              >
-                <SkipBack />
-              </AppButton>
-            </AppTooltip>
-            <AppTooltip content="Play / pause · Space">
-              <AppButton
-                size="icon"
-                variant="secondary"
-                disabled={!e.duration}
-                aria-label={e.playing ? "Pause" : "Play"}
-                onClick={e.togglePlay}
-              >
-                {e.playing ? <Pause /> : <Play />}
-              </AppButton>
-            </AppTooltip>
-            <AppTooltip content="Next frame">
-              <AppButton
-                size="icon-sm"
-                variant="ghost"
-                aria-label="Next frame"
-                onClick={() =>
-                  e.seek(Math.min(e.duration, e.playhead + 1 / 30))
-                }
-              >
-                <SkipForward />
-              </AppButton>
-            </AppTooltip>
-          </div>
-          <span className="time-display">
-            {formatTime(e.playhead)}{" "}
-            <span className="text-muted-foreground">
-              / {formatTime(e.duration)}
-            </span>
-          </span>
-          <div className="flex gap-2 items-center">
-            <AppPopover
-              title="Preview volume"
-              trigger={
-                <AppButton
-                  variant="ghost"
-                  size="icon-sm"
-                  title="Preview volume"
-                  aria-label="Preview volume"
-                >
-                  {muted ? <VolumeX /> : <Volume2 />}
-                </AppButton>
-              }
-            >
-              <div className="flex items-center gap-3 mt-4">
-                <AppButton
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={muted ? "Unmute preview" : "Mute preview"}
-                  onClick={() => setMuted(!muted)}
-                >
-                  {muted ? <VolumeX /> : <Volume2 />}
-                </AppButton>
-                <AppSlider
-                  label="Preview volume level"
-                  value={volume}
-                  onValueChange={setVolume}
-                />
-                <span className="text-xs">{volume}%</span>
-              </div>
-            </AppPopover>
+        <PlayerControls
+          className="studio-player-controls"
+          disabled={!e.duration}
+          isPlaying={e.playing}
+          onTogglePlay={e.togglePlay}
+          isMuted={muted}
+          volume={volume / 100}
+          onToggleMute={() => setMuted(!muted)}
+          onVolumeChange={(event) =>
+            setVolume(Number(event.target.value) * 100)
+          }
+          currentTime={e.playhead}
+          duration={e.duration}
+          isFullscreen={fullscreen}
+          onPreviousFrame={() => e.seek(Math.max(0, e.playhead - 1 / 30))}
+          onNextFrame={() => e.seek(Math.min(e.duration, e.playhead + 1 / 30))}
+          onToggleFullscreen={() => {
+            if (document.fullscreenElement) void document.exitFullscreen();
+            else stage.current?.requestFullscreen().catch(() => {});
+          }}
+          actions={
             <AppSelect
               aria-label="Preview zoom"
               size="sm"
@@ -372,21 +312,8 @@ export function PreviewCanvas() {
                 { value: "fill", label: "Fill" },
               ]}
             />
-            <AppTooltip content="Fullscreen preview">
-              <AppButton
-                variant="ghost"
-                size="icon-sm"
-                aria-label="Fullscreen preview"
-                onClick={() => {
-                  if (document.fullscreenElement) document.exitFullscreen();
-                  else stage.current?.requestFullscreen().catch(() => {});
-                }}
-              >
-                <Maximize />
-              </AppButton>
-            </AppTooltip>
-          </div>
-        </div>
+          }
+        />
         <AppSlider
           label="Seek preview"
           className="preview-seek"

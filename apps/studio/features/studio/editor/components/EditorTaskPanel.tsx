@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { SlidersHorizontal, Music2, Timer, Sparkles, X } from "lucide-react";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppSidebarItem } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
 import {
   InspectorPanel,
@@ -42,32 +42,29 @@ export function EditorTaskPanel() {
       </div>
       <nav className="property-rail" aria-label="Clip and project controls">
         {sections.map((item) => (
-          <AppButton
+          <AppSidebarItem
             key={item.id}
-            variant={
-              !e.aiOpen && e.inspectorOpen && section === item.id
-                ? "secondary"
-                : "ghost"
-            }
-            className="property-rail-button"
-            aria-label={`Open ${item.label.toLowerCase()} controls`}
-            aria-pressed={!e.aiOpen && e.inspectorOpen && section === item.id}
+            label={item.label}
+            icon={<item.icon />}
+            rail
+            active={!e.aiOpen && e.inspectorOpen && section === item.id}
+            className="editor-property-item"
             onClick={() => {
               setSection(item.id);
               e.setAiOpen(false);
               e.setInspectorOpen(true);
               if (window.innerWidth < 1180) e.setContextOpen(false);
             }}
-          >
-            <item.icon size={18} />
-            <span>{item.label}</span>
-          </AppButton>
+          />
         ))}
         <div className="property-rail-divider" />
-        <AppButton
+        <AppSidebarItem
           id="editor-ai-launcher"
-          variant={e.aiOpen ? "secondary" : "ghost"}
-          className="property-rail-button ai-rail-button"
+          label="AI edit"
+          icon={<Sparkles />}
+          rail
+          active={e.aiOpen}
+          className="editor-property-item"
           aria-label="Open Blynta AI chat"
           aria-controls="editor-ai-chat"
           aria-expanded={e.aiOpen}
@@ -75,10 +72,7 @@ export function EditorTaskPanel() {
             e.setAiOpen(!e.aiOpen);
             if (window.innerWidth < 1180) e.setContextOpen(false);
           }}
-        >
-          <Sparkles size={18} />
-          <span>AI edit</span>
-        </AppButton>
+        />
       </nav>
     </>
   );

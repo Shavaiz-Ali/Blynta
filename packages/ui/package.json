@@ -7,7 +7,12 @@
     ".": "./src/index.ts",
     "./components/*": "./src/components/*.tsx",
     "./primitives/*": "./src/primitives/*.tsx",
-    "./styles/*": "./src/styles/*.css"
+    "./styles/*": "./src/styles/*.css",
+    "./player": "./src/player/index.ts",
+    "./player/*": "./src/player/*.tsx",
+    "./player/types": "./src/player/types.ts",
+    "./player/useVideoPlayback": "./src/player/useVideoPlayback.ts",
+    "./player/index": "./src/player/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -60,6 +60,28 @@ export class StudioService {
     if (!p) throw new NotFoundException('Project not found');
     return p;
   }
+  private async importedThumbnail(userId: string, project: StudioProject) {
+    const jobId = project.sourceJobId || project.importKey?.split(':')[0];
+    if (
+      !jobId ||
+      !Types.ObjectId.isValid(jobId) ||
+      !Types.ObjectId.isValid(userId)
+    )
+      return undefined;
+    const job = await this.jobs.findOne(
+      { _id: jobId, userId },
+      { thumbnailUrl: 1 },
+    );
+    if (!job?.thumbnailUrl) return undefined;
+    try {
+      const url = new URL(job.thumbnailUrl);
+      return url.protocol === 'https:' && !url.username && !url.password
+        ? url.href
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   async list(userId: string) {
     const projects = await this.projects
       .find({ userId })
@@ -70,29 +92,40 @@ export class StudioService {
       projectId: { $in: projects.map((p) => String(p._id)) },
       status: 'ready',
     });
+    const posters = new Map<string, Promise<string | undefined>>();
     return Promise.all(
-      projects.map(async (p) => ({
-        ...p.document,
-        assets: await Promise.all(
-          p.document.assets.map(async (a) => {
-            const record = media.find(
-              (m) => m.projectId === String(p._id) && m.assetId === a.id,
-            );
-            const key =
-              record?.thumbnailKey ||
-              (record?.kind === 'image' ? record.storageKey : undefined);
-            return key
-              ? { ...a, thumbnail: await this.r2.getSignedDownloadUrl(key) }
-              : a;
-          }),
-        ),
-        id: String(p._id),
-        revision: p.revision,
-        version: p.version,
-        updatedAt: p.updatedAt,
-        demo: false,
-        source: p.source,
-      })),
+      projects.map(async (p) => {
+        const sourceId = p.sourceJobId || p.importKey?.split(':')[0] || '';
+        if (!posters.has(sourceId))
+          posters.set(sourceId, this.importedThumbnail(userId, p));
+        const poster = await posters.get(sourceId);
+        return {
+          ...p.document,
+          assets: await Promise.all(
+            p.document.assets.map(async (a) => {
+              const record = media.find(
+                (m) => m.projectId === String(p._id) && m.assetId === a.id,
+              );
+              const key =
+                record?.thumbnailKey ||
+                (record?.kind === 'image' ? record.storageKey : undefined);
+              return key
+                ? { ...a, thumbnail: await this.r2.getSignedDownloadUrl(key) }
+                : poster &&
+                    record?.sourceGroup !== 'Uploads' &&
+                    record?.kind === 'video'
+                  ? { ...a, thumbnail: poster }
+                  : a;
+            }),
+          ),
+          id: String(p._id),
+          revision: p.revision,
+          version: p.version,
+          updatedAt: p.updatedAt,
+          demo: false,
+          source: p.source,
+        };
+      }),
     );
   }
   async create(userId: string, body: unknown) {
@@ -203,6 +236,7 @@ export class StudioService {
       name: `${p.name.slice(0, 90)} (copy)`,
       document: { ...p.document, name: `${p.name.slice(0, 90)} (copy)` },
       source: p.source,
+      sourceJobId: p.sourceJobId || p.importKey?.split(':')[0],
     });
     const assets = await this.media
       .find({ userId, projectId: id, status: 'ready' })
@@ -219,7 +253,8 @@ export class StudioService {
     return this.get(userId, String(copy._id));
   }
   async assets(userId: string, id: string) {
-    await this.owned(userId, id);
+    const project = await this.owned(userId, id);
+    const poster = await this.importedThumbnail(userId, project);
     const assets = await this.media.find({ userId, projectId: id });
     return Promise.all(
       assets.map(async (a) => ({
@@ -241,7 +276,11 @@ export class StudioService {
             : undefined,
         thumbnail: a.thumbnailKey
           ? await this.r2.getSignedDownloadUrl(a.thumbnailKey)
-          : undefined,
+          : a.kind === 'image' && a.status === 'ready'
+            ? await this.r2.getSignedDownloadUrl(a.storageKey)
+            : a.sourceGroup !== 'Uploads' && a.kind === 'video'
+              ? poster
+              : undefined,
       })),
     );
   }
@@ -440,6 +479,7 @@ export class StudioService {
       name: document.name,
       document,
       source: 'Blynta Clip',
+      sourceJobId: input.jobId,
     });
     const projectId = String(project._id);
     try {

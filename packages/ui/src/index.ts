@@ -1,4 +1,9 @@
 export { AppInput } from "./components/AppInput";
+export {
+  AppHeader,
+  AppSidebar,
+  AppSidebarItem,
+} from "./components/AppWorkspace";
 export type { AppInputProps, AppInputSize } from "./components/AppInput";
 
 export {

@@ -13,14 +13,14 @@ import {
 import { StudioLogo } from "@/components/common/StudioLogo";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { UserDropdown } from "@/components/common/UserDropdown";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppHeader } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
 import { AppTooltip } from "@/components/common/AppTooltip";
 import { useEditor } from "../hooks/useEditor";
 export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const e = useEditor();
   return (
-    <header className="editor-toolbar">
+    <AppHeader className="editor-toolbar">
       <AppTooltip content="Back to projects">
         <AppButton
           nativeButton={false}
@@ -122,6 +122,6 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
         <ThemeToggle />
         <UserDropdown />
       </div>
-    </header>
+    </AppHeader>
   );
 }

@@ -32,6 +32,7 @@ describe('Blynta clip to editable Studio project', () => {
     transcript?: { startTime: number; endTime: number; text: string }[];
     highlights: { clipTitle: string }[];
     videoTitle: string;
+    thumbnailUrl?: string;
   };
   type ProjectRecord = {
     _id: string;
@@ -283,5 +284,46 @@ describe('Blynta clip to editable Studio project', () => {
     );
     expect(savedProjects).toHaveLength(0);
     expect(savedAssets).toHaveLength(0);
+  });
+  it('returns source thumbnails for existing imports without persisting temporary URLs', async () => {
+    job.thumbnailUrl = 'https://i.ytimg.com/vi/example/hqdefault.jpg';
+    const imported = await service.fromClip(owner, body);
+    expect(imported.assets[0].thumbnail).toBe(job.thumbnailUrl);
+    expect((await service.get(owner, imported.id)).assets[0].thumbnail).toBe(
+      job.thumbnailUrl,
+    );
+    expect(savedProjects[0].document.assets[0]).not.toHaveProperty('thumbnail');
+    expect(jobs.findOne).toHaveBeenCalledWith(
+      { _id: jobId, userId: owner },
+      { thumbnailUrl: 1 },
+    );
+  });
+  it('prefers stored thumbnails over the source poster', async () => {
+    job.thumbnailUrl = 'https://i.ytimg.com/vi/example/hqdefault.jpg';
+    const imported = await service.fromClip(owner, body);
+    savedAssets[0].thumbnailKey = 'studio/cover.jpg';
+    const project = await service.get(owner, imported.id);
+    expect(project.assets[0].thumbnail).toBe(
+      'https://playback.invalid/studio/cover.jpg?signed=temporary',
+    );
+  });
+  it('ignores unsafe source thumbnail URLs', async () => {
+    job.thumbnailUrl = 'javascript:alert(1)';
+    const imported = await service.fromClip(owner, body);
+    expect(imported.assets[0].thumbnail).toBeUndefined();
+  });
+  it('returns thumbnails in the dashboard list for previously imported projects', async () => {
+    job.thumbnailUrl = 'https://i.ytimg.com/vi/example/hqdefault.jpg';
+    await service.fromClip(owner, body);
+    Object.assign(projects, {
+      find: jest.fn(() => ({ sort: () => ({ limit: () => savedProjects }) })),
+    });
+    media.find.mockReturnValue(savedAssets);
+    const listed = await service.list(owner);
+    expect(listed[0].assets[0].thumbnail).toBe(job.thumbnailUrl);
+    jobs.findOne.mockReturnValue(null);
+    expect((await service.list(owner))[0].assets[0]).not.toHaveProperty(
+      'thumbnail',
+    );
   });
 });

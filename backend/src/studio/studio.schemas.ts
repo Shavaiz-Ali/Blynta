@@ -8,6 +8,7 @@ export interface StudioProject {
   document: StudioDocument;
   source: string;
   importKey?: string;
+  sourceJobId?: string;
   updatedAt: Date;
 }
 export interface StudioAsset {
@@ -50,6 +51,7 @@ export const StudioProjectSchema = new Schema<StudioProject>(
     document: { type: Schema.Types.Mixed, required: true },
     source: { type: String, default: 'Studio' },
     importKey: String,
+    sourceJobId: String,
   },
   { timestamps: true },
 );

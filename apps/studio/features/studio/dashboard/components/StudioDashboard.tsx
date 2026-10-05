@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { AppButton, AppDialog, AppInput } from "@blynta/ui";
+import { AppButton, AppDialog, AppInput, AppSkeleton } from "@blynta/ui";
 import { useProjects } from "../../projects/hooks/useProjects";
 import { NewProjectDialog } from "../../projects/components/NewProjectDialog";
 import type { Project } from "../../types";
@@ -212,7 +212,12 @@ export function DashboardWorkspace({
             />
           )}
           {!ready && !error ? (
-            <ProjectsSkeleton />
+            <>
+              <div className="project-result-count">
+                <AppSkeleton className="h-3 w-16" />
+              </div>
+              <ProjectsSkeleton />
+            </>
           ) : projects.length > 0 && filtered.length > 0 ? (
             <>
               <p className="project-result-count" role="status">
