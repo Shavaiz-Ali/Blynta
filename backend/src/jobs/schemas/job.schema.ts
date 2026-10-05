@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type JobDocument = Job & Document;
 
@@ -106,7 +106,7 @@ export const ClipSchema = SchemaFactory.createForClass(Clip);
 
 @Schema({ timestamps: true })
 export class Job {
-  @Prop({ type: Types.ObjectId, required: true, index: true })
+  @Prop({ type: MongooseSchema.Types.ObjectId, required: true, index: true })
   userId: Types.ObjectId;
 
   @Prop({ required: true })

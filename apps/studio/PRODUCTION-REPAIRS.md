@@ -1,5 +1,15 @@
 # Studio production repairs
 
+## Confirmed cause of the remaining clip 404 — October 5
+
+The real Mongoose owner-filtered query was reproduced against the supplied job. Before the fix, `JobSchema.path('userId').instance` was `Mixed`: Nest's schema factory did not turn the BSON constructor `Types.ObjectId` into an ObjectId schema path. The importer supplied a string owner ID, so it was sent unchanged to Mongo and failed to match the stored BSON ObjectId. The user's `/users/me` ID matched the stored owner. Both the clip and its R2 object were present.
+
+Changed the owner property's schema type to `MongooseSchema.Types.ObjectId` in `backend/src/jobs/schemas/job.schema.ts`. The same read-only database check with the rebuilt schema now reports ObjectId casting, a successful owner-filtered job lookup, and a successful exact clip lookup. No ownership checks were removed, and no database migration is needed for this record.
+
+The earlier service tests mocked `jobs.findOne` and therefore missed Mongoose's actual casting. New `job.schema.spec.ts` regressions use the real generated schema and Mongoose queries, with only the database collection mocked. They verify matching ObjectId ownership and rejection of another user.
+
+Deploy/restart the backend with this schema correction. This confirms the previously failing lookup against the actual record; an authenticated production import after deployment remains the final acceptance check. The earlier tentative deployment/account diagnosis below is superseded by this reproduced schema mismatch.
+
 ## Confirmed findings
 
 - The supplied job `6abe4d644b3ff2840974672f` and clip `6abe4de08c39dc00dddedd54` exist in the configured Mongo database. The clip is completed, belongs to user `6ab507089b7f22501c40aeb5`, and its canonical R2 object exists: `clips/6abe4d644b3ff2840974672f/clip-1-captioned.mp4` (15,465,928 bytes, video/mp4). This was checked read-only against Mongo and R2.
