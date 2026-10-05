@@ -1,0 +1,112 @@
+/* Geometry only: shared components own control colors, borders and states. */
+@layer studio-layout {
+  .editor-shell {
+    grid-template-rows: 56px minmax(0, 1fr) 22px;
+  }
+  .editor-toolbar {
+    margin: 0;
+    border-radius: 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    background: var(--background);
+  }
+  .editor-brand {
+    padding-right: 4px;
+  }
+  .media-area {
+    grid-row: 1;
+  }
+  .editor-workspace > .workspace-resizer.resize-y,
+  .timeline-area {
+    grid-column: 1 / -1;
+  }
+  .preview-area {
+    background: color-mix(in oklch, var(--muted) 45%, var(--background));
+  }
+  .preview-heading {
+    border-bottom: 1px solid var(--border);
+    background: var(--card);
+  }
+  .preview-stage {
+    padding: 20px;
+  }
+  .preview-frame {
+    box-shadow: 0 4px 24px #0002;
+  }
+  .tool-rail,
+  .property-rail {
+    padding: 12px 6px;
+    gap: 8px;
+  }
+  .media-source-tabs {
+    border: 0;
+    margin-top: 16px;
+  }
+
+  .media-panel-body {
+    padding: 16px;
+  }
+  .right-workspace {
+    background: var(--card);
+  }
+  .workspace-panel-heading {
+    background: var(--card);
+  }
+  .ai-prompt-input {
+    min-height: 96px;
+  }
+  .ai-composer-box {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0;
+  }
+  .media-item-main .asset-thumbnail {
+    border-radius: 0;
+    aspect-ratio: 16/9;
+  }
+  .media-item-main .media-item-label {
+    padding: 10px;
+  }
+  .media-item > [data-slot="card-content"] {
+    position: relative;
+  }
+  .media-item [data-slot="dropdown-menu-trigger"] {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+  }
+  @media (max-width: 767px) {
+    .editor-shell {
+      grid-template-rows: auto minmax(0, 1fr) 22px;
+    }
+    .editor-toolbar {
+      padding: 8px;
+      grid-template-columns: 32px minmax(0, 1fr);
+    }
+    .editor-toolbar .project-name {
+      width: 100%;
+      min-width: 0;
+    }
+    .editor-workspace > .workspace-resizer.resize-y {
+      grid-column: 1;
+      grid-row: 3;
+    }
+    .timeline-area {
+      grid-column: 1;
+      grid-row: 4;
+    }
+    .tool-rail {
+      padding: 3px 4px;
+      gap: 3px;
+    }
+    .property-rail {
+      padding: 2px 8px;
+      gap: 4px;
+    }
+    .preview-stage {
+      padding: 8px;
+    }
+  }
+}

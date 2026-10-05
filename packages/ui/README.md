@@ -13,3 +13,11 @@ Import StudioVideoPlayer, ClipMediaStage, useVideoPlayback, PlayerControls, or P
 Studio uses PlayerControls with its timeline playhead, volume, frame stepping, zoom action, and fullscreen callbacks. Its canvas continues composing synchronized video, audio, image, and text tracks. Speed and loop controls appear only when the consuming player provides those callbacks.
 
 The main app and Studio load the same Inter, Instrument Serif, and JetBrains Mono font variables in their Next root layouts.
+
+## Shared collections and CSS ownership
+
+Use AppViewModeToggle for grid/list selection in both apps. AppMediaCard provides the main app thumbnail-card surface (radius, border, shadow and hover states); apps provide the media and actions.
+
+PlayerControls defaults to appearance="overlay" for controls over video. Use appearance="surface" for controls on a themed application surface, including Studio, so timestamps and icons remain visible in light mode.
+
+Studio layout styles live in the studio-layout cascade layer, before shared component utilities. Keep geometry in that layer and use shared component props/classes for controls; do not override their internal markup or focus states.

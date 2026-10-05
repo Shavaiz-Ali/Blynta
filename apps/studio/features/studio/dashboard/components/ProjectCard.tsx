@@ -12,7 +12,7 @@ import {
   AudioLines,
   Type,
 } from "lucide-react";
-import { AppButton, AppCardRoot, AppDropdown } from "@blynta/ui";
+import { AppButton, AppMediaCard, AppDropdown, AppBadge } from "@blynta/ui";
 import type { Project } from "../../types";
 import {
   projectDuration,
@@ -137,7 +137,7 @@ export function ProjectCard({
   busy?: boolean;
 }) {
   return (
-    <AppCardRoot className="studio-project-card">
+    <AppMediaCard className="studio-project-card">
       <Link
         href={`/editor/${project.id}`}
         className="studio-project-link"
@@ -146,20 +146,28 @@ export function ProjectCard({
         onFocus={() => onPrepare?.(project)}
       >
         <ProjectThumbnail project={project} />
-        <div className="studio-project-details">
-          <h3 title={project.name}>{project.name}</h3>
-          <p>
+        <div className="p-4 pb-2">
+          <h3
+            className="line-clamp-2 text-sm font-semibold leading-snug"
+            title={project.name}
+          >
+            {project.name}
+          </h3>
+          <p className="mt-1 text-[11px] text-muted-foreground">
             Edited{" "}
             <time dateTime={project.updatedAt}>{projectEdited(project)}</time>
           </p>
-          <span className="studio-project-source">
-            {projectSource(project)}
-          </span>
         </div>
       </Link>
-      <div className="studio-project-actions">
+      <div className="mx-4 mb-3 flex items-center justify-between border-t border-border/50 pt-2">
+        <AppBadge
+          variant="outline"
+          className="border-primary/20 bg-primary/10 text-[11px] text-primary"
+        >
+          {projectSource(project)}
+        </AppBadge>
         <ProjectActions project={project} onAction={onAction} busy={busy} />
       </div>
-    </AppCardRoot>
+    </AppMediaCard>
   );
 }

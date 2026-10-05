@@ -16,7 +16,7 @@ import {
 import { JobActionsMenu } from "./JobActionsMenu";
 import { FilmIcon, PlayIcon, SparklesIcon, ClockIcon } from "../icons";
 
-import { AppCard } from "@blynta/ui";
+import { AppMediaCard } from "@blynta/ui";
 import { Badge } from "@/components/ui/badge";
 
 interface JobCardGridProps {
@@ -37,7 +37,7 @@ export function JobCardGrid({ job }: JobCardGridProps) {
   };
 
   return (
-    <AppCard
+    <AppMediaCard
       onClick={handleCardClick}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl p-0 text-left transition-[border-color,box-shadow,background-color] duration-200",
@@ -154,6 +154,6 @@ export function JobCardGrid({ job }: JobCardGridProps) {
           <JobActionsMenu job={job} menuPlacement="top" />
         </div>
       </div>
-    </AppCard>
+    </AppMediaCard>
   );
 }

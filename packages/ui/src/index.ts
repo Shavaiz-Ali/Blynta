@@ -84,3 +84,7 @@ export { Avatar as AppAvatar } from "./primitives/avatar";
 export { Badge as AppBadge } from "./primitives/badge";
 export { Skeleton as AppSkeleton } from "./primitives/skeleton";
 export { ScrollArea as AppScrollArea } from "./primitives/scroll-area";
+
+export { AppViewModeToggle } from "./components/AppViewModeToggle";
+export type { ViewMode } from "./components/AppViewModeToggle";
+export { AppMediaCard } from "./components/AppMediaCard";

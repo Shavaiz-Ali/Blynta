@@ -2,6 +2,7 @@
 import Link from "next/link";
 import {
   ArrowLeft,
+  CloudCheck,
   Undo2,
   Redo2,
   Download,
@@ -20,7 +21,7 @@ import { useEditor } from "../hooks/useEditor";
 export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const e = useEditor();
   return (
-    <AppHeader className="editor-toolbar">
+    <AppHeader className="editor-toolbar grid md:flex h-auto md:h-14">
       <AppTooltip content="Back to projects">
         <AppButton
           nativeButton={false}
@@ -39,12 +40,19 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
       <span className="h-5 border-l" />
       <AppInput
         aria-label="Project name"
-        size="sm"
-        wrapperClassName="project-name"
+        className="bg-background/80"
+        wrapperClassName="project-name min-w-0 flex-1 md:max-w-md"
         value={e.doc.name}
         maxLength={100}
         onChange={(v) => e.edit((d) => ({ ...d, name: v.target.value }))}
       />
+      <span
+        className="hidden xl:flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        role="status"
+      >
+        <CloudCheck className="h-4 w-4" />
+        {e.saveState}
+      </span>
       {e.saveState.startsWith("Save failed") && (
         <AppButton
           size="xs"
@@ -65,7 +73,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             aria-label="Toggle media panel"
             aria-pressed={e.contextOpen}
             onClick={() => {
-              if (window.innerWidth < 1180) {
+              if (window.innerWidth < 1360) {
                 e.setAiOpen(false);
                 e.setInspectorOpen(false);
               }
@@ -82,7 +90,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             aria-label="Toggle properties panel"
             aria-pressed={e.inspectorOpen}
             onClick={() => {
-              if (window.innerWidth < 1180) e.setContextOpen(false);
+              if (window.innerWidth < 1360) e.setContextOpen(false);
               if (e.aiOpen) {
                 e.setAiOpen(false);
                 e.setInspectorOpen(true);

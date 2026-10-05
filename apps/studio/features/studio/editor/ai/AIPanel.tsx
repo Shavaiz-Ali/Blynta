@@ -332,7 +332,7 @@ export function AIPanel() {
             value={prompt}
             onChange={(v) => setPrompt(v.target.value)}
             rows={2}
-            className="ai-prompt-input"
+            className="ai-prompt-input min-h-24 resize-none bg-background/80"
             style={{
               height: Math.min(
                 112,

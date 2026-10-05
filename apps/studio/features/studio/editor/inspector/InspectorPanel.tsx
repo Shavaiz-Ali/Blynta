@@ -27,7 +27,7 @@ function NumberField({
   return (
     <AppInput
       label={label}
-      size="sm"
+      size="default"
       type="number"
       min={min}
       max={max}
@@ -105,7 +105,7 @@ function VideoInspector() {
       <AppDisclosure title="Frame fit">
         <AppSelect
           label="Crop & fit"
-          size="sm"
+          size="default"
           wrapperClassName="mt-4"
           value={e.selected!.fit}
           onValueChange={(v) =>
@@ -134,7 +134,7 @@ function TextInspector() {
       <AppDisclosure title="Font & style">
         <AppSelect
           label="Font"
-          size="sm"
+          size="default"
           value={clip.fontFamily ?? "Arial"}
           onValueChange={(fontFamily) => e.patch(clip.id, { fontFamily })}
           options={[
@@ -147,7 +147,7 @@ function TextInspector() {
           <NumberField label="Size" field="fontSize" min={12} max={96} />
           <AppSelect
             label="Weight"
-            size="sm"
+            size="default"
             value={String(clip.fontWeight ?? 700)}
             onValueChange={(v) => e.patch(clip.id, { fontWeight: Number(v) })}
             options={[
@@ -159,7 +159,7 @@ function TextInspector() {
         <AppSelect
           label="Alignment"
           wrapperClassName="mt-3"
-          size="sm"
+          size="default"
           value={clip.textAlign ?? "center"}
           onValueChange={(v) =>
             e.patch(clip.id, { textAlign: v as "left" | "center" | "right" })
@@ -174,7 +174,7 @@ function TextInspector() {
           <AppInput
             label="Color"
             type="color"
-            size="sm"
+            size="default"
             value={clip.color}
             onChange={(v) => e.patch(clip.id, { color: v.target.value })}
           />
@@ -311,7 +311,7 @@ export function InspectorPanel({
             <>
               <AppInput
                 label="Project name"
-                size="sm"
+                size="default"
                 value={e.doc.name}
                 onChange={(v) =>
                   e.edit((d) => ({ ...d, name: v.target.value }))
@@ -319,7 +319,7 @@ export function InspectorPanel({
               />
               <AppSelect
                 label="Aspect ratio"
-                size="sm"
+                size="default"
                 wrapperClassName="mt-4"
                 value={e.doc.ratio}
                 onValueChange={(v) =>

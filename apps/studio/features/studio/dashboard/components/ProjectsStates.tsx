@@ -1,4 +1,4 @@
-import { AppButton, AppSkeleton } from "@blynta/ui";
+import { AppButton, AppSkeleton, AppMediaCard } from "@blynta/ui";
 import {
   FilePlus2,
   SearchX,
@@ -14,14 +14,17 @@ export function ProjectsSkeleton({ count = 4 }: { count?: number }) {
     <div className="studio-project-grid" role="status">
       <span className="sr-only">Loading projects</span>
       {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="studio-project-skeleton">
+        <AppMediaCard key={i} className="studio-project-skeleton">
           <AppSkeleton className="aspect-video rounded-none" />
           <div className="p-4">
             <AppSkeleton className="h-4 w-3/4" />
             <AppSkeleton className="mt-3 h-3 w-1/2" />
-            <AppSkeleton className="mt-3 h-3 w-1/4" />
+            <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2">
+              <AppSkeleton className="h-5 w-20" />
+              <AppSkeleton className="h-8 w-8" />
+            </div>
           </div>
-        </div>
+        </AppMediaCard>
       ))}
     </div>
   );

@@ -270,6 +270,23 @@ try {
   assert.ok(Math.abs(b.preview.y - b.right.y) < 2);
   assert.ok(b.preview.w > 400);
   assert.equal(b.overflow, false);
+  const timeline = await page.locator(".timeline-area").boundingBox();
+  assert.equal(timeline.x, 0);
+  assert.equal(timeline.width, 1440);
+  const handle = await page
+    .getByRole("separator", { name: "Resize timeline" })
+    .boundingBox();
+  assert.ok(handle.height <= 8);
+  assert.ok(timeline.height >= 220);
+  const durationColor = await page
+    .locator(".studio-player-controls .font-mono span")
+    .last()
+    .evaluate((el) => getComputedStyle(el).color);
+  assert.ok(
+    !durationColor.includes("255, 255, 255"),
+    "Light-theme playback duration must be visible",
+  );
+  await page.locator(".media-item-label").first().waitFor({ state: "visible" });
   await page.screenshot({
     path: path.join(root, ".test-results/editor-shared-light.png"),
   });
@@ -328,6 +345,12 @@ try {
   });
   await page.locator(".studio-project-card").first().waitFor();
   await page.locator(".studio-project-card img").first().waitFor();
+  const card = page.locator(".studio-project-card").first();
+  const cardBox = await card.boundingBox();
+  const menuBox = await card
+    .getByRole("button", { name: /Options for/ })
+    .boundingBox();
+  assert.ok(menuBox.y + menuBox.height <= cardBox.y + cardBox.height);
   assert.ok((await page.locator(".studio-project-card img").count()) > 0);
   await page.screenshot({
     path: path.join(root, ".test-results/dashboard-shared-dark.png"),

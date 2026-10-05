@@ -11,19 +11,19 @@ export function EditorSkeleton() {
         {
           "--media-width": `${layout.mediaWidth}px`,
           "--inspector-width": `${layout.inspectorWidth}px`,
-          "--timeline-height": "180px",
+          "--timeline-height": "240px",
         } as CSSProperties
       }
       role="status"
       aria-label="Loading editor"
     >
       <span className="sr-only">Loading editor</span>
-      <AppHeader className="editor-toolbar">
+      <AppHeader className="editor-toolbar grid md:flex h-auto md:h-14">
         <AppSkeleton className="h-8 w-8" />
         <div className="editor-brand">
           <AppSkeleton className="h-6 w-36" />
         </div>
-        <div className="project-name">
+        <div className="project-name min-w-0 flex-1 md:max-w-md">
           <AppSkeleton className="h-8 w-full" />
         </div>
         <div className="editor-actions ml-auto flex items-center gap-1.5">

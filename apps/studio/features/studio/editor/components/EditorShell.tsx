@@ -30,7 +30,7 @@ export function EditorWorkspace({
         style={
           {
             "--media-width": `${e.mediaWidth}px`,
-            "--timeline-height": `${Math.min(e.timelineHeight, Math.max(180, 92 + e.visibleTracks.length * 58))}px`,
+            "--timeline-height": `${Math.min(e.timelineHeight, Math.max(240, 96 + e.visibleTracks.length * 72))}px`,
             "--inspector-width": `${e.inspectorWidth}px`,
           } as CSSProperties
         }
@@ -70,12 +70,12 @@ export function EditorWorkspace({
             reverse
             value={Math.min(
               e.timelineHeight,
-              Math.max(180, 92 + e.visibleTracks.length * 58),
+              Math.max(240, 96 + e.visibleTracks.length * 72),
             )}
-            min={180}
+            min={Math.min(220, e.maxTimeline)}
             max={Math.min(
               e.maxTimeline,
-              Math.max(180, 92 + e.visibleTracks.length * 58),
+              Math.max(240, 96 + e.visibleTracks.length * 72),
             )}
             onValueChange={e.setTimelineHeight}
           />

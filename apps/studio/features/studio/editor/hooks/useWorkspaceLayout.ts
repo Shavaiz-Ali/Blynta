@@ -22,7 +22,7 @@ export function useWorkspaceLayout() {
         mediaWidth: 300,
         inspectorWidth: 300,
         timelineHeight: Math.min(324, Math.round(viewport.height * 0.4)),
-        contextOpen: viewport.width >= 1180,
+        contextOpen: viewport.width >= 1360,
         inspectorOpen: false,
       };
       try {
@@ -42,7 +42,7 @@ export function useWorkspaceLayout() {
               )
             : defaults.timelineHeight,
           contextOpen:
-            viewport.width >= 1180 && typeof saved?.contextOpen === "boolean"
+            viewport.width >= 1360 && typeof saved?.contextOpen === "boolean"
               ? saved.contextOpen
               : defaults.contextOpen,
           inspectorOpen:
@@ -59,7 +59,7 @@ export function useWorkspaceLayout() {
       setViewport({ width: window.innerWidth, height: window.innerHeight });
       setLayout((previous) => ({
         ...previous,
-        contextOpen: window.innerWidth < 1180 ? false : previous.contextOpen,
+        contextOpen: window.innerWidth < 1360 ? false : previous.contextOpen,
         inspectorOpen: window.innerWidth < 980 ? false : previous.inspectorOpen,
       }));
     };

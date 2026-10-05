@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AppCard } from "@blynta/ui";
 import type { Project } from "../../types";
 import { ProjectCard, ProjectActions, ProjectThumbnail } from "./ProjectCard";
 import {
@@ -36,7 +37,13 @@ export function ProjectCollection({
       </div>
     );
   return (
-    <div className="studio-project-table" role="table" aria-label="Projects">
+    <AppCard
+      className="studio-project-table p-0 rounded-xl"
+      contentClassName="p-0"
+      useDefaultClasses={false}
+      role="table"
+      aria-label="Projects"
+    >
       <div className="studio-project-table-header" role="row">
         <span role="columnheader">Project</span>
         <span role="columnheader">Source</span>
@@ -80,7 +87,7 @@ export function ProjectCollection({
           </div>
         </div>
       ))}
-    </div>
+    </AppCard>
   );
 }
 

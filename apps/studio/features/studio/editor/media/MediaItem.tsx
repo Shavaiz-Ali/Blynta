@@ -13,7 +13,7 @@ import Image from "next/image";
 import { formatTime } from "../utils/time";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppMediaCard } from "@blynta/ui";
 import { AppDropdownMenu } from "@/components/common/AppDropdownMenu";
 import { AppDialog } from "@blynta/ui";
 import { AppFileInput } from "@/components/common/AppFileInput";
@@ -34,22 +34,22 @@ export function MediaItem({ asset }: { asset: Asset }) {
         ? ImageIcon
         : Film;
   return (
-    <div
+    <AppMediaCard
       draggable
       onDragStart={(v) =>
         v.dataTransfer.setData("application/blynta-asset", asset.id)
       }
-      className="media-item"
+      className="media-item min-w-0"
     >
       <AppTooltip content={`${asset.name} · Click to add, or drag to timeline`}>
         <AppButton
           variant="ghost"
-          className="media-item-main"
+          className="media-item-main h-auto w-full justify-start rounded-none p-0 [&>span]:w-full [&>span]:flex-col [&>span]:gap-0 [&>span>span]:w-full [&>span>span]:flex-col [&>span>span]:gap-0"
           onClick={() => e.add(asset)}
           aria-label={`Add ${asset.name} to timeline`}
         >
           <span
-            className={`asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
+            className={`relative block w-full aspect-video overflow-hidden asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
           >
             {asset.thumbnail || (asset.src && asset.kind === "image") ? (
               <Image
@@ -70,8 +70,8 @@ export function MediaItem({ asset }: { asset: Asset }) {
               <Icon size={18} />
             )}
           </span>
-          <span className="media-item-label">
-            <span className="truncate block text-xs font-medium">
+          <span className="media-item-label block w-full p-2 text-left">
+            <span className="truncate block text-xs font-medium leading-5">
               {asset.name}
             </span>
             <span className="block mt-1 text-[10px] text-muted-foreground">
@@ -137,14 +137,33 @@ export function MediaItem({ asset }: { asset: Asset }) {
           try {
             if (!selected) return;
             const replacement = await uploadMedia(e.projectId, selected);
-            if (replacement.kind !== asset.kind) throw new Error('Choose a replacement with the same media type.');
+            if (replacement.kind !== asset.kind)
+              throw new Error("Choose a replacement with the same media type.");
             e.edit((d) => ({
               ...d,
-              assets: d.assets.map((a) => a.id === asset.id ? replacement : a),
-              clips: d.clips.map((c) => c.assetId === asset.id ? { ...c, assetId: replacement.id, offset: 0, duration: Math.min(c.duration, replacement.duration / c.speed) } : c),
+              assets: d.assets.map((a) =>
+                a.id === asset.id ? replacement : a,
+              ),
+              clips: d.clips.map((c) =>
+                c.assetId === asset.id
+                  ? {
+                      ...c,
+                      assetId: replacement.id,
+                      offset: 0,
+                      duration: Math.min(
+                        c.duration,
+                        replacement.duration / c.speed,
+                      ),
+                    }
+                  : c,
+              ),
             }));
           } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Could not replace this file.");
+            toast.error(
+              error instanceof Error
+                ? error.message
+                : "Could not replace this file.",
+            );
           }
         }}
       />
@@ -180,6 +199,6 @@ export function MediaItem({ asset }: { asset: Asset }) {
           autoFocus
         />
       </AppDialog>
-    </div>
+    </AppMediaCard>
   );
 }

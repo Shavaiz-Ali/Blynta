@@ -1,6 +1,5 @@
-import { Search, Grid2X2, List } from "lucide-react";
-import { AppInput, AppSelect, AppButton } from "@blynta/ui";
-import { AppTooltip } from "@/components/common/AppTooltip";
+import { Search } from "lucide-react";
+import { AppInput, AppSelect, AppCard, AppViewModeToggle } from "@blynta/ui";
 
 export function ProjectsToolbar({
   search,
@@ -22,14 +21,18 @@ export function ProjectsToolbar({
   onList: (value: boolean) => void;
 }) {
   return (
-    <div className="projects-toolbar">
+    <AppCard
+      className="py-0"
+      contentClassName="flex-col gap-3 lg:flex-row lg:items-center"
+    >
       <AppInput
         prefixIcon={<Search size={16} />}
         aria-label="Search projects"
         value={search}
         onChange={(e) => onSearch(e.target.value)}
         placeholder="Search your projects"
-        wrapperClassName="project-search"
+        wrapperClassName="w-full min-w-0 lg:flex-1"
+        className="bg-background/80"
       />
       <AppSelect
         label="Filter by project source"
@@ -43,7 +46,8 @@ export function ProjectsToolbar({
             (value) => ({ value, label: value }),
           ),
         ]}
-        wrapperClassName="project-filter"
+        wrapperClassName="w-full sm:w-36"
+        className="bg-background/80"
       />
       <AppSelect
         label="Sort projects"
@@ -55,30 +59,13 @@ export function ProjectsToolbar({
           { value: "name", label: "Name A–Z" },
           { value: "oldest", label: "Oldest first" },
         ]}
-        wrapperClassName="project-filter"
+        wrapperClassName="w-full sm:w-36"
+        className="bg-background/80"
       />
-      <div
-        className="project-view-switch"
-        role="group"
-        aria-label="Project display"
-      >
-        {[
-          { label: "Grid view", value: false, icon: Grid2X2 },
-          { label: "List view", value: true, icon: List },
-        ].map(({ label, value, icon: Icon }) => (
-          <AppTooltip key={label} content={label}>
-            <AppButton
-              aria-label={label}
-              aria-pressed={list === value}
-              variant={list === value ? "secondary" : "ghost"}
-              size="icon-sm"
-              onClick={() => onList(value)}
-            >
-              <Icon />
-            </AppButton>
-          </AppTooltip>
-        ))}
-      </div>
-    </div>
+      <AppViewModeToggle
+        mode={list ? "list" : "grid"}
+        onChange={(mode) => onList(mode === "list")}
+      />
+    </AppCard>
   );
 }

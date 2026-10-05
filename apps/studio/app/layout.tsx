@@ -5,6 +5,7 @@ import "./globals.css";
 import "./studio.css";
 import "./dashboard.css";
 import "./editor-layout.css";
+import "./workspace-layout.css";
 
 const fontSans = Inter({ subsets: ["latin"], variable: "--font-sans" });
 const fontSerif = Instrument_Serif({

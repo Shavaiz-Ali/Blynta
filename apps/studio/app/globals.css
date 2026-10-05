@@ -1,3 +1,4 @@
+@layer theme, base, studio-layout, components, utilities;
 @import "tailwindcss";
 @import "@blynta/ui/styles/theme";
 @source "../../../packages/ui/src";

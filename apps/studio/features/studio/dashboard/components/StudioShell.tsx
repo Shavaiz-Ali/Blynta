@@ -1,6 +1,8 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { AppAvatar } from "@/components/common/AppAvatar";
 import {
   AppButton,
   AppHeader,
@@ -35,6 +37,7 @@ export function StudioSidebar({
   onNavigate?: () => void;
   collapsed?: boolean;
 }) {
+  const { data: session } = useSession();
   const navigate = (action: () => void) => {
     onNavigate?.();
     action();
@@ -97,9 +100,17 @@ export function StudioSidebar({
       </nav>
       <div className="mt-auto border-t border-border/60 p-2.5">
         {!collapsed && (
-          <p className="px-3 pb-3 text-[11px] leading-5 text-muted-foreground">
-            Your media library and Blynta AI are available inside each project.
-          </p>
+          <div className="mb-3 flex items-center gap-2.5 rounded-lg bg-muted/30 px-3 py-2.5">
+            <AppAvatar name={session?.user.name || "Blynta"} />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-semibold">
+                {session?.user.name || "Your workspace"}
+              </p>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {session?.user.email || "Personal workspace"}
+              </p>
+            </div>
+          </div>
         )}
         <AppSidebarItem
           label="Back to Blynta"
@@ -147,6 +158,16 @@ export function StudioHeader({
         Studio <span className="mx-2 text-border">/</span>{" "}
         <span className="text-foreground">Projects</span>
       </span>
+      <AppButton
+        variant="outline"
+        size="sm"
+        className="hidden sm:inline-flex"
+        icon={<ArrowUpLeft />}
+        nativeButton={false}
+        render={<a href={blyntaUrl} />}
+      >
+        Blynta
+      </AppButton>
       <ThemeToggle />
       <UserDropdown />
     </AppHeader>

@@ -40,7 +40,7 @@ export function QuickStart({
           <AppButton
             key={title}
             variant="outline"
-            className="studio-quick-action"
+            className="studio-quick-action h-auto min-h-28 rounded-xl border-border/80 bg-card shadow-xs text-left hover:border-primary/35 hover:shadow-md [&>span]:w-full"
             onClick={action}
           >
             <span className="quick-action-icon">

@@ -8,6 +8,7 @@ import { cn } from "../lib/utils";
 
 export interface PlayerControlsProps {
   className?: string;
+  appearance?: "overlay" | "surface";
   disabled?: boolean;
   actions?: React.ReactNode;
   onPreviousFrame?: () => void;
@@ -30,6 +31,7 @@ export interface PlayerControlsProps {
 
 export function PlayerControls({
   className,
+  appearance = "overlay",
   disabled = false,
   actions,
   onPreviousFrame,
@@ -49,10 +51,15 @@ export function PlayerControls({
   isFullscreen,
   onToggleFullscreen,
 }: PlayerControlsProps) {
+  const surface = appearance === "surface";
+  const neutralControl = surface
+    ? "text-foreground/80 hover:bg-accent hover:text-foreground"
+    : "text-white/80 hover:bg-white/10 hover:text-white";
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-2 text-white",
+        "flex items-center justify-between gap-2",
+        surface ? "text-foreground" : "text-white",
         className,
       )}
     >
@@ -109,7 +116,10 @@ export function PlayerControls({
           <button
             type="button"
             onClick={onToggleMute}
-            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            className={cn(
+              "flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors",
+              neutralControl,
+            )}
             aria-label={isMuted ? "Unmute video" : "Mute video"}
             title={isMuted ? "Unmute (M)" : "Mute (M)"}
           >
@@ -141,16 +151,33 @@ export function PlayerControls({
             step={0.05}
             value={isMuted ? 0 : volume}
             onChange={onVolumeChange}
-            className="hidden h-1 w-0 cursor-pointer rounded-full bg-white/20 accent-primary opacity-0 transition-all duration-200 group-hover/vol:w-14 group-hover/vol:opacity-100 sm:block"
+            className={cn(
+              "hidden h-1 w-0 cursor-pointer rounded-full accent-primary opacity-0 transition-all duration-200 group-hover/vol:w-14 group-hover/vol:opacity-100 sm:block",
+              surface ? "bg-muted" : "bg-white/20",
+            )}
             title="Volume"
           />
         </div>
 
         {/* Time Stamp Display */}
-        <div className="truncate font-mono text-[10px] tabular-nums text-white/90 sm:text-[11px]">
+        <div
+          className={cn(
+            "truncate font-mono text-[10px] tabular-nums sm:text-[11px]",
+            surface ? "text-foreground" : "text-white/90",
+          )}
+        >
           <span>{formatTimestamp(currentTime)}</span>
-          <span className="text-white/40 mx-1">/</span>
-          <span className="text-white/70">{formatTimestamp(duration)}</span>
+          <span
+            className={cn(
+              "mx-1",
+              surface ? "text-muted-foreground" : "text-white/40",
+            )}
+          >
+            /
+          </span>
+          <span className={surface ? "text-muted-foreground" : "text-white/70"}>
+            {formatTimestamp(duration)}
+          </span>
         </div>
       </div>
 
@@ -162,7 +189,10 @@ export function PlayerControls({
           <button
             type="button"
             onClick={onCyclePlaybackRate}
-            className="h-8 cursor-pointer rounded-lg px-2 font-mono text-[10px] font-bold text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            className={cn(
+              "h-8 cursor-pointer rounded-lg px-2 font-mono text-[10px] font-bold transition-colors",
+              neutralControl,
+            )}
             title="Change Speed"
           >
             {playbackRate}x
@@ -175,10 +205,13 @@ export function PlayerControls({
             type="button"
             onClick={onToggleLoop}
             className={cn(
-              "flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors hover:bg-white/10",
+              "flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors",
+              surface ? "hover:bg-accent" : "hover:bg-white/10",
               isLooping
-                ? "bg-primary/15 text-blue-300"
-                : "text-white/70 hover:text-white",
+                ? surface
+                  ? "bg-primary/15 text-primary"
+                  : "bg-primary/15 text-blue-300"
+                : neutralControl,
             )}
             title={isLooping ? "Disable Loop (L)" : "Enable Loop (L)"}
           >
@@ -201,7 +234,10 @@ export function PlayerControls({
         <button
           type="button"
           onClick={onToggleFullscreen}
-          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          className={cn(
+            "flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg transition-colors",
+            neutralControl,
+          )}
           aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
           title={isFullscreen ? "Exit Fullscreen (F)" : "Fullscreen (F)"}
         >

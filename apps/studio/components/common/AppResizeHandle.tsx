@@ -34,7 +34,7 @@ export function AppResizeHandle({
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={Math.round(value)}
-      className={`workspace-resizer resize-${axis} ${end ? 'resize-end' : ''}`}
+      className={`workspace-resizer rounded-none p-0 min-h-0 min-w-0 ${axis === "x" ? "h-full w-1.5" : "h-2 w-full"} resize-${axis} ${end ? "resize-end" : ""}`}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();

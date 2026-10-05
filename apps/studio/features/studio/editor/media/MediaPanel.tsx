@@ -73,11 +73,11 @@ export function MediaPanel() {
               icon={<t.icon />}
               rail
               active={e.tool === t.name}
-              className="editor-tool-item"
+              className="editor-tool-item w-auto md:w-full min-h-10 md:min-h-14 px-2 md:px-1"
               aria-label={t.name}
               aria-pressed={e.tool === t.name}
               onClick={() => {
-                if (window.matchMedia("(max-width: 1179px)").matches) {
+                if (window.matchMedia("(max-width: 1359px)").matches) {
                   e.setAiOpen(false);
                   e.setInspectorOpen(false);
                 }
@@ -107,8 +107,8 @@ export function MediaPanel() {
               <>
                 <AppInput
                   aria-label="Search media"
-                  prefixIcon={<Search size={14} />}
-                  size="sm"
+                  className="bg-background/80"
+                  prefixIcon={<Search size={16} />}
                   value={search}
                   onChange={(v) => setSearch(v.target.value)}
                   placeholder="Search media & files"
@@ -129,8 +129,8 @@ export function MediaPanel() {
                 )}
                 {e.tool === "Media" && (
                   <AppTabs
-                    variant="line"
-                    size="sm"
+                    variant="default"
+                    size="default"
                     value={source}
                     onValueChange={setSource}
                     className="mt-3"
@@ -143,8 +143,8 @@ export function MediaPanel() {
                 )}
                 {e.tool === "Media" && (
                   <AppTabs
-                    variant="pills"
-                    size="xs"
+                    variant="default"
+                    size="sm"
                     value={filter}
                     onValueChange={setFilter}
                     className="mt-3"
@@ -193,7 +193,7 @@ export function MediaPanel() {
                 )}
                 <div className="media-library-grid">
                   <AppButton
-                    className="media-upload-tile"
+                    className="media-upload-tile h-auto min-h-28 w-full flex-col border-dashed rounded-xl bg-muted/30 [&>span]:flex-col"
                     variant="outline"
                     isLoading={busy}
                     onClick={() => fileRef.current?.click()}
@@ -251,7 +251,7 @@ export function MediaPanel() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (window.innerWidth < 1180) e.setContextOpen(false);
+                    if (window.innerWidth < 1360) e.setContextOpen(false);
                     e.setAiOpen(true);
                   }}
                 >

@@ -280,6 +280,7 @@ export function PreviewCanvas() {
       )}
       <div className="preview-controls">
         <PlayerControls
+          appearance="surface"
           className="studio-player-controls"
           disabled={!e.duration}
           isPlaying={e.playing}

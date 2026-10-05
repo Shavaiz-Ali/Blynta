@@ -48,12 +48,12 @@ export function EditorTaskPanel() {
             icon={<item.icon />}
             rail
             active={!e.aiOpen && e.inspectorOpen && section === item.id}
-            className="editor-property-item"
+            className="editor-property-item flex-row md:flex-col min-h-8 md:min-h-14 w-auto md:w-full"
             onClick={() => {
               setSection(item.id);
               e.setAiOpen(false);
               e.setInspectorOpen(true);
-              if (window.innerWidth < 1180) e.setContextOpen(false);
+              if (window.innerWidth < 1360) e.setContextOpen(false);
             }}
           />
         ))}
@@ -64,13 +64,13 @@ export function EditorTaskPanel() {
           icon={<Sparkles />}
           rail
           active={e.aiOpen}
-          className="editor-property-item"
+          className="editor-property-item flex-row md:flex-col min-h-8 md:min-h-14 w-auto md:w-full"
           aria-label="Open Blynta AI chat"
           aria-controls="editor-ai-chat"
           aria-expanded={e.aiOpen}
           onClick={() => {
             e.setAiOpen(!e.aiOpen);
-            if (window.innerWidth < 1180) e.setContextOpen(false);
+            if (window.innerWidth < 1360) e.setContextOpen(false);
           }}
         />
       </nav>
