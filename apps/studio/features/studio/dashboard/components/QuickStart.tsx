@@ -14,7 +14,7 @@ export function QuickStart({
   return (
     <section aria-labelledby="quick-start-heading">
       <h2 id="quick-start-heading" className="workspace-eyebrow">
-        Quick start
+        Quick create
       </h2>
       <div className="studio-quick-start">
         {[

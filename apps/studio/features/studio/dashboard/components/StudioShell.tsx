@@ -1,11 +1,13 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { AccountControls } from "./AccountControls";
 import { useSession } from "next-auth/react";
 import { AppAvatar } from "@/components/common/AppAvatar";
 import {
   AppButton,
-  AppHeader,
+  AppProductHeader,
   AppSidebar,
   AppSidebarItem,
   Sheet,
@@ -16,28 +18,31 @@ import {
 import {
   ArrowUpLeft,
   FolderOpen,
-  Menu,
-  PanelLeft,
   Plus,
   Clapperboard,
+  Home,
+  Sparkles,
+  LayoutTemplate,
+  Images,
+  Zap,
+  Bell,
 } from "lucide-react";
 import { StudioLogo } from "@/components/common/StudioLogo";
-import { ThemeToggle } from "@/components/common/ThemeToggle";
-import { UserDropdown } from "@/components/common/UserDropdown";
 import { blyntaUrl } from "@/config/env";
 
 export function StudioSidebar({
   onNew,
-  onBlynta,
+  onAI,
   onNavigate,
   collapsed = false,
 }: {
   onNew: () => void;
-  onBlynta: () => void;
+  onAI?: () => void;
   onNavigate?: () => void;
   collapsed?: boolean;
 }) {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const navigate = (action: () => void) => {
     onNavigate?.();
     action();
@@ -45,10 +50,10 @@ export function StudioSidebar({
   return (
     <div className="flex h-full flex-col gap-2 overflow-x-hidden overflow-y-auto">
       <Link
-        href="/dashboard"
+        href="/home"
         onClick={onNavigate}
         className="flex h-14 shrink-0 items-center px-3.5 overflow-hidden"
-        aria-label="Blynta Studio projects"
+        aria-label="Blynta Studio home"
       >
         <StudioLogo collapsed={collapsed} />
       </Link>
@@ -68,35 +73,86 @@ export function StudioSidebar({
         aria-label="Studio navigation"
         className="flex flex-1 flex-col gap-3 px-2.5"
       >
-        <div className="flex flex-col gap-2">
-          {!collapsed && (
-            <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-              Workspace
-            </p>
-          )}
-          <AppSidebarItem
-            label="Projects"
-            icon={<FolderOpen />}
-            active
-            collapsed={collapsed}
-            href="/dashboard"
-            onClick={onNavigate}
-            renderLink={(props) => <Link href="/dashboard" {...props} />}
-          />
-        </div>
-        <div className="flex flex-col gap-2">
-          {!collapsed && (
-            <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
-              Library
-            </p>
-          )}
-          <AppSidebarItem
-            label="From Blynta"
-            icon={<Clapperboard />}
-            collapsed={collapsed}
-            onClick={() => navigate(onBlynta)}
-          />
-        </div>
+        {[
+          {
+            title: "Workspace",
+            items: [
+              { label: "Home", href: "/home", icon: Home },
+              { label: "Projects", href: "/dashboard", icon: FolderOpen },
+            ],
+          },
+          {
+            title: "Create",
+            items: [
+              {
+                label: "Blynta AI",
+                action: () => navigate(onAI || onNew),
+                icon: Sparkles,
+              },
+              { label: "Templates", disabled: true, icon: LayoutTemplate },
+            ],
+          },
+          {
+            title: "Library",
+            items: [
+              { label: "My media", href: "/media", icon: Images },
+              {
+                label: "From Blynta",
+                href: "/from-blynta",
+                icon: Clapperboard,
+              },
+            ],
+          },
+          {
+            title: "Account / Usage",
+            items: [
+              { label: "Credits / Usage", href: "/usage", icon: Zap },
+              { label: "Notifications", href: "/notifications", icon: Bell },
+            ],
+          },
+        ].map((group) => (
+          <div key={group.title} className="flex flex-col gap-1">
+            {!collapsed && (
+              <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+                {group.title}
+              </p>
+            )}
+            {group.items.map(
+              (item: {
+                label: string;
+                href?: string;
+                action?: () => void;
+                disabled?: boolean;
+                icon: typeof Home;
+              }) => (
+                <AppSidebarItem
+                  key={item.label}
+                  label={
+                    item.disabled && collapsed
+                      ? `${item.label} — Coming soon`
+                      : item.label
+                  }
+                  icon={<item.icon />}
+                  collapsed={collapsed}
+                  active={pathname === item.href}
+                  disabled={item.disabled}
+                  badge={
+                    item.disabled ? (
+                      <span className="text-[9px]">Coming soon</span>
+                    ) : undefined
+                  }
+                  href={item.href}
+                  onClick={item.action || onNavigate}
+                  renderLink={
+                    item.href
+                      ? (props) => <Link href={item.href!} {...props} />
+                      : undefined
+                  }
+                />
+              ),
+            )}
+          </div>
+        ))}
       </nav>
       <div className="mt-auto border-t border-border/60 p-2.5">
         {!collapsed && (
@@ -107,7 +163,7 @@ export function StudioSidebar({
                 {session?.user.name || "Your workspace"}
               </p>
               <p className="truncate text-[11px] text-muted-foreground">
-                {session?.user.email || "Personal workspace"}
+                Personal workspace
               </p>
             </div>
           </div>
@@ -131,70 +187,51 @@ export function StudioHeader({
   onCollapse: () => void;
   onMenu: () => void;
 }) {
+  const pathname = usePathname();
+  const title =
+    (
+      {
+        "/home": "Home",
+        "/dashboard": "Projects",
+        "/media": "My media",
+        "/from-blynta": "From Blynta",
+        "/usage": "Credits / Usage",
+        "/notifications": "Notifications",
+      } as Record<string, string>
+    )[pathname] || "Workspace";
   return (
-    <AppHeader>
-      <AppButton
-        variant="ghost"
-        size="icon-sm"
-        className="md:hidden"
-        onClick={onMenu}
-        aria-label="Open Studio navigation"
-      >
-        <Menu />
-      </AppButton>
-      <AppButton
-        variant="ghost"
-        size="icon-sm"
-        className="hidden md:inline-flex"
-        onClick={onCollapse}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        aria-expanded={!collapsed}
-        aria-controls="studio-sidebar"
-      >
-        <PanelLeft />
-      </AppButton>
-      <span className="hidden md:block h-5 w-px bg-border/80" />
-      <span className="flex-1 text-xs font-medium text-muted-foreground">
-        Studio <span className="mx-2 text-border">/</span>{" "}
-        <span className="text-foreground">Projects</span>
+    <AppProductHeader
+      collapsed={collapsed}
+      onCollapse={onCollapse}
+      onMenu={onMenu}
+      sidebarId="studio-sidebar"
+    >
+      <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">
+        Studio <span className="mx-2 text-border">/</span>
+        <span className="text-foreground">{title}</span>
       </span>
-      <AppButton
-        variant="outline"
-        size="sm"
-        className="hidden sm:inline-flex"
-        icon={<ArrowUpLeft />}
-        nativeButton={false}
-        render={<a href={blyntaUrl} />}
-      >
-        Blynta
-      </AppButton>
-      <ThemeToggle />
-      <UserDropdown />
-    </AppHeader>
+      <AccountControls />
+    </AppProductHeader>
   );
 }
 export function StudioShell({
   children,
   onNew,
-  onBlynta,
+  onAI,
 }: {
   children: ReactNode;
   onNew: () => void;
-  onBlynta: () => void;
+  onAI?: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   return (
     <div className="flex h-dvh overflow-hidden bg-background text-foreground">
       <a href="#studio-content" className="studio-skip-link">
-        Skip to projects
+        Skip to workspace
       </a>
       <AppSidebar id="studio-sidebar" collapsed={collapsed}>
-        <StudioSidebar
-          collapsed={collapsed}
-          onNew={onNew}
-          onBlynta={onBlynta}
-        />
+        <StudioSidebar collapsed={collapsed} onNew={onNew} onAI={onAI} />
       </AppSidebar>
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         <StudioHeader
@@ -218,7 +255,7 @@ export function StudioShell({
           </SheetDescription>
           <StudioSidebar
             onNew={onNew}
-            onBlynta={onBlynta}
+            onAI={onAI}
             onNavigate={() => setMobileOpen(false)}
           />
         </SheetContent>

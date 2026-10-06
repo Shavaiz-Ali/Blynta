@@ -112,9 +112,9 @@ export function RecentProjects({
           <h2 id="recent-projects-heading">Recent projects</h2>
           <p>Pick up where you left off</p>
         </div>
-        <a className="workspace-text-link" href="#all-projects">
+        <Link className="workspace-text-link" href="/dashboard">
           View all
-        </a>
+        </Link>
       </div>
       <ProjectCollection
         projects={projects}

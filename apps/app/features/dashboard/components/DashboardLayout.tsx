@@ -4,7 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BlyntaLogo } from "@/components/logo";
-import { AppButton, AppHeader, AppSidebar, AppSidebarItem } from "@blynta/ui";
+import {
+  AppButton,
+  AppProductHeader,
+  AppSidebar,
+  AppSidebarItem,
+} from "@blynta/ui";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -133,15 +138,6 @@ export const navGroups: NavGroup[] = [
     ],
   },
 ];
-
-function findActiveNavItem(pathname: string) {
-  for (const group of navGroups) {
-    for (const item of group.items) {
-      if (item.href === pathname) return item;
-    }
-  }
-  return navGroups[0].items[0];
-}
 
 /* -------------------------------------------------------------------------- */
 /*                           Nav Item                                         */
@@ -365,40 +361,13 @@ export function DashboardLayout({
       {/* ── Main Content Viewport ── */}
       <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
         {/* Topbar */}
-        <AppHeader>
-          {/* Mobile hamburger */}
-          <AppButton
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => setMobileOpen(true)}
-            className="md:hidden h-8 w-8 rounded-lg -ml-1"
-            aria-label="Open menu"
-          >
-            <Icon.Menu className="h-4.5 w-4.5" />
-          </AppButton>
-
-          {/* Desktop collapse toggle */}
-          <div className="hidden md:flex items-center gap-2 shrink-0">
-            <AppButton
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsCollapsed((prev) => !prev)}
-              className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground"
-              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              <Icon.PanelLeft className="h-4.5 w-4.5" />
-            </AppButton>
-            <div className="h-5 w-px bg-border/80 shrink-0" />
-          </div>
-
-          {/* Header content */}
-          <div className="flex-1 min-w-0 flex items-center">
-            {headerContent}
-          </div>
-        </AppHeader>
+        <AppProductHeader
+          collapsed={isCollapsed}
+          onCollapse={() => setIsCollapsed((prev) => !prev)}
+          onMenu={() => setMobileOpen(true)}
+        >
+          {headerContent}
+        </AppProductHeader>
 
         <main className="flex-1 min-w-0 w-full px-6 sm:px-8 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto">
           {children}

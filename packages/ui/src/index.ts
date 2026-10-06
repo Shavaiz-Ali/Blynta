@@ -1,5 +1,16 @@
 export { AppInput } from "./components/AppInput";
 export {
+  AppProductHeader,
+  AppHeaderActions,
+  AppCreditsControl,
+  AppAccountMenu,
+  AppNotificationControl,
+} from "./components/AppProductHeader";
+export type {
+  AppAccountIdentity,
+  AppAccountLink,
+} from "./components/AppProductHeader";
+export {
   AppHeader,
   AppSidebar,
   AppSidebarItem,

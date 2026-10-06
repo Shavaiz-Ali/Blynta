@@ -4,7 +4,11 @@ Both the main app and Studio consume this package. The main app is the visual re
 
 ## Workspace chrome
 
-Import AppSidebar, AppSidebarItem, and AppHeader from @blynta/ui. AppSidebar handles desktop widths and collapse. Apps supply their own navigation, mobile Sheet, logo, user controls, and actions. AppSidebarItem supports links through renderLink, disabled items, collapsed tooltips, and a labeled rail variant for the editor. AppHeader accepts children and a className for app-specific layout.
+Import AppSidebar and AppSidebarItem from @blynta/ui. AppSidebar handles desktop widths and collapse. Apps supply navigation, mobile Sheet, and logo. AppSidebarItem supports links through renderLink, disabled items, collapsed tooltips, and a labeled rail variant for the editor.
+
+Use AppProductHeader for the shared product topbar, including mobile navigation and desktop collapse controls. AppHeaderActions composes AppCreditsControl, AppNotificationControl, and AppAccountMenu with the main app's visual styling. Both the main app and Studio use these components. Do not recreate account dropdown markup or separate header skins inside a product.
+
+Apps provide identity, real balance/plan data, navigation elements (Next Link or external anchors), notification content, and the existing logout callback. AppAccountMenu owns the shared Appearance submenu. AppCreditsControl accepts an optional allowance; omit it when the backend cannot supply a reliable product allowance. Missing balances display a dash, never a fabricated zero. UI components do not fetch data, access auth tokens, or implement billing.
 
 ## Player
 

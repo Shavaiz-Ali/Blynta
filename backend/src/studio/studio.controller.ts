@@ -8,6 +8,7 @@ import {
   Post,
   Put,
   Req,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -18,6 +19,9 @@ type UserRequest = Request & { user: { userId: string } };
 @UseGuards(AuthGuard('jwt'))
 export class StudioController {
   constructor(private readonly studio: StudioService) {}
+  @Get('media') media(@Req() req: UserRequest, @Query() query: unknown) {
+    return this.studio.library(req.user.userId, query);
+  }
   @Get('projects') list(@Req() req: UserRequest) {
     return this.studio.list(req.user.userId);
   }

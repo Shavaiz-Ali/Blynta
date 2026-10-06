@@ -1,45 +1,40 @@
 "use client";
 import { useSession } from "next-auth/react";
 import { logoutProduct } from "@blynta/auth/client";
-import { AppDropdownMenu } from "./AppDropdownMenu";
-import { AppButton } from "./AppButton";
-import { AppAvatar } from "./AppAvatar";
-import { LogOut, ExternalLink } from "lucide-react";
+import { AppAccountMenu } from "@blynta/ui";
+import {
+  useWorkspaceQuery,
+  type AccountProfile,
+} from "@/features/studio/dashboard/workspace-api";
 import { blyntaUrl } from "@/config/env";
 export function UserDropdown() {
   const { data: session } = useSession();
+  const { data: profile } = useWorkspaceQuery<AccountProfile>("users/me");
+  const base = blyntaUrl.replace(/\/$/, "");
   return (
-    <AppDropdownMenu
-      trigger={
-        <AppButton
-          size="icon-sm"
-          variant="ghost"
-          aria-label={
-            session?.user.email
-              ? `Account: ${session.user.email}`
-              : "Your account"
-          }
-        >
-          <AppAvatar
-            name={session?.user.name || session?.user.email || "Blynta"}
-          />
-        </AppButton>
+    <AppAccountMenu
+      profile={{
+        name: profile?.name || session?.user.name,
+        email: session?.user.email,
+        avatarUrl: profile?.avatarUrl,
+        plan: profile?.plan,
+      }}
+      links={
+        blyntaUrl
+          ? [
+              { label: "Profile", render: <a href={`${base}/profile`} /> },
+              { label: "Settings", render: <a href={`${base}/settings`} /> },
+              {
+                label: "Billing & Plan",
+                render: <a href={`${base}/billing`} />,
+              },
+              { label: "Back to Blynta", render: <a href={blyntaUrl} /> },
+            ]
+          : []
       }
-      items={[
-        {
-          label: "Open Blynta",
-          icon: <ExternalLink />,
-          onClick: () => window.location.assign(blyntaUrl),
-        },
-        {
-          label: "Sign out",
-          icon: <LogOut />,
-          separator: true,
-          onClick: () => {
-            void logoutProduct();
-          },
-        },
-      ]}
+      onSignOut={() => {
+        void logoutProduct();
+      }}
     />
   );
 }

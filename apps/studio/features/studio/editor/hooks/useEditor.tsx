@@ -58,7 +58,11 @@ export function useEditorState(project: Project, userId: string) {
   const [playing, play] = useState(false);
   const layout = useWorkspaceLayout();
   const [tool, setTool] = useState("Media");
-  const [aiOpen, setAiOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("ai") === "1",
+  );
   const [zoom, setZoom] = useState(18);
   const [snapping, setSnapping] = useState(true);
   const [showAllTracks, setShowAllTracks] = useState(false);

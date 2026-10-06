@@ -102,21 +102,23 @@ export class StudioService {
         return {
           ...p.document,
           assets: await Promise.all(
-            p.document.assets.map(async (a) => {
-              const record = media.find(
-                (m) => m.projectId === String(p._id) && m.assetId === a.id,
-              );
-              const key =
-                record?.thumbnailKey ||
-                (record?.kind === 'image' ? record.storageKey : undefined);
-              return key
-                ? { ...a, thumbnail: await this.r2.getSignedDownloadUrl(key) }
-                : poster &&
-                    record?.sourceGroup !== 'Uploads' &&
-                    record?.kind === 'video'
-                  ? { ...a, thumbnail: poster }
-                  : a;
-            }),
+            p.document.assets.map(
+              async (a): Promise<typeof a & { thumbnail?: string }> => {
+                const record = media.find(
+                  (m) => m.projectId === String(p._id) && m.assetId === a.id,
+                );
+                const key =
+                  record?.thumbnailKey ||
+                  (record?.kind === 'image' ? record.storageKey : undefined);
+                return key
+                  ? { ...a, thumbnail: await this.r2.getSignedDownloadUrl(key) }
+                  : poster &&
+                      record?.sourceGroup !== 'Uploads' &&
+                      record?.kind === 'video'
+                    ? { ...a, thumbnail: poster }
+                    : a;
+              },
+            ),
           ),
           id: String(p._id),
           revision: p.revision,
@@ -150,7 +152,9 @@ export class StudioService {
     return {
       ...p.document,
       assets: p.document.assets.map((a) =>
-        a.kind === 'text' ? a : { ...a, ...byId.get(a.id), name: a.name },
+        a.kind === 'text'
+          ? (a as typeof a & { thumbnail?: string })
+          : { ...a, ...byId.get(a.id), name: a.name },
       ),
       id,
       revision: p.revision,
@@ -283,6 +287,57 @@ export class StudioService {
               : undefined,
       })),
     );
+  }
+  async library(userId: string, query: unknown) {
+    const { page, source } = parse(
+      z.object({
+        page: z.coerce.number().int().min(1).max(10000).default(1),
+        source: z.enum(['all', 'uploads', 'blynta']).default('all'),
+      }),
+      query,
+    );
+    // Project deletion preserves storage. Only expose media attached to an owned project.
+    const ownedProjects = await this.projects
+      .find({ userId }, { _id: 1 })
+      .lean();
+    const filter = {
+      userId,
+      projectId: { $in: ownedProjects.map((project) => String(project._id)) },
+      ...(source === 'uploads'
+        ? { sourceGroup: 'Uploads' }
+        : source === 'blynta'
+          ? { sourceGroup: { $ne: 'Uploads' } }
+          : {}),
+    };
+    const limit = 24;
+    const [records, total] = await Promise.all([
+      this.media
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      this.media.countDocuments(filter),
+    ]);
+    const items = await Promise.all(
+      records.map(async (a) => ({
+        id: String(a._id),
+        assetId: a.assetId,
+        projectId: a.projectId,
+        name: a.name,
+        kind: a.kind,
+        duration: a.duration,
+        status: a.status,
+        sourceGroup: a.sourceGroup,
+        createdAt: (a as typeof a & { createdAt?: Date }).createdAt,
+        thumbnail: a.thumbnailKey
+          ? await this.r2.getSignedDownloadUrl(a.thumbnailKey)
+          : a.kind === 'image' && a.status === 'ready'
+            ? await this.r2.getSignedDownloadUrl(a.storageKey)
+            : undefined,
+      })),
+    );
+    return { items, total, page, totalPages: Math.ceil(total / limit) };
   }
   async upload(userId: string, id: string, body: unknown) {
     await this.owned(userId, id);
