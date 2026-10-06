@@ -100,18 +100,17 @@
   }
   .media-library-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 10px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
     margin-top: 16px;
   }
   .media-item-main .asset-thumbnail {
     width: 100%;
-    height: auto;
-    aspect-ratio: 16/9;
+    height: 54px;
     border-radius: 0;
   }
   .media-item-main .media-item-label {
-    padding: 8px;
+    padding: 8px 28px 8px 0;
   }
   .media-item-label > span {
     overflow: hidden;
@@ -287,6 +286,9 @@
   }
   .inspector-body {
     padding: 16px 14px 24px;
+  }
+  .inspector-body fieldset {
+    min-width: 0;
   }
   .inspector-guidance {
     font-size: 12px;

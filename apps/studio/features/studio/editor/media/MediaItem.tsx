@@ -45,12 +45,13 @@ export function MediaItem({ asset }: { asset: Asset }) {
       <AppTooltip content={`${asset.name} · Click to add, or drag to timeline`}>
         <AppButton
           variant="ghost"
-          className="media-item-main h-auto w-full justify-start rounded-none p-0 [&>span]:w-full [&>span]:flex-col [&>span]:gap-0 [&>span>span]:w-full [&>span>span]:flex-col [&>span>span]:gap-0"
+          className="media-item-main h-auto w-full justify-start rounded-none p-0 [&>span]:w-full"
+          contentClassName="grid w-full grid-cols-[72px_minmax(0,1fr)] gap-2 text-left"
           onClick={() => e.add(asset)}
           aria-label={`Add ${asset.name} to timeline`}
         >
           <span
-            className={`relative block w-full aspect-video overflow-hidden asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
+            className={`relative block w-full overflow-hidden asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
           >
             {asset.thumbnail || (asset.src && asset.kind === "image") ? (
               <Image
@@ -71,7 +72,7 @@ export function MediaItem({ asset }: { asset: Asset }) {
               <Icon size={18} />
             )}
           </span>
-          <span className="media-item-label block w-full p-2 text-left">
+          <span className="media-item-label block min-w-0 w-full py-2 pr-7 text-left">
             <span className="truncate block text-xs font-medium leading-5">
               {asset.name}
             </span>

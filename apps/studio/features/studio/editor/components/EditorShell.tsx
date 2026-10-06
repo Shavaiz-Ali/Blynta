@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AppButton, AppResizeHandle } from "@blynta/ui";
 import { useQuery } from "@tanstack/react-query";
 import { studioApi, studioKeys } from "../../api";
-import { EditorSkeleton } from "./EditorSkeleton";
+import { EditorLoading } from "./EditorLoading";
 import { EditorContext, useEditorState } from "../hooks/useEditor";
 import { EditorToolbar } from "./EditorToolbar";
 import { MediaPanel } from "../media/MediaPanel";
@@ -103,7 +103,7 @@ export function EditorShell({ projectId }: { projectId: string }) {
     refetchOnWindowFocus: false,
   });
   const error = query.error?.message;
-  if (query.isPending && !error) return <EditorSkeleton />;
+  if (query.isPending && !error) return <EditorLoading />;
   const project = query.data;
   if (error || !project || !session)
     return (

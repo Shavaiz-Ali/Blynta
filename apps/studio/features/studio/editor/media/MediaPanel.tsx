@@ -195,6 +195,7 @@ export function MediaPanel() {
                           size="sm"
                           variant="outline"
                           className="w-full mt-2 truncate"
+                          contentClassName="block truncate"
                           onClick={() =>
                             e.edit((d) => ({ ...d, assets: [...d.assets, a] }))
                           }

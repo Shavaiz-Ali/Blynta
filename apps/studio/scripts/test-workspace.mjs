@@ -275,6 +275,8 @@ try {
   );
   assert.ok(bounds.timeline.h >= 280 && bounds.timeline.h <= 380);
   assert.equal(bounds.rail.w, 72);
+  const card = await page.locator(".media-item").first().boundingBox();
+  assert.ok(card.height <= 80 && card.width >= 250, JSON.stringify(card));
   assert.equal(await page.locator(".property-rail").count(), 0);
   assert.equal(await page.locator(".right-workspace").isVisible(), false);
   // Selection opens a contextual inspector. AI replaces it and returns it on close.
@@ -283,6 +285,25 @@ try {
   await page.getByRole("tab", { name: "Image", exact: true }).waitFor();
   bounds = await geometry();
   assert.equal(bounds.right.w, 300);
+  const position = await page
+    .getByRole("spinbutton", { name: "Position X", exact: true })
+    .boundingBox();
+  const inspector = await page.locator(".inspector-panel").boundingBox();
+  assert.ok(
+    position.y >= inspector.y,
+    "First inspector fields must not be clipped",
+  );
+  await page
+    .getByRole("slider", { name: "Seek preview", exact: true })
+    .press("End");
+  assert.equal(
+    await page.locator(".preview-media").count(),
+    1,
+    "Project end must retain its final frame",
+  );
+  await page
+    .getByRole("slider", { name: "Seek preview", exact: true })
+    .press("Home");
   // Playback and seeking update the transport without losing editing commands.
   await page.getByRole("button", { name: "Play video", exact: true }).click();
   await page.waitForTimeout(350);

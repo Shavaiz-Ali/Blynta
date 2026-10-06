@@ -1,2 +1,2 @@
-import { EditorSkeleton } from "@/features/studio/editor/components/EditorSkeleton";
-export default EditorSkeleton;
+import { EditorLoading } from "@/features/studio/editor/components/EditorLoading";
+export default EditorLoading;

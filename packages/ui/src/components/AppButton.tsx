@@ -54,6 +54,8 @@ export interface AppButtonProps
   iconPosition?: "left" | "right";
   socialProvider?: SocialProvider;
   size?: ShadcnButtonSize;
+  /** Layout for rich button content, such as a thumbnail and truncated title. */
+  contentClassName?: string;
 }
 
 const socialIcons: Record<SocialProvider, React.ReactNode> = {
@@ -113,6 +115,7 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
       disabled,
       type = "button",
       children,
+      contentClassName,
       ...props
     },
     ref,
@@ -151,14 +154,19 @@ const AppButton = React.forwardRef<HTMLButtonElement, AppButtonProps>(
             <AppSpinner size={spinnerSize} className="m-0" />
           </span>
         ) : (
-          <span className="inline-flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap">
+          <span className="inline-flex min-w-0 max-w-full items-center justify-center gap-1.5 whitespace-nowrap">
             {resolvedIcon && iconPosition === "left" && (
               <span className="shrink-0 inline-flex items-center">
                 {resolvedIcon}
               </span>
             )}
             {children != null && (
-              <span className="inline-flex items-center justify-center gap-1.5 shrink-0">
+              <span
+                className={cn(
+                  "inline-flex min-w-0 items-center justify-center gap-1.5",
+                  contentClassName,
+                )}
+              >
                 {children}
               </span>
             )}

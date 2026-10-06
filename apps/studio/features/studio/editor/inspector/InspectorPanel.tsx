@@ -225,7 +225,7 @@ export function InspectorPanel({
   const Inspector = e.selected ? inspectors[e.selected.kind] : null;
   return (
     <aside className="inspector-panel">
-      <AppScrollArea className="flex-1">
+      <AppScrollArea key={`${e.selectedId}-${section}`} className="flex-1 overflow-hidden">
         <div className="inspector-body">
           {e.selected && Inspector ? (
             <>

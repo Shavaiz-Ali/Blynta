@@ -17,12 +17,14 @@ function MediaLayer({
   muted,
   volume,
   factor,
+  playhead,
 }: {
   clip: Clip;
   asset?: Asset;
   muted: boolean;
   volume: number;
   factor: number;
+  playhead: number;
 }) {
   const e = useEditorPlayback();
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null);
@@ -30,7 +32,7 @@ function MediaLayer({
   useEffect(() => {
     const media = ref.current;
     if (!media || !asset?.src) return;
-    const elapsed = Math.max(0, e.playhead - clip.start);
+    const elapsed = Math.max(0, playhead - clip.start);
     const fadeIn =
       clip.fadeIn > 0
         ? Math.min(1, elapsed / Math.min(clip.fadeIn, clip.duration))
@@ -54,21 +56,21 @@ function MediaLayer({
       media.currentTime = time;
     if (e.playing) media.play().catch(() => setFailed(true));
     else media.pause();
-  }, [e.playing, e.playhead, clip, asset?.src, muted, volume]);
+  }, [e.playing, playhead, clip, asset?.src, muted, volume]);
   const style = {
     opacity:
       (clip.opacity / 100) *
       (clip.fadeIn
         ? Math.min(
             1,
-            Math.max(0, e.playhead - clip.start) /
+            Math.max(0, playhead - clip.start) /
               Math.min(clip.fadeIn, clip.duration),
           )
         : 1) *
       (clip.fadeOut
         ? Math.min(
             1,
-            Math.max(0, clip.start + clip.duration - e.playhead) /
+            Math.max(0, clip.start + clip.duration - playhead) /
               Math.min(clip.fadeOut, clip.duration),
           )
         : 1),
@@ -159,10 +161,15 @@ export function PreviewCanvas() {
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
   const [zoom, setZoom] = useState("fit");
+  // Keep the final frame visible while the transport rests at the project end.
+  const previewTime =
+    !e.playing && e.duration > 0 && e.playhead >= e.duration
+      ? Math.max(0, e.duration - 1 / 30)
+      : e.playhead;
   const active = e.doc.clips.filter(
     (c) =>
-      e.playhead >= c.start &&
-      e.playhead < c.start + c.duration &&
+      previewTime >= c.start &&
+      previewTime < c.start + c.duration &&
       !e.doc.tracks.find((t) => t.id === c.trackId)?.hidden,
   );
   // Track order defines visual stacking; the top track is painted last.
@@ -216,6 +223,7 @@ export function PreviewCanvas() {
                 }
                 volume={volume}
                 factor={factor}
+                playhead={previewTime}
               />
             ))
           ) : (
