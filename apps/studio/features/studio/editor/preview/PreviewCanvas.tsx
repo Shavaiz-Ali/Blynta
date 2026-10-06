@@ -5,9 +5,10 @@ import { Film, Upload } from "lucide-react";
 import { AppButton } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { PlayerControls } from "@blynta/ui/player";
-import { AppSlider } from "@/components/common/AppSlider";
-import { useEditor } from "../hooks/useEditor";
-import { AppFileInput } from "@/components/common/AppFileInput";
+import { AppSlider } from "@blynta/ui";
+import { useEditorPlayback } from "../hooks/useEditor";
+import { AppFileInput } from "@blynta/ui";
+import { supportedMedia } from "@/features/studio/editor/media/supported-media";
 import { useMediaUpload } from "../media/useMediaUpload";
 import type { Clip, Asset } from "../../types";
 function MediaLayer({
@@ -23,7 +24,7 @@ function MediaLayer({
   volume: number;
   factor: number;
 }) {
-  const e = useEditor();
+  const e = useEditorPlayback();
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -135,7 +136,7 @@ function MediaLayer({
   );
 }
 export function PreviewCanvas() {
-  const e = useEditor();
+  const e = useEditorPlayback();
   const [fullscreen, setFullscreen] = useState(false);
   useEffect(() => {
     const update = () => setFullscreen(!!document.fullscreenElement);
@@ -173,29 +174,8 @@ export function PreviewCanvas() {
   const [w, h] = e.doc.ratio.split(":").map(Number);
   return (
     <section className="preview-area" aria-label="Video preview">
-      <div className="preview-heading">
-        <div className="preview-title">
-          <span>Project preview</span>
-          <span className="preview-project-name">{e.doc.name}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <AppSelect
-            aria-label="Canvas aspect ratio"
-            size="sm"
-            wrapperClassName="w-24!"
-            value={e.doc.ratio}
-            onValueChange={(v) =>
-              e.edit((d) => ({ ...d, ratio: v as typeof d.ratio }))
-            }
-            options={["16:9", "9:16", "1:1", "4:5"].map((value) => ({
-              value,
-              label: value,
-            }))}
-          />
-        </div>
-      </div>
       <div
-        className={`preview-stage ${zoom === "100" ? "actual-size" : ""} ${zoom === "fill" ? "fill-size" : ""}`}
+        className={`preview-stage ${zoom === "100" ? "actual-size" : ""}`}
         ref={stage}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
@@ -268,6 +248,7 @@ export function PreviewCanvas() {
         </div>
       </div>
       <AppFileInput
+        accept={supportedMedia}
         ref={uploadFile}
         label="Upload media to canvas"
         disabled={busy}
@@ -301,18 +282,35 @@ export function PreviewCanvas() {
             else stage.current?.requestFullscreen().catch(() => {});
           }}
           actions={
-            <AppSelect
-              aria-label="Preview zoom"
-              size="sm"
-              wrapperClassName="w-20!"
-              value={zoom}
-              onValueChange={setZoom}
-              options={[
-                { value: "fit", label: "Fit" },
-                { value: "100", label: "100%" },
-                { value: "fill", label: "Fill" },
-              ]}
-            />
+            <>
+              <AppSelect
+                aria-label="Canvas aspect ratio"
+                size="sm"
+                wrapperClassName="w-32!"
+                value={e.doc.ratio}
+                onValueChange={(value) =>
+                  e.edit((doc) => ({
+                    ...doc,
+                    ratio: value as typeof doc.ratio,
+                  }))
+                }
+                options={["16:9", "9:16", "1:1", "4:5"].map((value) => ({
+                  value,
+                  label: `Canvas ${value}`,
+                }))}
+              />
+              <AppSelect
+                aria-label="Preview zoom"
+                size="sm"
+                wrapperClassName="w-20!"
+                value={zoom}
+                onValueChange={setZoom}
+                options={[
+                  { value: "fit", label: "Fit" },
+                  { value: "100", label: "100%" },
+                ]}
+              />
+            </>
           }
         />
         <AppSlider

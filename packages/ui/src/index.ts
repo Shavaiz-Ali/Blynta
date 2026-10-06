@@ -90,12 +90,23 @@ export * from "./primitives/popover";
 export * from "./primitives/dialog";
 export * from "./primitives/dropdown-menu";
 export { Sheet as AppSheet } from "./primitives/sheet";
-export { Tooltip as AppTooltip } from "./primitives/tooltip";
+export { AppTooltip } from "./components/AppTooltip";
 export { Avatar as AppAvatar } from "./primitives/avatar";
 export { Badge as AppBadge } from "./primitives/badge";
 export { Skeleton as AppSkeleton } from "./primitives/skeleton";
-export { ScrollArea as AppScrollArea } from "./primitives/scroll-area";
 
 export { AppViewModeToggle } from "./components/AppViewModeToggle";
 export type { ViewMode } from "./components/AppViewModeToggle";
 export { AppMediaCard } from "./components/AppMediaCard";
+
+export { AppResizeHandle } from "./components/AppResizeHandle";
+
+export { AppSlider } from "./components/AppSlider";
+export { AppScrollArea } from "./components/AppScrollArea";
+
+export { AppContextMenu } from "./components/AppContextMenu";
+export { AppDisclosure } from "./components/AppDisclosure";
+export { AppFileInput } from "./components/AppFileInput";
+
+export { ThemeToggle } from "./components/ThemeToggle";
+export { AppIdentityAvatar } from "./components/AppIdentityAvatar";

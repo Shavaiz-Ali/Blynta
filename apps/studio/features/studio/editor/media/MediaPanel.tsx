@@ -13,10 +13,11 @@ import {
   PanelLeftClose,
 } from "lucide-react";
 import { AppButton, AppSidebarItem, AppTabs } from "@blynta/ui";
-import { AppFileInput } from "@/components/common/AppFileInput";
+import { AppFileInput } from "@blynta/ui";
+import { supportedMedia } from "@/features/studio/editor/media/supported-media";
 import { AppInput } from "@blynta/ui";
-import { AppTooltip } from "@/components/common/AppTooltip";
-import { AppScrollArea } from "@/components/common/AppScrollArea";
+import { AppTooltip } from "@blynta/ui";
+import { AppScrollArea } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
 import { useMediaUpload } from "./useMediaUpload";
 import { MediaItem } from "./MediaItem";
@@ -72,12 +73,12 @@ export function MediaPanel() {
               label={t.name}
               icon={<t.icon />}
               rail
-              active={e.tool === t.name}
+              active={e.contextOpen && e.tool === t.name}
               className="editor-tool-item w-auto md:w-full min-h-10 md:min-h-14 px-2 md:px-1"
               aria-label={t.name}
-              aria-pressed={e.tool === t.name}
+              aria-pressed={e.contextOpen && e.tool === t.name}
               onClick={() => {
-                if (window.matchMedia("(max-width: 1359px)").matches) {
+                if (window.matchMedia("(max-width: 1179px)").matches) {
                   e.setAiOpen(false);
                   e.setInspectorOpen(false);
                 }
@@ -108,12 +109,14 @@ export function MediaPanel() {
                 <AppInput
                   aria-label="Search media"
                   className="bg-background/80"
-                  prefixIcon={<Search size={16} />}
+                  size="default"
+                  prefixIcon={<Search className="h-3.5 w-3.5" />}
                   value={search}
                   onChange={(v) => setSearch(v.target.value)}
                   placeholder="Search media & files"
                 />
                 <AppFileInput
+                  accept={supportedMedia}
                   ref={fileRef}
                   label="Upload editor media"
                   disabled={busy}
@@ -144,7 +147,7 @@ export function MediaPanel() {
                 {e.tool === "Media" && (
                   <AppTabs
                     variant="default"
-                    size="sm"
+                    size="default"
                     value={filter}
                     onValueChange={setFilter}
                     className="mt-3"
@@ -156,6 +159,16 @@ export function MediaPanel() {
                     ]}
                   />
                 )}
+                <AppButton
+                  size="sm"
+                  variant="outline"
+                  className="w-full mt-3"
+                  icon={<Upload className="h-3.5 w-3.5" />}
+                  isLoading={busy}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  Upload media
+                </AppButton>
                 {(error || e.mediaError) && (
                   <p role="alert" className="text-xs text-destructive mt-3">
                     {error || e.mediaError}
@@ -192,15 +205,6 @@ export function MediaPanel() {
                   </section>
                 )}
                 <div className="media-library-grid">
-                  <AppButton
-                    className="media-upload-tile h-auto min-h-28 w-full flex-col border-dashed rounded-xl bg-muted/30 [&>span]:flex-col"
-                    variant="outline"
-                    isLoading={busy}
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    <Upload size={24} />
-                    <span>Upload media</span>
-                  </AppButton>
                   {assets.map((asset) => (
                     <MediaItem key={asset.id} asset={asset} />
                   ))}
@@ -251,7 +255,7 @@ export function MediaPanel() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (window.innerWidth < 1360) e.setContextOpen(false);
+                    if (window.innerWidth < 1180) e.setContextOpen(false);
                     e.setAiOpen(true);
                   }}
                 >

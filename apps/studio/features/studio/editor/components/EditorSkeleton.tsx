@@ -6,12 +6,12 @@ export function EditorSkeleton() {
   const layout = useWorkspaceLayout();
   return (
     <main
-      className={`editor-shell editor-loading ${layout.contextOpen ? "" : "context-collapsed"} ${layout.inspectorOpen ? "task-open" : ""}`}
+      className={`editor-shell editor-loading ${layout.contextOpen ? "" : "context-collapsed"} `}
       style={
         {
           "--media-width": `${layout.mediaWidth}px`,
           "--inspector-width": `${layout.inspectorWidth}px`,
-          "--timeline-height": "240px",
+          "--timeline-height": `${layout.timelineHeight}px`,
         } as CSSProperties
       }
       role="status"
@@ -59,9 +59,6 @@ export function EditorSkeleton() {
         </aside>
         <div className="editor-stage">
           <section className="preview-area">
-            <div className="preview-heading">
-              <AppSkeleton className="h-4 w-48" />
-            </div>
             <div className="preview-stage">
               <AppSkeleton
                 className="preview-frame border border-border bg-background/70!"
@@ -87,11 +84,6 @@ export function EditorSkeleton() {
                 <AppSkeleton key={i} className="h-10 w-full" />
               ))}
             </div>
-          </div>
-          <div className="property-rail">
-            {Array.from({ length: 4 }, (_, i) => (
-              <AppSkeleton key={i} className="h-14 w-full shrink-0" />
-            ))}
           </div>
         </div>
         <div className="workspace-resizer resize-y" />

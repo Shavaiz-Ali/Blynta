@@ -6,7 +6,7 @@ import { useTheme } from "next-themes";
 import { AppHeader } from "./AppWorkspace";
 import { AppButton } from "./AppButton";
 import { AppPopover } from "./AppPopover";
-import { Avatar, AvatarImage, AvatarFallback } from "../primitives/avatar";
+import { AppIdentityAvatar } from "./AppIdentityAvatar";
 import { Badge } from "../primitives/badge";
 import { Progress } from "../primitives/progress";
 import { Separator } from "../primitives/separator";
@@ -220,13 +220,6 @@ export function AppAccountMenu({
   links: AppAccountLink[];
   onSignOut: () => void;
 }) {
-  const initials = (profile.name || profile.email || "?")
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
   const paid = profile.plan === "pro" || profile.plan === "business";
   const { theme, setTheme } = useTheme();
   return (
@@ -245,18 +238,10 @@ export function AppAccountMenu({
             </span>
           )}
         </div>
-        <Avatar className="h-8 w-8 rounded-lg overflow-hidden">
-          {profile.avatarUrl && (
-            <AvatarImage
-              src={profile.avatarUrl}
-              alt={profile.name || "User"}
-              className="object-cover"
-            />
-          )}
-          <AvatarFallback className="rounded-lg bg-primary/15 text-primary text-xs font-bold">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
+        <AppIdentityAvatar
+          name={profile.name || profile.email || "User"}
+          src={profile.avatarUrl}
+        />
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"

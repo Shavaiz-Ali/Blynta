@@ -21,13 +21,13 @@ import {
   Layers,
 } from "lucide-react";
 import { AppButton } from "@blynta/ui";
-import { AppSlider } from "@/components/common/AppSlider";
-import { AppScrollArea } from "@/components/common/AppScrollArea";
-import { useEditor } from "../hooks/useEditor";
+import { AppSlider } from "@blynta/ui";
+import { AppScrollArea } from "@blynta/ui";
+import { useEditorPlayback } from "../hooks/useEditor";
 import { TimelineClip } from "./TimelineClip";
 import { formatTime } from "../utils/time";
 export function Timeline() {
-  const e = useEditor();
+  const e = useEditorPlayback();
   const timeline = useRef<HTMLElement>(null);
   const locked = !!e.doc.tracks.find((t) => t.id === e.selected?.trackId)
     ?.locked;
@@ -237,7 +237,7 @@ export function Timeline() {
                   >
                     {t.hidden ? <EyeOff /> : <Eye />}
                   </AppButton>
-                  {t.kind !== "text" && (
+                  {(t.kind === "video" || t.kind === "audio") && (
                     <AppButton
                       variant="ghost"
                       size="icon-xs"
@@ -266,6 +266,7 @@ export function Timeline() {
               <div className="time-ruler">
                 <AppSlider
                   label="Timeline playhead"
+                  showTrack={false}
                   value={e.playhead}
                   max={extent}
                   step={1 / 30}
@@ -277,7 +278,9 @@ export function Timeline() {
                   { length: Math.floor(extent / rulerStep) + 1 },
                   (_, i) => (
                     <span key={i} style={{ left: i * rulerStep * e.zoom }}>
-                      {formatTime(i * rulerStep).slice(0, 5)}
+                      {rulerStep < 1
+                        ? formatTime(i * rulerStep)
+                        : formatTime(i * rulerStep).slice(0, 5)}
                     </span>
                   ),
                 )}
@@ -285,6 +288,7 @@ export function Timeline() {
               {e.visibleTracks.map((t) => (
                 <div
                   className={`track-lane ${t.hidden ? "opacity-40" : ""}`}
+                  style={{ backgroundSize: `${rulerStep * e.zoom}px 100%` }}
                   key={t.id}
                   onPointerDown={(v) => {
                     if (v.target === v.currentTarget) {

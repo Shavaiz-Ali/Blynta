@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { SlidersHorizontal, Music2, Timer, Sparkles, X } from "lucide-react";
-import { AppButton, AppSidebarItem } from "@blynta/ui";
+import { X } from "lucide-react";
+import { AppButton, AppTabs } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
 import {
   InspectorPanel,
@@ -9,71 +9,64 @@ import {
 } from "../inspector/InspectorPanel";
 import { AIPanel } from "../ai/AIPanel";
 
-const sections = [
-  { id: "basic", label: "Basic", icon: SlidersHorizontal },
-  { id: "audio", label: "Audio", icon: Music2 },
-  { id: "timing", label: "Timing", icon: Timer },
-] as const;
-
-export function EditorTaskPanel() {
+function ClipInspector() {
   const e = useEditor();
   const [section, setSection] = useState<InspectorSection>("basic");
+  const clip = e.selected!;
+  const tabs = [
+    {
+      value: "basic",
+      label:
+        clip.kind === "audio"
+          ? "Audio"
+          : clip.kind === "text"
+            ? "Text"
+            : clip.kind === "image"
+              ? "Image"
+              : "Video",
+    },
+    ...(clip.kind === "video" ? [{ value: "audio", label: "Audio" }] : []),
+    { value: "timing", label: "Timing" },
+  ];
   return (
-    <>
-      <div className="right-workspace" hidden={!e.inspectorOpen && !e.aiOpen}>
-        <div className="inspector-task" hidden={e.aiOpen || !e.inspectorOpen}>
-          <div className="workspace-panel-heading">
-            <div>
-              <h2>{sections.find((item) => item.id === section)?.label}</h2>
-              <p>{e.selected ? "Selected clip" : "Project settings"}</p>
-            </div>
-            <AppButton
-              size="icon-sm"
-              variant="ghost"
-              aria-label="Close properties panel"
-              onClick={() => e.setInspectorOpen(false)}
-            >
-              <X />
-            </AppButton>
-          </div>
-          <InspectorPanel section={section} />
+    <div className="inspector-task" hidden={e.aiOpen || !e.inspectorOpen}>
+      <div className="workspace-panel-heading">
+        <div className="min-w-0">
+          <h2>Clip inspector</h2>
+          <p className="truncate">{clip.name}</p>
         </div>
-        <AIPanel />
+        <AppButton
+          size="icon-sm"
+          variant="ghost"
+          aria-label="Close properties panel"
+          onClick={() => e.setInspectorOpen(false)}
+        >
+          <X />
+        </AppButton>
       </div>
-      <nav className="property-rail" aria-label="Clip and project controls">
-        {sections.map((item) => (
-          <AppSidebarItem
-            key={item.id}
-            label={item.label}
-            icon={<item.icon />}
-            rail
-            active={!e.aiOpen && e.inspectorOpen && section === item.id}
-            className="editor-property-item flex-row md:flex-col min-h-8 md:min-h-14 w-auto md:w-full"
-            onClick={() => {
-              setSection(item.id);
-              e.setAiOpen(false);
-              e.setInspectorOpen(true);
-              if (window.innerWidth < 1360) e.setContextOpen(false);
-            }}
-          />
-        ))}
-        <div className="property-rail-divider" />
-        <AppSidebarItem
-          id="editor-ai-launcher"
-          label="AI edit"
-          icon={<Sparkles />}
-          rail
-          active={e.aiOpen}
-          className="editor-property-item flex-row md:flex-col min-h-8 md:min-h-14 w-auto md:w-full"
-          aria-label="Open Blynta AI chat"
-          aria-controls="editor-ai-chat"
-          aria-expanded={e.aiOpen}
-          onClick={() => {
-            e.setAiOpen(!e.aiOpen);
-            if (window.innerWidth < 1360) e.setContextOpen(false);
-          }}
-        />
-      </nav>
-    </>
+      <AppTabs
+        variant="default"
+        size="default"
+        className="inspector-tabs"
+        value={section}
+        onValueChange={(value) => setSection(value as InspectorSection)}
+        tabs={tabs}
+      />
+      <InspectorPanel section={section} />
+    </div>
+  );
+}
+export function EditorTaskPanel() {
+  const e = useEditor();
+  return (
+    <div
+      className="right-workspace"
+      hidden={!e.aiOpen && (!e.selected || !e.inspectorOpen)}
+      aria-label={e.aiOpen ? "Blynta AI workspace" : "Selected clip properties"}
+    >
+      {e.selected && <ClipInspector key={e.selected.kind} />}
+      {/* Keep chat mounted so closing the dock retains the proposal history. */}
+      <AIPanel />
+    </div>
   );
 }

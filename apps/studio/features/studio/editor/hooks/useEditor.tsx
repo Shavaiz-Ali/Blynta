@@ -6,6 +6,7 @@ import {
   useReducer,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   editorReducer,
@@ -18,6 +19,7 @@ import { useWorkspaceLayout } from "./useWorkspaceLayout";
 import { studioApi, studioKeys } from "../../api";
 import { SaveSession } from "../stores/save-session";
 import { useQuery } from "@tanstack/react-query";
+import { PlaybackClock } from "../stores/playback-clock";
 export function useEditorState(project: Project, userId: string) {
   const [history, dispatch] = useReducer(editorReducer, {
     past: [],
@@ -54,8 +56,8 @@ export function useEditorState(project: Project, userId: string) {
     [history.present, media.data],
   );
   const [selectedId, select] = useState<string | null>(null);
-  const [playhead, seek] = useState(0);
-  const [playing, play] = useState(false);
+  const [playback] = useState(() => new PlaybackClock());
+  const seek = playback.seek;
   const layout = useWorkspaceLayout();
   const [tool, setTool] = useState("Media");
   const [aiOpen, setAiOpen] = useState(
@@ -109,26 +111,16 @@ export function useEditorState(project: Project, userId: string) {
     };
   }, [saveSession]);
   useEffect(() => {
-    if (!playing) return;
-    const timer = setInterval(
-      () =>
-        seek((t) => {
-          if (t + 0.1 >= duration) {
-            play(false);
-            return duration;
-          }
-          return t + 0.1;
-        }),
-      100,
-    );
-    return () => clearInterval(timer);
-  }, [playing, duration]);
+    playback.setDuration(duration);
+  }, [playback, duration]);
+  useEffect(() => () => playback.stop(), [playback]);
   useEffect(() => {
     function keydown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.isComposing || e.altKey) return;
       const target = e.target as HTMLElement;
       if (
         target.closest(
-          "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=dialog], [role=combobox], [role=listbox], [role=menu], [role=slider]",
+          "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=dialog], [role=combobox], [role=listbox], [role=menu], [role=textbox], [role=slider], [role=separator]",
         )
       )
         return;
@@ -145,8 +137,7 @@ export function useEditorState(project: Project, userId: string) {
       ) {
         e.preventDefault();
         if (duration) {
-          if (playhead >= duration) seek(0);
-          play((v) => !v);
+          playback.toggle();
         }
       } else if (
         (e.key === "Delete" || e.key === "Backspace") &&
@@ -171,18 +162,15 @@ export function useEditorState(project: Project, userId: string) {
         e.preventDefault();
         dispatch({
           type: "edit",
-          apply: (d) => splitClip(d, selectedId, playhead),
+          apply: (d) =>
+            splitClip(d, selectedId, playback.getSnapshot().playhead),
         });
       }
     }
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [selectedId, playhead, duration, doc]);
-  function togglePlay() {
-    if (!duration) return;
-    if (playhead >= duration) seek(0);
-    play(!playing);
-  }
+  }, [selectedId, duration, doc, playback]);
+  const togglePlay = playback.toggle;
   return {
     projectId: project.id,
     userId,
@@ -199,11 +187,19 @@ export function useEditorState(project: Project, userId: string) {
     selectedTrackId: selected?.trackId ?? null,
     select: (id: string | null) => {
       select(id);
-      if (id && window.innerWidth >= 1180) layout.setInspectorOpen(true);
+      if (id) {
+        layout.setInspectorOpen(true);
+        if (window.innerWidth < 1180) layout.setContextOpen(false);
+      }
     },
-    playhead: Math.min(playhead, duration),
+    playback,
+    get playhead() {
+      return playback.getSnapshot().playhead;
+    },
     seek,
-    playing,
+    get playing() {
+      return playback.getSnapshot().playing;
+    },
     togglePlay,
     duration,
     ...layout,
@@ -249,10 +245,14 @@ export function useEditorState(project: Project, userId: string) {
         }));
     },
     split: () => {
-      if (selectedId) edit((d) => splitClip(d, selectedId, playhead));
+      if (selectedId)
+        edit((d) => splitClip(d, selectedId, playback.getSnapshot().playhead));
     },
-    add: (asset: Asset, start = playhead, trackId?: string) =>
-      edit((d) => addAsset(d, asset, start, trackId)),
+    add: (
+      asset: Asset,
+      start = playback.getSnapshot().playhead,
+      trackId?: string,
+    ) => edit((d) => addAsset(d, asset, start, trackId)),
   };
 }
 type Editor = ReturnType<typeof useEditorState>;
@@ -261,4 +261,14 @@ export function useEditor() {
   const editor = useContext(EditorContext);
   if (!editor) throw new Error("Editor components require EditorContext");
   return editor;
+}
+
+export function useEditorPlayback() {
+  const editor = useEditor();
+  const snapshot = useSyncExternalStore(
+    editor.playback.subscribe,
+    editor.playback.getSnapshot,
+    editor.playback.getSnapshot,
+  );
+  return { ...editor, ...snapshot };
 }

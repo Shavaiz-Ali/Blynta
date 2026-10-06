@@ -25,3 +25,13 @@ Use AppViewModeToggle for grid/list selection in both apps. AppMediaCard provide
 PlayerControls defaults to appearance="overlay" for controls over video. Use appearance="surface" for controls on a themed application surface, including Studio, so timestamps and icons remain visible in light mode.
 
 Studio layout styles live in the studio-layout cascade layer, before shared component utilities. Keep geometry in that layer and use shared component props/classes for controls; do not override their internal markup or focus states.
+
+## Cross-app controls
+
+Reusable controls must have one implementation in this package. App-level files may re-export a shared component for compatibility, but must not define a parallel implementation or reskin its internals. Product adapters may load data and supply routes, auth actions, or callbacks.
+
+Studio uses the same default `AppTabs`, `AppInput`, `AppSelect`, `AppButton`, `AppDropdown`, header, and account controls as the main app. Its editor layout CSS owns panel geometry, canvas, and timeline presentation; shared controls own their variants and interaction states.
+
+Additional shared controls include `AppTooltip`, `AppContextMenu`, `AppDisclosure`, `AppFileInput`, `AppSlider`, `AppResizeHandle`, `AppScrollArea`, `AppIdentityAvatar`, and `ThemeToggle`. `AppContextMenu` uses the same menu item configuration as `AppDropdown`. File accept rules are supplied by the consuming app. Resize handles support transient preview callbacks and commit on pointer release.
+
+Studio's ESLint rules reject feature imports from local `components/common/App*` and raw local primitives; import from `@blynta/ui` instead.

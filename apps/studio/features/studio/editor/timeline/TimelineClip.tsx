@@ -1,12 +1,24 @@
 "use client";
-import { useRef, useState } from "react";
+import { memo } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import { Film, Type, AudioLines, Image as ImageIcon } from "lucide-react";
-import { AppContextMenu } from "@/components/common/AppContextMenu";
+import { AppContextMenu } from "@blynta/ui";
 import { splitClip } from "../stores/editor-store";
 import { useEditor } from "../hooks/useEditor";
 import type { Clip } from "../../types";
-export function TimelineClip({ clip }: { clip: Clip }) {
+const idleSubscription = () => () => {};
+export const TimelineClip = memo(function TimelineClip({
+  clip,
+}: {
+  clip: Clip;
+}) {
   const e = useEditor();
+  const [menuOpen, setMenuOpen] = useState(false);
+  useSyncExternalStore(
+    menuOpen ? e.playback.subscribe : idleSubscription,
+    e.playback.getSnapshot,
+    e.playback.getSnapshot,
+  );
   const [draft, setDraft] = useState<Clip | null>(null);
   const gesture = useRef<{
     x: number;
@@ -95,6 +107,7 @@ export function TimelineClip({ clip }: { clip: Clip }) {
   }
   return (
     <AppContextMenu
+      onOpenChange={setMenuOpen}
       items={[
         {
           label: "Split at playhead",
@@ -124,7 +137,7 @@ export function TimelineClip({ clip }: { clip: Clip }) {
           label: "Delete clip",
           disabled: locked,
           destructive: true,
-          separator: true,
+          separatorBefore: true,
           onClick: () =>
             e.edit((d) => ({
               ...d,
@@ -188,8 +201,8 @@ export function TimelineClip({ clip }: { clip: Clip }) {
             className={`clip-filmstrip ${asset?.origin === "Blynta demo" ? "demo-filmstrip" : ""}`}
             aria-hidden="true"
           >
-            {asset?.src && clip.kind === "video" && (
-              <video src={asset.src} muted preload="metadata" />
+            {asset?.thumbnail && clip.kind === "video" && (
+              <span style={{ backgroundImage: `url("${asset.thumbnail}")` }} />
             )}
             {asset?.src && clip.kind === "image" && (
               <span style={{ backgroundImage: `url("${asset.src}")` }} />
@@ -224,4 +237,4 @@ export function TimelineClip({ clip }: { clip: Clip }) {
       </div>
     </AppContextMenu>
   );
-}
+});

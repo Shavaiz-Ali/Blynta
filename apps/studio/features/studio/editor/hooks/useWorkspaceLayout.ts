@@ -1,13 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 
-const storageKey = "blynta-studio:workspace:v4";
+const storageKey = "blynta-studio:workspace:v5";
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
 export function useWorkspaceLayout() {
   const [layout, setLayout] = useState({
     mediaWidth: 300,
     inspectorWidth: 300,
+    aiWidth: 400,
     timelineHeight: 324,
     contextOpen: true,
     inspectorOpen: false,
@@ -21,28 +22,32 @@ export function useWorkspaceLayout() {
       const defaults = {
         mediaWidth: 300,
         inspectorWidth: 300,
-        timelineHeight: Math.min(324, Math.round(viewport.height * 0.4)),
-        contextOpen: viewport.width >= 1360,
+        aiWidth: 400,
+        timelineHeight: Math.max(180, Math.round(viewport.height * 0.36)),
+        contextOpen: viewport.width >= 1180,
         inspectorOpen: false,
       };
       try {
         const saved = JSON.parse(localStorage.getItem(storageKey) ?? "null");
         setLayout({
+          aiWidth: Number.isFinite(saved?.aiWidth)
+            ? clamp(saved.aiWidth, 380, 440)
+            : 400,
           inspectorWidth: Number.isFinite(saved?.inspectorWidth)
-            ? clamp(saved.inspectorWidth, 260, 380)
+            ? clamp(saved.inspectorWidth, 280, 340)
             : 300,
           mediaWidth: Number.isFinite(saved?.mediaWidth)
-            ? clamp(saved.mediaWidth, 280, 360)
+            ? clamp(saved.mediaWidth, 280, 340)
             : defaults.mediaWidth,
           timelineHeight: Number.isFinite(saved?.timelineHeight)
             ? clamp(
                 saved.timelineHeight,
                 180,
-                Math.min(360, viewport.height * 0.4),
+                Math.max(180, viewport.height - 340),
               )
             : defaults.timelineHeight,
           contextOpen:
-            viewport.width >= 1360 && typeof saved?.contextOpen === "boolean"
+            viewport.width >= 1180 && typeof saved?.contextOpen === "boolean"
               ? saved.contextOpen
               : defaults.contextOpen,
           inspectorOpen:
@@ -59,7 +64,7 @@ export function useWorkspaceLayout() {
       setViewport({ width: window.innerWidth, height: window.innerHeight });
       setLayout((previous) => ({
         ...previous,
-        contextOpen: window.innerWidth < 1360 ? false : previous.contextOpen,
+        contextOpen: window.innerWidth < 1180 ? false : previous.contextOpen,
         inspectorOpen: window.innerWidth < 980 ? false : previous.inspectorOpen,
       }));
     };
@@ -83,15 +88,16 @@ export function useWorkspaceLayout() {
   ) => setLayout((previous) => ({ ...previous, [key]: value }));
   const maxTimeline = Math.max(
     180,
-    Math.min(360, viewport.height * 0.4, viewport.height - 340),
+    Math.min(viewport.height * 0.6, viewport.height - 340),
   );
   return {
     ...layout,
     timelineHeight: clamp(layout.timelineHeight, 180, maxTimeline),
     maxTimeline,
-    setMediaWidth: (value: number) => set("mediaWidth", clamp(value, 280, 360)),
+    setMediaWidth: (value: number) => set("mediaWidth", clamp(value, 280, 340)),
     setInspectorWidth: (value: number) =>
-      set("inspectorWidth", clamp(value, 260, 380)),
+      set("inspectorWidth", clamp(value, 280, 340)),
+    setAiWidth: (value: number) => set("aiWidth", clamp(value, 380, 440)),
     setTimelineHeight: (value: number) =>
       set("timelineHeight", clamp(value, 180, maxTimeline)),
     setContextOpen: (value: boolean) => set("contextOpen", value),

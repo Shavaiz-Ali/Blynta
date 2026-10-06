@@ -1,36 +1,40 @@
 @layer studio-layout {
-  /* Studio workspace architecture; all colors and buttons use shared theme tokens. */
+  /* Four regions: tools, canvas, a single task dock, and a full-width timeline. */
   .editor-shell {
-    --left-width: calc(var(--media-width) + 76px);
+    --left-width: calc(var(--media-width) + 72px);
     --task-width: 0px;
     height: 100dvh;
     min-height: 480px;
     padding: 0;
     display: grid;
-    grid-template-rows: 64px minmax(0, 1fr) 22px;
+    grid-template-rows: 56px minmax(0, 1fr) 22px;
     overflow: hidden;
     background: var(--background);
   }
   .editor-shell.context-collapsed {
-    --left-width: 76px;
+    --left-width: 72px;
   }
   .editor-shell.task-open {
     --task-width: var(--inspector-width);
   }
   .editor-toolbar {
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    padding: 0 16px;
+    gap: 8px;
+    background: var(--background);
     min-width: 0;
-    margin: 6px 10px;
-    padding: 0 12px;
-    gap: 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--card);
   }
   .editor-brand {
     flex-shrink: 0;
   }
   .editor-actions {
     min-width: 0;
+  }
+  .editor-toolbar .project-name {
+    max-width: 320px;
   }
   .editor-workspace {
     position: relative;
@@ -43,107 +47,83 @@
   }
   .media-area {
     grid-column: 1;
-    grid-row: 1 / -1;
+    grid-row: 1;
     display: flex;
+    min-height: 0;
     gap: 0;
-    background: var(--card);
     border-right: 1px solid var(--border);
+    background: var(--card);
   }
   .tool-rail {
-    flex: 0 0 76px;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    padding: 12px 6px;
-    gap: 6px;
-    background: var(--card);
-    overflow-y: auto;
-    scrollbar-width: thin;
-  }
-  .rail-button {
-    width: 62px;
-    min-height: 58px;
-    height: 58px;
-    flex-shrink: 0;
-    padding: 6px 2px !important;
-  }
-  .editor-shell .rail-button > span,
-  .editor-shell .rail-button > span > span {
+    flex: 0 0 72px;
+    width: 72px;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
+    padding: 8px 4px;
+    gap: 4px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    background: var(--sidebar);
+    border-radius: 0;
+    border-right: 1px solid var(--border);
   }
-  .editor-shell .rail-button > span > span > span {
-    display: block;
-    font-size: 9px;
-    line-height: 1.3;
-    max-width: 62px;
+  .editor-tool-item {
+    flex-shrink: 0;
+    min-height: 52px;
   }
   .tool-panel {
+    position: static;
+    display: flex;
+    flex-direction: column;
     flex: 1;
     width: var(--media-width);
     min-width: 0;
+    min-height: 0;
     border: 0;
     border-radius: 0;
     overflow: hidden;
   }
+  .context-collapsed .tool-panel {
+    display: none;
+  }
   .panel-heading {
-    height: 54px;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border);
+    height: 48px;
+    padding: 12px 14px;
+    flex-shrink: 0;
   }
   .panel-heading h2 {
     font-size: 13px;
     font-weight: 600;
   }
   .media-panel-body {
-    padding: 16px;
+    padding: 14px;
   }
-  .media-source-tabs {
-    display: flex;
-    gap: 4px;
-    margin-top: 14px;
-    border-bottom: 1px solid var(--border);
-  }
-
   .media-library-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px 10px;
     margin-top: 16px;
   }
-  .media-upload-tile {
-    height: auto;
-    min-height: 90px;
-    align-self: start;
-    aspect-ratio: 1.35;
-    border-style: dashed;
-    background: var(--muted);
-  }
-  .media-upload-tile > span,
-  .media-upload-tile > span > span {
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    font-size: 11px;
-  }
   .media-item-main .asset-thumbnail {
-    aspect-ratio: 1.35;
-    height: auto;
     width: 100%;
-    border-radius: var(--radius-md);
+    height: auto;
+    aspect-ratio: 16/9;
+    border-radius: 0;
   }
   .media-item-main .media-item-label {
-    padding: 7px 2px;
+    padding: 8px;
   }
   .media-item-label > span {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .media-item > [data-slot="dropdown-menu-trigger"] {
-    opacity: 1;
+  .media-item > [data-slot="card-content"] {
+    position: relative;
+  }
+  .media-item [data-slot="dropdown-menu-trigger"] {
+    position: absolute;
+    top: 6px;
+    right: 6px;
   }
   .editor-stage {
     grid-column: 2;
@@ -152,137 +132,111 @@
     min-width: 0;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) var(--task-width) 68px;
+    grid-template-columns: minmax(0, 1fr) var(--task-width);
+    grid-template-rows: minmax(0, 1fr);
   }
   .preview-area {
     grid-column: 1;
     grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
     border: 0;
     border-radius: 0;
-    background: var(--muted);
     overflow: hidden;
-  }
-  .preview-heading {
-    height: 44px;
-    padding: 0 16px;
-    gap: 12px;
-  }
-  .preview-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    font-size: 11px;
-  }
-  .preview-title > span:first-child {
-    color: var(--muted-foreground);
-    flex-shrink: 0;
-  }
-  .preview-project-name {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    background: color-mix(in oklch, var(--muted) 45%, var(--background));
   }
   .preview-stage {
-    padding: 12px 20px;
-    container-name: editor-preview;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    padding: 20px;
+    container: editor-preview / size;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
   }
-  .preview-frame {
-    border-radius: var(--radius-md);
-  }
+  .preview-frame,
   .preview-frame.preview-frame-empty {
-    width: 100%;
-    height: 100%;
-    aspect-ratio: auto !important;
-    background: transparent;
-    box-shadow: none;
+    position: relative;
+    flex: none;
+    width: min(100cqw, calc(100cqh * var(--frame-ratio)));
+    height: auto;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: var(--frame-ratio);
+    border-radius: 4px;
+    overflow: hidden;
+    background: #000;
+    box-shadow: 0 4px 24px #0003;
+  }
+  .preview-stage.actual-size {
+    overflow: auto;
+    align-items: flex-start;
+    justify-content: flex-start;
+  }
+  .preview-stage:fullscreen {
+    padding: 24px;
+    background: #000;
+  }
+  .preview-stage:fullscreen .preview-frame {
+    width: min(100cqw, calc(100cqh * var(--frame-ratio))) !important;
   }
   .preview-missing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     text-align: center;
     padding: 12px;
-    gap: 12px;
+    gap: 10px;
+    color: #c7c7cc;
     overflow: hidden;
   }
   .preview-missing p {
-    max-width: 100%;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
-    line-height: 1.5;
   }
   .preview-missing span {
-    max-width: 100%;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.5;
   }
   .preview-controls {
-    padding: 0 16px 10px;
+    flex-shrink: 0;
+    padding: 0 14px 8px;
     background: var(--card);
     border-top: 1px solid var(--border);
   }
-  .playback-controls {
-    gap: 8px;
+  .studio-player-controls {
     padding: 8px 0;
+    color: var(--foreground);
     flex-wrap: wrap;
   }
   .preview-seek {
     display: block;
-    margin-top: 2px;
+    margin-top: 0;
   }
   .canvas-upload-status {
     padding: 6px 12px;
     font-size: 11px;
     background: var(--card);
   }
-  .property-rail {
-    grid-column: 3;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 5px;
-    border-left: 1px solid var(--border);
-    background: var(--card);
-    min-height: 0;
-    overflow-y: auto;
-  }
-  .property-rail-button {
-    width: 56px;
-    min-height: 58px;
-    height: auto;
-    padding: 8px 2px;
-    flex-shrink: 0;
-  }
-  .property-rail-button > span,
-  .property-rail-button > span > span {
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    font-size: 10px;
-  }
-  .property-rail-divider {
-    height: 1px;
-    width: 32px;
-    background: var(--border);
-    margin: 4px 0;
-    flex-shrink: 0;
-  }
-  .ai-rail-button {
-    color: var(--primary);
-  }
   .right-workspace {
     grid-column: 2;
     grid-row: 1;
     position: static;
-    display: flex;
-    flex-direction: column;
+    width: auto;
+    height: 100%;
+    margin: 0;
     min-width: 0;
     min-height: 0;
-    width: auto;
-    margin: 0;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
-    border: 1px solid var(--border);
+    border: 0;
+    border-left: 1px solid var(--border);
     border-radius: 0;
     background: var(--card);
   }
@@ -302,25 +256,30 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    flex-shrink: 0;
+    gap: 12px;
     padding: 14px;
     border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
   }
   .workspace-panel-heading h2 {
     font-size: 14px;
     font-weight: 600;
   }
   .workspace-panel-heading p {
-    font-size: 10px;
-    color: var(--muted-foreground);
     margin-top: 3px;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+  .inspector-tabs {
+    flex-shrink: 0;
+    padding: 12px 14px;
   }
   .right-workspace .inspector-panel {
     display: flex;
     flex-direction: column;
-    height: auto;
     flex: 1;
     min-height: 0;
+    height: auto;
     overflow: hidden;
   }
   .right-workspace .inspector-panel > .panel-heading {
@@ -329,43 +288,40 @@
   .inspector-body {
     padding: 16px 14px 24px;
   }
-  .inspector-empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 12px;
-    padding: 30px 6px;
-    color: var(--muted-foreground);
-  }
-  .inspector-empty h3 {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--foreground);
-  }
-  .inspector-empty p,
   .inspector-guidance {
     font-size: 12px;
     line-height: 1.6;
     color: var(--muted-foreground);
   }
   .editor-workspace > .resize-x {
+    position: absolute;
     left: calc(var(--left-width) - 3px);
+    top: 0;
+    bottom: calc(var(--timeline-height) + 8px);
+    height: auto;
+    z-index: 30;
   }
   .editor-stage > .resize-x.resize-end {
-    right: calc(var(--task-width) + 65px);
+    position: absolute;
     left: auto;
+    right: calc(var(--task-width) - 3px);
+    top: 0;
+    z-index: 30;
   }
   .editor-workspace > .workspace-resizer.resize-y {
-    grid-column: 2;
+    grid-column: 1 / -1;
     grid-row: 2;
     height: 8px;
     background: var(--card);
+    z-index: 31;
   }
   .timeline-area {
-    --track-header-width: 154px;
-    grid-column: 2;
+    --track-header-width: 200px;
+    grid-column: 1 / -1;
     grid-row: 3;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
     min-width: 0;
     border: 0;
     border-top: 1px solid var(--border);
@@ -374,30 +330,80 @@
   }
   .timeline-toolbar {
     height: 44px;
-    background: var(--card);
+    flex-shrink: 0;
     border-bottom: 1px solid var(--border);
     padding: 0 12px;
     gap: 3px;
+    background: var(--card);
+  }
+  .timeline-vertical {
+    flex: 1;
+    min-height: 0;
+  }
+  .timeline-content {
+    min-height: 100%;
   }
   .track-headers {
-    flex-basis: var(--track-header-width);
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    flex: 0 0 var(--track-header-width);
     background: var(--card);
+    border-right: 1px solid var(--border);
   }
   .ruler-header,
   .time-ruler {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    height: 32px;
     background: var(--card);
   }
   .track-header {
-    font-size: 10px;
-    text-transform: none;
+    height: 58px;
+    font-size: 11px;
     font-weight: 500;
+    text-transform: none;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 8px 0 12px;
+    gap: 4px;
+  }
+  .track-header > div {
+    position: static;
+    flex-shrink: 0;
+  }
+  .track-header > span {
+    max-width: none;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .track-lane {
+    height: 58px;
   }
   .timeline-clip {
-    border-radius: var(--radius-md);
-  }
-  .clip-video,
-  .clip-image {
     border-radius: 4px;
+    container-type: inline-size;
+  }
+  .timeline-clip.selected {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+  }
+  .clip-caption {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .timeline-playhead {
+    z-index: 7;
+    pointer-events: none;
+  }
+  .timeline-empty {
+    left: 16px;
+    text-align: left;
   }
   .editor-status {
     border-top: 1px solid var(--border);
@@ -409,6 +415,127 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  @container (max-width: 75px) {
+    .clip-duration {
+      display: none;
+    }
+  }
+  @container editor-preview (max-height: 180px) {
+    .preview-missing {
+      gap: 6px;
+    }
+    .preview-missing > span {
+      display: none;
+    }
+    .preview-missing p {
+      font-size: 11px;
+    }
+  }
+  @media (max-width: 1439px) {
+    .editor-brand {
+      display: none;
+    }
+    .editor-toolbar .project-name {
+      max-width: 280px;
+    }
+  }
+  @media (max-width: 1179px) {
+    .editor-shell,
+    .editor-shell.context-collapsed {
+      --left-width: 72px;
+    }
+    .tool-panel {
+      position: absolute;
+      left: 72px;
+      top: 0;
+      bottom: calc(var(--timeline-height) + 8px);
+      width: var(--media-width);
+      z-index: 25;
+      box-shadow: 6px 0 24px #0003;
+      border-right: 1px solid var(--border);
+    }
+    .editor-workspace > .resize-x {
+      display: none;
+    }
+    .editor-toolbar .project-name {
+      max-width: 200px;
+    }
+  }
+  @media (max-width: 979px) {
+    .editor-shell.task-open {
+      --task-width: 0px;
+    }
+    .right-workspace {
+      position: absolute;
+      grid-area: auto;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      width: min(var(--inspector-width), calc(100% - 24px));
+      z-index: 26;
+      box-shadow: -6px 0 24px #0003;
+    }
+    .editor-stage > .resize-x {
+      display: none;
+    }
+    .preview-stage {
+      padding: 12px;
+    }
+  }
+  @media (max-width: 767px) {
+    .editor-shell {
+      grid-template-rows: auto minmax(0, 1fr) 22px;
+    }
+    .editor-toolbar {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      padding: 6px 8px;
+      gap: 4px;
+    }
+    .editor-toolbar > .h-5 {
+      display: none;
+    }
+    .editor-toolbar .project-name {
+      max-width: none;
+      width: 100%;
+    }
+    .editor-toolbar .editor-actions {
+      grid-column: 1 / -1;
+      width: 100%;
+      margin: 0;
+      justify-content: space-between;
+      gap: 2px;
+    }
+    .editor-save-retry {
+      grid-column: 1 / -1;
+    }
+    .editor-stage {
+      grid-template-rows: minmax(0, 1fr);
+    }
+    .preview-controls {
+      padding: 0 8px 6px;
+    }
+    .timeline-area {
+      --track-header-width: 160px;
+    }
+    .track-header {
+      padding-left: 8px;
+    }
+    .track-header > span {
+      max-width: 60px;
+    }
+    .timeline-toolbar {
+      padding: 0 4px;
+    }
+    .timeline-toolbar > span:first-child,
+    .timeline-toolbar .time-display,
+    .timeline-zoom {
+      display: none;
+    }
+    .editor-status > span:last-child {
+      display: none;
+    }
   }
   /* AI is a task in the right dock, with the same scroll and composer boundaries. */
   .ai-chat {
@@ -482,23 +609,6 @@
     width: 100%;
     margin-top: 4px;
   }
-  .ai-chat .suggestion-chip {
-    width: 100%;
-    height: auto;
-    min-height: 44px;
-    padding: 8px;
-    white-space: normal;
-    font-size: 10px;
-    text-align: left;
-    justify-content: flex-start;
-  }
-  .ai-chat .suggestion-chip > span,
-  .ai-chat .suggestion-chip > span > span {
-    min-width: 0;
-    flex-shrink: 1;
-    white-space: normal;
-    line-height: 1.5;
-  }
   .ai-chat .ai-command {
     margin-bottom: 16px;
   }
@@ -526,12 +636,11 @@
     flex-shrink: 0;
   }
   .ai-chat .ai-composer > .ai-composer-box {
-    padding: 8px;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--input);
-    background: var(--background);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
-
   .ai-composer-actions {
     display: flex;
     align-items: center;
@@ -550,300 +659,6 @@
     text-align: center;
     padding-top: 6px;
   }
-  @container editor-preview (max-height: 140px) {
-    .preview-missing {
-      padding: 6px;
-      gap: 4px;
-    }
-    .preview-missing > span {
-      display: none;
-    }
-    .preview-missing p {
-      font-size: 11px;
-    }
-  }
-  @media (max-width: 1359px) {
-    .editor-shell {
-      --left-width: 76px;
-      --task-width: 0px;
-    }
-    .editor-shell.task-open {
-      --task-width: 0px;
-    }
-    .editor-brand {
-      display: none;
-    }
-    .tool-panel {
-      position: absolute;
-      left: 76px;
-      top: 0;
-      bottom: 0;
-      width: var(--media-width);
-      z-index: 25;
-      box-shadow: 6px 0 24px #0003;
-      border-right: 1px solid var(--border);
-    }
-    .right-workspace {
-      position: absolute;
-      grid-area: auto;
-      right: 68px;
-      top: 0;
-      bottom: 0;
-      width: min(var(--inspector-width), calc(100% - 80px));
-      margin: 8px;
-      z-index: 26;
-      box-shadow: -6px 0 24px #0003;
-    }
-    .editor-workspace > .resize-x,
-    .editor-stage > .resize-x {
-      display: none;
-    }
-  }
-  @media (max-width: 767px) {
-    .editor-shell {
-      min-height: 480px;
-      grid-template-rows: auto minmax(0, 1fr) 22px;
-    }
-    .editor-toolbar {
-      height: auto;
-      display: grid;
-      grid-template-columns: 32px minmax(0, 1fr);
-      margin: 6px 8px;
-      padding: 6px;
-      gap: 4px;
-    }
-    .editor-toolbar > .h-5 {
-      display: none;
-    }
-    .editor-toolbar .editor-actions {
-      grid-column: 1 / -1;
-      width: 100%;
-      margin: 0;
-      justify-content: space-between;
-      gap: 2px;
-    }
-    .editor-save-retry {
-      grid-column: 1 / -1;
-      justify-self: start;
-    }
-    .editor-actions > .h-5 {
-      display: none;
-    }
-    .editor-actions button {
-      min-width: 30px;
-    }
-    .editor-workspace {
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: 60px minmax(0, 1fr) 6px min(
-          var(--timeline-height),
-          27dvh
-        );
-    }
-    .media-area {
-      grid-column: 1;
-      grid-row: 1;
-      border: 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .tool-rail {
-      flex: 1;
-      flex-direction: row;
-      padding: 3px 4px;
-      gap: 3px;
-      justify-content: space-between;
-      overflow-x: auto;
-      border: 0;
-    }
-    .rail-button {
-      width: 42px;
-      min-height: 50px;
-      height: 50px;
-    }
-    .editor-shell .rail-button > span > span > span {
-      font-size: 8px;
-      max-width: 42px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .tool-panel {
-      top: 60px;
-      left: 0;
-      bottom: 0;
-      width: 100%;
-    }
-    .media-library-grid {
-      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    }
-    .editor-stage {
-      grid-column: 1;
-      grid-row: 2;
-      grid-template-columns: minmax(0, 1fr);
-      grid-template-rows: 42px minmax(0, 1fr);
-    }
-    .property-rail {
-      grid-column: 1;
-      grid-row: 1;
-      flex-direction: row;
-      padding: 2px 8px;
-      gap: 4px;
-      justify-content: flex-end;
-      border: 0;
-      border-bottom: 1px solid var(--border);
-    }
-    .property-rail-button {
-      width: auto;
-      min-height: 34px;
-      padding: 4px 8px;
-    }
-    .property-rail-button > span,
-    .property-rail-button > span > span {
-      flex-direction: row;
-      gap: 4px;
-      font-size: 10px;
-    }
-    .property-rail-button svg {
-      width: 14px;
-      height: 14px;
-    }
-    .property-rail-divider {
-      width: 1px;
-      height: 20px;
-      margin: 0 3px;
-    }
-    .preview-area {
-      grid-column: 1;
-      grid-row: 2;
-    }
-    .preview-heading {
-      height: 34px;
-      padding: 0 8px;
-    }
-    .preview-title > span:first-child {
-      display: none;
-    }
-    .preview-stage {
-      padding: 4px 8px;
-    }
-    .preview-controls {
-      padding: 0 8px 6px;
-    }
-    .playback-controls {
-      display: grid;
-      grid-template-columns: auto auto;
-      justify-content: space-between;
-      gap: 4px;
-      padding: 4px 0;
-    }
-    .playback-controls > .time-display {
-      grid-row: 2;
-      grid-column: 1 / -1;
-      text-align: center;
-      font-size: 9px;
-    }
-    .playback-controls > div:last-child {
-      margin-left: 0;
-      gap: 2px;
-    }
-    .right-workspace {
-      top: 42px;
-      right: 0;
-      bottom: calc(-1 * (min(var(--timeline-height), 27dvh) + 6px));
-      width: 100%;
-      margin: 0;
-      border: 0;
-      border-radius: 0;
-      overflow-y: auto;
-    }
-    .right-workspace .ai-chat {
-      min-height: 260px;
-    }
-    .workspace-panel-heading,
-    .ai-chat-heading {
-      padding: 10px 12px;
-    }
-    .workspace-panel-heading p,
-    .ai-chat-heading p {
-      display: none;
-    }
-    .ai-chat .ai-history {
-      padding: 12px;
-    }
-    .ai-welcome > svg {
-      display: none;
-    }
-    .ai-welcome h3 {
-      font-size: 13px;
-    }
-    .ai-chat .ai-composer {
-      padding: 6px 10px;
-    }
-
-    .ai-composer-hint {
-      display: none;
-    }
-    .editor-workspace > .workspace-resizer.resize-y {
-      grid-column: 1;
-      grid-row: 3;
-      height: 6px;
-    }
-    .timeline-area {
-      grid-column: 1;
-      grid-row: 4;
-      --track-header-width: 110px;
-    }
-    .track-header > div {
-      position: static;
-    }
-    .track-header > span {
-      max-width: 100%;
-    }
-    .timeline-toolbar {
-      padding: 0 4px;
-      height: 38px;
-      gap: 0;
-    }
-    .timeline-toolbar > span:first-child,
-    .timeline-toolbar .time-display,
-    .timeline-zoom {
-      display: none;
-    }
-    .timeline-toolbar > div.ml-auto {
-      gap: 0;
-    }
-    .timeline-toolbar button {
-      width: 30px;
-      height: 32px;
-    }
-    .timeline-tools-spacer {
-      min-width: 2px;
-    }
-    .editor-status {
-      padding: 0 8px;
-      font-size: 9px;
-    }
-    .editor-status > span:last-child {
-      display: none;
-    }
-  }
-  @media (max-height: 650px) and (min-width: 768px) {
-    .editor-workspace {
-      grid-template-rows: minmax(0, 1fr) 6px min(var(--timeline-height), 30dvh);
-    }
-    .ai-chat-heading {
-      padding: 8px 12px;
-    }
-    .ai-chat-heading p,
-    .ai-composer-hint {
-      display: none;
-    }
-    .ai-chat .ai-composer {
-      padding: 6px;
-    }
-    .ai-welcome > svg {
-      display: none;
-    }
-  }
-  /* Export is portalled outside the editor shell. Keep its layout self-contained. */
   .editor-export-dialog {
     max-height: calc(100dvh - 32px);
     overflow-y: auto;
@@ -947,49 +762,6 @@
     }
     .export-settings {
       gap: 12px;
-    }
-  }
-
-  /* Shared navigation follows the main app; surfaces fill the preview row. */
-  .tool-rail,
-  .property-rail {
-    background: var(--sidebar);
-  }
-  .editor-tool-item,
-  .editor-property-item {
-    flex-shrink: 0;
-  }
-  .right-workspace {
-    align-self: stretch;
-    height: 100%;
-  }
-  .inspector-task,
-  .right-workspace .ai-chat {
-    flex: 1;
-    min-height: 0;
-  }
-  .studio-player-controls {
-    padding: 10px 0;
-    color: var(--foreground);
-  }
-  @media (max-width: 767px) {
-    .editor-tool-item {
-      flex-direction: row;
-      min-height: 36px;
-      width: auto;
-      padding: 8px;
-    }
-    .editor-property-item {
-      flex-direction: row;
-      min-height: 36px;
-      width: auto;
-      padding: 8px;
-    }
-  }
-
-  @media (max-width: 1359px) {
-    .editor-loading .tool-panel {
-      display: none;
     }
   }
 }

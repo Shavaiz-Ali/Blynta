@@ -13,9 +13,9 @@ const eslintConfig = defineConfig([
         {
           patterns: [
             {
-              group: ["@/components/ui/*"],
+              group: ["@/components/ui/*", "@/components/common/App*"],
               message:
-                "Use the Blynta App component layer in components/common.",
+                "Import shared controls from @blynta/ui. Reusable UI belongs in packages/ui; Studio owns editor behavior only.",
             },
           ],
         },

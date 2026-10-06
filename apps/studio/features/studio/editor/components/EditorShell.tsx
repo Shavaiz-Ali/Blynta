@@ -1,8 +1,8 @@
 "use client";
-import { useState, type CSSProperties } from "react";
+import { useState, useRef, type CSSProperties } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { AppResizeHandle } from "@/components/common/AppResizeHandle";
+import { AppButton, AppResizeHandle } from "@blynta/ui";
 import { useQuery } from "@tanstack/react-query";
 import { studioApi, studioKeys } from "../../api";
 import { EditorSkeleton } from "./EditorSkeleton";
@@ -22,16 +22,21 @@ export function EditorWorkspace({
   userId: string;
 }) {
   const e = useEditorState(project, userId);
+  const shell = useRef<HTMLElement>(null);
+  const previewSize = (variable: string, value: number) =>
+    shell.current?.style.setProperty(variable, `${value}px`);
+  const taskOpen = e.aiOpen || (!!e.selected && e.inspectorOpen);
   const [exportOpen, setExportOpen] = useState(false);
   return (
     <EditorContext.Provider value={e}>
       <main
-        className={`editor-shell ${e.contextOpen ? "" : "context-collapsed"} ${e.inspectorOpen || e.aiOpen ? "task-open" : ""}`}
+        ref={shell}
+        className={`editor-shell ${e.contextOpen ? "" : "context-collapsed"} ${taskOpen ? "task-open" : ""}`}
         style={
           {
             "--media-width": `${e.mediaWidth}px`,
-            "--timeline-height": `${Math.min(e.timelineHeight, Math.max(240, 96 + e.visibleTracks.length * 72))}px`,
-            "--inspector-width": `${e.inspectorWidth}px`,
+            "--timeline-height": `${e.timelineHeight}px`,
+            "--inspector-width": `${e.aiOpen ? e.aiWidth : e.inspectorWidth}px`,
           } as CSSProperties
         }
       >
@@ -44,22 +49,26 @@ export function EditorWorkspace({
               axis="x"
               value={e.mediaWidth}
               min={280}
-              max={360}
+              max={340}
+              onValuePreview={(value) => previewSize("--media-width", value)}
               onValueChange={e.setMediaWidth}
             />
           )}
           <div className="editor-stage">
             <PreviewCanvas />
-            {(e.inspectorOpen || e.aiOpen) && (
+            {taskOpen && (
               <AppResizeHandle
-                label="Resize properties panel"
+                label={e.aiOpen ? "Resize AI panel" : "Resize properties panel"}
                 axis="x"
                 reverse
                 end
-                value={e.inspectorWidth}
-                min={260}
-                max={380}
-                onValueChange={e.setInspectorWidth}
+                value={e.aiOpen ? e.aiWidth : e.inspectorWidth}
+                min={e.aiOpen ? 380 : 280}
+                max={e.aiOpen ? 440 : 340}
+                onValuePreview={(value) =>
+                  previewSize("--inspector-width", value)
+                }
+                onValueChange={e.aiOpen ? e.setAiWidth : e.setInspectorWidth}
               />
             )}
             <EditorTaskPanel />
@@ -68,15 +77,10 @@ export function EditorWorkspace({
             label="Resize timeline"
             axis="y"
             reverse
-            value={Math.min(
-              e.timelineHeight,
-              Math.max(240, 96 + e.visibleTracks.length * 72),
-            )}
-            min={Math.min(220, e.maxTimeline)}
-            max={Math.min(
-              e.maxTimeline,
-              Math.max(240, 96 + e.visibleTracks.length * 72),
-            )}
+            value={e.timelineHeight}
+            min={180}
+            max={e.maxTimeline}
+            onValuePreview={(value) => previewSize("--timeline-height", value)}
             onValueChange={e.setTimelineHeight}
           />
           <Timeline />
@@ -111,6 +115,11 @@ export function EditorShell({ projectId }: { projectId: string }) {
           {error ||
             "This project may have been removed or belongs to another account."}
         </p>
+        {error && (
+          <AppButton variant="outline" onClick={() => void query.refetch()}>
+            Retry opening project
+          </AppButton>
+        )}
         <Link className="text-primary" href="/dashboard">
           Back to projects
         </Link>

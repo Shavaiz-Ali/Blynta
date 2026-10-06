@@ -1,14 +1,14 @@
 "use client";
-import { SlidersHorizontal, Type, Music2, Film, RotateCcw } from "lucide-react";
-import { AppDisclosure } from "@/components/common/AppDisclosure";
+import { RotateCcw } from "lucide-react";
+import { AppDisclosure } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
 import { AppTextarea } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
-import { AppScrollArea } from "@/components/common/AppScrollArea";
-import { AppSlider } from "@/components/common/AppSlider";
+import { AppScrollArea } from "@blynta/ui";
+import { AppSlider } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
-import type { Clip, AspectRatio } from "../../types";
+import type { Clip } from "../../types";
 function NumberField({
   label,
   field,
@@ -225,24 +225,10 @@ export function InspectorPanel({
   const Inspector = e.selected ? inspectors[e.selected.kind] : null;
   return (
     <aside className="inspector-panel">
-      <div className="panel-heading">
-        <h2>Inspector</h2>
-        <SlidersHorizontal size={14} className="text-muted-foreground" />
-      </div>
       <AppScrollArea className="flex-1">
         <div className="inspector-body">
           {e.selected && Inspector ? (
             <>
-              <div className="flex items-center gap-2 pb-4 mb-4 border-b text-xs font-medium">
-                {e.selected.kind === "text" ? (
-                  <Type size={14} />
-                ) : e.selected.kind === "audio" ? (
-                  <Music2 size={14} />
-                ) : (
-                  <Film size={14} />
-                )}
-                <span className="truncate">{e.selected.name}</span>
-              </div>
               <fieldset
                 disabled={
                   !!e.doc.tracks.find((t) => t.id === e.selected?.trackId)
@@ -295,56 +281,10 @@ export function InspectorPanel({
                 </p>
               )}
             </>
-          ) : section !== "basic" ? (
-            <div className="inspector-empty">
-              <SlidersHorizontal size={28} />
-              <h3>Select a clip</h3>
-              <p>
-                Choose a clip in the timeline to adjust its{" "}
-                {section === "audio"
-                  ? "volume and fades"
-                  : "timing and playback speed"}
-                .
-              </p>
-            </div>
           ) : (
-            <>
-              <AppInput
-                label="Project name"
-                size="default"
-                value={e.doc.name}
-                onChange={(v) =>
-                  e.edit((d) => ({ ...d, name: v.target.value }))
-                }
-              />
-              <AppSelect
-                label="Aspect ratio"
-                size="default"
-                wrapperClassName="mt-4"
-                value={e.doc.ratio}
-                onValueChange={(v) =>
-                  e.edit((d) => ({ ...d, ratio: v as AspectRatio }))
-                }
-                options={["16:9", "9:16", "1:1", "4:5"].map((value) => ({
-                  value,
-                  label: value,
-                }))}
-              />
-              <h3 className="inspector-section">Project summary</h3>
-              <dl className="grid grid-cols-2 gap-y-3 text-xs">
-                <dt className="text-muted-foreground">Duration</dt>
-                <dd className="text-right">{e.duration.toFixed(1)} sec</dd>
-                <dt className="text-muted-foreground">Timeline clips</dt>
-                <dd className="text-right">{e.doc.clips.length}</dd>
-                <dt className="text-muted-foreground">Media assets</dt>
-                <dd className="text-right">{e.doc.assets.length}</dd>
-                <dt className="text-muted-foreground">Frame rate</dt>
-                <dd className="text-right">30 fps preview</dd>
-              </dl>
-              <p className="mt-6 border-t pt-4 text-xs text-muted-foreground leading-relaxed">
-                Select a clip to adjust its appearance, audio, and timing.
-              </p>
-            </>
+            <p className="inspector-guidance">
+              Select a timeline clip to edit its properties.
+            </p>
           )}
         </div>
       </AppScrollArea>

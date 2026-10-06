@@ -2,6 +2,8 @@
 import Link from "next/link";
 import {
   ArrowLeft,
+  Sparkles,
+  Settings2,
   CloudCheck,
   Undo2,
   Redo2,
@@ -12,11 +14,10 @@ import {
   PanelRightClose,
 } from "lucide-react";
 import { StudioLogo } from "@/components/common/StudioLogo";
-import { ThemeToggle } from "@/components/common/ThemeToggle";
 import { UserDropdown } from "@/components/common/UserDropdown";
-import { AppButton, AppHeader } from "@blynta/ui";
+import { AppButton, AppHeader, AppPopover } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
-import { AppTooltip } from "@/components/common/AppTooltip";
+import { AppTooltip } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
 export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const e = useEditor();
@@ -73,7 +74,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             aria-label="Toggle media panel"
             aria-pressed={e.contextOpen}
             onClick={() => {
-              if (window.innerWidth < 1360) {
+              if (window.innerWidth < 1180) {
                 e.setAiOpen(false);
                 e.setInspectorOpen(false);
               }
@@ -88,9 +89,10 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             variant="ghost"
             size="icon-sm"
             aria-label="Toggle properties panel"
-            aria-pressed={e.inspectorOpen}
+            disabled={!e.selected}
+            aria-pressed={e.inspectorOpen && !!e.selected && !e.aiOpen}
             onClick={() => {
-              if (window.innerWidth < 1360) e.setContextOpen(false);
+              if (window.innerWidth < 1180) e.setContextOpen(false);
               if (e.aiOpen) {
                 e.setAiOpen(false);
                 e.setInspectorOpen(true);
@@ -122,12 +124,48 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             <Redo2 />
           </AppButton>
         </AppTooltip>
-        <span className="h-5 border-l mx-1" />
+        <AppButton
+          id="editor-ai-launcher"
+          variant={e.aiOpen ? "secondary" : "outline"}
+          size="sm"
+          aria-label="Open Blynta AI chat"
+          aria-controls="editor-ai-chat"
+          aria-expanded={e.aiOpen}
+          onClick={() => {
+            e.setAiOpen(!e.aiOpen);
+            if (window.innerWidth < 1180) e.setContextOpen(false);
+          }}
+        >
+          <Sparkles />
+          <span className="hidden sm:inline">Blynta AI</span>
+        </AppButton>
         <AppButton size="sm" aria-label="Export project" onClick={onExport}>
           <Download />
           <span className="hidden sm:inline">Export</span>
         </AppButton>
-        <ThemeToggle />
+        <AppPopover
+          title="Project settings"
+          trigger={
+            <AppButton
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Project settings"
+            >
+              <Settings2 />
+            </AppButton>
+          }
+        >
+          <dl className="grid grid-cols-2 gap-3 p-4 text-xs min-w-60">
+            <dt className="text-muted-foreground">Duration</dt>
+            <dd>{e.duration.toFixed(1)} sec</dd>
+            <dt className="text-muted-foreground">Timeline clips</dt>
+            <dd>{e.doc.clips.length}</dd>
+            <dt className="text-muted-foreground">Media assets</dt>
+            <dd>{e.doc.assets.length}</dd>
+            <dt className="text-muted-foreground">Preview frame rate</dt>
+            <dd>30 fps</dd>
+          </dl>
+        </AppPopover>
         <UserDropdown />
       </div>
     </AppHeader>

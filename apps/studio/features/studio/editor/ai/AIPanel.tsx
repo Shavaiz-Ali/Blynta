@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { AppButton } from "@blynta/ui";
 import { studioApi } from "../../api";
-import { AppScrollArea } from "@/components/common/AppScrollArea";
+import { AppScrollArea } from "@blynta/ui";
 import { AppTextarea } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
@@ -209,7 +209,7 @@ export function AIPanel() {
                     disabled={busy}
                     variant="outline"
                     size="sm"
-                    className="suggestion-chip"
+                    className="w-full h-auto min-h-9 whitespace-normal justify-start [&>span]:whitespace-normal [&>span]:shrink [&>span>span]:whitespace-normal [&>span>span]:shrink text-left"
                     onClick={() => send(command)}
                   >
                     {command}
@@ -332,7 +332,7 @@ export function AIPanel() {
             value={prompt}
             onChange={(v) => setPrompt(v.target.value)}
             rows={2}
-            className="ai-prompt-input min-h-24 resize-none bg-background/80"
+            className="min-h-24 resize-none"
             style={{
               height: Math.min(
                 112,

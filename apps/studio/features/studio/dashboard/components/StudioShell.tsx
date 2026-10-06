@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AccountControls } from "./AccountControls";
 import { useSession } from "next-auth/react";
-import { AppAvatar } from "@/components/common/AppAvatar";
+import { AppIdentityAvatar } from "@blynta/ui";
 import {
   AppButton,
   AppProductHeader,
@@ -157,7 +157,7 @@ export function StudioSidebar({
       <div className="mt-auto border-t border-border/60 p-2.5">
         {!collapsed && (
           <div className="mb-3 flex items-center gap-2.5 rounded-lg bg-muted/30 px-3 py-2.5">
-            <AppAvatar name={session?.user.name || "Blynta"} />
+            <AppIdentityAvatar name={session?.user.name || "Blynta"} />
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold">
                 {session?.user.name || "Your workspace"}

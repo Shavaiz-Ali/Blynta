@@ -14,11 +14,12 @@ import { formatTime } from "../utils/time";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppButton, AppMediaCard } from "@blynta/ui";
-import { AppDropdownMenu } from "@/components/common/AppDropdownMenu";
+import { AppDropdown } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
-import { AppFileInput } from "@/components/common/AppFileInput";
+import { AppFileInput } from "@blynta/ui";
+import { supportedMedia } from "@/features/studio/editor/media/supported-media";
 import { AppInput } from "@blynta/ui";
-import { AppTooltip } from "@/components/common/AppTooltip";
+import { AppTooltip } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
 import { uploadMedia } from "../../projects/media";
 import type { Asset } from "../../types";
@@ -80,7 +81,7 @@ export function MediaItem({ asset }: { asset: Asset }) {
           </span>
         </AppButton>
       </AppTooltip>
-      <AppDropdownMenu
+      <AppDropdown
         trigger={
           <AppButton
             variant="ghost"
@@ -114,7 +115,7 @@ export function MediaItem({ asset }: { asset: Asset }) {
             label: "Remove from library",
             icon: <Trash2 />,
             destructive: true,
-            separator: true,
+            separatorBefore: true,
             onClick: () => {
               if (e.doc.clips.some((c) => c.assetId === asset.id)) {
                 toast.info(
@@ -131,6 +132,7 @@ export function MediaItem({ asset }: { asset: Asset }) {
         ]}
       />
       <AppFileInput
+        accept={supportedMedia}
         ref={file}
         label={`Reattach ${asset.name}`}
         onFile={async (selected) => {

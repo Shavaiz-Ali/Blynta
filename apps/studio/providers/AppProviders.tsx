@@ -6,7 +6,12 @@ import { QueryProvider } from "./QueryProvider";
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider refetchInterval={60} refetchOnWindowFocus>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
         <QueryProvider>
           {children}
           <Toaster richColors closeButton />

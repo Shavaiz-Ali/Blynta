@@ -2,7 +2,8 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppDialog } from "@blynta/ui";
-import { AppFileInput } from "@/components/common/AppFileInput";
+import { AppFileInput } from "@blynta/ui";
+import { supportedMedia } from "@/features/studio/editor/media/supported-media";
 import { AppInput } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
@@ -168,6 +169,7 @@ export function NewProjectDialog({
               Browse files
             </AppButton>
             <AppFileInput
+              accept={supportedMedia}
               ref={fileRef}
               label="Upload project media"
               disabled={busy}
