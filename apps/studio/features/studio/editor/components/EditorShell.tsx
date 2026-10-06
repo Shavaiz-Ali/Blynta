@@ -8,7 +8,7 @@ import { studioApi, studioKeys } from "../../api";
 import { EditorLoading } from "./EditorLoading";
 import { EditorContext, useEditorState } from "../hooks/useEditor";
 import { EditorToolbar } from "./EditorToolbar";
-import { MediaPanel } from "../media/MediaPanel";
+import { MediaPanel, EditorToolRail } from "../media/MediaPanel";
 import { PreviewCanvas } from "../preview/PreviewCanvas";
 import { Timeline } from "../timeline/Timeline";
 import { EditorTaskPanel } from "./EditorTaskPanel";
@@ -25,36 +25,42 @@ export function EditorWorkspace({
   const shell = useRef<HTMLElement>(null);
   const previewSize = (variable: string, value: number) =>
     shell.current?.style.setProperty(variable, `${value}px`);
-  const taskOpen = e.aiOpen || (!!e.selected && e.inspectorOpen);
+  const taskOpen = e.aiOpen || e.inspectorOpen;
   const [exportOpen, setExportOpen] = useState(false);
   return (
     <EditorContext.Provider value={e}>
       <main
         ref={shell}
-        className={`editor-shell ${e.contextOpen ? "" : "context-collapsed"} ${taskOpen ? "task-open" : ""}`}
+        className={`editor-shell grid-cols-[56px_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_22px] pr-2 md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-[56px_minmax(0,1fr)_22px] md:pr-4 ${e.contextOpen ? "" : "context-collapsed"} ${taskOpen ? "task-open" : ""}`}
         style={
           {
             "--media-width": `${e.mediaWidth}px`,
+            "--left-width": e.contextOpen ? `${e.mediaWidth}px` : "0px",
             "--timeline-height": `${e.timelineHeight}px`,
             "--inspector-width": `${e.aiOpen ? e.aiWidth : e.inspectorWidth}px`,
           } as CSSProperties
         }
       >
+        <EditorToolRail />
         <EditorToolbar onExport={() => setExportOpen(true)} />
-        <div className="editor-workspace">
+        <div
+          className={`editor-workspace col-start-2 row-start-2 grid-cols-[0_minmax(0,1fr)] ${e.contextOpen ? "min-[1100px]:grid-cols-[var(--media-width)_minmax(0,1fr)] min-[1100px]:gap-x-4" : ""} [&>.resize-x]:hidden min-[1180px]:[&>.resize-x]:block`}
+        >
           <MediaPanel />
           {e.contextOpen && (
             <AppResizeHandle
               label="Resize media panel"
               axis="x"
               value={e.mediaWidth}
-              min={280}
-              max={340}
+              min={240}
+              max={320}
               onValuePreview={(value) => previewSize("--media-width", value)}
               onValueChange={e.setMediaWidth}
             />
           )}
-          <div className="editor-stage">
+          <div
+            className={`editor-stage ${taskOpen ? "min-[980px]:gap-x-4" : ""} [&>.resize-end]:right-[calc(var(--task-width)+5px)]`}
+          >
             <PreviewCanvas />
             {taskOpen && (
               <AppResizeHandle
@@ -63,15 +69,15 @@ export function EditorWorkspace({
                 reverse
                 end
                 value={e.aiOpen ? e.aiWidth : e.inspectorWidth}
-                min={e.aiOpen ? 380 : 280}
-                max={e.aiOpen ? 440 : 340}
+                min={e.aiOpen ? 320 : 260}
+                max={e.aiOpen ? 400 : 340}
                 onValuePreview={(value) =>
                   previewSize("--inspector-width", value)
                 }
                 onValueChange={e.aiOpen ? e.setAiWidth : e.setInspectorWidth}
               />
             )}
-            <EditorTaskPanel />
+            <EditorTaskPanel onExport={() => setExportOpen(true)} />
           </div>
           <AppResizeHandle
             label="Resize timeline"
@@ -85,7 +91,7 @@ export function EditorWorkspace({
           />
           <Timeline />
         </div>
-        <footer className="editor-status">
+        <footer className="editor-status col-start-2 row-start-3">
           <span role="status">{e.saveState} · Cloud project</span>
           <span>Space to play · S to split · Ctrl/⌘ K for AI</span>
         </footer>

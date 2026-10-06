@@ -1,5 +1,8 @@
 "use client";
 import { useRef, useState } from "react";
+import Link from "next/link";
+import { StudioLogo } from "@/components/common/StudioLogo";
+import { ThemeToggle } from "@/components/common/ThemeToggle";
 import {
   Film,
   Type,
@@ -45,6 +48,47 @@ function assetGroup(asset: Asset) {
             : "Generated clips")
   );
 }
+export function EditorToolRail() {
+  const e = useEditor();
+  return (
+    <nav
+      className="tool-rail col-start-1 row-span-3 row-start-1 w-14 gap-2 border-r border-border md:w-[72px]"
+      aria-label="Editor tools"
+    >
+      <Link
+        href="/dashboard"
+        className="mb-3 grid min-h-10 place-items-center"
+        aria-label="Blynta projects"
+      >
+        <StudioLogo collapsed />
+      </Link>
+      {tools.map((t) => (
+        <AppTooltip key={t.name} content={t.name}>
+          <AppSidebarItem
+            label={t.name}
+            icon={<t.icon />}
+            rail
+            active={e.contextOpen && e.tool === t.name}
+            className="editor-tool-item w-full px-1"
+            aria-label={t.name}
+            aria-pressed={e.contextOpen && e.tool === t.name}
+            onClick={() => {
+              if (window.matchMedia("(max-width: 1099px)").matches) {
+                e.setAiOpen(false);
+                e.setInspectorOpen(false);
+              }
+              e.setContextOpen(e.tool === t.name ? !e.contextOpen : true);
+              e.setTool(t.name);
+            }}
+          />
+        </AppTooltip>
+      ))}
+      <div className="mt-auto grid place-items-center pt-6 pb-10">
+        <ThemeToggle />
+      </div>
+    </nav>
+  );
+}
 export function MediaPanel() {
   const e = useEditor();
   const { upload, busy, error } = useMediaUpload();
@@ -65,31 +109,10 @@ export function MediaPanel() {
       a.name.toLowerCase().includes(search.toLowerCase()),
   );
   return (
-    <aside className="media-area">
-      <nav className="tool-rail" aria-label="Editor tools">
-        {tools.map((t) => (
-          <AppTooltip key={t.name} content={t.name}>
-            <AppSidebarItem
-              label={t.name}
-              icon={<t.icon />}
-              rail
-              active={e.contextOpen && e.tool === t.name}
-              className="editor-tool-item w-auto md:w-full min-h-10 md:min-h-14 px-2 md:px-1"
-              aria-label={t.name}
-              aria-pressed={e.contextOpen && e.tool === t.name}
-              onClick={() => {
-                if (window.matchMedia("(max-width: 1179px)").matches) {
-                  e.setAiOpen(false);
-                  e.setInspectorOpen(false);
-                }
-                e.setContextOpen(e.tool === t.name ? !e.contextOpen : true);
-                e.setTool(t.name);
-              }}
-            />
-          </AppTooltip>
-        ))}
-      </nav>
-      <div className="tool-panel">
+    <aside
+      className={`media-area border border-border max-[1099px]:absolute max-[1099px]:inset-y-0 max-[1099px]:bottom-[calc(var(--timeline-height)+8px)] max-[1099px]:left-0 max-[1099px]:z-25 max-[1099px]:w-(--media-width) max-[1099px]:shadow-lg ${e.contextOpen ? "" : "hidden"}`}
+    >
+      <div className="tool-panel static w-full">
         <div className="panel-heading">
           <h2>{e.tool === "Media" ? "Media library" : e.tool}</h2>
           <AppButton
@@ -133,7 +156,9 @@ export function MediaPanel() {
                 {e.tool === "Media" && (
                   <AppTabs
                     variant="default"
-                    size="default"
+                    size="sm"
+                    listClassName="w-full"
+                    triggerClassName="min-w-0 flex-1 px-1.5"
                     value={source}
                     onValueChange={setSource}
                     className="mt-3"
@@ -147,7 +172,9 @@ export function MediaPanel() {
                 {e.tool === "Media" && (
                   <AppTabs
                     variant="default"
-                    size="default"
+                    size="sm"
+                    listClassName="w-full"
+                    triggerClassName="min-w-0 flex-1 px-1.5"
                     value={filter}
                     onValueChange={setFilter}
                     className="mt-3"
@@ -205,7 +232,7 @@ export function MediaPanel() {
                       ))}
                   </section>
                 )}
-                <div className="media-library-grid">
+                <div className="media-library-grid grid-cols-2">
                   {assets.map((asset) => (
                     <MediaItem key={asset.id} asset={asset} />
                   ))}
@@ -256,7 +283,7 @@ export function MediaPanel() {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    if (window.innerWidth < 1180) e.setContextOpen(false);
+                    if (window.innerWidth < 1100) e.setContextOpen(false);
                     e.setAiOpen(true);
                   }}
                 >

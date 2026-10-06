@@ -180,7 +180,10 @@ export function PreviewCanvas() {
   );
   const [w, h] = e.doc.ratio.split(":").map(Number);
   return (
-    <section className="preview-area" aria-label="Video preview">
+    <section
+      className="preview-area border border-border bg-card"
+      aria-label="Video preview"
+    >
       <div
         className={`preview-stage ${zoom === "100" ? "actual-size" : ""}`}
         ref={stage}

@@ -40,18 +40,19 @@ export function MediaItem({ asset }: { asset: Asset }) {
       onDragStart={(v) =>
         v.dataTransfer.setData("application/blynta-asset", asset.id)
       }
-      className="media-item min-w-0"
+      className="media-item min-w-0 items-stretch"
+      contentClassName="min-w-0 w-full"
     >
       <AppTooltip content={`${asset.name} · Click to add, or drag to timeline`}>
         <AppButton
           variant="ghost"
-          className="media-item-main h-auto w-full justify-start rounded-none p-0 [&>span]:w-full"
-          contentClassName="grid w-full grid-cols-[72px_minmax(0,1fr)] gap-2 text-left"
+          className="media-item-main block h-auto w-full justify-start rounded-none p-0 [&>span]:block [&>span]:w-full [&>span>span]:block"
+          contentClassName="flex w-full flex-col items-stretch gap-0 text-left"
           onClick={() => e.add(asset)}
           aria-label={`Add ${asset.name} to timeline`}
         >
           <span
-            className={`relative block w-full overflow-hidden asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
+            className={`relative block w-full h-20 overflow-hidden asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
           >
             {asset.thumbnail || (asset.src && asset.kind === "image") ? (
               <Image
@@ -72,7 +73,7 @@ export function MediaItem({ asset }: { asset: Asset }) {
               <Icon size={18} />
             )}
           </span>
-          <span className="media-item-label block min-w-0 w-full py-2 pr-7 text-left">
+          <span className="media-item-label block min-w-0 w-full p-2 text-left">
             <span className="truncate block text-xs font-medium leading-5">
               {asset.name}
             </span>

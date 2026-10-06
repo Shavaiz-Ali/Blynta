@@ -19,6 +19,14 @@ import {
   Type,
   AudioLines,
   Layers,
+  Undo2,
+  Redo2,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  RotateCcw,
+  RotateCw,
 } from "lucide-react";
 import { AppButton } from "@blynta/ui";
 import { AppSlider } from "@blynta/ui";
@@ -66,11 +74,33 @@ export function Timeline() {
   return (
     <section
       ref={timeline}
-      className="timeline-area"
+      className="timeline-area border border-border [--track-header-width:148px] max-md:[--track-header-width:120px]"
       aria-label="Project timeline"
     >
-      <div className="timeline-toolbar">
-        <span className="text-xs font-medium mr-2">Timeline</span>
+      <div className="timeline-toolbar relative h-12 max-md:h-24 max-md:items-start max-md:pt-2">
+        <span className="text-xs font-medium mr-2 max-[980px]:hidden">
+          Timeline
+        </span>
+        <AppButton
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Undo"
+          title="Undo · Ctrl/⌘ Z"
+          disabled={!e.history.past.length}
+          onClick={e.undo}
+        >
+          <Undo2 />
+        </AppButton>
+        <AppButton
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Redo"
+          title="Redo · Ctrl/⌘ Shift Z"
+          disabled={!e.history.future.length}
+          onClick={e.redo}
+        >
+          <Redo2 />
+        </AppButton>
         <AppButton
           variant="ghost"
           size="icon-sm"
@@ -102,6 +132,54 @@ export function Timeline() {
           <Trash2 />
         </AppButton>
         <div className="timeline-tools-spacer" />
+        <div className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2 max-md:top-12 max-md:gap-1">
+          <AppButton
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back five seconds"
+            className="max-[980px]:hidden"
+            disabled={!e.duration}
+            onClick={() => e.seek(Math.max(0, e.playhead - 5))}
+          >
+            <RotateCcw />
+          </AppButton>
+          <AppButton
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Go to start"
+            disabled={!e.duration}
+            onClick={() => e.seek(0)}
+          >
+            <SkipBack />
+          </AppButton>
+          <AppButton
+            size="icon"
+            aria-label={e.playing ? "Pause timeline" : "Play timeline"}
+            disabled={!e.duration}
+            onClick={e.togglePlay}
+          >
+            {e.playing ? <Pause /> : <Play />}
+          </AppButton>
+          <AppButton
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Go to end"
+            disabled={!e.duration}
+            onClick={() => e.seek(e.duration)}
+          >
+            <SkipForward />
+          </AppButton>
+          <AppButton
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Forward five seconds"
+            className="max-[980px]:hidden"
+            disabled={!e.duration}
+            onClick={() => e.seek(Math.min(e.duration, e.playhead + 5))}
+          >
+            <RotateCw />
+          </AppButton>
+        </div>
         <AppButton
           variant={e.showAllTracks ? "secondary" : "ghost"}
           size="icon-sm"

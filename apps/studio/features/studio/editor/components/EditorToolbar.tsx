@@ -5,15 +5,12 @@ import {
   Sparkles,
   Settings2,
   CloudCheck,
-  Undo2,
-  Redo2,
   Download,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightOpen,
   PanelRightClose,
 } from "lucide-react";
-import { StudioLogo } from "@/components/common/StudioLogo";
 import { UserDropdown } from "@/components/common/UserDropdown";
 import { AppButton, AppHeader, AppPopover } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
@@ -22,7 +19,7 @@ import { useEditor } from "../hooks/useEditor";
 export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const e = useEditor();
   return (
-    <AppHeader className="editor-toolbar grid md:flex h-auto md:h-14">
+    <AppHeader className="editor-toolbar col-start-2 row-start-1 grid md:flex h-auto md:h-14">
       <AppTooltip content="Back to projects">
         <AppButton
           nativeButton={false}
@@ -35,10 +32,6 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
           <ArrowLeft />
         </AppButton>
       </AppTooltip>
-      <span className="editor-brand">
-        <StudioLogo />
-      </span>
-      <span className="h-5 border-l" />
       <AppInput
         aria-label="Project name"
         className="bg-background/80"
@@ -74,7 +67,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             aria-label="Toggle media panel"
             aria-pressed={e.contextOpen}
             onClick={() => {
-              if (window.innerWidth < 1180) {
+              if (window.innerWidth < 1100) {
                 e.setAiOpen(false);
                 e.setInspectorOpen(false);
               }
@@ -89,10 +82,9 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             variant="ghost"
             size="icon-sm"
             aria-label="Toggle properties panel"
-            disabled={!e.selected}
-            aria-pressed={e.inspectorOpen && !!e.selected && !e.aiOpen}
+            aria-pressed={e.inspectorOpen && !e.aiOpen}
             onClick={() => {
-              if (window.innerWidth < 1180) e.setContextOpen(false);
+              if (window.innerWidth < 1100) e.setContextOpen(false);
               if (e.aiOpen) {
                 e.setAiOpen(false);
                 e.setInspectorOpen(true);
@@ -100,28 +92,6 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             }}
           >
             {e.inspectorOpen ? <PanelRightClose /> : <PanelRightOpen />}
-          </AppButton>
-        </AppTooltip>
-        <AppTooltip content="Undo · Ctrl/⌘ Z">
-          <AppButton
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Undo"
-            disabled={!e.history.past.length}
-            onClick={e.undo}
-          >
-            <Undo2 />
-          </AppButton>
-        </AppTooltip>
-        <AppTooltip content="Redo · Ctrl/⌘ Shift Z">
-          <AppButton
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Redo"
-            disabled={!e.history.future.length}
-            onClick={e.redo}
-          >
-            <Redo2 />
           </AppButton>
         </AppTooltip>
         <AppButton
@@ -133,7 +103,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
           aria-expanded={e.aiOpen}
           onClick={() => {
             e.setAiOpen(!e.aiOpen);
-            if (window.innerWidth < 1180) e.setContextOpen(false);
+            if (window.innerWidth < 1100) e.setContextOpen(false);
           }}
         >
           <Sparkles />
