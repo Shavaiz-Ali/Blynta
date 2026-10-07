@@ -82,7 +82,11 @@ export function GeneratedClipCard({
     e?.stopPropagation();
     try {
       toast.info("Generating secure download link...");
-      const res = await downloadMutation.mutateAsync({ jobId, clipId });
+      const res = await downloadMutation.mutateAsync({
+        jobId,
+        clipId,
+        actionId: crypto.randomUUID(),
+      });
       if (res.signedUrl) {
         window.open(res.signedUrl, "_blank", "noopener,noreferrer");
         toast.success("Download started!");

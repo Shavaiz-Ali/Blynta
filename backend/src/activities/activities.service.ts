@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Model, Types } from 'mongoose';
+import { createHash, randomUUID } from 'node:crypto';
 
 import {
   Activity,
@@ -16,6 +17,19 @@ import {
 import { ACTIVITIES_QUEUE, ACTIVITY_JOBS } from './activities.constants';
 
 type ObjectIdLike = string | Types.ObjectId;
+
+export function activityTrace(input: CreateActivityInput) {
+  return {
+    userId: input.userId.toString(),
+    activityType: input.type,
+    eventId: input.dedupeKey,
+    requestId: input.metadata?.requestId,
+    actionId: input.metadata?.actionId,
+    jobId: input.metadata?.jobId,
+    clipId: input.metadata?.clipId,
+    entityId: input.entityId?.toString(),
+  };
+}
 
 export interface CreateActivityInput {
   userId: ObjectIdLike;
@@ -164,29 +178,7 @@ export class ActivitiesService {
    * Isolates failures so activity tracking never crashes user operations.
    */
   async queueCreate(input: CreateActivityInput): Promise<void> {
-    try {
-      // Normalize ObjectIds to strings for clean JSON serialization in BullMQ
-      const payload = {
-        ...input,
-        userId: input.userId.toString(),
-        actorId: input.actorId ? input.actorId.toString() : undefined,
-        entityId: input.entityId ? input.entityId.toString() : undefined,
-      };
-
-      await this.activitiesQueue.add(ACTIVITY_JOBS.CREATE, payload, {
-        attempts: 3,
-        backoff: {
-          type: 'exponential',
-          delay: 2000,
-        },
-        removeOnComplete: 1000,
-        removeOnFail: 5000,
-      });
-    } catch (err) {
-      this.logger.warn(
-        `Failed to enqueue activity [${input.type}] for user ${input.userId}: ${err instanceof Error ? err.message : err}`,
-      );
-    }
+    await this.enqueue(ACTIVITY_JOBS.CREATE, input);
   }
 
   /**
@@ -199,30 +191,50 @@ export class ActivitiesService {
       );
     }
 
-    try {
-      const payload = {
-        ...input,
-        userId: input.userId.toString(),
-        actorId: input.actorId ? input.actorId.toString() : undefined,
-        entityId: input.entityId ? input.entityId.toString() : undefined,
-      };
+    await this.enqueue(ACTIVITY_JOBS.CREATE_IF_NOT_EXISTS, input);
+  }
 
-      await this.activitiesQueue.add(
-        ACTIVITY_JOBS.CREATE_IF_NOT_EXISTS,
-        payload,
-        {
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 2000,
-          },
-          removeOnComplete: 1000,
-          removeOnFail: 5000,
+  private async enqueue(
+    name: string,
+    input: CreateActivityInput,
+  ): Promise<void> {
+    // Generate once at the producer; BullMQ retains the key across all attempts.
+    // Repeated business events should supply their own stable dedupeKey.
+    const dedupeKey = input.dedupeKey ?? `activity:event:${randomUUID()}`;
+    const payload = {
+      ...input,
+      dedupeKey,
+      userId: input.userId.toString(),
+      actorId: input.actorId?.toString(),
+      entityId: input.entityId?.toString(),
+    };
+    const activityJobId = `activity-${createHash('sha256').update(dedupeKey).digest('hex')}`;
+    try {
+      await this.activitiesQueue.add(name, payload, {
+        jobId: activityJobId,
+        attempts: 3,
+        backoff: {
+          type: 'exponential',
+          delay: 2000,
         },
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+      });
+      this.logger.log(
+        JSON.stringify({
+          phase: 'activity.enqueued',
+          ...activityTrace(payload),
+          activityJobId,
+        }),
       );
     } catch (err) {
       this.logger.warn(
-        `Failed to enqueue deduplicated activity [${input.type}] with key ${input.dedupeKey}: ${err instanceof Error ? err.message : err}`,
+        JSON.stringify({
+          phase: 'activity.enqueue_failed',
+          ...activityTrace(payload),
+          activityJobId,
+          error: err instanceof Error ? err.message : String(err),
+        }),
       );
     }
   }

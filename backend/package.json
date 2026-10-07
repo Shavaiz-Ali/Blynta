@@ -33,7 +33,9 @@
     "seed:admin": "ts-node -r tsconfig-paths/register scripts/create-admin.ts",
     "typecheck": "tsc --noEmit",
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
-    "test:media:local": "npm run build && node scripts/media-load-test.cjs"
+    "test:media:local": "npm run build && node scripts/media-load-test.cjs",
+    "audit:activities": "node scripts/audit-activity-duplicates.cjs",
+    "test:activities:integration": "npm run build && node scripts/test-activity-flow.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.42",

@@ -165,14 +165,14 @@ export function useStylePresets(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                  useDownloadClip — GET /jobs/:id/clips/:id/download        */
+/*                  useDownloadClip — POST intentional download              */
 /* -------------------------------------------------------------------------- */
 
 type DownloadClipOpts = Omit<
   UseMutationOptions<
     { signedUrl: string },
     Error,
-    { jobId: string; clipId: string },
+    { jobId: string; clipId: string; actionId: string },
     unknown
   >,
   "mutationFn"
@@ -183,13 +183,14 @@ export function useDownloadClip(
 ): UseMutationResult<
   { signedUrl: string },
   Error,
-  { jobId: string; clipId: string },
+  { jobId: string; clipId: string; actionId: string },
   unknown
 > {
   return useMutation({
-    mutationFn: async ({ jobId, clipId }) => {
-      const { data } = await axiosClient.get<{ signedUrl: string }>(
+    mutationFn: async ({ jobId, clipId, actionId }) => {
+      const { data } = await axiosClient.post<{ signedUrl: string }>(
         `/jobs/${jobId}/clips/${clipId}/download`,
+        { actionId },
       );
       return data;
     },
@@ -198,7 +199,7 @@ export function useDownloadClip(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                  useClipSignedUrl — GET /jobs/:id/clips/:id/download query */
+/*                  useClipSignedUrl — read-only media URL query              */
 /* -------------------------------------------------------------------------- */
 
 export function useClipSignedUrl(
@@ -210,7 +211,7 @@ export function useClipSignedUrl(
     queryKey: ["clip-url", jobId, clipId],
     queryFn: async () => {
       const { data } = await axiosClient.get<{ signedUrl: string }>(
-        `/jobs/${jobId}/clips/${clipId}/download`,
+        `/jobs/${jobId}/clips/${clipId}/media-url`,
       );
       return data.signedUrl;
     },

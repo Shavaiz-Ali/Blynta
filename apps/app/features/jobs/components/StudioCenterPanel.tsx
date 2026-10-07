@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Clip, Job } from "@/features/jobs/types";
-import { useDownloadClip } from "@/features/jobs/queries";
+import { useClipSignedUrl } from "@/features/jobs/queries";
 import { getClipId } from "./helpers";
 import { StudioVideoPlayer } from "./player";
 import {
@@ -26,37 +26,12 @@ export function StudioCenterPanel({
   job,
   onDeleteClip,
 }: StudioCenterPanelProps) {
-  const downloadClip = useDownloadClip();
   const clipId = getClipId(clip);
-
-  const [previewSrc, setPreviewSrc] = React.useState<string | null>(null);
-  const [previewLoading, setPreviewLoading] = React.useState(true);
-  const [previewError, setPreviewError] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    async function loadPreview() {
-      setPreviewLoading(true);
-      setPreviewError(false);
-      try {
-        const { signedUrl } = await downloadClip.mutateAsync({ jobId, clipId });
-        if (cancelled) return;
-        setPreviewSrc(signedUrl);
-      } catch {
-        if (!cancelled) setPreviewError(true);
-      } finally {
-        if (!cancelled) setPreviewLoading(false);
-      }
-    }
-
-    loadPreview();
-
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clipId, jobId]);
+  const {
+    data: previewSrc,
+    isLoading: previewLoading,
+    isError: previewError,
+  } = useClipSignedUrl(jobId, clipId);
 
   function handleDownloadTranscript() {
     if (!job?.transcript || job.transcript.length === 0) return;

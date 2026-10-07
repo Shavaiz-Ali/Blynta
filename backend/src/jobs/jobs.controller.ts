@@ -8,7 +8,10 @@ import {
   Query,
   Request,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { DownloadClipDto } from './dto/download-clip.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -30,6 +33,7 @@ import {
 @Controller('jobs')
 @UseGuards(AuthGuard('jwt'))
 export class JobsController {
+  private readonly logger = new Logger(JobsController.name);
   constructor(
     private jobsService: JobsService,
     private usersService: UsersService,
@@ -133,13 +137,56 @@ export class JobsController {
     return this.jobsService.retryJob(req.user.userId, id);
   }
 
-  // GET /jobs/:jobId/clips/:clipId/download — returns a time-limited presigned R2 download URL
+  // Keep old GET clients safe: URL retrieval never records a user download.
   @Get(':jobId/clips/:clipId/download')
-  async downloadClip(
+  legacyClipUrl(
+    @Request() req: { user: { userId: string } },
+    @Param('jobId') jobId: string,
+    @Param('clipId') clipId: string,
+  ) {
+    return this.clipMediaUrl(req, jobId, clipId);
+  }
+
+  @Get(':jobId/clips/:clipId/media-url')
+  async clipMediaUrl(
     @Request() req: { user: { userId: string } },
     @Param('jobId') jobId: string,
     @Param('clipId') clipId: string,
   ): Promise<{ signedUrl: string }> {
+    const { clip } = await this.jobsService.getClipForDownload(
+      req.user.userId,
+      jobId,
+      clipId,
+    );
+    return {
+      signedUrl: await this.r2Service.getSignedDownloadUrl(
+        clip.r2ObjectKey,
+        3600,
+      ),
+    };
+  }
+
+  @Post(':jobId/clips/:clipId/download')
+  async downloadClip(
+    @Request() req: { user: { userId: string } },
+    @Param('jobId') jobId: string,
+    @Param('clipId') clipId: string,
+    @Body() dto: DownloadClipDto,
+  ): Promise<{ signedUrl: string; requestId: string; actionId: string }> {
+    const requestId = randomUUID();
+    const dedupeKey = `activity:download:${req.user.userId}:${jobId}:${clipId}:${dto.actionId}`;
+    this.logger.log(
+      JSON.stringify({
+        phase: 'clip.download_requested',
+        requestId,
+        actionId: dto.actionId,
+        userId: req.user.userId,
+        jobId,
+        clipId,
+        activityType: ActivityType.CLIP_DOWNLOAD,
+        eventId: dedupeKey,
+      }),
+    );
     const { clip } = await this.jobsService.getClipForDownload(
       req.user.userId,
       jobId,
@@ -151,23 +198,24 @@ export class JobsController {
       3600,
     );
 
-    void this.activitiesService.queueCreate({
+    await this.activitiesService.queueCreate({
       userId: req.user.userId,
       type: ActivityType.CLIP_DOWNLOAD,
       category: ActivityCategory.JOB,
       title: 'Clip download requested',
       description: 'A download link was generated for your clip.',
-      activityUrl: `/dashboard/jobs/${jobId}`,
+      activityUrl: `/my-clips/${jobId}/clips/${clipId}`,
       entityType: 'clip',
       entityId: clip._id,
       actorType: ActivityActorType.USER,
       actorId: req.user.userId,
       status: ActivityStatus.SUCCESS,
       severity: ActivitySeverity.INFO,
-      metadata: { jobId, clipId },
+      dedupeKey,
+      metadata: { jobId, clipId, requestId, actionId: dto.actionId },
     });
 
-    return { signedUrl };
+    return { signedUrl, requestId, actionId: dto.actionId };
   }
 
   // DELETE /jobs/:jobId/clips/:clipId — remove a single clip from a job (Task 3)

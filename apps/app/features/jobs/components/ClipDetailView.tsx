@@ -202,7 +202,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         queryKey: ["clip-url", jobId, prevClipId],
         queryFn: async () => {
           const { data } = await axiosClient.get<{ signedUrl: string }>(
-            `/jobs/${jobId}/clips/${prevClipId}/download`,
+            `/jobs/${jobId}/clips/${prevClipId}/media-url`,
           );
           return data.signedUrl;
         },
@@ -215,7 +215,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         queryKey: ["clip-url", jobId, nextClipId],
         queryFn: async () => {
           const { data } = await axiosClient.get<{ signedUrl: string }>(
-            `/jobs/${jobId}/clips/${nextClipId}/download`,
+            `/jobs/${jobId}/clips/${nextClipId}/media-url`,
           );
           return data.signedUrl;
         },
@@ -227,13 +227,12 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   const handleDownload = async () => {
     setIsDownloading(true);
     try {
-      if (videoSrc) {
-        window.open(videoSrc, "_blank", "noopener,noreferrer");
-        toast.success("Download started!");
-        return;
-      }
       toast.info("Generating secure download URL...");
-      const res = await downloadMutation.mutateAsync({ jobId, clipId });
+      const res = await downloadMutation.mutateAsync({
+        jobId,
+        clipId,
+        actionId: crypto.randomUUID(),
+      });
       if (res.signedUrl) {
         window.open(res.signedUrl, "_blank", "noopener,noreferrer");
         toast.success("Download started!");

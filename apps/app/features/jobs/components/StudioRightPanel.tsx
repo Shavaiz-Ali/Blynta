@@ -59,7 +59,11 @@ export function StudioRightPanel({
     try {
       setDownloading(true);
       toast.info("Preparing clip download...");
-      const { signedUrl } = await downloadClip.mutateAsync({ jobId, clipId });
+      const { signedUrl } = await downloadClip.mutateAsync({
+        jobId,
+        clipId,
+        actionId: crypto.randomUUID(),
+      });
       const a = document.createElement("a");
       a.href = signedUrl;
       a.download = `blynta-clip-${clipIndex + 1}.mp4`;

@@ -85,6 +85,7 @@ export class JobsService {
     await this.activitiesService.queueCreate({
       userId: saved.userId,
       type: ActivityType.JOB_CREATE,
+      dedupeKey: `activity:job:${saved._id.toString()}:create`,
       category: ActivityCategory.JOB,
       title: 'Clip generation started',
       description: 'Your video is being processed.',
@@ -105,6 +106,7 @@ export class JobsService {
     await this.activitiesService.queueCreate({
       userId: saved.userId,
       type: ActivityType.CREDIT_DEDUCT,
+      dedupeKey: `activity:job:${saved._id.toString()}:credit-deduct`,
       category: ActivityCategory.CREDIT,
       title: 'Credit used',
       description: '1 credit used for video clip generation.',
@@ -596,6 +598,7 @@ export class JobsService {
     await this.activitiesService.queueCreate({
       userId: job.userId,
       type: ActivityType.JOB_DELETE,
+      dedupeKey: `activity:job:${jobId}:delete`,
       category: ActivityCategory.JOB,
       title: 'Job deleted',
       description: 'Video processing job was deleted.',
@@ -651,6 +654,7 @@ export class JobsService {
     await this.activitiesService.queueCreate({
       userId: job.userId,
       type: ActivityType.CLIP_DELETE,
+      dedupeKey: `activity:job:${jobId}:clip:${clipId}:delete`,
       category: ActivityCategory.JOB,
       title: 'Clip deleted',
       description: 'Clip was removed from job.',
