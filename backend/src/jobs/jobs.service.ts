@@ -12,11 +12,28 @@ import { Queue } from 'bullmq';
 import { Model, Types } from 'mongoose';
 import * as fs from 'fs';
 import * as path from 'path';
-import { Job, JobDocument, JobStatus, Clip } from './schemas/job.schema';
+import {
+  Job,
+  JobDocument,
+  JobStatus,
+  Clip,
+  ClipProcessingState,
+} from './schemas/job.schema';
+import { HighlightDto } from '../media/services/highlight-detection.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { JobAccessDeniedException } from '../common/exceptions';
 import { UsersService } from '../users/users.service';
-import { JOBS_QUEUE, JOBS_TYPES } from './jobs.constants';
+import {
+  JOBS_QUEUE,
+  JOBS_TYPES,
+  RENDER_QUEUE,
+  RENDER_CLIP,
+  MEDIA_JOB_OPTIONS,
+  pipelineJobId,
+  renderJobId,
+} from './jobs.constants';
+import { clipIdentity } from './clip-identity';
+import { renderSnapshot, ClipRenderProgress } from './render-progress';
 import { R2Service } from '../storage/r2.service';
 import type { StudioAsset } from '../studio/studio.schemas';
 import { ActivitiesService } from '../activities/activities.service';
@@ -35,11 +52,14 @@ export class JobsService {
   constructor(
     @InjectModel(Job.name) private jobModel: Model<JobDocument>,
     @InjectQueue(JOBS_QUEUE) private jobsQueue: Queue,
+    @InjectQueue(RENDER_QUEUE) private renderQueue: Queue,
     private usersService: UsersService,
     private configService: ConfigService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
-    @Optional() @InjectModel('StudioAsset') private studioAssets?: Model<StudioAsset>,
+    @Optional()
+    @InjectModel('StudioAsset')
+    private studioAssets?: Model<StudioAsset>,
   ) {}
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
@@ -55,13 +75,11 @@ export class JobsService {
       stylePreset: dto.stylePreset || 'default',
       resolutionUsed: dto.resolution,
       progressPercent: 0,
+      pipelineRetryRequested: true,
     });
     const saved = await job.save();
 
-    await this.jobsQueue.add(JOBS_TYPES.CLIP_VIDEO, {
-      jobId: saved._id.toString(),
-      userId,
-    });
+    await this.enqueuePipeline(saved._id.toString());
 
     // Activities for Job Creation and Credit Usage
     await this.activitiesService.queueCreate({
@@ -70,7 +88,7 @@ export class JobsService {
       category: ActivityCategory.JOB,
       title: 'Clip generation started',
       description: 'Your video is being processed.',
-      activityUrl: `/dashboard/jobs/${saved._id}`,
+      activityUrl: `/dashboard/jobs/${saved._id.toString()}`,
       entityType: 'job',
       entityId: saved._id,
       actorType: ActivityActorType.USER,
@@ -156,6 +174,331 @@ export class JobsService {
       .exec();
   }
 
+  async findJob(jobId: string): Promise<JobDocument | null> {
+    return this.jobModel.findById(jobId).exec();
+  }
+
+  async activeMediaJobIds() {
+    const active = await Promise.all([
+      this.jobsQueue.getJobs(['active']),
+      this.renderQueue.getJobs(['active']),
+    ]);
+    return new Set(
+      active.flat().map((job) => (job.data as { jobId?: string }).jobId),
+    );
+  }
+
+  async enqueuePipeline(jobId: string) {
+    const parent = await this.findJob(jobId);
+    if (!parent || parent.renderManifestReady) return;
+    const queued = await this.jobsQueue.getJob(pipelineJobId(jobId));
+    if (!queued)
+      await this.jobsQueue.add(
+        JOBS_TYPES.CLIP_VIDEO,
+        { jobId },
+        { ...MEDIA_JOB_OPTIONS, jobId: pipelineJobId(jobId) },
+      );
+    else if (parent.pipelineRetryRequested) {
+      const state = await queued.getState();
+      if (state === 'failed' || state === 'completed')
+        await queued.retry(state, { resetAttemptsMade: true });
+    }
+    await this.jobModel
+      .updateOne({ _id: jobId }, { $set: { pipelineRetryRequested: false } })
+      .exec();
+  }
+
+  async prepareRenderManifest(jobId: string, highlights: HighlightDto[]) {
+    const job = await this.findJob(jobId);
+    if (!job || job.renderManifestReady) return;
+    const baseUrl = this.configService.get<string>(
+      'API_BASE_URL',
+      'http://localhost:5001',
+    );
+    const clips = highlights.map((highlight, index) => {
+      const existing = job.clips[index];
+      const id = clipIdentity(existing, highlight);
+      if (
+        existing?._id.equals(id) &&
+        existing.status === JobStatus.COMPLETED &&
+        existing.r2ObjectKey
+      )
+        return existing;
+      return {
+        _id: id,
+        startTime: highlight.startTime,
+        endTime: highlight.endTime,
+        downloadUrl: `${baseUrl}/jobs/${jobId}/clips/${id.toString()}/download`,
+        status: JobStatus.PENDING,
+        processingState: ClipProcessingState.QUEUED,
+        hasCaptions: false,
+      };
+    });
+    // Manifest precedes fan-out; a retry reads the winner rather than creating new IDs.
+    await this.jobModel
+      .updateOne(
+        { _id: jobId, renderManifestReady: { $ne: true } },
+        {
+          $set: {
+            clips,
+            renderManifestReady: true,
+            status: JobStatus.CUTTING_CLIPS,
+            progressPercent: 0,
+          },
+          $unset: { errorMessage: '', errorStage: '' },
+        },
+      )
+      .exec();
+  }
+
+  async enqueueRenders(jobId: string, retryFailed = false) {
+    const job = await this.findJob(jobId);
+    if (!job?.renderManifestReady || !job.sourceObjectKey) return;
+    retryFailed = retryFailed || !!job.renderRetryRequested;
+    for (const [index, clip] of job.clips.entries()) {
+      if (clip.status === JobStatus.COMPLETED) continue;
+      const id = renderJobId(jobId, clip._id.toString());
+      const queued = await this.renderQueue.getJob(id);
+      if (queued) {
+        const state = await queued.getState();
+        if (retryFailed && (state === 'failed' || state === 'completed'))
+          await queued.retry(state, { resetAttemptsMade: true });
+        // A crash between Mongo update and Bull completion is recovered by reconciliation.
+        continue;
+      }
+      await this.renderQueue.add(
+        RENDER_CLIP,
+        { jobId, clipId: clip._id.toString() },
+        {
+          ...MEDIA_JOB_OPTIONS,
+          jobId: id,
+          priority: index + 1,
+        },
+      );
+    }
+    if (retryFailed)
+      await this.jobModel
+        .updateOne({ _id: jobId }, { $set: { renderRetryRequested: false } })
+        .exec();
+  }
+
+  async updateClip(jobId: string, clipId: string, updates: Partial<Clip>) {
+    const fields = Object.fromEntries(
+      Object.entries(updates).map(([key, value]) => [`clips.$.${key}`, value]),
+    );
+    return this.jobModel
+      .updateOne(
+        { _id: jobId, 'clips._id': new Types.ObjectId(clipId) },
+        { $set: fields },
+      )
+      .exec();
+  }
+
+  async failUnfinishedClip(
+    jobId: string,
+    clipId: string,
+    message: string,
+    stage: string,
+  ) {
+    // Reconciliation reads a snapshot: a worker may finish before this update executes.
+    return this.jobModel
+      .updateOne(
+        {
+          _id: jobId,
+          clips: {
+            $elemMatch: {
+              _id: new Types.ObjectId(clipId),
+              status: { $ne: JobStatus.COMPLETED },
+            },
+          },
+        },
+        {
+          $set: {
+            'clips.$.status': JobStatus.FAILED,
+            'clips.$.processingState': ClipProcessingState.FAILED,
+            'clips.$.errorMessage': message,
+            'clips.$.errorStage': stage,
+          },
+        },
+      )
+      .exec();
+  }
+
+  async finalizeRenderState(jobId: string) {
+    const job = await this.findJob(jobId);
+    if (!job?.renderManifestReady || job.status !== JobStatus.CUTTING_CLIPS)
+      return;
+    if (
+      job.clips.some(
+        (c) => ![JobStatus.COMPLETED, JobStatus.FAILED].includes(c.status),
+      )
+    )
+      return;
+    const failed = job.clips.filter(
+      (c) => c.status === JobStatus.FAILED,
+    ).length;
+    const success = job.clips.length > 0 && failed === 0;
+    return this.jobModel
+      .findOneAndUpdate(
+        {
+          _id: jobId,
+          status: JobStatus.CUTTING_CLIPS,
+          clips: {
+            $not: {
+              $elemMatch: {
+                status: { $nin: [JobStatus.COMPLETED, JobStatus.FAILED] },
+              },
+            },
+          },
+        },
+        {
+          $set: {
+            status: success ? JobStatus.COMPLETED : JobStatus.FAILED,
+            progressPercent: 100,
+            completionPublished: false,
+            ...(success
+              ? {}
+              : {
+                  errorMessage: job.clips.length
+                    ? `${failed} of ${job.clips.length} clips failed; ready clips remain available.`
+                    : 'No highlights found',
+                  errorStage: 'rendering',
+                }),
+          },
+        },
+        { returnDocument: 'after' },
+      )
+      .exec();
+  }
+
+  async markCompletionPublished(jobId: string, status: JobStatus) {
+    await this.jobModel
+      .updateOne(
+        { _id: jobId, status },
+        { $set: { completionPublished: true } },
+      )
+      .exec();
+  }
+
+  async getRenderSnapshot(job: JobDocument) {
+    const progress = await Promise.all(
+      job.clips.map(async (clip) => {
+        if ([JobStatus.COMPLETED, JobStatus.FAILED].includes(clip.status))
+          return { clip, progress: undefined };
+        const bullJob = await this.renderQueue.getJob(
+          renderJobId(job._id.toString(), clip._id.toString()),
+        );
+        const state = bullJob ? await bullJob.getState() : undefined;
+        // Ignore stale progress while an attempt waits for retry.
+        return {
+          clip,
+          progress:
+            state === 'active' && typeof bullJob?.progress === 'object'
+              ? (bullJob.progress as ClipRenderProgress)
+              : ['waiting', 'prioritized', 'delayed'].includes(state ?? '')
+                ? {
+                    clipId: clip._id.toString(),
+                    status: ClipProcessingState.QUEUED,
+                    progress: 0,
+                    renderProgress: 0,
+                    updatedAt: Date.now(),
+                  }
+                : undefined,
+        };
+      }),
+    );
+    return renderSnapshot(progress);
+  }
+
+  async reconcileMediaJobs() {
+    const jobs = await this.jobModel
+      .find({
+        $or: [
+          {
+            status: {
+              $in: [
+                JobStatus.PENDING,
+                JobStatus.TRANSCRIBING,
+                JobStatus.DETECTING_HIGHLIGHTS,
+                JobStatus.CUTTING_CLIPS,
+              ],
+            },
+          },
+          {
+            completionPublished: false,
+            status: { $in: [JobStatus.COMPLETED, JobStatus.FAILED] },
+          },
+        ],
+      })
+      .exec();
+    for (const job of jobs) {
+      const jobId = job._id.toString();
+      if (job.renderManifestReady && job.status === JobStatus.CUTTING_CLIPS) {
+        await this.enqueueRenders(jobId);
+        for (const clip of job.clips) {
+          if ([JobStatus.COMPLETED, JobStatus.FAILED].includes(clip.status))
+            continue;
+          const queued = await this.renderQueue.getJob(
+            renderJobId(jobId, clip._id.toString()),
+          );
+          const state = queued && (await queued.getState());
+          if (state === 'failed')
+            await this.failUnfinishedClip(
+              jobId,
+              clip._id.toString(),
+              queued!.failedReason,
+              'worker',
+            );
+          else if (state === 'completed') {
+            // Completed Bull job without durable output is inconsistent, fail explicitly.
+            await this.failUnfinishedClip(
+              jobId,
+              clip._id.toString(),
+              'Render finished without durable output',
+              'worker',
+            );
+          }
+        }
+        await this.finalizeRenderState(jobId);
+      } else if (
+        ![JobStatus.COMPLETED, JobStatus.FAILED].includes(job.status)
+      ) {
+        if (job.pipelineRetryRequested) await this.enqueuePipeline(jobId);
+        const queued = await this.jobsQueue.getJob(pipelineJobId(jobId));
+        const state = queued && (await queued.getState());
+        if (state === 'failed')
+          await this.updateJob(jobId, {
+            status: JobStatus.FAILED,
+            errorMessage: queued!.failedReason,
+            errorStage: 'worker',
+          });
+        // Keep legacy numeric jobs safe while draining pre-migration work.
+        if (
+          !queued &&
+          Date.now() - new Date(job.updatedAt).getTime() > 30 * 60 * 1000
+        ) {
+          const legacyJobs = await this.jobsQueue.getJobs([
+            'active',
+            'waiting',
+            'delayed',
+            'prioritized',
+          ]);
+          if (
+            !legacyJobs.some(
+              (q) => (q.data as { jobId?: string }).jobId === jobId,
+            )
+          )
+            await this.updateJob(jobId, {
+              status: JobStatus.FAILED,
+              errorMessage: 'No live pipeline job found',
+              errorStage: 'reconciliation',
+            });
+        }
+      }
+    }
+    return jobs.map((job) => job._id.toString());
+  }
+
   async findStuckJobs(
     statuses: JobStatus[],
     cutoff: Date,
@@ -234,7 +577,10 @@ export class JobsService {
     for (const clip of job.clips) {
       if (clip.r2ObjectKey) {
         try {
-          if (!(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))) await this.r2Service.deleteFile(clip.r2ObjectKey);
+          if (
+            !(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))
+          )
+            await this.r2Service.deleteFile(clip.r2ObjectKey);
         } catch (err) {
           this.logger.warn(
             `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,
@@ -243,6 +589,8 @@ export class JobsService {
       }
     }
 
+    if (job.sourceObjectKey?.startsWith(`job-sources/${jobId}/`))
+      await this.r2Service.deleteFile(job.sourceObjectKey);
     await this.jobModel.findByIdAndDelete(jobId).exec();
 
     await this.activitiesService.queueCreate({
@@ -270,6 +618,10 @@ export class JobsService {
     clipId: string,
   ): Promise<{ message: string }> {
     const job = await this.getJobById(userId, jobId);
+    if (![JobStatus.COMPLETED, JobStatus.FAILED].includes(job.status))
+      throw new ConflictException(
+        'Cannot delete clips while the job is processing',
+      );
     const clip = job.clips.find((c) => c._id.toString() === clipId);
     if (!clip) throw new NotFoundException('Clip not found');
 
@@ -278,7 +630,10 @@ export class JobsService {
     // by the processor's finally block after the job completed.
     if (clip.r2ObjectKey) {
       try {
-        if (!(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))) await this.r2Service.deleteFile(clip.r2ObjectKey);
+        if (
+          !(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))
+        )
+          await this.r2Service.deleteFile(clip.r2ObjectKey);
       } catch (err) {
         this.logger.warn(
           `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,
@@ -331,16 +686,43 @@ export class JobsService {
       throw new ConflictException('Only failed jobs can be retried');
     }
 
-    // Reset only the terminal error fields — DO NOT touch localVideoPath,
-    // transcript, highlights, or clips. Those are what the resume logic needs.
-    await this.jobModel
-      .findByIdAndUpdate(jobId, {
-        $set: { status: JobStatus.PENDING },
-        $unset: { errorMessage: '', errorStage: '' },
-      })
+    // Claim the retry once; concurrent API calls cannot enqueue duplicate attempts.
+    const claimed = await this.jobModel
+      .findOneAndUpdate(
+        { _id: jobId, status: JobStatus.FAILED },
+        {
+          $set: {
+            status: job.renderManifestReady
+              ? JobStatus.CUTTING_CLIPS
+              : JobStatus.PENDING,
+            completionPublished: false,
+            pipelineRetryRequested: !job.renderManifestReady,
+            ...(job.renderManifestReady
+              ? {
+                  renderRetryRequested: true,
+                  'clips.$[failed].status': JobStatus.PENDING,
+                  'clips.$[failed].processingState': ClipProcessingState.QUEUED,
+                  'clips.$[failed].errorMessage': '',
+                  'clips.$[failed].errorStage': '',
+                }
+              : {}),
+          },
+          $unset: { errorMessage: '', errorStage: '' },
+        },
+        {
+          returnDocument: 'after',
+          ...(job.renderManifestReady
+            ? { arrayFilters: [{ 'failed.status': JobStatus.FAILED }] }
+            : {}),
+        },
+      )
       .exec();
-
-    await this.jobsQueue.add(JOBS_TYPES.CLIP_VIDEO, { jobId });
+    if (!claimed) throw new ConflictException('Job retry already started');
+    if (job.renderManifestReady) {
+      await this.enqueueRenders(jobId, true);
+    } else {
+      await this.enqueuePipeline(jobId);
+    }
 
     return { jobId, status: 'queued_for_retry' };
   }

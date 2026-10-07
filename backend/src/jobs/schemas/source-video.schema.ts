@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+import type { MediaMetadata } from '../../media/services/media-inspection.service';
 import {
   SourcePlatform,
   TranscriptSegment,
@@ -23,6 +24,8 @@ export type SourceVideoDocument = SourceVideo & Document;
  */
 @Schema({ timestamps: true })
 export class SourceVideo {
+  @Prop({ type: Object })
+  mediaMetadata?: MediaMetadata;
   @Prop({ type: String, required: true, enum: SourcePlatform })
   platform: SourcePlatform;
 

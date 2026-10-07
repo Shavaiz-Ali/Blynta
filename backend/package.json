@@ -17,7 +17,7 @@
     "start:worker:youtube:dev": "nest start --watch --entryFile youtube-worker",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "start:worker:prod": "node dist/worker",
+    "start:worker:prod": "node dist/src/worker",
     "start:worker:notifications:prod": "node dist/notifications/notifications.worker",
     "start:worker:mail:prod": "node dist/mail/mail.worker",
     "start:worker:activities:prod": "node dist/activities/activities.worker",
@@ -32,7 +32,8 @@
     "migrate:billing": "ts-node -r tsconfig-paths/register scripts/migrate-billing-to-customer.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register scripts/create-admin.ts",
     "typecheck": "tsc --noEmit",
-    "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\""
+    "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "test:media:local": "npm run build && node scripts/media-load-test.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.42",

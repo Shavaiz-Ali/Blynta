@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
+import { MediaRenderModule } from './media-render.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { VideoDownloadService } from './services/video-download.service';
 import { TranscriptionService } from './services/transcription.service';
-import { CaptionBurningService } from './services/caption-burning.service';
 import { HighlightDetectionService } from './services/highlight-detection.service';
-import { ClipCuttingService } from './services/clip-cutting.service';
 import { SourceVideoService } from './services/source-video.service';
 import {
   SourceVideo,
@@ -13,6 +12,7 @@ import {
 
 @Module({
   imports: [
+    MediaRenderModule,
     MongooseModule.forFeature([
       { name: SourceVideo.name, schema: SourceVideoSchema },
     ]),
@@ -20,17 +20,14 @@ import {
   providers: [
     VideoDownloadService,
     TranscriptionService,
-    CaptionBurningService,
     HighlightDetectionService,
-    ClipCuttingService,
     SourceVideoService,
   ],
   exports: [
+    MediaRenderModule,
     VideoDownloadService,
     TranscriptionService,
-    CaptionBurningService,
     HighlightDetectionService,
-    ClipCuttingService,
     SourceVideoService,
   ],
 })

@@ -7,6 +7,7 @@ import {
 } from '../../jobs/schemas/source-video.schema';
 import { SourcePlatform } from '../../jobs/schemas/job.schema';
 import { extractYouTubeId } from '../utils/extract-youtube-id';
+import { MediaMetadata } from './media-inspection.service';
 
 @Injectable()
 export class SourceVideoService {
@@ -81,6 +82,12 @@ export class SourceVideoService {
           $set: { lastReferencedAt: new Date() },
         },
       )
+      .exec();
+  }
+
+  async saveMediaMetadata(sourceVideoId: string, mediaMetadata: MediaMetadata) {
+    await this.sourceVideoModel
+      .updateOne({ _id: sourceVideoId }, { $set: { mediaMetadata } })
       .exec();
   }
 

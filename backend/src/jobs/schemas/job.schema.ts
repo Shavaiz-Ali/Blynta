@@ -1,5 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import type {
+  MediaMetadata,
+  WorkloadEstimate,
+} from '../../media/services/media-inspection.service';
 
 export type JobDocument = Job & Document;
 
@@ -17,6 +21,15 @@ export enum SourcePlatform {
   TIKTOK = 'tiktok',
   INSTAGRAM = 'instagram',
   UPLOAD = 'upload',
+}
+
+export enum ClipProcessingState {
+  QUEUED = 'queued',
+  CUTTING = 'cutting',
+  CAPTIONING = 'captioning',
+  UPLOADING = 'uploading',
+  READY = 'ready',
+  FAILED = 'failed',
 }
 
 // A transcript segment — one chunk of speech with timing, from Whisper
@@ -72,6 +85,14 @@ export const HighlightSchema = SchemaFactory.createForClass(Highlight);
 // A finished, cut clip — the actual deliverable to the user
 @Schema({ timestamps: true })
 export class Clip {
+  @Prop({ enum: ClipProcessingState, default: ClipProcessingState.QUEUED })
+  processingState?: ClipProcessingState;
+
+  @Prop()
+  errorMessage?: string;
+
+  @Prop()
+  errorStage?: string;
   @Prop({ type: Types.ObjectId, auto: true })
   _id: Types.ObjectId;
 
@@ -106,6 +127,27 @@ export const ClipSchema = SchemaFactory.createForClass(Clip);
 
 @Schema({ timestamps: true })
 export class Job {
+  updatedAt: Date;
+
+  @Prop({ default: false })
+  pipelineRetryRequested?: boolean;
+
+  @Prop({ default: false })
+  renderRetryRequested?: boolean;
+  @Prop()
+  sourceObjectKey?: string;
+
+  @Prop({ type: Object })
+  mediaMetadata?: MediaMetadata;
+
+  @Prop({ type: Object })
+  workload?: WorkloadEstimate;
+
+  @Prop({ default: false })
+  renderManifestReady?: boolean;
+
+  @Prop({ default: false })
+  completionPublished?: boolean;
   @Prop({ type: MongooseSchema.Types.ObjectId, required: true, index: true })
   userId: Types.ObjectId;
 

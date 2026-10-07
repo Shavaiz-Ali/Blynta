@@ -1,8 +1,13 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Logger } from '@nestjs/common';
+import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
+import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job as BullJob } from 'bullmq';
-import { clipIdentity } from './clip-identity';
+import {
+  MediaInspectionService,
+  estimateVideoWorkload,
+} from '../media/services/media-inspection.service';
+import { JobsCompletionService } from './jobs-completion.service';
+import { workerConcurrency } from './jobs.constants';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -11,7 +16,7 @@ import {
   ALLOWED_PAID_AI_MODELS,
 } from './jobs.constants';
 import { JobsService } from './jobs.service';
-import { JobStatus, Clip, TranscriptSegment } from './schemas/job.schema';
+import { JobStatus, TranscriptSegment } from './schemas/job.schema';
 import { SourceVideoDocument } from './schemas/source-video.schema';
 import { UsersService } from '../users/users.service';
 import { UserPlan } from '../users/schemas/user.schema';
@@ -20,25 +25,16 @@ import {
   TranscriptionService,
   TranscriptSegmentDto,
 } from '../media/services/transcription.service';
-import { CaptionBurningService } from '../media/services/caption-burning.service';
 import {
   HighlightDetectionService,
   HighlightDto,
 } from '../media/services/highlight-detection.service';
-import { ClipCuttingService } from '../media/services/clip-cutting.service';
 import { SourceVideoService } from '../media/services/source-video.service';
 import { R2Service } from '../storage/r2.service';
 import {
   resolveStylePreset,
   DEFAULT_STYLE_PRESET_KEY,
 } from '../media/style-presets';
-import { resolveEditorStyle } from '../media/editor-styles';
-import {
-  NotificationCategory,
-  NotificationType,
-} from '../notifications/schemas/notification.schema';
-import { NotificationsService } from '../notifications/notifications.service';
-import { MailService } from '../mail/mail.service';
 import { ActivitiesService } from '../activities/activities.service';
 import {
   ActivityActorType,
@@ -48,22 +44,17 @@ import {
   ActivityType,
 } from '../activities/schemas/activity.schema';
 
-type ClipDraft = {
-  highlight: HighlightDto;
-  localFilePath?: string;
-  captionedFilePath?: string;
-  r2ObjectKey?: string; // set after successful R2 upload of the captioned (or raw) clip
-  status: JobStatus;
-  errorMessage?: string;
-};
-
 @Processor(JOBS_QUEUE, {
-  concurrency: 2,
+  concurrency: 1,
+  autorun: false,
   lockDuration: 60_000, // ms a job can be "locked" by a worker before considered stalled
   stalledInterval: 30_000, // how often BullMQ checks for stalled jobs
   maxStalledCount: 1, // after this many stall-detections, job is marked FAILED
 })
-export class JobsProcessor extends WorkerHost {
+export class JobsProcessor
+  extends WorkerHost
+  implements OnApplicationBootstrap
+{
   private readonly logger = new Logger(JobsProcessor.name);
 
   constructor(
@@ -72,23 +63,50 @@ export class JobsProcessor extends WorkerHost {
     private configService: ConfigService,
     private videoDownloadService: VideoDownloadService,
     private transcriptionService: TranscriptionService,
-    private captionBurningService: CaptionBurningService,
     private highlightDetectionService: HighlightDetectionService,
-    private clipCuttingService: ClipCuttingService,
     private sourceVideoService: SourceVideoService,
     private r2Service: R2Service,
-    private notificationsService: NotificationsService,
-    private mailService: MailService,
+    private inspection: MediaInspectionService,
+    private completion: JobsCompletionService,
     private activitiesService: ActivitiesService,
   ) {
     super();
   }
 
-  async process(bullJob: BullJob): Promise<void> {
+  onApplicationBootstrap() {
+    this.worker.concurrency = workerConcurrency(
+      this.configService.get('PIPELINE_CONCURRENCY'),
+      'PIPELINE_CONCURRENCY',
+    );
+    this.worker.on('error', (error) => this.logger.error(error));
+    void this.worker.run().catch((error) => this.logger.error(error));
+  }
+
+  @OnWorkerEvent('failed')
+  async onFailed(
+    bullJob: BullJob<{ jobId: string }> | undefined,
+    error: Error,
+  ) {
+    try {
+      if (bullJob && (await bullJob.getState()) === 'failed') {
+        const parent = await this.jobsService.findJob(bullJob.data.jobId);
+        if (!parent?.renderManifestReady)
+          await this.jobsService.updateJob(bullJob.data.jobId, {
+            status: JobStatus.FAILED,
+            errorMessage: error.message,
+          });
+        await this.completion.publish(bullJob.data.jobId);
+      }
+    } catch (failure) {
+      this.logger.error(`Failure handling will be reconciled: ${failure}`);
+    }
+  }
+
+  async process(bullJob: BullJob<{ jobId: string }>): Promise<void> {
     switch (bullJob.name) {
       case JOBS_TYPES.CLIP_VIDEO: {
         const { jobId } = bullJob.data;
-        await this.processClipVideoJob(jobId);
+        await this.processClipVideoJob(jobId, bullJob);
         break;
       }
       default:
@@ -96,7 +114,18 @@ export class JobsProcessor extends WorkerHost {
     }
   }
 
-  private async processClipVideoJob(jobId: string): Promise<void> {
+  private async processClipVideoJob(
+    jobId: string,
+    bullJob: BullJob<{ jobId: string }>,
+  ): Promise<void> {
+    const started = Date.now();
+    const existing = await this.jobsService.findJob(jobId);
+    if (!existing) return;
+    if (existing.renderManifestReady) {
+      await this.jobsService.enqueueRenders(jobId);
+      await this.completion.finalize(jobId);
+      return;
+    }
     const job = await this.jobsService.updateJob(jobId, {
       status: JobStatus.PENDING,
       errorMessage: undefined,
@@ -141,16 +170,20 @@ export class JobsProcessor extends WorkerHost {
       const resolution: '720p' | '1080p' | '360p' | '240p' = '240p';
 
       let lastProgressUpdate = 0;
-      const makeThrottledProgressUpdate = () => async (percent: number) => {
+      const makeThrottledProgressUpdate = () => (percent: number) => {
         this.logger.debug(
           `[${jobId}] Raw progress callback fired: ${percent}%`,
         );
         const now = Date.now();
         if (now - lastProgressUpdate < 2000) return;
         lastProgressUpdate = now;
-        await this.jobsService.updateJob(jobId, {
-          progressPercent: Math.round(percent),
-        });
+        void this.jobsService
+          .updateJob(jobId, {
+            progressPercent: Math.round(percent),
+          })
+          .catch((error) =>
+            this.logger.warn(`Pipeline progress update failed: ${error}`),
+          );
       };
 
       // =========================================================================
@@ -200,7 +233,40 @@ export class JobsProcessor extends WorkerHost {
       let audioPath = '';
       let transcript: TranscriptSegmentDto[] = [];
 
-      if (hasLocalVideo && hasLocalAudio && hasTranscript) {
+      // Commit normalized metadata and a durable source before expensive AI work.
+      const prepareSource = async (
+        input: string,
+        cached?: SourceVideoDocument,
+      ) => {
+        const latest = await this.jobsService.findJob(jobId);
+        const metadata =
+          latest?.mediaMetadata ??
+          cached?.mediaMetadata ??
+          (await this.inspection.inspect(input));
+        if (!metadata.hasVideo || metadata.durationSeconds <= 0)
+          throw new Error('Invalid source video metadata');
+        const key =
+          latest?.sourceObjectKey ??
+          cached?.videoObjectKey ??
+          (externalId
+            ? `source-videos/${externalId}/video.mp4`
+            : `job-sources/${jobId}/video.mp4`);
+        if (
+          !latest?.sourceObjectKey &&
+          !cached &&
+          !(await this.r2Service.fileExists(key))
+        )
+          await this.r2Service.uploadFile(input, key);
+        await this.jobsService.updateJob(jobId, {
+          sourceObjectKey: key,
+          mediaMetadata: metadata,
+          videoDuration: metadata.durationSeconds,
+          workload: estimateVideoWorkload(metadata),
+        });
+        return metadata;
+      };
+
+      if (hasTranscript && (hasLocalVideo || job.sourceObjectKey)) {
         // -----------------------------------------------------------------------
         // RESUME (full) — both download AND transcription already completed on
         // a prior attempt and local files are still on disk. Most valuable skip:
@@ -209,9 +275,14 @@ export class JobsProcessor extends WorkerHost {
         this.logger.log(
           `[${jobId}] Resuming: skipping download + transcription (already complete on disk)`,
         );
-        videoPath = job.localVideoPath!;
-        audioPath = job.localAudioPath!;
+        videoPath = hasLocalVideo
+          ? job.localVideoPath
+          : path.join(jobDir, 'source.mp4');
+        if (!hasLocalVideo)
+          await this.r2Service.downloadToLocal(job.sourceObjectKey!, videoPath);
+        audioPath = job.localAudioPath ?? '';
         transcript = job.transcript;
+        await prepareSource(videoPath);
         await this.jobsService.updateJob(jobId, { progressPercent: 100 });
       } else if (hasLocalVideo && hasLocalAudio) {
         // -----------------------------------------------------------------------
@@ -222,7 +293,8 @@ export class JobsProcessor extends WorkerHost {
           `[${jobId}] Resuming: skipping download, re-running transcription`,
         );
         videoPath = job.localVideoPath!;
-        audioPath = job.localAudioPath!;
+        audioPath = job.localAudioPath;
+        await prepareSource(videoPath);
 
         this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio (resumed)`);
         lastProgressUpdate = 0;
@@ -267,7 +339,7 @@ export class JobsProcessor extends WorkerHost {
             // Stages 1 + 2 are skipped; progress jumps straight to 100 for both.
             // -------------------------------------------------------------------
             this.logger.log(
-              `[${jobId}] Cache hit for ${job.sourcePlatform}:${externalId} — reusing video, audio, transcript from SourceVideo ${sourceVideo._id}`,
+              `[${jobId}] Cache hit for ${job.sourcePlatform}:${externalId} — reusing video, audio, transcript from SourceVideo ${sourceVideo._id.toString()}`,
             );
             await this.sourceVideoService.recordReuse(
               sourceVideo._id.toString(),
@@ -287,6 +359,7 @@ export class JobsProcessor extends WorkerHost {
             );
 
             transcript = sourceVideo.transcript;
+            await prepareSource(videoPath, sourceVideo);
 
             await this.jobsService.updateJob(jobId, {
               sourceVideoId: sourceVideo._id,
@@ -302,7 +375,7 @@ export class JobsProcessor extends WorkerHost {
             });
           } catch (cacheErr) {
             this.logger.warn(
-              `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
+              `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id.toString()} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
             );
             sourceVideo = null;
           }
@@ -342,6 +415,7 @@ export class JobsProcessor extends WorkerHost {
           );
           videoPath = dlVideoPath;
           audioPath = dlAudioPath;
+          await prepareSource(videoPath);
 
           await this.jobsService.updateJob(jobId, {
             localVideoPath: videoPath,
@@ -361,10 +435,12 @@ export class JobsProcessor extends WorkerHost {
             progressPercent: 0,
           });
 
-          transcript = await this.transcriptionService.transcribe(
-            audioPath,
-            makeThrottledProgressUpdate(),
-          );
+          transcript = hasTranscript
+            ? job.transcript
+            : await this.transcriptionService.transcribe(
+                audioPath,
+                makeThrottledProgressUpdate(),
+              );
           const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
             startTime: t.startTime,
             endTime: t.endTime,
@@ -383,7 +459,6 @@ export class JobsProcessor extends WorkerHost {
             const videoObjectKey = `source-videos/${externalId}/video.mp4`;
             const audioObjectKey = `source-videos/${externalId}/audio.wav`;
 
-            await this.r2Service.uploadFile(videoPath, videoObjectKey);
             await this.r2Service.uploadFile(audioPath, audioObjectKey);
 
             const newSourceVideo =
@@ -404,11 +479,18 @@ export class JobsProcessor extends WorkerHost {
             });
             sourceVideo = newSourceVideo;
             this.logger.log(
-              `[${jobId}] SourceVideo created: ${newSourceVideo._id} (key: ${videoObjectKey})`,
+              `[${jobId}] SourceVideo created: ${newSourceVideo._id.toString()} (key: ${videoObjectKey})`,
             );
           }
         }
       }
+
+      const metadata = await prepareSource(videoPath, sourceVideo ?? undefined);
+      if (sourceVideo && !sourceVideo.mediaMetadata)
+        await this.sourceVideoService.saveMediaMetadata(
+          sourceVideo._id.toString(),
+          metadata,
+        );
 
       // =========================================================================
       // Stage 3: Highlight detection
@@ -436,8 +518,7 @@ export class JobsProcessor extends WorkerHost {
       }
       const effectiveHighlightPreset = resolveStylePreset(effectivePresetKey);
 
-      let options: { customPrompt?: string; model?: string } | undefined;
-      options = {};
+      const options: { customPrompt?: string; model?: string } = {};
       if (effectiveHighlightPreset.highlightPrompt) {
         options.customPrompt = effectiveHighlightPreset.highlightPrompt;
       }
@@ -482,11 +563,7 @@ export class JobsProcessor extends WorkerHost {
         });
 
         const presetMap = sourceVideo?.defaultHighlightsByPreset;
-        const cachedHighlights = (
-          presetMap instanceof Map
-            ? presetMap.get(effectivePresetKey)
-            : (presetMap as any)?.[effectivePresetKey]
-        ) as HighlightDto[] | undefined;
+        const cachedHighlights = presetMap?.get(effectivePresetKey);
         let detectionResult: {
           videoTitle?: string;
           videoDescription?: string;
@@ -502,7 +579,7 @@ export class JobsProcessor extends WorkerHost {
           cachedHighlights.length > 0
         ) {
           this.logger.log(
-            `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id}`,
+            `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id.toString()}`,
           );
           highlights = cachedHighlights;
         } else {
@@ -521,7 +598,7 @@ export class JobsProcessor extends WorkerHost {
               highlights,
             );
             this.logger.log(
-              `[${jobId}] Saved highlights for preset "${effectivePresetKey}" to SourceVideo ${sourceVideo._id}`,
+              `[${jobId}] Saved highlights for preset "${effectivePresetKey}" to SourceVideo ${sourceVideo._id.toString()}`,
             );
           }
         }
@@ -551,410 +628,52 @@ export class JobsProcessor extends WorkerHost {
         });
       }
 
-      // =========================================================================
-      // Stage 4: Cut + caption clips
-      //
-      // ffmpeg operates on local files — videoPath is the local copy pulled either
-      // from R2 (cache hit) or left on disk (cache miss). After each clip is
-      // successfully captioned, upload it to R2 under clips/<jobId>/...
-      // =========================================================================
+      await this.jobsService.prepareRenderManifest(jobId, highlights);
+      await this.jobsService.enqueueRenders(jobId);
+      await this.completion.finalize(jobId);
       this.logger.log(
-        `[${jobId}] Stage 4/5: Cutting ${highlights.length} clip(s)`,
-      );
-      await this.jobsService.updateJob(jobId, {
-        status: JobStatus.CUTTING_CLIPS,
-      });
-
-      // -----------------------------------------------------------------------
-      // Build clipDrafts from existing job.clips where possible (resume path).
-      // A clip that was already COMPLETED with a valid R2 upload is marked as
-      // done up-front; the cutting loop will persist its doc and continue
-      // without re-running cutClip/burnCaptions/uploadFile.
-      // Fresh jobs (no prior clips) fall through to the identical PENDING draft.
-      // -----------------------------------------------------------------------
-      const existingClips = job.clips ?? [];
-      const clipDrafts: ClipDraft[] = highlights.map((h, i) => {
-        const existing = existingClips[i];
-        if (
-          existing &&
-          existing.status === JobStatus.COMPLETED &&
-          existing.r2ObjectKey
-        ) {
-          this.logger.log(
-            `[${jobId}]   Clip ${i + 1} already completed (${existing.r2ObjectKey}) — skipping cut/caption/upload`,
-          );
-          return {
-            highlight: h,
-            status: JobStatus.COMPLETED,
-            localFilePath: existing.localFilePath,
-            captionedFilePath: existing.captionedFilePath,
-            r2ObjectKey: existing.r2ObjectKey,
-          };
-        }
-        return { highlight: h, status: JobStatus.PENDING };
-      });
-
-      const apiBaseUrl = this.configService.get<string>(
-        'API_BASE_URL',
-        'http://localhost:5001',
-      );
-      const clipDocs: Clip[] = []; // now built incrementally, not after the loop
-
-      for (let i = 0; i < clipDrafts.length; i++) {
-        const draft = clipDrafts[i];
-        const h = draft.highlight;
-        const rawClipPath = path.join(clipsDir, `clip-${i + 1}.mp4`);
-        const captionedClipPath = path.join(
-          clipsDir,
-          `clip-${i + 1}-captioned.mp4`,
-        );
-        const clipId = clipIdentity(existingClips[i], h);
-
-        if (draft.status !== JobStatus.COMPLETED) {
-          // Not yet completed — run the full cut/caption/upload pipeline.
-          try {
-            this.logger.log(
-              `[${jobId}]   Cutting clip ${i + 1}/${clipDrafts.length}: ${h.startTime.toFixed(1)}s - ${h.endTime.toFixed(1)}s`,
-            );
-            await this.clipCuttingService.cutClip(
-              videoPath,
-              h.startTime,
-              h.endTime,
-              rawClipPath,
-            );
-            draft.localFilePath = rawClipPath;
-
-            const relevantSegments = this.extractSegmentsForHighlight(
-              transcript,
-              h.startTime,
-              h.endTime,
-            );
-
-            let finalLocalPath: string;
-            if (relevantSegments.length > 0) {
-              const editorStyle = resolveEditorStyle(h.style);
-              const captionStyle =
-                requestedPreset.key !== DEFAULT_STYLE_PRESET_KEY
-                  ? requestedPreset.captionStyle
-                  : editorStyle.captionStyle;
-
-              this.logger.log(
-                `[${jobId}]   Burning captions for clip ${i + 1} (preset=${requestedPreset.key}, editorStyle=${editorStyle.key})`,
-              );
-              await this.captionBurningService.burnCaptions(
-                rawClipPath,
-                relevantSegments,
-                captionedClipPath,
-                captionStyle,
-              );
-              draft.captionedFilePath = captionedClipPath;
-              finalLocalPath = captionedClipPath;
-            } else {
-              this.logger.warn(
-                `[${jobId}]   Clip ${i + 1} has no transcript segments; skipping caption burn.`,
-              );
-              finalLocalPath = rawClipPath;
-            }
-
-            // Upload finished clip to R2. Key is deterministic and collision-safe:
-            // jobId is a unique MongoDB ObjectId, so clips/<jobId>/... never collides.
-            const clipObjectKey = `clips/${jobId}/clip-${i + 1}-captioned.mp4`;
-            await this.r2Service.uploadFile(finalLocalPath, clipObjectKey);
-            draft.r2ObjectKey = clipObjectKey;
-            this.logger.log(
-              `[${jobId}]   Clip ${i + 1} uploaded to R2: ${clipObjectKey}`,
-            );
-
-            draft.status = JobStatus.COMPLETED;
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            this.logger.error(`[${jobId}]   Clip ${i + 1} failed: ${msg}`);
-            draft.status = JobStatus.FAILED;
-            draft.errorMessage = msg;
-          }
-        }
-        // else: clip was already COMPLETED from a prior attempt — skip cut/caption/upload
-        // but still fall through to build + persist the clipDoc below so the full
-        // clips array is always written back on every loop iteration.
-
-        // Build and persist THIS clip's doc immediately — do not wait for remaining clips.
-        const downloadUrl = `${apiBaseUrl}/jobs/${jobId}/clips/${clipId}/download`;
-        const clipDoc: Clip = {
-          _id: clipId,
-          startTime: draft.highlight.startTime,
-          endTime: draft.highlight.endTime,
-          localFilePath: draft.localFilePath,
-          captionedFilePath: draft.captionedFilePath,
-          r2ObjectKey: draft.r2ObjectKey,
-          downloadUrl,
-          hasCaptions: Boolean(draft.captionedFilePath),
-          status: draft.status,
-          outputUrl: draft.r2ObjectKey,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        } as Clip;
-        clipDocs.push(clipDoc);
-
-        // Push the growing clips array so the frontend sees this clip the moment it's ready.
-        await this.jobsService.updateJob(jobId, { clips: clipDocs });
-        this.logger.log(
-          `[${jobId}]   Persisted clip ${i + 1}/${clipDrafts.length} (status=${draft.status})`,
-        );
-      }
-
-      const anyClipSucceeded = clipDocs.some(
-        (c) => c.status === JobStatus.COMPLETED,
-      );
-      const successfulClipCount = clipDocs.filter(
-        (c) => c.status === JobStatus.COMPLETED,
-      ).length;
-
-      // --- Stage 5: Complete ---
-      this.logger.log(`[${jobId}] Stage 5/5: Finalizing`);
-      const finalJob = await this.jobsService.updateJob(jobId, {
-        status: anyClipSucceeded ? JobStatus.COMPLETED : JobStatus.FAILED,
-        clips: clipDocs, // redundant with the last loop iteration's write, kept for clarity/safety
-        ...(anyClipSucceeded
-          ? {}
-          : {
-              errorMessage: 'All clips failed to cut',
-              errorStage: 'cutting_clips',
-            }),
-      });
-
-      // Queue idempotent in-app notifications and emails via BullMQ (never inline)
-      if (finalJob) {
-        try {
-          if (anyClipSucceeded) {
-            await this.notificationsService.queueCreateIfNotExists({
-              userId: finalJob.userId,
-              type: NotificationType.SUCCESS,
-              category: NotificationCategory.JOB,
-              title: 'Your clips are ready',
-              message:
-                successfulClipCount === 1
-                  ? '1 clip was successfully generated.'
-                  : `${successfulClipCount} clips were successfully generated.`,
-              actionUrl: `/dashboard/jobs/${jobId}`,
-              actionLabel: 'View clips',
-              entityType: 'job',
-              entityId: jobId,
-              dedupeKey: `job:${jobId}:completed`,
-            });
-
-            if (user.email) {
-              await this.mailService.queueJobCompletedEmail(
-                user.email,
-                finalJob.videoTitle || 'Your video',
-                successfulClipCount,
-                jobId,
-              );
-            }
-
-            // Record Activity: Job completed
-            await this.activitiesService.queueCreateIfNotExists({
-              userId: finalJob.userId,
-              type: ActivityType.JOB_COMPLETE,
-              category: ActivityCategory.JOB,
-              title: 'Clip generation completed',
-              description:
-                successfulClipCount === 1
-                  ? '1 clip was successfully generated.'
-                  : `${successfulClipCount} clips were successfully generated.`,
-              activityUrl: `/dashboard/jobs/${jobId}`,
-              entityType: 'job',
-              entityId: jobId,
-              actorType: ActivityActorType.WORKER,
-              isSystem: true,
-              status: ActivityStatus.SUCCESS,
-              severity: ActivitySeverity.SUCCESS,
-              dedupeKey: `activity:job:${jobId}:complete`,
-              metadata: {
-                clipCount: successfulClipCount,
-              },
-            });
-          } else {
-            await this.notificationsService.queueCreateIfNotExists({
-              userId: finalJob.userId,
-              type: NotificationType.ERROR,
-              category: NotificationCategory.JOB,
-              title: 'Clip generation failed',
-              message:
-                'We were unable to generate clips from your video. Please try again.',
-              actionUrl: `/dashboard/jobs/${jobId}`,
-              actionLabel: 'View job',
-              entityType: 'job',
-              entityId: jobId,
-              dedupeKey: `job:${jobId}:failed`,
-            });
-
-            if (user.email) {
-              await this.mailService.queueJobFailedEmail(
-                user.email,
-                finalJob.videoTitle || 'Your video',
-                jobId,
-              );
-            }
-
-            // Record Activity: Job failed
-            await this.activitiesService.queueCreateIfNotExists({
-              userId: finalJob.userId,
-              type: ActivityType.JOB_FAIL,
-              category: ActivityCategory.JOB,
-              title: 'Clip generation failed',
-              description: 'We were unable to generate clips from your video.',
-              activityUrl: `/dashboard/jobs/${jobId}`,
-              entityType: 'job',
-              entityId: jobId,
-              actorType: ActivityActorType.WORKER,
-              isSystem: true,
-              status: ActivityStatus.FAILED,
-              severity: ActivitySeverity.ERROR,
-              dedupeKey: `activity:job:${jobId}:fail`,
-            });
-          }
-        } catch (notifErr) {
-          this.logger.warn(
-            `[${jobId}] Failed to queue ${anyClipSucceeded ? 'success' : 'failure'} notification/activity: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
-          );
-        }
-      }
-
-      this.logger.log(
-        `[${jobId}] Pipeline finished (status=${anyClipSucceeded ? 'COMPLETED' : 'FAILED'})`,
+        JSON.stringify({
+          event: 'pipeline_fanout',
+          jobId,
+          userId,
+          queueWaitMs: started - bullJob.timestamp,
+          processingMs: Date.now() - started,
+          retryCount: bullJob.attemptsMade,
+          metadata,
+          workload: estimateVideoWorkload(metadata),
+          clips: highlights.length,
+        }),
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const stack = err instanceof Error ? err.stack : undefined;
-      this.logger.error(`[${jobId}] Pipeline FAILED: ${msg}`, stack);
-
-      let stage = 'unknown';
-      try {
-        const latest = await this.jobsService.updateJob(jobId, {});
-        if (latest) {
-          const current = latest.status;
-          if (current === JobStatus.PENDING) stage = 'download';
-          else if (current === JobStatus.TRANSCRIBING) stage = 'transcription';
-          else if (current === JobStatus.DETECTING_HIGHLIGHTS)
-            stage = 'highlight_detection';
-          else if (current === JobStatus.CUTTING_CLIPS) stage = 'cutting_clips';
-        }
-      } catch {}
-
-      const failedJob = await this.jobsService.updateJob(jobId, {
-        status: JobStatus.FAILED,
-        errorMessage: msg,
-        errorStage: stage,
+      const latest = await this.jobsService.findJob(jobId);
+      const message = err instanceof Error ? err.message : String(err);
+      await this.jobsService.updateJob(jobId, {
+        status: latest?.renderManifestReady ? latest.status : JobStatus.PENDING,
+        errorMessage: message,
+        errorStage: latest?.status ?? 'pipeline',
       });
-
-      if (failedJob) {
-        try {
-          await this.notificationsService.queueCreateIfNotExists({
-            userId: failedJob.userId,
-            type: NotificationType.ERROR,
-            category: NotificationCategory.JOB,
-            title: 'Clip generation failed',
-            message:
-              'We were unable to generate clips from your video. Please try again.',
-            actionUrl: `/dashboard/jobs/${jobId}`,
-            actionLabel: 'View job',
-            entityType: 'job',
-            entityId: jobId,
-            dedupeKey: `job:${jobId}:failed`,
-          });
-
-          const user = await this.usersService.findById(
-            failedJob.userId.toString(),
-          );
-          if (user?.email) {
-            await this.mailService.queueJobFailedEmail(
-              user.email,
-              failedJob.videoTitle || 'Your video',
-              jobId,
-            );
-          }
-
-          // Record Activity: Job failed (exception handler)
-          await this.activitiesService.queueCreateIfNotExists({
-            userId: failedJob.userId,
-            type: ActivityType.JOB_FAIL,
-            category: ActivityCategory.JOB,
-            title: 'Clip generation failed',
-            description: 'We were unable to generate clips from your video.',
-            activityUrl: `/dashboard/jobs/${jobId}`,
-            entityType: 'job',
-            entityId: jobId,
-            actorType: ActivityActorType.WORKER,
-            isSystem: true,
-            status: ActivityStatus.FAILED,
-            severity: ActivitySeverity.ERROR,
-            dedupeKey: `activity:job:${jobId}:fail`,
-            metadata: {
-              errorStage: stage,
-            },
-          });
-        } catch (notifErr) {
-          this.logger.warn(
-            `[${jobId}] Failed to queue failure notification/activity: ${notifErr instanceof Error ? notifErr.message : notifErr}`,
-          );
-        }
-      }
+      this.logger.error(
+        JSON.stringify({
+          event: 'pipeline_failed',
+          jobId,
+          retryCount: bullJob.attemptsMade,
+          stage: latest?.status,
+          message,
+        }),
+      );
+      throw err;
     } finally {
-      // -------------------------------------------------------------------------
-      // Local temp cleanup — only runs on COMPLETED jobs.
-      //
-      // On failure, the jobDir is left in place so that a subsequent retry can
-      // resume from existing local files (video, audio, clips) rather than
-      // re-downloading and re-transcribing from scratch.
-      //
-      // Abandoned FAILED dirs that are never retried are swept by the nightly
-      // TTL cron in JobsReconciliationService.sweepAbandonedFailedJobDirs().
-      //
-      // Local disk is purely a transient working area for ffmpeg/whisper.cpp.
-      // Durable copies of source videos live in R2 (under source-videos/<externalId>/)
-      // and clips live in R2 (under clips/<jobId>/).
-      //
-      // SourceVideo-level R2 cleanup (evicting stale source-videos/... objects)
-      // is a SEPARATE future concern that requires a background cron — NOT done here.
-      // -------------------------------------------------------------------------
-      const finalJobState = await this.jobsService.updateJob(jobId, {});
-      const succeeded = finalJobState?.status === JobStatus.COMPLETED;
-
-      if (succeeded) {
-        try {
-          await fs.promises.rm(jobDir, { recursive: true, force: true });
-          this.logger.log(
-            `[${jobId}] Cleaned up local temp directory: ${jobDir}`,
+      const latest = await this.jobsService.findJob(jobId);
+      if (latest?.renderManifestReady) {
+        // Render workers use their own R2-backed workspace, never this directory.
+        await fs.promises
+          .rm(jobDir, { recursive: true, force: true })
+          .catch((error) =>
+            this.logger.warn(
+              `[jobId=${jobId}] Pipeline cleanup failed: ${error}`,
+            ),
           );
-        } catch (err) {
-          this.logger.warn(
-            `[${jobId}] Failed to clean up local temp directory: ${err instanceof Error ? err.message : err}`,
-          );
-        }
-      } else {
-        this.logger.log(
-          `[${jobId}] Job did not complete — leaving ${jobDir} in place for possible retry/resume.`,
-        );
       }
     }
-  }
-
-  private extractSegmentsForHighlight(
-    transcript: TranscriptSegmentDto[],
-    hlStart: number,
-    hlEnd: number,
-  ): TranscriptSegmentDto[] {
-    return transcript
-      .filter((seg) => seg.endTime >= hlStart && seg.startTime <= hlEnd)
-      .map((seg) => {
-        const overlapStart = Math.max(seg.startTime, hlStart);
-        const overlapEnd = Math.min(seg.endTime, hlEnd);
-        return {
-          startTime: Math.max(0, overlapStart - hlStart),
-          endTime: Math.max(0, overlapEnd - hlStart),
-          text: seg.text,
-        };
-      })
-      .filter((seg) => seg.endTime > seg.startTime);
   }
 }

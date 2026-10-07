@@ -1,15 +1,19 @@
-import { Module, Logger } from '@nestjs/common';
+import { Module, Logger, DynamicModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bullmq';
+import { RenderProcessor } from './render.processor';
+import { RenderSourceService } from './render-source.service';
+import { JobsCompletionService } from './jobs-completion.service';
 import { JobsProcessor } from './jobs.processor';
 import { JobsService } from './jobs.service';
 import { JobsReconciliationService } from './jobs-reconciliation.service';
 import { Job, JobSchema } from './schemas/job.schema';
-import { JOBS_QUEUE } from './jobs.constants';
+import { JOBS_QUEUE, RENDER_QUEUE } from './jobs.constants';
 import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
+import { MediaRenderModule } from '../media/media-render.module';
 import { StorageModule } from '../storage/storage.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MailModule } from '../mail/mail.module';
@@ -28,13 +32,13 @@ const logger = new Logger('JobsWorkerMongoose');
     CommonModule,
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         uri: configService.get<string>('MONGO_URI'),
         connectionFactory: (connection: Connection) => {
           connection.on('connected', () => {
             logger.log('MongoDB connected successfully');
           });
-          connection.on('error', (err) => {
+          connection.on('error', (err: Error) => {
             logger.error(`MongoDB connection error: ${err.message}`, err.stack);
           });
           return connection;
@@ -45,7 +49,7 @@ const logger = new Logger('JobsWorkerMongoose');
     MongooseModule.forFeature([{ name: Job.name, schema: JobSchema }]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
+      useFactory: (configService: ConfigService) => ({
         connection: {
           host: configService.get<string>('REDIS_HOST', 'localhost'),
           port: configService.get<number>('REDIS_PORT', 6379),
@@ -53,9 +57,8 @@ const logger = new Logger('JobsWorkerMongoose');
       }),
       inject: [ConfigService],
     }),
-    BullModule.registerQueue({ name: JOBS_QUEUE }),
+    BullModule.registerQueue({ name: JOBS_QUEUE }, { name: RENDER_QUEUE }),
     UsersModule,
-    MediaModule,
     StorageModule,
     NotificationsModule,
     MailModule,
@@ -63,6 +66,27 @@ const logger = new Logger('JobsWorkerMongoose');
     StudioModule,
     BullModule.registerQueue({ name: 'studio' }),
   ],
-  providers: [JobsService, JobsProcessor, JobsReconciliationService, StudioProcessor],
+  providers: [
+    JobsService,
+    JobsCompletionService,
+    JobsReconciliationService,
+    RenderSourceService,
+  ],
 })
-export class JobsWorkerModule {}
+export class JobsWorkerModule {
+  static forRole(role = 'all'): DynamicModule {
+    if (!['all', 'pipeline', 'render', 'studio'].includes(role))
+      throw new Error(
+        'MEDIA_WORKER_ROLE must be all, pipeline, render, or studio',
+      );
+    return {
+      module: JobsWorkerModule,
+      imports: [role === 'render' ? MediaRenderModule : MediaModule],
+      providers: [
+        ...(role === 'all' || role === 'pipeline' ? [JobsProcessor] : []),
+        ...(role === 'all' || role === 'render' ? [RenderProcessor] : []),
+        ...(role === 'all' || role === 'studio' ? [StudioProcessor] : []),
+      ],
+    };
+  }
+}

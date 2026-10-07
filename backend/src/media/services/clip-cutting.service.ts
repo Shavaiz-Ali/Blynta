@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import ffmpeg from 'fluent-ffmpeg';
+import { runCommandWithProgress } from '../utils/run-command-with-progress';
+import { ffmpegProgressParser, FfmpegProgress } from '../utils/ffmpeg-progress';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class ClipCuttingService {
     startTime: number,
     endTime: number,
     outputPath: string,
+    onProgress?: (progress: FfmpegProgress) => void,
   ): Promise<string> {
     const duration = endTime - startTime;
     if (duration <= 0) {
@@ -29,37 +31,49 @@ export class ClipCuttingService {
       startTime,
       duration,
       outputPath,
+      onProgress,
     );
     return outputPath;
   }
 
-  private cutAndCropWithFfmpeg(
+  private async cutAndCropWithFfmpeg(
     sourceVideoPath: string,
     startTime: number,
     duration: number,
     outputPath: string,
+    onProgress?: (progress: FfmpegProgress) => void,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const vf = 'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos';
-
-      const cmd = ffmpeg(sourceVideoPath)
-        .setStartTime(startTime)
-        .setDuration(duration)
-        .outputOptions([`-vf ${vf}`])
-        .outputOptions(['-c:v libx264', '-preset fast', '-crf 23'])
-        .outputOptions(['-c:a aac', '-b:a 128k'])
-        .outputOptions(['-movflags +faststart'])
-        .outputOptions(['-y'])
-        .on('end', () => resolve())
-        .on('error', (err: Error, stdout: string, stderr: string) => {
-          this.logger.error(
-            `ffmpeg clip cut failed: ${err.message}\n${stderr}`,
-          );
-          reject(new Error(`ffmpeg clip cut failed: ${err.message}`));
-        });
-
-      this.processRegistry.registerFfmpeg(cmd);
-      cmd.save(outputPath);
-    });
+    await runCommandWithProgress(
+      'ffmpeg',
+      [
+        '-ss',
+        String(startTime),
+        '-i',
+        sourceVideoPath,
+        '-t',
+        String(duration),
+        '-vf',
+        'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'fast',
+        '-crf',
+        '23',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '128k',
+        '-movflags',
+        '+faststart',
+        '-progress',
+        'pipe:1',
+        '-nostats',
+        '-y',
+        outputPath,
+      ],
+      ffmpegProgressParser(duration, onProgress),
+      this.processRegistry,
+    );
   }
 }

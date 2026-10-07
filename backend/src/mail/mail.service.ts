@@ -89,7 +89,11 @@ export class MailService {
     await this.mailQueue.add(
       MAIL_JOBS.SEND_JOB_COMPLETED,
       { email, videoTitle, clipCount, jobId },
-      DEFAULT_JOB_OPTIONS,
+      {
+        ...DEFAULT_JOB_OPTIONS,
+        jobId: `job-completed-${jobId}`,
+        removeOnComplete: false,
+      },
     );
   }
 
@@ -102,7 +106,11 @@ export class MailService {
     await this.mailQueue.add(
       MAIL_JOBS.SEND_JOB_FAILED,
       { email, videoTitle, jobId },
-      DEFAULT_JOB_OPTIONS,
+      {
+        ...DEFAULT_JOB_OPTIONS,
+        jobId: `job-failed-${jobId}`,
+        removeOnComplete: false,
+      },
     );
   }
 

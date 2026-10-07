@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
-import ffmpeg from 'fluent-ffmpeg';
+import { runCommandWithProgress } from '../utils/run-command-with-progress';
+import { ffmpegProgressParser, FfmpegProgress } from '../utils/ffmpeg-progress';
 import { TranscriptSegmentDto } from './transcription.service';
 import { CaptionStyleConfig } from '../style-presets';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
@@ -16,6 +17,8 @@ export class CaptionBurningService {
     segments: TranscriptSegmentDto[],
     outputVideoPath: string,
     captionStyle?: CaptionStyleConfig,
+    durationSeconds = 0,
+    onProgress?: (progress: FfmpegProgress) => void,
   ): Promise<string> {
     const defaultStyle: CaptionStyleConfig = {
       fontFamily: 'Montserrat',
@@ -32,7 +35,13 @@ export class CaptionBurningService {
     await fs.promises.writeFile(assPath, assContent, 'utf-8');
 
     this.logger.log(`Burning captions into ${outputVideoPath}`);
-    await this.burnWithFfmpeg(inputVideoPath, assPath, outputVideoPath);
+    await this.burnWithFfmpeg(
+      inputVideoPath,
+      assPath,
+      outputVideoPath,
+      durationSeconds,
+      onProgress,
+    );
     return outputVideoPath;
   }
 
@@ -81,32 +90,34 @@ Format: Layer, Start, End, Style, Text
     return `${h}:${pad(m)}:${pad(s)}.${pad(cs, 2)}`;
   }
 
-  private burnWithFfmpeg(
+  private async burnWithFfmpeg(
     videoPath: string,
     assPath: string,
     outputPath: string,
+    durationSeconds: number,
+    onProgress?: (progress: FfmpegProgress) => void,
   ): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const escapedAssPath = assPath
-        .replace(/\\/g, '\\\\')
-        .replace(/:/g, '\\:')
-        .replace(/'/g, "\\'");
-      const filter = `subtitles='${escapedAssPath}'`;
-
-      const cmd = ffmpeg(videoPath)
-        .outputOptions([`-vf ${filter}`])
-        .outputOptions(['-c:a copy'])
-        .outputOptions(['-y'])
-        .on('end', () => resolve())
-        .on('error', (err: Error, stdout: string, stderr: string) => {
-          this.logger.error(
-            `ffmpeg caption burn failed: ${err.message}\n${stderr}`,
-          );
-          reject(new Error(`ffmpeg caption burn failed: ${err.message}`));
-        });
-
-      this.processRegistry.registerFfmpeg(cmd);
-      cmd.save(outputPath);
-    });
+    const escapedAssPath = assPath
+      .replace(/\\/g, '/')
+      .replace(/:/g, '\\:')
+      .replace(/'/g, "\\'");
+    await runCommandWithProgress(
+      'ffmpeg',
+      [
+        '-i',
+        videoPath,
+        '-vf',
+        `subtitles='${escapedAssPath}'`,
+        '-c:a',
+        'copy',
+        '-progress',
+        'pipe:1',
+        '-nostats',
+        '-y',
+        outputPath,
+      ],
+      ffmpegProgressParser(durationSeconds, onProgress),
+      this.processRegistry,
+    );
   }
 }

@@ -6,8 +6,7 @@ import { Job } from 'bullmq';
 import { mkdtemp, writeFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+import { MediaInspectionService } from '../media/services/media-inspection.service';
 import { R2Service } from '../storage/r2.service';
 import { TranscriptionService } from '../media/services/transcription.service';
 import { ProcessRegistryService } from '../common/services/process-registry.service';
@@ -24,6 +23,7 @@ export class StudioProcessor extends WorkerHost {
     private r2: R2Service,
     private transcription: TranscriptionService,
     private registry: ProcessRegistryService,
+    private inspection: MediaInspectionService,
   ) {
     super();
   }
@@ -94,17 +94,6 @@ export class StudioProcessor extends WorkerHost {
       await rm(directory, { recursive: true, force: true });
     }
   }
-  private async probe(path: string) {
-    const { stdout } = await promisify(execFile)(
-      'ffprobe',
-      ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', path],
-      { timeout: 30000, maxBuffer: 2 * 1024 * 1024 },
-    );
-    return JSON.parse(stdout) as {
-      streams: { codec_type: string; width?: number; height?: number }[];
-      format: { duration?: string };
-    };
-  }
   private async media(
     job: Job<{ userId: string; projectId: string; assetId: string }>,
     directory: string,
@@ -148,12 +137,12 @@ export class StudioProcessor extends WorkerHost {
       );
       return;
     }
-    const metadata = await this.probe(input);
-    const video = metadata.streams.find((s) => s.codec_type === 'video');
-    const hasAudio = metadata.streams.some((s) => s.codec_type === 'audio');
+    const metadata = await this.inspection.inspect(input);
+    const video = metadata.hasVideo ? metadata : undefined;
+    const hasAudio = metadata.hasAudio;
     if ((a.kind === 'audio' && !hasAudio) || (a.kind !== 'audio' && !video))
       throw new Error('Media type mismatch');
-    const duration = a.kind === 'image' ? 5 : Number(metadata.format.duration);
+    const duration = a.kind === 'image' ? 5 : metadata.durationSeconds;
     if (!Number.isFinite(duration) || duration <= 0 || duration > 14400)
       throw new Error('Unsupported media duration');
     let thumbnailKey: string | undefined;
@@ -207,10 +196,10 @@ export class StudioProcessor extends WorkerHost {
       if (!a) throw new Error('Render asset not available');
       const path = join(directory, `asset-${inputs.size}`);
       await this.r2.downloadToLocal(a.storageKey, path);
-      const probe = await this.probe(path);
+      const probe = await this.inspection.inspect(path);
       inputs.set(c.assetId, {
         path,
-        hasAudio: probe.streams.some((s) => s.codec_type === 'audio'),
+        hasAudio: probe.hasAudio,
       });
     }
     const plan = renderPlan(r.document, r.settings, inputs);

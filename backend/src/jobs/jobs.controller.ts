@@ -37,20 +37,30 @@ export class JobsController {
     private activitiesService: ActivitiesService,
   ) {}
 
-  private shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
-    const responseJob = job.toObject();
+  private async shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
+    const responseJob = job.toObject<JobDocument>();
     if (userPlan === UserPlan.FREE && responseJob.highlights) {
-      responseJob.highlights = responseJob.highlights.map((h: any) => {
-        const { clipDescription, ...rest } = h;
-        return rest;
+      responseJob.highlights = responseJob.highlights.map((h) => {
+        const copy = { ...h };
+        Reflect.deleteProperty(copy, 'clipDescription');
+        return copy;
       });
     }
-    return responseJob;
+    const render = job.renderManifestReady
+      ? await this.jobsService.getRenderSnapshot(job)
+      : undefined;
+    return {
+      ...responseJob,
+      ...(render ? { render, progressPercent: render.progressPercent } : {}),
+    };
   }
 
   // POST /jobs — create a new clip job
   @Post()
-  async create(@Request() req, @Body() dto: CreateJobDto) {
+  async create(
+    @Request() req: { user: { userId: string } },
+    @Body() dto: CreateJobDto,
+  ) {
     const user = await this.usersService.findById(req.user.userId);
     const plan = user?.plan || UserPlan.FREE;
     const job = await this.jobsService.createJob(req.user.userId, dto);
@@ -59,7 +69,10 @@ export class JobsController {
 
   // GET /jobs?status=completed&page=1&limit=20 — paginated + filterable job list (Task 1)
   @Get()
-  async findAll(@Request() req, @Query() query: ListJobsDto) {
+  async findAll(
+    @Request() req: { user: { userId: string } },
+    @Query() query: ListJobsDto,
+  ) {
     const [result, user] = await Promise.all([
       this.jobsService.getJobsForUser(req.user.userId, {
         status: query.status,
@@ -71,7 +84,9 @@ export class JobsController {
     const plan = user?.plan || UserPlan.FREE;
     return {
       ...result,
-      jobs: result.jobs.map((job) => this.shapeJobResponse(job, plan)),
+      jobs: await Promise.all(
+        result.jobs.map((job) => this.shapeJobResponse(job, plan)),
+      ),
     };
   }
 
@@ -87,7 +102,10 @@ export class JobsController {
 
   // GET /jobs/:id — single job detail
   @Get(':id')
-  async findOne(@Request() req, @Param('id') id: string) {
+  async findOne(
+    @Request() req: { user: { userId: string } },
+    @Param('id') id: string,
+  ) {
     const [job, user] = await Promise.all([
       this.jobsService.getJobById(req.user.userId, id),
       this.usersService.findById(req.user.userId),
@@ -98,21 +116,27 @@ export class JobsController {
 
   // DELETE /jobs/:id — delete a completed/failed job and its files (Task 2)
   @Delete(':id')
-  deleteJob(@Request() req, @Param('id') id: string) {
+  deleteJob(
+    @Request() req: { user: { userId: string } },
+    @Param('id') id: string,
+  ) {
     return this.jobsService.deleteJob(req.user.userId, id);
   }
 
   // POST /jobs/:id/retry — resume the same failed job in-place (Step 2)
   // Returns { jobId, status: 'queued_for_retry' } — no new job doc, same page.
   @Post(':id/retry')
-  retryJob(@Request() req, @Param('id') id: string) {
+  retryJob(
+    @Request() req: { user: { userId: string } },
+    @Param('id') id: string,
+  ) {
     return this.jobsService.retryJob(req.user.userId, id);
   }
 
   // GET /jobs/:jobId/clips/:clipId/download — returns a time-limited presigned R2 download URL
   @Get(':jobId/clips/:clipId/download')
   async downloadClip(
-    @Request() req,
+    @Request() req: { user: { userId: string } },
     @Param('jobId') jobId: string,
     @Param('clipId') clipId: string,
   ): Promise<{ signedUrl: string }> {
@@ -127,7 +151,7 @@ export class JobsController {
       3600,
     );
 
-    this.activitiesService.queueCreate({
+    void this.activitiesService.queueCreate({
       userId: req.user.userId,
       type: ActivityType.CLIP_DOWNLOAD,
       category: ActivityCategory.JOB,
@@ -149,7 +173,7 @@ export class JobsController {
   // DELETE /jobs/:jobId/clips/:clipId — remove a single clip from a job (Task 3)
   @Delete(':jobId/clips/:clipId')
   deleteClip(
-    @Request() req,
+    @Request() req: { user: { userId: string } },
     @Param('jobId') jobId: string,
     @Param('clipId') clipId: string,
   ) {
