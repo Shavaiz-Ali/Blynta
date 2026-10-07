@@ -240,7 +240,7 @@ export function MediaPanel() {
                       ))}
                   </section>
                 )}
-                <div className="mt-4 grid grid-cols-1 gap-2">
+                <div className="mt-4 grid grid-cols-2 gap-2">
                   {assets.map((asset) => (
                     <MediaItem key={asset.id} asset={asset} />
                   ))}

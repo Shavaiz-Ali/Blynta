@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ThemeProvider as NextThemesProvider } from "next-themes";
+import { AppThemeProvider as NextThemesProvider } from "@blynta/ui";
 
 export function ThemeProvider({
   children,

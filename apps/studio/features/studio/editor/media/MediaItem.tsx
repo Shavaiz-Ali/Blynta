@@ -23,11 +23,17 @@ import { AppTooltip } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
 import { uploadMedia } from "../../projects/media";
 import type { Asset } from "../../types";
+import { assetDragType, mediaUnavailable } from "../utils/timeline";
 export function MediaItem({ asset }: { asset: Asset }) {
   const e = useEditor();
   const [rename, setRename] = useState(false);
   const [name, setName] = useState(asset.name);
   const file = useRef<HTMLInputElement>(null);
+  const [failedSource, setFailedSource] = useState<string>();
+  const unavailable = mediaUnavailable(asset);
+  const thumbnail =
+    asset.thumbnail || (asset.kind === "image" ? asset.src : undefined);
+  const dragging = e.draggedAssetId === asset.id;
   const Icon =
     asset.kind === "audio"
       ? AudioLines
@@ -36,48 +42,80 @@ export function MediaItem({ asset }: { asset: Asset }) {
         : Film;
   return (
     <AppMediaCard
-      draggable
-      onDragStart={(v) =>
-        v.dataTransfer.setData("application/blynta-asset", asset.id)
-      }
-      className={`media-item min-w-0 cursor-grab items-stretch rounded-lg border-transparent bg-muted/25 hover:bg-muted/50 active:cursor-grabbing ${e.selected?.assetId === asset.id ? "ring-1 ring-primary/40" : ""}`}
+      data-media-asset={asset.id}
+      className={`media-item min-w-0 items-stretch rounded-lg border-transparent bg-muted/25 hover:bg-muted/50 ${dragging ? "opacity-50 ring-2 ring-primary cursor-grabbing" : "cursor-grab"} ${e.selected?.assetId === asset.id ? "ring-1 ring-primary/40" : ""}`}
       contentClassName="min-w-0 w-full"
     >
       <AppTooltip
-        content={`${asset.name} · ${asset.kind} · Click to add, or drag to timeline`}
+        content={`${asset.name} · ${asset.kind} · ${unavailable || "Click to add, or drag to timeline"}`}
       >
         <AppButton
           variant="ghost"
+          draggable={!unavailable}
+          aria-disabled={!!unavailable}
+          onDragStart={(event) => {
+            if (unavailable) {
+              event.preventDefault();
+              return;
+            }
+            event.dataTransfer.clearData();
+            event.dataTransfer.setData(assetDragType, asset.id);
+            event.dataTransfer.effectAllowed = "copy";
+            e.setDraggedAssetId(asset.id);
+          }}
+          onDragEnd={() => e.setDraggedAssetId(null)}
           className="block h-auto w-full cursor-grab justify-start rounded-none p-0 active:cursor-grabbing [&>span]:flex [&>span]:w-full"
           contentClassName="flex w-full items-center text-left"
-          onClick={() => e.add(asset)}
+          onClick={() => {
+            if (unavailable) toast.info(unavailable);
+            else if (!e.add(asset))
+              toast.info(
+                "Cannot add media here. Check locked tracks and timeline limits.",
+              );
+          }}
           aria-label={`Add ${asset.name} to timeline`}
         >
           <span className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded bg-muted text-muted-foreground">
-            {asset.thumbnail || (asset.src && asset.kind === "image") ? (
+            {thumbnail && failedSource !== thumbnail ? (
               <Image
-                src={asset.thumbnail || asset.src!}
+                src={thumbnail}
                 alt=""
                 fill
                 unoptimized
+                draggable={false}
+                onError={() => setFailedSource(thumbnail)}
                 className="object-cover"
               />
-            ) : asset.src && asset.kind === "video" ? (
+            ) : !thumbnail &&
+              asset.src &&
+              failedSource !== asset.src &&
+              asset.kind === "video" ? (
               <video
                 src={asset.src}
                 muted
                 preload="metadata"
+                draggable={false}
+                onError={() => setFailedSource(asset.src)}
                 className="h-full w-full object-cover"
               />
             ) : (
               <Icon size={18} />
             )}
-            {asset.kind === "video" && (
-              <span
-                data-media-duration
-                className="absolute bottom-1.5 right-1.5 rounded bg-card/95 px-1.5 py-0.5 text-[11px] tabular-nums text-foreground ring-1 ring-border/60"
-              >
-                {formatTime(asset.duration).slice(0, 5)}
+            {asset.kind === "video" &&
+              Number.isFinite(asset.duration) &&
+              asset.duration > 0 && (
+                <span
+                  data-media-duration
+                  className="absolute bottom-1.5 right-1.5 rounded bg-card/95 px-1.5 py-0.5 text-[11px] tabular-nums text-foreground ring-1 ring-border/60"
+                >
+                  {formatTime(asset.duration).slice(0, 5)}
+                </span>
+              )}
+            {unavailable && (
+              <span className="absolute inset-x-0 bottom-0 bg-card/95 px-1 py-0.5 text-[10px] text-muted-foreground">
+                {asset.status && asset.status !== "ready"
+                  ? asset.status
+                  : "Unavailable"}
               </span>
             )}
           </span>
@@ -96,6 +134,7 @@ export function MediaItem({ asset }: { asset: Asset }) {
         items={[
           {
             label: "Add to timeline",
+            disabled: !!unavailable,
             icon: <Plus />,
             onClick: () => e.add(asset),
           },

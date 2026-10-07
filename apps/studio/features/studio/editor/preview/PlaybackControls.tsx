@@ -6,12 +6,12 @@ import {
   SkipForward,
   Volume2,
   VolumeX,
-  Scan,
   Maximize2,
   Minimize2,
 } from "lucide-react";
 import { AppButton, AppSlider, AppTooltip } from "@blynta/ui";
 import { formatTime } from "../utils/time";
+import { PreviewZoom, type PreviewZoomValue } from "./PreviewZoom";
 
 /** Studio transport composition; the existing preview owns playback and volume. */
 export function PlaybackControls({
@@ -28,7 +28,8 @@ export function PlaybackControls({
   onToggleFullscreen,
   onPreviousFrame,
   onNextFrame,
-  onFit,
+  zoom,
+  onZoomChange,
 }: {
   disabled: boolean;
   playing: boolean;
@@ -43,7 +44,8 @@ export function PlaybackControls({
   onToggleFullscreen: () => void;
   onPreviousFrame: () => void;
   onNextFrame: () => void;
-  onFit: () => void;
+  zoom: PreviewZoomValue;
+  onZoomChange: (value: PreviewZoomValue) => void;
 }) {
   return (
     <div
@@ -134,18 +136,7 @@ export function PlaybackControls({
         className="flex items-center justify-end gap-1"
         data-transport-display
       >
-        <AppTooltip content="Fit canvas to preview">
-          <AppButton
-            variant="ghost"
-            size="sm"
-            aria-label="Fit preview"
-            onClick={onFit}
-            className="h-8 text-muted-foreground"
-          >
-            <Scan className="size-4" />
-            <span className="@max-[480px]/preview:hidden">Fit</span>
-          </AppButton>
-        </AppTooltip>
+        <PreviewZoom value={zoom} onChange={onZoomChange} />
         <AppTooltip
           content={fullscreen ? "Exit fullscreen" : "Fullscreen preview"}
         >

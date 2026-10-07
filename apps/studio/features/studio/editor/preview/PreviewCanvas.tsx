@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { AppButton } from "@blynta/ui";
 import { PlaybackControls } from "./PlaybackControls";
+import { previewZooms, type PreviewZoomValue } from "./PreviewZoom";
+import { assetDragType, mediaUnavailable } from "../utils/timeline";
 import {
   AppDropdown,
   AppPopover,
@@ -153,8 +155,12 @@ function MediaLayer({
 export function PreviewCanvas() {
   const e = useEditorPlayback();
   const [fullscreen, setFullscreen] = useState(false);
+  const [zoom, setZoom] = useState<PreviewZoomValue>("fit");
   useEffect(() => {
-    const update = () => setFullscreen(!!document.fullscreenElement);
+    const update = () => {
+      setFullscreen(!!document.fullscreenElement);
+      if (document.fullscreenElement) setZoom("fit");
+    };
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
@@ -173,7 +179,24 @@ export function PreviewCanvas() {
   }, []);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(100);
-  const [zoom, setZoom] = useState("fit");
+  useEffect(() => {
+    const viewport = stage.current;
+    if (!viewport) return;
+    const wheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || !event.deltaY) return;
+      event.preventDefault();
+      setZoom((current) => {
+        const percent = current === "fit" ? factor * 100 : current;
+        return event.deltaY < 0
+          ? (previewZooms.find((value) => value > percent + 0.1) ?? 200)
+          : ([...previewZooms]
+              .reverse()
+              .find((value) => value < percent - 0.1) ?? 25);
+      });
+    };
+    viewport.addEventListener("wheel", wheel, { passive: false });
+    return () => viewport.removeEventListener("wheel", wheel);
+  }, [factor]);
   // Keep the final frame visible while the transport rests at the project end.
   const previewTime =
     !e.playing && e.duration > 0 && e.playhead >= e.duration
@@ -204,42 +227,6 @@ export function PreviewCanvas() {
         data-preview-toolbar
       >
         <div className="flex items-center gap-1">
-          <AppTooltip>
-            <AppDropdown
-              align="start"
-              trigger={
-                <TooltipTrigger
-                  render={
-                    <AppButton
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 font-mono text-xs"
-                      aria-label="Preview zoom"
-                    >
-                      {zoom === "fit" ? "Fit" : "100%"}
-                      <ChevronDown className="size-3.5 text-muted-foreground" />
-                    </AppButton>
-                  }
-                />
-              }
-              items={[
-                {
-                  label: "Fit to workspace",
-                  icon:
-                    zoom === "fit" ? <Check className="size-4" /> : undefined,
-                  onClick: () => setZoom("fit"),
-                },
-                {
-                  label: "Actual size · 100%",
-                  icon:
-                    zoom === "100" ? <Check className="size-4" /> : undefined,
-                  onClick: () => setZoom("100"),
-                },
-              ]}
-            />
-            <TooltipContent>Preview zoom</TooltipContent>
-          </AppTooltip>
-          <span className="mx-1 h-4 w-px bg-border/60" aria-hidden="true" />
           <AppTooltip>
             <AppDropdown
               align="start"
@@ -307,34 +294,37 @@ export function PreviewCanvas() {
         </AppTooltip>
       </div>
       <div
-        className={`relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-muted/25 p-2 [container-type:size] fullscreen:bg-background fullscreen:p-3 fullscreen:items-center! fullscreen:justify-center! fullscreen:overflow-hidden! ${zoom === "100" ? "overflow-auto! items-start! justify-start!" : ""}`}
+        className={`relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-muted/25 p-2 [container-type:size] fullscreen:bg-background fullscreen:p-3 ${zoom !== "fit" ? "overflow-auto! items-start! justify-start!" : ""}`}
         ref={stage}
+        data-preview-viewport
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
-          const file = event.dataTransfer.files[0];
-          if (file) {
-            void upload(file, true);
+          const asset = e.doc.assets.find(
+            (item) => item.id === event.dataTransfer.getData(assetDragType),
+          );
+          if (asset) {
+            if (!mediaUnavailable(asset)) e.add(asset);
+            e.setDraggedAssetId(null);
             return;
           }
-          const asset = e.doc.assets.find(
-            (item) =>
-              item.id ===
-              event.dataTransfer.getData("application/blynta-asset"),
-          );
-          if (asset) e.add(asset);
+          const file = event.dataTransfer.files[0];
+          if (file) void upload(file, true);
         }}
       >
         <div
           ref={frame}
           data-preview-frame
-          className="relative shrink-0 overflow-hidden rounded bg-background w-[min(100cqw,calc(100cqh*var(--frame-ratio)))] in-[:fullscreen]:w-[min(100cqw,calc(100cqh*var(--frame-ratio)))]!"
+          className="relative shrink-0 overflow-hidden rounded bg-background w-[min(100cqw,calc(100cqh*var(--frame-ratio)))]"
           style={
             {
               aspectRatio: `${w}/${h}`,
               "--frame-ratio": w / h,
 
-              width: zoom === "100" ? `${(720 * w) / h}px` : undefined,
+              width:
+                zoom !== "fit"
+                  ? `${(720 * w * zoom) / (h * 100)}px`
+                  : undefined,
             } as CSSProperties
           }
         >
@@ -413,7 +403,8 @@ export function PreviewCanvas() {
           volume={volume}
           onToggleMute={() => setMuted(!muted)}
           onVolumeChange={setVolume}
-          onFit={() => setZoom("fit")}
+          zoom={zoom}
+          onZoomChange={setZoom}
           currentTime={e.playhead}
           duration={e.duration}
           fullscreen={fullscreen}

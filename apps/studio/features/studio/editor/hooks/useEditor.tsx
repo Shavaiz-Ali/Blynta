@@ -20,6 +20,7 @@ import { studioApi, studioKeys } from "../../api";
 import { SaveSession } from "../stores/save-session";
 import { useQuery } from "@tanstack/react-query";
 import { PlaybackClock } from "../stores/playback-clock";
+import { assetPlacement } from "../utils/timeline";
 export function useEditorState(project: Project, userId: string) {
   const [history, dispatch] = useReducer(editorReducer, {
     past: [],
@@ -68,6 +69,7 @@ export function useEditorState(project: Project, userId: string) {
   );
   const [zoom, setZoom] = useState(64);
   const [snapping, setSnapping] = useState(true);
+  const [draggedAssetId, setDraggedAssetId] = useState<string | null>(null);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const mainTrack =
     doc.tracks.find((track) => track.id === "video") ??
@@ -213,6 +215,8 @@ export function useEditorState(project: Project, userId: string) {
     setZoom,
     snapping,
     setSnapping,
+    draggedAssetId,
+    setDraggedAssetId,
     showAllTracks,
     setShowAllTracks,
     visibleTracks,
@@ -254,7 +258,13 @@ export function useEditorState(project: Project, userId: string) {
       asset: Asset,
       start = playback.getSnapshot().playhead,
       trackId?: string,
-    ) => edit((d) => addAsset(d, asset, start, trackId)),
+    ) => {
+      if (!assetPlacement(doc, asset, start, trackId)) return false;
+      const id = crypto.randomUUID();
+      edit((d) => addAsset(d, asset, start, trackId, id));
+      select(id);
+      return true;
+    },
   };
 }
 type Editor = ReturnType<typeof useEditorState>;

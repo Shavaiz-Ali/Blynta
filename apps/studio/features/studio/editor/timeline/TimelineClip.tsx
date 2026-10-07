@@ -62,7 +62,7 @@ export const TimelineClip = memo(function TimelineClip({
         : Infinity;
     let next = { ...c };
     if (g.mode === "move") {
-      let at = Math.max(0, c.start + delta);
+      let at = Math.min(3600 - c.duration, Math.max(0, c.start + delta));
       if (e.snapping) {
         const points = [
           e.playhead,
@@ -92,7 +92,7 @@ export const TimelineClip = memo(function TimelineClip({
     } else
       next.duration = Math.max(
         0.2,
-        Math.min(sourceRemaining, c.duration + delta),
+        Math.min(sourceRemaining, 3600 - c.start, c.duration + delta),
       );
     g.final = next;
     setDraft(next);

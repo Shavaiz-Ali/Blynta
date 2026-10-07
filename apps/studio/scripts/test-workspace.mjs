@@ -22,6 +22,20 @@ const port = await new Promise((resolve, reject) => {
   });
 });
 const origin = `http://localhost:${port}`;
+// Next persists a user badge position that overrides next.config. Keep the
+// browser fixture's development badge clear of the real rail theme control.
+const devToolsConfig = path.join(
+  root,
+  "apps/studio/.next/dev/cache/next-devtools-config.json",
+);
+fs.mkdirSync(path.dirname(devToolsConfig), { recursive: true });
+const devToolsPreferences = fs.existsSync(devToolsConfig)
+  ? JSON.parse(fs.readFileSync(devToolsConfig, "utf8"))
+  : {};
+fs.writeFileSync(
+  devToolsConfig,
+  JSON.stringify({ ...devToolsPreferences, devToolsPosition: "bottom-right" }),
+);
 const secret = "studio-workspace-test-only-secret-32-characters";
 const log = fs.createWriteStream(
   path.join(root, ".test-results/studio-workspace.log"),
@@ -53,6 +67,7 @@ const server = spawn(
 server.stdout.pipe(log);
 server.stderr.pipe(log);
 let browser;
+let page;
 try {
   let ready = false;
   for (let i = 0; i < 60; i++) {
@@ -96,9 +111,65 @@ try {
       sameSite: "Lax",
     },
   ]);
-  const page = await context.newPage();
+  page = await context.newPage();
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  const videoBytes = Buffer.from(
+    await page.evaluate(async () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 180;
+      const drawing = canvas.getContext("2d");
+      const stream = canvas.captureStream(15);
+      const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+      const chunks = [];
+      recorder.ondataavailable = (event) => chunks.push(event.data);
+      const finished = new Promise((resolve) => {
+        recorder.onstop = resolve;
+      });
+      let count = 0;
+      const draw = () => {
+        drawing.fillStyle = "#204052";
+        drawing.fillRect(0, 0, 320, 180);
+        drawing.fillStyle = "#ffffff";
+        drawing.font = "24px sans-serif";
+        drawing.fillText(`Test footage ${count++}`, 20, 95);
+      };
+      draw();
+      recorder.start();
+      const timer = setInterval(draw, 60);
+      await new Promise((resolve) => setTimeout(resolve, 2100));
+      recorder.stop();
+      await finished;
+      clearInterval(timer);
+      stream.getTracks().forEach((track) => track.stop());
+      return [...new Uint8Array(await new Blob(chunks).arrayBuffer())];
+    }),
+  );
+  const audioBytes = Buffer.alloc(44 + 16000 * 2 * 2);
+  audioBytes.write("RIFF", 0);
+  audioBytes.writeUInt32LE(audioBytes.length - 8, 4);
+  audioBytes.write("WAVEfmt ", 8);
+  audioBytes.writeUInt32LE(16, 16);
+  audioBytes.writeUInt16LE(1, 20);
+  audioBytes.writeUInt16LE(1, 22);
+  audioBytes.writeUInt32LE(16000, 24);
+  audioBytes.writeUInt32LE(32000, 28);
+  audioBytes.writeUInt16LE(2, 32);
+  audioBytes.writeUInt16LE(16, 34);
+  audioBytes.write("data", 36);
+  audioBytes.writeUInt32LE(audioBytes.length - 44, 40);
+  for (let sample = 0; sample < 32000; sample++)
+    audioBytes.writeInt16LE(
+      Math.round(Math.sin((sample * Math.PI * 2 * 440) / 16000) * 1200),
+      44 + sample * 2,
+    );
+  await page.route("**/test-video-*.webm", (route) =>
+    route.fulfill({ contentType: "video/webm", body: videoBytes }),
+  );
+  await page.route("**/test-audio.wav", (route) =>
+    route.fulfill({ contentType: "audio/wav", body: audioBytes }),
+  );
   const asset = {
     id: "image-1",
     name: "Northern coast",
@@ -113,10 +184,46 @@ try {
     id: "video-1",
     name: "Coast video",
     kind: "video",
-    duration: 50,
+    duration: 2,
     thumbnail: asset.src,
-    src: undefined,
+    src: `${origin}/test-video-a.webm`,
   };
+  const videoB = {
+    ...videoAsset,
+    id: "video-2",
+    name: "Coast video B",
+    src: `${origin}/test-video-b.webm`,
+  };
+  const audioAsset = {
+    ...asset,
+    id: "audio-1",
+    name: "Ambient audio",
+    kind: "audio",
+    duration: 2,
+    src: `${origin}/test-audio.wav`,
+  };
+  const waitingAsset = {
+    ...videoAsset,
+    id: "waiting-1",
+    name: "Processing footage",
+    status: "processing",
+    src: undefined,
+    duration: 0,
+  };
+  const brokenThumbnail = {
+    ...asset,
+    id: "image-fallback",
+    name: "Missing thumbnail",
+    thumbnail: `${origin}/missing-thumbnail.png`,
+  };
+  const mediaFixtures = [
+    asset,
+    videoAsset,
+    videoB,
+    audioAsset,
+    waitingAsset,
+    brokenThumbnail,
+  ];
   const clip = {
     id: "clip-1",
     assetId: asset.id,
@@ -147,7 +254,7 @@ try {
     revision: 0,
     version: 1,
     demo: false,
-    assets: [asset, videoAsset],
+    assets: mediaFixtures,
     clips: [clip],
     tracks: [
       { id: "text", name: "Text 1", kind: "text", muted: false, hidden: false },
@@ -236,10 +343,9 @@ try {
         data: url.pathname.endsWith("/assets")
           ? project.assets.map((saved) => ({
               ...saved,
-              ...(saved.id === asset.id ? { src: asset.src } : {}),
-              ...(saved.id === videoAsset.id
-                ? { thumbnail: videoAsset.thumbnail }
-                : {}),
+              src: mediaFixtures.find((item) => item.id === saved.id)?.src,
+              thumbnail: mediaFixtures.find((item) => item.id === saved.id)
+                ?.thumbnail,
             }))
           : url.pathname.endsWith("/projects")
             ? [project]
@@ -299,7 +405,19 @@ try {
   assert.ok(bounds.timeline.h >= 280 && bounds.timeline.h <= 380);
   assert.equal(bounds.rail.w, 72);
   const card = await page.locator(".media-item").first().boundingBox();
-  assert.ok(card.height >= 130 && card.width >= 240, JSON.stringify(card));
+  assert.ok(
+    card.height >= 60 && card.width >= 110 && card.width < 130,
+    JSON.stringify(card),
+  );
+  const grid = await page
+    .locator("[data-project-tools] .media-item")
+    .first()
+    .evaluate(
+      (item) =>
+        getComputedStyle(item.parentElement).gridTemplateColumns.split(" ")
+          .length,
+    );
+  assert.equal(grid, 2);
   const library = page.locator("[data-project-tools]");
   const imageCard = library.locator(".media-item").filter({
     has: page.getByRole("button", {
@@ -317,7 +435,7 @@ try {
   assert.equal(await imageCard.locator("[data-media-duration]").count(), 0);
   assert.equal(
     await videoCard.locator("[data-media-duration]").innerText(),
-    "00:50",
+    "00:02",
   );
   await videoCard.scrollIntoViewIfNeeded();
   await videoCard.screenshot({
@@ -337,7 +455,20 @@ try {
     await page.getByRole("button", { name: "Toggle properties panel" }).count(),
     0,
   );
-  assert.equal(await page.locator("#editor-ai-launcher svg").count(), 0);
+  assert.equal(await page.locator("#editor-ai-launcher svg").count(), 1);
+  assert.ok(
+    await page
+      .locator("#editor-ai-launcher")
+      .evaluate((button) => getComputedStyle(button).animationName !== "none"),
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert.equal(
+    await page
+      .locator("#editor-ai-launcher")
+      .evaluate((button) => getComputedStyle(button).animationName),
+    "none",
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
   assert.equal(await page.locator("[data-ai-header] > div svg").count(), 0);
   const railDetails = await page
     .locator("[data-editor-rail]")
@@ -382,13 +513,23 @@ try {
     assert.equal(colors.activeFg, colors.primaryFg);
   };
   await verifyRailTheme();
-  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await page.waitForFunction(
+    () => !document.documentElement.classList.contains("dark"),
+  );
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("theme")),
+    "light",
+  );
   await page.waitForTimeout(250);
   await verifyRailTheme();
   await page.screenshot({
     path: path.join(root, ".test-results/studio-editor-polish-light.png"),
   });
-  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await page.waitForFunction(() =>
+    document.documentElement.classList.contains("dark"),
+  );
   await page.waitForTimeout(250);
   assert.equal(await page.locator(".property-rail").count(), 0);
   assert.equal(await page.locator(".right-workspace").isVisible(), true);
@@ -415,9 +556,7 @@ try {
   );
   // Compact preview controls still perform real zoom, fit, and aspect changes.
   await page.getByRole("button", { name: "Preview zoom", exact: true }).click();
-  await page
-    .getByRole("menuitem", { name: "Actual size · 100%", exact: true })
-    .click();
+  await page.getByRole("menuitem", { name: "100%", exact: true }).click();
   assert.equal((await geometry()).frame.w, 1280);
   await page
     .getByRole("button", { name: "Enter fullscreen", exact: true })
@@ -427,7 +566,10 @@ try {
   assert.ok(bounds.frame.w <= 1440 && bounds.frame.h <= 900);
   assert.ok(Math.abs(bounds.frame.w / bounds.frame.h - 16 / 9) < 0.01);
   await page.evaluate(() => document.exitFullscreen());
-  await page.getByRole("button", { name: "Fit preview", exact: true }).click();
+  await page.getByRole("button", { name: "Preview zoom", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Fit to workspace", exact: true })
+    .click();
   assert.ok((await geometry()).frame.w < 1280);
   await page
     .getByRole("button", { name: "Canvas aspect ratio", exact: true })
@@ -735,6 +877,339 @@ try {
     animations: "disabled",
     path: path.join(root, ".test-results/studio-editor-reference-layout.png"),
   });
+  // Real native drags from an empty timeline: video A/B, image, then audio.
+  project = {
+    ...project,
+    name: "A long project title that must leave room for save state, Blynta AI, export, and account actions",
+    assets: mediaFixtures,
+    clips: [],
+    tracks: [
+      {
+        id: "video",
+        name: "Video 1",
+        kind: "video",
+        muted: false,
+        hidden: false,
+      },
+    ],
+  };
+  await page.reload();
+  await page.getByText("Start with your footage", { exact: true }).waitFor();
+  const nativeDrop = async (assetId, time, valid = true) => {
+    const source = page.locator(
+      `[data-media-asset="${assetId}"] button[draggable]`,
+    );
+    await source.scrollIntoViewIfNeeded();
+    const sourceBox = await source.boundingBox();
+    const lane = page.locator('[data-track-lane][data-track-id="video"]');
+    const laneBox = await lane.boundingBox();
+    const contentBox = await page
+      .locator("[data-timeline-content]")
+      .boundingBox();
+    const x = contentBox.x + time * 64;
+    await page.mouse.move(
+      sourceBox.x + sourceBox.width / 2,
+      sourceBox.y + sourceBox.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(x, laneBox.y + 32, { steps: 20 });
+    await page.mouse.move(x, laneBox.y + 32);
+    if (valid) {
+      await page.locator("[data-drop-indicator]").waitFor();
+      if (assetId === videoAsset.id)
+        await page.screenshot({
+          path: path.join(
+            root,
+            ".test-results/studio-editor-drag-insertion.png",
+          ),
+          animations: "disabled",
+        });
+    } else assert.equal(await page.locator("[data-drop-indicator]").count(), 0);
+    await page.mouse.up();
+  };
+  const saveReady = async (predicate) => {
+    for (let attempt = 0; attempt < 100 && !predicate(); attempt++)
+      await page.waitForTimeout(100);
+    assert.ok(predicate(), "Autosave must persist the tested document");
+  };
+  assert.equal(
+    await page
+      .locator('[data-timeline-workspace] [data-slot="scroll-area-viewport"]')
+      .evaluate((element) => element.scrollLeft),
+    0,
+  );
+  await nativeDrop(videoAsset.id, 10);
+  assert.equal(await page.locator(".timeline-clip").count(), 1);
+  await nativeDrop(videoB.id, 11); // Collision resolves to the end of video A, at 12s.
+  assert.equal(await page.locator(".timeline-clip").count(), 2);
+  await page.keyboard.press("Control+z");
+  assert.equal(await page.locator(".timeline-clip").count(), 1);
+  await page.keyboard.press("Control+Shift+z");
+  assert.equal(await page.locator(".timeline-clip").count(), 2);
+  await nativeDrop(asset.id, 14);
+  await nativeDrop(audioAsset.id, 8);
+  assert.equal(await page.locator(".timeline-clip").count(), 4);
+  assert.equal(await page.locator("[data-track-header]").count(), 2);
+  await saveReady(() => project.clips.length === 4);
+  assert.deepEqual(
+    project.clips.map((item) => [item.assetId, item.start, item.trackId]),
+    [
+      [videoAsset.id, 10, "video"],
+      [videoB.id, 12, "video"],
+      [asset.id, 14, "video"],
+      [audioAsset.id, 8, "audio"],
+    ],
+  );
+  const moving = page
+    .locator(".timeline-clip")
+    .filter({ hasText: videoB.name });
+  const movingBox = await moving.boundingBox();
+  await page.mouse.move(
+    movingBox.x + movingBox.width / 2,
+    movingBox.y + movingBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    movingBox.x + movingBox.width / 2 - 384,
+    movingBox.y + movingBox.height / 2,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+  assert.ok(
+    (await moving.getAttribute("aria-label")).includes("starts at 6.0"),
+  );
+  await page.keyboard.press("Control+z");
+  assert.ok(
+    (await moving.getAttribute("aria-label")).includes("starts at 12.0"),
+  );
+  await page.keyboard.press("Control+Shift+z");
+  await saveReady(
+    () => project.clips.find((item) => item.assetId === videoB.id)?.start === 6,
+  );
+  await page.getByRole("button", { name: "Lock Video 1", exact: true }).click();
+  await nativeDrop(videoB.id, 10, false);
+  assert.equal(await page.locator(".timeline-clip").count(), 4);
+  await page
+    .getByRole("button", { name: "Unlock Video 1", exact: true })
+    .click();
+  assert.equal(
+    await page
+      .locator('[data-media-asset="waiting-1"] button[draggable]')
+      .getAttribute("draggable"),
+    "false",
+  );
+  await page
+    .locator('[data-media-asset="image-fallback"]')
+    .scrollIntoViewIfNeeded();
+  await page.waitForFunction(
+    () => !document.querySelector('[data-media-asset="image-fallback"] img'),
+  );
+  await saveReady(
+    () => !project.tracks.find((track) => track.id === "video").locked,
+  );
+  await page.reload();
+  await page.locator(".timeline-clip").first().waitFor();
+  assert.equal(await page.locator(".timeline-clip").count(), 4);
+  const contentBox = await page
+    .locator("[data-timeline-content]")
+    .boundingBox();
+  await page.mouse.click(contentBox.x + 11 * 64, contentBox.y + 18);
+  await page.locator("video.preview-media").waitFor();
+  await page.waitForFunction(
+    () =>
+      Math.abs(document.querySelector("video.preview-media").currentTime - 1) <
+      0.12,
+  );
+  assert.ok(
+    Math.abs(
+      Number(
+        await page
+          .getByRole("slider", { name: "Timeline playhead", exact: true })
+          .getAttribute("aria-valuenow"),
+      ) - 11,
+    ) < 0.05,
+  );
+  await page.getByRole("button", { name: "Play video", exact: true }).click();
+  await page.waitForTimeout(450);
+  await page.getByRole("button", { name: "Pause video", exact: true }).click();
+  assert.ok(
+    Number(
+      await page
+        .getByRole("slider", { name: "Timeline playhead", exact: true })
+        .getAttribute("aria-valuenow"),
+    ) > 11.3,
+  );
+  await page.mouse.click(contentBox.x + 9 * 64, contentBox.y + 18);
+  await page.locator("audio").waitFor({ state: "attached" });
+  await page.waitForFunction(
+    () => Math.abs(document.querySelector("audio").currentTime - 1) < 0.12,
+  );
+  const playheadKnob = await page
+    .locator('.ruler-seek [data-slot="slider-thumb"]')
+    .boundingBox();
+  await page.mouse.move(playheadKnob.x + 5, playheadKnob.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(contentBox.x + 11 * 64, playheadKnob.y + 4, {
+    steps: 10,
+  });
+  await page.mouse.up();
+  assert.ok(
+    Math.abs(
+      Number(
+        await page
+          .getByRole("slider", { name: "Timeline playhead", exact: true })
+          .getAttribute("aria-valuenow"),
+      ) - 11,
+    ) < 0.1,
+  );
+  const beforeZoom = project.revision;
+  for (const percent of [25, 50, 75, 100, 150, 200]) {
+    await page
+      .getByRole("button", { name: "Preview zoom", exact: true })
+      .click();
+    await page
+      .getByRole("menuitem", { name: `${percent}%`, exact: true })
+      .click();
+    assert.equal((await geometry()).frame.w, (1280 * percent) / 100);
+  }
+  const preview = await page.locator("[data-preview-viewport]").boundingBox();
+  await page.mouse.move(preview.x + 30, preview.y + 30);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 100);
+  await page.keyboard.up("Control");
+  await page
+    .getByRole("button", { name: "Preview zoom", exact: true })
+    .filter({ hasText: "150%" })
+    .waitFor();
+  await page.getByRole("button", { name: "Preview zoom", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Fit to workspace", exact: true })
+    .click();
+  await page.waitForTimeout(900);
+  assert.equal(
+    project.revision,
+    beforeZoom,
+    "Preview zoom is workspace state, not an autosave edit",
+  );
+  await page
+    .locator('[data-timeline-workspace] [data-slot="scroll-area-viewport"]')
+    .evaluate((element) => {
+      element.scrollLeft = 500;
+    });
+  await nativeDrop(brokenThumbnail.id, 22);
+  await saveReady(() => project.clips.length === 5);
+  assert.equal(
+    project.clips.at(-1).start,
+    22,
+    "drop time must include timeline horizontal scroll",
+  );
+  await page
+    .getByRole("slider", { name: "Seek preview", exact: true })
+    .press("End");
+  assert.ok(
+    await page
+      .locator('[data-timeline-workspace] [data-slot="scroll-area-viewport"]')
+      .evaluate((element) => element.scrollLeft > 0),
+  );
+  await page
+    .getByRole("slider", { name: "Seek preview", exact: true })
+    .press("Home");
+  assert.equal(
+    await page
+      .locator('[data-timeline-workspace] [data-slot="scroll-area-viewport"]')
+      .evaluate((element) => element.scrollLeft),
+    0,
+  );
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await page.waitForFunction(
+    () => !document.documentElement.classList.contains("dark"),
+  );
+  await page.goto(`${origin}/dashboard`);
+  await page.locator("#studio-sidebar").waitFor();
+  assert.equal(
+    await page.evaluate(() =>
+      document.documentElement.classList.contains("dark"),
+    ),
+    false,
+  );
+  await page.reload();
+  await page.locator("#studio-sidebar").waitFor();
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("theme")),
+    "light",
+  );
+  await page.getByRole("button", { name: "User menu", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Appearance", exact: true }).hover();
+  await page.getByRole("menuitem", { name: "system", exact: true }).click();
+  await page.waitForFunction(() =>
+    document.documentElement.classList.contains("dark"),
+  );
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("theme")),
+    "system",
+  );
+  await page.goto(`${origin}/editor/${project.id}`);
+  await page.locator(".timeline-clip").first().waitFor();
+  assert.equal(
+    await page.evaluate(() =>
+      document.documentElement.classList.contains("dark"),
+    ),
+    true,
+  );
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Switch to dark mode" }).waitFor();
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await page.screenshot({
+    path: path.join(root, ".test-results/studio-editor-multiple-media.png"),
+    animations: "disabled",
+  });
+  // A long occupied clip must not make a successful addition appear lost.
+  project = {
+    ...project,
+    assets: mediaFixtures,
+    clips: [{ ...clip, duration: 300 }],
+    tracks: [
+      {
+        id: "video",
+        name: "Video 1",
+        kind: "video",
+        muted: false,
+        hidden: false,
+      },
+    ],
+  };
+  await page.reload();
+  await page.locator(".timeline-clip").first().waitFor();
+  await nativeDrop(videoAsset.id, 10);
+  await saveReady(() => project.clips.length === 2);
+  assert.equal(project.clips.at(-1).start, 300);
+  assert.ok(
+    await page
+      .locator('[data-timeline-workspace] [data-slot="scroll-area-viewport"]')
+      .evaluate((element) => element.scrollLeft > 0),
+  );
+  const revealed = await page
+    .locator(".timeline-clip")
+    .filter({ hasText: videoAsset.name })
+    .boundingBox();
+  const visibleTimeline = await page
+    .locator("[data-timeline-workspace]")
+    .boundingBox();
+  assert.ok(
+    revealed.x >= visibleTimeline.x &&
+      revealed.x < visibleTimeline.x + visibleTimeline.width,
+  );
+  await page.getByRole("button", { name: "Play video", exact: true }).click();
+  await page.waitForTimeout(250);
+  await page.getByRole("button", { name: "Pause video", exact: true }).click();
+  assert.equal(
+    await page
+      .locator('[data-timeline-workspace] [data-slot="scroll-area-viewport"]')
+      .evaluate((element) => element.scrollLeft),
+    0,
+    "pausing must not jump back to a previously selected distant clip",
+  );
   // Empty projects retain the workspace, and smaller viewports scroll internally.
   project = { ...project, clips: [], assets: [] };
   await page.reload();
@@ -766,8 +1241,27 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Workspace browser checks passed: desktop widths 2560/1920/1600/1440/1280/1000, contextual inspector, alternate AI dock, collapse, resizing persistence without autosave, aspect ratio/source fit, clip history, input shortcut safety, autosave and export UI. API transport is mocked in this UI suite.",
+    "Workspace browser checks passed: native sequential video/image/audio drops, collisions, long-clip reveal, scrolled coordinates, locked/processing media, history, save/reload, real video/audio playback synchronization, playhead dragging, all preview zooms and Ctrl-wheel, reduced motion, dashboard/editor theme persistence and system mode, responsive geometry, AI scrolling, autosave and export UI. API transport is mocked; playable media fixtures are generated locally.",
   );
+} catch (error) {
+  if (page) {
+    await page
+      .screenshot({
+        path: path.join(root, ".test-results/studio-workspace-failure.png"),
+      })
+      .catch(() => {});
+    console.error(
+      "Browser failure page:",
+      page.url(),
+      (
+        await page
+          .locator("body")
+          .innerText()
+          .catch(() => "")
+      ).slice(0, 1600),
+    );
+  }
+  throw error;
 } finally {
   // Next's Windows dev CLI forks a listener. Stop only this test's allocated port.
   if (process.platform === "win32") {

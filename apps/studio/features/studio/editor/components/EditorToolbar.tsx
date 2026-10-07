@@ -1,6 +1,12 @@
 "use client";
 import Link from "next/link";
-import { ArrowLeft, Settings2, CloudCheck, Download } from "lucide-react";
+import {
+  ArrowLeft,
+  Settings2,
+  CloudCheck,
+  Download,
+  WandSparkles,
+} from "lucide-react";
 import { UserDropdown } from "@/components/common/UserDropdown";
 import { AppButton, AppHeader, AppPopover } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
@@ -25,7 +31,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
       <AppInput
         aria-label="Project name"
         className="h-8 border-transparent bg-transparent px-2 text-sm font-medium shadow-none hover:bg-muted/40 focus-visible:border-ring dark:bg-transparent dark:hover:bg-muted/40"
-        title="Rename project"
+        title={e.doc.name}
         wrapperClassName="min-w-20 flex-1 max-w-80"
         value={e.doc.name}
         maxLength={100}
@@ -54,7 +60,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
         <AppButton
           id="editor-ai-launcher"
           variant="ghost"
-          className={`h-8 ${e.aiOpen ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
+          className={`h-8 border-primary/25 bg-linear-to-r from-primary/15 via-chart-4/15 to-secondary bg-[length:200%_100%] text-foreground hover:border-primary/50 hover:from-primary/20 motion-safe:animate-theme-shimmer motion-reduce:animate-none aria-expanded:bg-transparent dark:aria-expanded:bg-transparent ${e.aiOpen ? "ring-1 ring-primary/50 border-primary/50" : ""}`}
           size="sm"
           aria-label="Open Blynta AI chat"
           aria-controls="editor-ai-chat"
@@ -64,6 +70,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             if (window.innerWidth < 1100) e.setContextOpen(false);
           }}
         >
+          <WandSparkles className="size-3.5 text-primary" />
           Blynta AI
         </AppButton>
         <span className="mx-1 h-5 w-px bg-border/60" aria-hidden="true" />

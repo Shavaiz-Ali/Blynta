@@ -1,5 +1,18 @@
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --animate-theme-shimmer: theme-shimmer 14s ease-in-out infinite;
+  @keyframes theme-shimmer {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+}
+
 :root {
   --background: oklch(1 0 0);
   --foreground: oklch(0.1371 0.036 258.5258);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   LockKeyhole,
   UnlockKeyhole,
@@ -28,12 +28,91 @@ import { AppScrollArea } from "@blynta/ui";
 import { useEditorPlayback } from "../hooks/useEditor";
 import { TimelineClip } from "./TimelineClip";
 import { formatTime } from "../utils/time";
+import { assetDragType, assetPlacement, timelineTime } from "../utils/timeline";
 export function Timeline() {
   const e = useEditorPlayback();
   const timeline = useRef<HTMLElement>(null);
   const locked = !!e.doc.tracks.find((t) => t.id === e.selected?.trackId)
     ?.locked;
   const [available, setAvailable] = useState(1000);
+  const [drop, setDrop] = useState<{
+    lane: string;
+    start: number;
+    hint: number;
+    label: string;
+  } | null>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const lastView = useRef({ time: e.playhead, zoom: e.zoom });
+  const lastSelection = useRef(e.selectedId);
+  const viewport = () =>
+    timeline.current?.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+  const revealTime = useCallback(
+    (time: number) => {
+      const scroll = viewport();
+      if (!scroll || !timeline.current) return;
+      const header =
+        parseFloat(
+          getComputedStyle(timeline.current).getPropertyValue(
+            "--track-header-width",
+          ),
+        ) || 192;
+      const position = time * e.zoom;
+      if (
+        position < scroll.scrollLeft ||
+        position > scroll.scrollLeft + scroll.clientWidth - header - 24
+      )
+        scroll.scrollLeft = Math.max(
+          0,
+          position - (scroll.clientWidth - header) / 3,
+        );
+    },
+    [e.zoom],
+  );
+  useEffect(() => {
+    const clear = () => setDrop(null);
+    document.addEventListener("dragend", clear);
+    return () => document.removeEventListener("dragend", clear);
+  }, []);
+  useEffect(() => {
+    const scroll = viewport();
+    if (scroll) scroll.scrollLeft = 0;
+  }, [e.projectId]);
+  useEffect(() => {
+    const changed =
+      Math.abs(e.playhead - lastView.current.time) > 1 ||
+      e.zoom !== lastView.current.zoom;
+    lastView.current = { time: e.playhead, zoom: e.zoom };
+    if (!e.playing && !changed) return;
+    revealTime(e.playhead);
+  }, [e.playhead, e.playing, e.zoom, revealTime]);
+  useEffect(() => {
+    if (lastSelection.current === e.selectedId) return;
+    lastSelection.current = e.selectedId;
+    if (!e.selected || e.playing) return;
+    revealTime(e.selected.start);
+  }, [e.selected, e.selectedId, e.playing, revealTime]);
+  function placement(event: React.DragEvent, trackId: string) {
+    const asset = e.doc.assets.find(
+      (item) =>
+        item.id ===
+        (e.draggedAssetId || event.dataTransfer.getData(assetDragType)),
+    );
+    if (!asset || !content.current) return;
+    const time = timelineTime(
+      event.clientX,
+      content.current.getBoundingClientRect().left,
+      e.zoom,
+    );
+    const next = assetPlacement(
+      e.doc,
+      asset,
+      e.snapping ? Math.round(time * 2) / 2 : time,
+      trackId,
+    );
+    return next && { asset, hint: time, ...next };
+  }
   useEffect(() => {
     if (!timeline.current) return;
     const observer = new ResizeObserver((entries) => {
@@ -62,7 +141,7 @@ export function Timeline() {
     e.playhead < selected.start + selected.duration - 0.1;
   function seek(event: React.PointerEvent) {
     const rect = event.currentTarget.getBoundingClientRect();
-    const t = (event.clientX - rect.left) / e.zoom;
+    const t = timelineTime(event.clientX, rect.left, e.zoom);
     e.seek(Math.min(e.duration, Math.max(0, t)));
   }
   return (
@@ -309,6 +388,8 @@ export function Timeline() {
           </div>
           <div className="relative isolate min-w-0 flex-1">
             <div
+              ref={content}
+              data-timeline-content
               className="relative min-h-full bg-[linear-gradient(to_right,color-mix(in_oklch,var(--border)_30%,transparent)_1px,transparent_1px)]"
               style={{ width, backgroundSize: `${rulerStep * e.zoom}px 100%` }}
             >
@@ -336,40 +417,47 @@ export function Timeline() {
               </div>
               {e.visibleTracks.map((t) => (
                 <div
-                  className={`relative h-16 border-b border-border/50 bg-muted/10 ${t.hidden ? "opacity-40" : ""}`}
+                  className={`relative h-16 border-b border-border/50 ${drop?.lane === t.id ? "bg-primary/5 ring-1 ring-inset ring-primary/40" : "bg-muted/10"} ${t.hidden ? "opacity-40" : ""}`}
                   style={{ backgroundSize: `${rulerStep * e.zoom}px 100%` }}
                   key={t.id}
                   data-track-lane
+                  data-track-id={t.id}
+                  data-drop-valid={drop?.lane === t.id ? "true" : undefined}
                   onPointerDown={(v) => {
                     if (v.target === v.currentTarget) {
                       e.select(null);
                       seek(v);
                     }
                   }}
-                  onDragOver={(v) => v.preventDefault()}
+                  onDragOver={(event) => {
+                    const next = placement(event, t.id);
+                    event.dataTransfer.dropEffect = next ? "copy" : "none";
+                    if (!next) {
+                      setDrop(null);
+                      return;
+                    }
+                    event.preventDefault();
+                    setDrop({
+                      lane: t.id,
+                      start: next.start,
+                      hint: next.hint,
+                      label: `${next.track.name} · ${formatTime(next.start).slice(0, 5)}`,
+                    });
+                  }}
+                  onDragLeave={(event) => {
+                    if (
+                      !event.currentTarget.contains(
+                        event.relatedTarget as Node | null,
+                      )
+                    )
+                      setDrop(null);
+                  }}
                   onDrop={(v) => {
                     v.preventDefault();
-                    const asset = e.doc.assets.find(
-                      (a) =>
-                        a.id ===
-                        v.dataTransfer.getData("application/blynta-asset"),
-                    );
-                    if (!asset || t.locked) return;
-                    const compatible =
-                      asset.kind === t.kind ||
-                      (asset.kind === "image" && t.kind === "video");
-                    if (!compatible && e.showAllTracks) return;
-                    const start = Math.max(
-                      0,
-                      (v.clientX -
-                        v.currentTarget.getBoundingClientRect().left) /
-                        e.zoom,
-                    );
-                    e.add(
-                      asset,
-                      e.snapping ? Math.round(start * 2) / 2 : start,
-                      compatible ? t.id : undefined,
-                    );
+                    const next = placement(v, t.id);
+                    if (next) e.add(next.asset, next.start, next.track.id);
+                    setDrop(null);
+                    e.setDraggedAssetId(null);
                   }}
                 >
                   {e.doc.clips
@@ -377,6 +465,22 @@ export function Timeline() {
                     .map((c) => (
                       <TimelineClip key={c.id} clip={c} />
                     ))}
+                  {drop?.lane === t.id && (
+                    <>
+                      <div
+                        data-drop-indicator
+                        data-drop-time={drop.start}
+                        className="pointer-events-none absolute inset-y-0 z-30 w-0.5 bg-primary"
+                        style={{ left: drop.start * e.zoom }}
+                      ></div>
+                      <span
+                        className="pointer-events-none absolute top-0 z-30 max-w-48 -translate-x-1/2 truncate rounded bg-primary px-2 py-1 text-[11px] text-primary-foreground"
+                        style={{ left: drop.hint * e.zoom }}
+                      >
+                        {drop.label}
+                      </span>
+                    </>
+                  )}
                 </div>
               ))}
               <div

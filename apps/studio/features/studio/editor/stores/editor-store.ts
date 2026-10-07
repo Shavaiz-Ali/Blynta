@@ -1,5 +1,6 @@
 import type { EditorDocument, Clip, Asset, AIAction } from "../../types";
 import { makeClip } from "../../projects/document";
+import { assetPlacement } from "../utils/timeline";
 export interface History {
   past: EditorDocument[];
   present: EditorDocument;
@@ -54,7 +55,11 @@ export function patchClip(
       if (c.id !== id) return c;
       const next = { ...c, ...patch };
       const asset = doc.assets.find((a) => a.id === c.assetId);
-      if (asset && !['image', 'text'].includes(c.kind)) next.duration = Math.min(next.duration, Math.max(0.01, (asset.duration - next.offset) / next.speed));
+      if (asset && !["image", "text"].includes(c.kind))
+        next.duration = Math.min(
+          next.duration,
+          Math.max(0.01, (asset.duration - next.offset) / next.speed),
+        );
       return next;
     }),
   };
@@ -95,15 +100,23 @@ export function addAsset(
   asset: Asset,
   start = 0,
   trackId?: string,
+  clipId?: string,
 ): EditorDocument {
-  const clip = makeClip(asset, start, trackId);
-  if (doc.tracks.find((t) => t.id === clip.trackId)?.locked) return doc;
+  const placement = assetPlacement(doc, asset, start, trackId);
+  if (!placement) return doc;
+  const clip = makeClip(asset, placement.start, placement.track.id);
+  if (clipId) clip.id = clipId;
   return {
     ...doc,
     assets: doc.assets.some((a) => a.id === asset.id)
-      ? doc.assets
+      ? doc.assets.map((saved) =>
+          saved.id === asset.id ? { ...asset, name: saved.name } : saved,
+        )
       : [...doc.assets, asset],
     clips: [...doc.clips, clip],
+    tracks: doc.tracks.some((track) => track.id === placement.track.id)
+      ? doc.tracks
+      : [...doc.tracks, placement.track],
   };
 }
 export function applyAIActions(
@@ -143,7 +156,15 @@ export function applyAIActions(
             : c,
         ),
       };
-    if (action.type === 'trim' && action.targetClipId && !d.clips.some((c) => c.id === action.targetClipId && c.duration > action.seconds + 0.2)) throw new Error('Trim exceeds the selected clip duration.');
+    if (
+      action.type === "trim" &&
+      action.targetClipId &&
+      !d.clips.some(
+        (c) =>
+          c.id === action.targetClipId && c.duration > action.seconds + 0.2,
+      )
+    )
+      throw new Error("Trim exceeds the selected clip duration.");
     if (action.type === "trim" && action.targetClipId)
       return {
         ...d,
@@ -173,8 +194,10 @@ export function applyAIActions(
           ];
         }),
       };
-    if (!action.segments?.length) throw new Error('No transcript captions available.');
-    if (d.clips.length + action.segments.length > 150) throw new Error('Caption proposal exceeds the 150 clip timeline limit.');
+    if (!action.segments?.length)
+      throw new Error("No transcript captions available.");
+    if (d.clips.length + action.segments.length > 150)
+      throw new Error("Caption proposal exceeds the 150 clip timeline limit.");
     let next = d;
     for (const segment of action.segments)
       next = addAsset(

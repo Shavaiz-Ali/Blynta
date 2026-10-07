@@ -109,4 +109,5 @@ export { AppDisclosure } from "./components/AppDisclosure";
 export { AppFileInput } from "./components/AppFileInput";
 
 export { ThemeToggle } from "./components/ThemeToggle";
+export { AppThemeProvider } from "./components/AppThemeProvider";
 export { AppIdentityAvatar } from "./components/AppIdentityAvatar";

@@ -11,6 +11,7 @@ const modules = [
   "features/studio/editor/stores/playback-clock.ts",
   "features/studio/projects/mock-data.ts",
   "features/studio/editor/stores/editor-store.ts",
+  "features/studio/editor/utils/timeline.ts",
   "features/studio/projects/document.ts",
   "features/studio/editor/stores/save-session.ts",
   "features/studio/api.ts",
@@ -72,7 +73,7 @@ try {
         .href
     )
   ).default;
-  const { editorReducer, patchClip, splitClip, applyAIActions } = (
+  const { editorReducer, patchClip, splitClip, applyAIActions, addAsset } = (
     await import(
       pathToFileURL(
         path.join(tmp, "features/studio/editor/stores/editor-store.js"),
@@ -80,6 +81,82 @@ try {
     )
   ).default;
   const doc = mockProjects()[0];
+  const { timelineTime } = (
+    await import(
+      pathToFileURL(path.join(tmp, "features/studio/editor/utils/timeline.js"))
+        .href
+    )
+  ).default;
+  assert.equal(
+    timelineTime(100, -220, 64),
+    5,
+    "scrolled content coordinates include scroll offset once",
+  );
+  assert.equal(timelineTime(80, 100, 64), 0);
+  const empty = {
+    ...doc,
+    clips: [],
+    tracks: doc.tracks.filter((track) => track.kind === "video"),
+  };
+  const mediaA = { ...doc.assets[0], id: "drop-a", duration: 10 };
+  const mediaB = { ...mediaA, id: "drop-b", duration: 5 };
+  const a = addAsset(empty, mediaA, 20);
+  const b = addAsset(a, mediaB, 25);
+  assert.equal(a.clips[0].start, 20);
+  assert.equal(b.clips[1].start, 30, "intersecting drop follows existing clip");
+  assert.equal(b.clips[0], a.clips[0], "second drop preserves first clip");
+  assert.equal(b.clips[1].trackId, a.clips[0].trackId);
+  assert.equal(
+    b.tracks.length,
+    a.tracks.length,
+    "sequential video doesn't create extra tracks",
+  );
+  const customTracks = {
+    ...empty,
+    tracks: [{ ...empty.tracks[0], id: "custom-visual" }],
+  };
+  assert.equal(
+    addAsset(customTracks, mediaA, 2).clips[0].trackId,
+    "custom-visual",
+  );
+  const staleMetadata = { ...empty, assets: [{ ...mediaA, duration: 0 }] };
+  assert.equal(
+    addAsset(staleMetadata, mediaA, 0).assets[0].duration,
+    10,
+    "refreshed source metadata persists with the clip",
+  );
+  const still = addAsset(
+    b,
+    { ...mediaB, id: "still", kind: "image", duration: 0 },
+    40,
+  );
+  assert.equal(still.clips.at(-1).duration, 5);
+  const audio = addAsset(b, { ...mediaB, id: "audio-drop", kind: "audio" }, 10);
+  assert.equal(audio.tracks.at(-1).kind, "audio");
+  assert.equal(audio.clips.at(-1).trackId, audio.tracks.at(-1).id);
+  assert.equal(addAsset(audio, { ...mediaB, status: "processing" }, 40), audio);
+  assert.equal(addAsset(audio, { ...mediaB, duration: NaN }, 40), audio);
+  assert.equal(
+    addAsset(audio, mediaB, 3598),
+    audio,
+    "timeline limit rejects overflow",
+  );
+  const lockedDrop = {
+    ...audio,
+    tracks: audio.tracks.map((track) => ({ ...track, locked: true })),
+  };
+  assert.equal(addAsset(lockedDrop, mediaB, 50), lockedDrop);
+  const dropHistory = editorReducer(
+    { past: [], present: a, future: [] },
+    { type: "edit", apply: (d) => addAsset(d, mediaB, 30) },
+  );
+  assert.equal(editorReducer(dropHistory, { type: "undo" }).present, a);
+  assert.equal(
+    editorReducer(editorReducer(dropHistory, { type: "undo" }), {
+      type: "redo",
+    }).present,
+    dropHistory.present,
+  );
   const history = { past: [], present: doc, future: [] };
   const edit = editorReducer(history, {
     type: "edit",

@@ -19,6 +19,8 @@ if (process.env.NODE_ENV === "production") {
   }
 }
 const nextConfig: NextConfig = {
+  // Keep the development badge clear of the rail's theme control.
+  devIndicators: { position: "bottom-right" },
   env: {
     NEXT_PUBLIC_BLYNTA_URL: mainAppUrl ? new URL(mainAppUrl).origin : "",
   },
