@@ -1,16 +1,6 @@
 "use client";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Sparkles,
-  Settings2,
-  CloudCheck,
-  Download,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightOpen,
-  PanelRightClose,
-} from "lucide-react";
+import { ArrowLeft, Settings2, CloudCheck, Download } from "lucide-react";
 import { UserDropdown } from "@/components/common/UserDropdown";
 import { AppButton, AppHeader, AppPopover } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
@@ -19,14 +9,14 @@ import { useEditor } from "../hooks/useEditor";
 export function EditorToolbar({ onExport }: { onExport: () => void }) {
   const e = useEditor();
   return (
-    <AppHeader className="editor-toolbar col-start-2 row-start-1 grid md:flex h-auto md:h-14">
+    <AppHeader className="flex h-auto min-h-12 shrink-0 flex-wrap items-center gap-2 rounded-xl bg-card px-3 ring-1 ring-border/60 py-1.5 md:h-12 md:flex-nowrap">
       <AppTooltip content="Back to projects">
         <AppButton
           nativeButton={false}
           role="link"
           render={<Link href="/dashboard" />}
           variant="ghost"
-          size="icon-sm"
+          size="icon"
           aria-label="Back to projects"
         >
           <ArrowLeft />
@@ -34,14 +24,15 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
       </AppTooltip>
       <AppInput
         aria-label="Project name"
-        className="bg-background/80"
-        wrapperClassName="project-name min-w-0 flex-1 md:max-w-md"
+        className="h-8 border-transparent bg-transparent px-2 text-sm font-medium shadow-none hover:bg-muted/40 focus-visible:border-ring dark:bg-transparent dark:hover:bg-muted/40"
+        title="Rename project"
+        wrapperClassName="min-w-20 flex-1 max-w-80"
         value={e.doc.name}
         maxLength={100}
         onChange={(v) => e.edit((d) => ({ ...d, name: v.target.value }))}
       />
       <span
-        className="hidden xl:flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
+        className="ml-auto hidden lg:flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground"
         role="status"
       >
         <CloudCheck className="h-4 w-4" />
@@ -59,44 +50,11 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
           Retry save
         </AppButton>
       )}
-      <div className="editor-actions ml-auto flex items-center gap-1.5">
-        <AppTooltip content="Toggle media panel">
-          <AppButton
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Toggle media panel"
-            aria-pressed={e.contextOpen}
-            onClick={() => {
-              if (window.innerWidth < 1100) {
-                e.setAiOpen(false);
-                e.setInspectorOpen(false);
-              }
-              e.setContextOpen(!e.contextOpen);
-            }}
-          >
-            {e.contextOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
-          </AppButton>
-        </AppTooltip>
-        <AppTooltip content="Toggle properties panel">
-          <AppButton
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Toggle properties panel"
-            aria-pressed={e.inspectorOpen && !e.aiOpen}
-            onClick={() => {
-              if (window.innerWidth < 1100) e.setContextOpen(false);
-              if (e.aiOpen) {
-                e.setAiOpen(false);
-                e.setInspectorOpen(true);
-              } else e.setInspectorOpen(!e.inspectorOpen);
-            }}
-          >
-            {e.inspectorOpen ? <PanelRightClose /> : <PanelRightOpen />}
-          </AppButton>
-        </AppTooltip>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <AppButton
           id="editor-ai-launcher"
-          variant={e.aiOpen ? "secondary" : "outline"}
+          variant="ghost"
+          className={`h-8 ${e.aiOpen ? "bg-primary/10 text-primary" : "text-muted-foreground"}`}
           size="sm"
           aria-label="Open Blynta AI chat"
           aria-controls="editor-ai-chat"
@@ -106,10 +64,14 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             if (window.innerWidth < 1100) e.setContextOpen(false);
           }}
         >
-          <Sparkles />
-          <span className="hidden sm:inline">Blynta AI</span>
+          Blynta AI
         </AppButton>
-        <AppButton size="sm" aria-label="Export project" onClick={onExport}>
+        <span className="mx-1 h-5 w-px bg-border/60" aria-hidden="true" />
+        <AppButton
+          size="default"
+          aria-label="Export project"
+          onClick={onExport}
+        >
           <Download />
           <span className="hidden sm:inline">Export</span>
         </AppButton>
@@ -118,7 +80,7 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
           trigger={
             <AppButton
               variant="ghost"
-              size="icon-sm"
+              size="icon"
               aria-label="Project settings"
             >
               <Settings2 />
@@ -135,8 +97,24 @@ export function EditorToolbar({ onExport }: { onExport: () => void }) {
             <dt className="text-muted-foreground">Preview frame rate</dt>
             <dd>30 fps</dd>
           </dl>
+          <div className="border-t border-border px-4 py-3">
+            <AppButton
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                e.setAiOpen(false);
+                e.setInspectorOpen(true);
+                if (window.innerWidth < 1100) e.setContextOpen(false);
+              }}
+            >
+              Open properties
+            </AppButton>
+          </div>
         </AppPopover>
-        <UserDropdown />
+        <div className="ml-1 border-l border-border/60 pl-3">
+          <UserDropdown />
+        </div>
       </div>
     </AppHeader>
   );

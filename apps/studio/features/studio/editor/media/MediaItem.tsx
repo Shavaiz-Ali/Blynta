@@ -40,46 +40,46 @@ export function MediaItem({ asset }: { asset: Asset }) {
       onDragStart={(v) =>
         v.dataTransfer.setData("application/blynta-asset", asset.id)
       }
-      className="media-item min-w-0 items-stretch"
+      className={`media-item min-w-0 cursor-grab items-stretch rounded-lg border-transparent bg-muted/25 hover:bg-muted/50 active:cursor-grabbing ${e.selected?.assetId === asset.id ? "ring-1 ring-primary/40" : ""}`}
       contentClassName="min-w-0 w-full"
     >
-      <AppTooltip content={`${asset.name} · Click to add, or drag to timeline`}>
+      <AppTooltip
+        content={`${asset.name} · ${asset.kind} · Click to add, or drag to timeline`}
+      >
         <AppButton
           variant="ghost"
-          className="media-item-main block h-auto w-full justify-start rounded-none p-0 [&>span]:block [&>span]:w-full [&>span>span]:block"
-          contentClassName="flex w-full flex-col items-stretch gap-0 text-left"
+          className="block h-auto w-full cursor-grab justify-start rounded-none p-0 active:cursor-grabbing [&>span]:flex [&>span]:w-full"
+          contentClassName="flex w-full items-center text-left"
           onClick={() => e.add(asset)}
           aria-label={`Add ${asset.name} to timeline`}
         >
-          <span
-            className={`relative block w-full h-20 overflow-hidden asset-thumbnail ${asset.kind === "audio" ? "audio-thumb" : asset.origin === "Blynta demo" ? "demo-scene" : "bg-muted"}`}
-          >
+          <span className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded bg-muted text-muted-foreground">
             {asset.thumbnail || (asset.src && asset.kind === "image") ? (
               <Image
                 src={asset.thumbnail || asset.src!}
                 alt=""
                 fill
                 unoptimized
-                style={{ objectFit: "cover" }}
+                className="object-cover"
               />
             ) : asset.src && asset.kind === "video" ? (
               <video
                 src={asset.src}
                 muted
                 preload="metadata"
-                className="media-thumbnail-video"
+                className="h-full w-full object-cover"
               />
             ) : (
               <Icon size={18} />
             )}
-          </span>
-          <span className="media-item-label block min-w-0 w-full p-2 text-left">
-            <span className="truncate block text-xs font-medium leading-5">
-              {asset.name}
-            </span>
-            <span className="block mt-1 text-[10px] text-muted-foreground">
-              {formatTime(asset.duration).slice(0, 5)}
-            </span>
+            {asset.kind === "video" && (
+              <span
+                data-media-duration
+                className="absolute bottom-1.5 right-1.5 rounded bg-card/95 px-1.5 py-0.5 text-[11px] tabular-nums text-foreground ring-1 ring-border/60"
+              >
+                {formatTime(asset.duration).slice(0, 5)}
+              </span>
+            )}
           </span>
         </AppButton>
       </AppTooltip>

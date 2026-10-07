@@ -161,7 +161,7 @@ export function EditorTaskPanel({ onExport }: { onExport: () => void }) {
   const e = useEditor();
   return (
     <div
-      className="right-workspace border border-border"
+      className="right-workspace col-start-3! row-start-1! flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl! border! border-border bg-card [&[hidden]]:hidden max-[979px]:absolute! max-[979px]:inset-y-0 max-[979px]:right-0 max-[979px]:z-25 max-[979px]:w-[min(var(--inspector-width),calc(100%-24px))] max-[979px]:shadow-lg min-[980px]:static!"
       hidden={!e.aiOpen && !e.inspectorOpen}
       aria-label={
         e.aiOpen

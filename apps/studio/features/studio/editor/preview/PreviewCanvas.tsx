@@ -1,10 +1,23 @@
 "use client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Image from "next/image";
-import { Film, Upload } from "lucide-react";
+import {
+  Film,
+  Upload,
+  ChevronDown,
+  MoreHorizontal,
+  Check,
+  Ratio,
+} from "lucide-react";
 import { AppButton } from "@blynta/ui";
-import { AppSelect } from "@blynta/ui";
-import { PlayerControls } from "@blynta/ui/player";
+import { PlaybackControls } from "./PlaybackControls";
+import {
+  AppDropdown,
+  AppPopover,
+  AppTooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@blynta/ui";
 import { AppSlider } from "@blynta/ui";
 import { useEditorPlayback } from "../hooks/useEditor";
 import { AppFileInput } from "@blynta/ui";
@@ -181,11 +194,120 @@ export function PreviewCanvas() {
   const [w, h] = e.doc.ratio.split(":").map(Number);
   return (
     <section
-      className="preview-area border border-border bg-card"
+      className="@container/preview col-start-2 row-start-1 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl bg-card ring-1 ring-border/60"
+      data-preview-workspace
       aria-label="Video preview"
     >
       <div
-        className={`preview-stage ${zoom === "100" ? "actual-size" : ""}`}
+        className="flex h-10 shrink-0 items-center justify-between gap-2 px-3"
+        aria-label="Preview toolbar"
+        data-preview-toolbar
+      >
+        <div className="flex items-center gap-1">
+          <AppTooltip>
+            <AppDropdown
+              align="start"
+              trigger={
+                <TooltipTrigger
+                  render={
+                    <AppButton
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 font-mono text-xs"
+                      aria-label="Preview zoom"
+                    >
+                      {zoom === "fit" ? "Fit" : "100%"}
+                      <ChevronDown className="size-3.5 text-muted-foreground" />
+                    </AppButton>
+                  }
+                />
+              }
+              items={[
+                {
+                  label: "Fit to workspace",
+                  icon:
+                    zoom === "fit" ? <Check className="size-4" /> : undefined,
+                  onClick: () => setZoom("fit"),
+                },
+                {
+                  label: "Actual size · 100%",
+                  icon:
+                    zoom === "100" ? <Check className="size-4" /> : undefined,
+                  onClick: () => setZoom("100"),
+                },
+              ]}
+            />
+            <TooltipContent>Preview zoom</TooltipContent>
+          </AppTooltip>
+          <span className="mx-1 h-4 w-px bg-border/60" aria-hidden="true" />
+          <AppTooltip>
+            <AppDropdown
+              align="start"
+              label="Canvas aspect ratio"
+              trigger={
+                <TooltipTrigger
+                  render={
+                    <AppButton
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs"
+                      aria-label="Canvas aspect ratio"
+                    >
+                      <Ratio className="size-4 text-muted-foreground" />
+                      {e.doc.ratio}
+                      <ChevronDown className="size-3.5 text-muted-foreground" />
+                    </AppButton>
+                  }
+                />
+              }
+              items={["16:9", "9:16", "1:1", "4:5"].map((ratio) => ({
+                label: ratio,
+                icon:
+                  e.doc.ratio === ratio ? (
+                    <Check className="size-4" />
+                  ) : undefined,
+                onClick: () =>
+                  e.edit((doc) => ({
+                    ...doc,
+                    ratio: ratio as typeof doc.ratio,
+                  })),
+              }))}
+            />
+            <TooltipContent>Canvas aspect ratio</TooltipContent>
+          </AppTooltip>
+        </div>
+        <span className="text-xs font-medium text-muted-foreground @max-[480px]/preview:hidden">
+          Preview
+        </span>
+        <AppTooltip>
+          <AppPopover
+            title="Preview information"
+            trigger={
+              <TooltipTrigger
+                render={
+                  <AppButton
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Preview information"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </AppButton>
+                }
+              />
+            }
+          >
+            <dl className="grid grid-cols-[1fr_auto] gap-x-6 gap-y-2 p-4 text-xs">
+              <dt className="text-muted-foreground">Preview frame rate</dt>
+              <dd>30 fps</dd>
+              <dt className="text-muted-foreground">Canvas</dt>
+              <dd>{e.doc.ratio}</dd>
+            </dl>
+          </AppPopover>
+          <TooltipContent>Preview information</TooltipContent>
+        </AppTooltip>
+      </div>
+      <div
+        className={`relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden bg-muted/25 p-2 [container-type:size] fullscreen:bg-background fullscreen:p-3 fullscreen:items-center! fullscreen:justify-center! fullscreen:overflow-hidden! ${zoom === "100" ? "overflow-auto! items-start! justify-start!" : ""}`}
         ref={stage}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
@@ -205,7 +327,8 @@ export function PreviewCanvas() {
       >
         <div
           ref={frame}
-          className={`preview-frame ${active.length ? "" : "preview-frame-empty"}`}
+          data-preview-frame
+          className="relative shrink-0 overflow-hidden rounded bg-background w-[min(100cqw,calc(100cqh*var(--frame-ratio)))] in-[:fullscreen]:w-[min(100cqw,calc(100cqh*var(--frame-ratio)))]!"
           style={
             {
               aspectRatio: `${w}/${h}`,
@@ -270,69 +393,36 @@ export function PreviewCanvas() {
           {error}
         </p>
       )}
-      <div className="preview-controls">
-        <PlayerControls
-          appearance="surface"
-          className="studio-player-controls"
-          disabled={!e.duration}
-          isPlaying={e.playing}
-          onTogglePlay={e.togglePlay}
-          isMuted={muted}
-          volume={volume / 100}
-          onToggleMute={() => setMuted(!muted)}
-          onVolumeChange={(event) =>
-            setVolume(Number(event.target.value) * 100)
-          }
-          currentTime={e.playhead}
-          duration={e.duration}
-          isFullscreen={fullscreen}
-          onPreviousFrame={() => e.seek(Math.max(0, e.playhead - 1 / 30))}
-          onNextFrame={() => e.seek(Math.min(e.duration, e.playhead + 1 / 30))}
-          onToggleFullscreen={() => {
-            if (document.fullscreenElement) void document.exitFullscreen();
-            else stage.current?.requestFullscreen().catch(() => {});
-          }}
-          actions={
-            <>
-              <AppSelect
-                aria-label="Canvas aspect ratio"
-                size="sm"
-                wrapperClassName="w-32!"
-                value={e.doc.ratio}
-                onValueChange={(value) =>
-                  e.edit((doc) => ({
-                    ...doc,
-                    ratio: value as typeof doc.ratio,
-                  }))
-                }
-                options={["16:9", "9:16", "1:1", "4:5"].map((value) => ({
-                  value,
-                  label: `Canvas ${value}`,
-                }))}
-              />
-              <AppSelect
-                aria-label="Preview zoom"
-                size="sm"
-                wrapperClassName="w-20!"
-                value={zoom}
-                onValueChange={setZoom}
-                options={[
-                  { value: "fit", label: "Fit" },
-                  { value: "100", label: "100%" },
-                ]}
-              />
-            </>
-          }
-        />
+      <div className="shrink-0 px-3 pt-1 pb-1">
         <AppSlider
           label="Seek preview"
-          className="preview-seek"
+          className="h-3 [&_[data-slot=slider-track]]:h-1 [&_[data-slot=slider-thumb]]:size-3"
           value={e.playhead}
           min={0}
           max={e.duration || 1}
           step={1 / 30}
           disabled={!e.duration}
           onValueChange={e.seek}
+        />
+
+        <PlaybackControls
+          disabled={!e.duration}
+          playing={e.playing}
+          onTogglePlay={e.togglePlay}
+          muted={muted}
+          volume={volume}
+          onToggleMute={() => setMuted(!muted)}
+          onVolumeChange={setVolume}
+          onFit={() => setZoom("fit")}
+          currentTime={e.playhead}
+          duration={e.duration}
+          fullscreen={fullscreen}
+          onPreviousFrame={() => e.seek(Math.max(0, e.playhead - 1 / 30))}
+          onNextFrame={() => e.seek(Math.min(e.duration, e.playhead + 1 / 30))}
+          onToggleFullscreen={() => {
+            if (document.fullscreenElement) void document.exitFullscreen();
+            else stage.current?.requestFullscreen().catch(() => {});
+          }}
         />
       </div>
     </section>

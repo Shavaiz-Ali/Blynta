@@ -1,11 +1,11 @@
 "use client";
 import { useState, useRef, type CSSProperties } from "react";
 import { useSession } from "next-auth/react";
-import Link from "next/link";
-import { AppButton, AppResizeHandle } from "@blynta/ui";
+import { AppResizeHandle } from "@blynta/ui";
 import { useQuery } from "@tanstack/react-query";
 import { studioApi, studioKeys } from "../../api";
 import { EditorLoading } from "./EditorLoading";
+import { EditorUnavailable } from "./EditorUnavailable";
 import { EditorContext, useEditorState } from "../hooks/useEditor";
 import { EditorToolbar } from "./EditorToolbar";
 import { MediaPanel, EditorToolRail } from "../media/MediaPanel";
@@ -31,7 +31,8 @@ export function EditorWorkspace({
     <EditorContext.Provider value={e}>
       <main
         ref={shell}
-        className={`editor-shell grid-cols-[56px_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_22px] pr-2 md:grid-cols-[72px_minmax(0,1fr)] md:grid-rows-[56px_minmax(0,1fr)_22px] md:pr-4 ${e.contextOpen ? "" : "context-collapsed"} ${taskOpen ? "task-open" : ""}`}
+        className="flex h-dvh min-h-0 min-w-0 gap-3 overflow-hidden bg-background p-2 text-foreground md:p-3"
+        data-editor-shell
         style={
           {
             "--media-width": `${e.mediaWidth}px`,
@@ -42,59 +43,75 @@ export function EditorWorkspace({
         }
       >
         <EditorToolRail />
-        <EditorToolbar onExport={() => setExportOpen(true)} />
         <div
-          className={`editor-workspace col-start-2 row-start-2 grid-cols-[0_minmax(0,1fr)] ${e.contextOpen ? "min-[1100px]:grid-cols-[var(--media-width)_minmax(0,1fr)] min-[1100px]:gap-x-4" : ""} [&>.resize-x]:hidden min-[1180px]:[&>.resize-x]:block`}
+          className="flex min-h-0 min-w-0 flex-1 flex-col gap-3"
+          data-main-editor
         >
-          <MediaPanel />
-          {e.contextOpen && (
-            <AppResizeHandle
-              label="Resize media panel"
-              axis="x"
-              value={e.mediaWidth}
-              min={240}
-              max={320}
-              onValuePreview={(value) => previewSize("--media-width", value)}
-              onValueChange={e.setMediaWidth}
-            />
-          )}
+          <EditorToolbar onExport={() => setExportOpen(true)} />
           <div
-            className={`editor-stage ${taskOpen ? "min-[980px]:gap-x-4" : ""} [&>.resize-end]:right-[calc(var(--task-width)+5px)]`}
+            className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_8px_var(--timeline-height)] [&>.resize-y]:opacity-30 [&>.resize-y:hover]:opacity-100 [&>.resize-y:focus-visible]:opacity-100 [&>.resize-y]:transition-opacity"
+            data-editor-body
           >
-            <PreviewCanvas />
-            {taskOpen && (
-              <AppResizeHandle
-                label={e.aiOpen ? "Resize AI panel" : "Resize properties panel"}
-                axis="x"
-                reverse
-                end
-                value={e.aiOpen ? e.aiWidth : e.inspectorWidth}
-                min={e.aiOpen ? 320 : 260}
-                max={e.aiOpen ? 400 : 340}
-                onValuePreview={(value) =>
-                  previewSize("--inspector-width", value)
-                }
-                onValueChange={e.aiOpen ? e.setAiWidth : e.setInspectorWidth}
-              />
-            )}
-            <EditorTaskPanel onExport={() => setExportOpen(true)} />
+            <div
+              className={`relative grid min-h-0 min-w-0 grid-cols-[0_minmax(0,1fr)_var(--right-width)] ${e.contextOpen ? "min-[1100px]:grid-cols-[var(--left-width)_minmax(0,1fr)_var(--right-width)] min-[1100px]:gap-x-3" : ""} ${taskOpen ? "min-[980px]:[--right-width:var(--inspector-width)] min-[980px]:gap-x-3" : ""} [--right-width:0px] [&>.resize-x]:opacity-0 [&>.resize-x:hover]:opacity-100 [&>.resize-x:focus-visible]:opacity-100 [&>.resize-x]:transition-opacity [&>.resize-x]:absolute [&>.resize-x]:inset-y-0 [&>.resize-x]:z-30 [&>.resize-x]:hidden min-[1100px]:[&>.resize-x]:block [&>.resize-x:not(.resize-end)]:left-[calc(var(--left-width)+3px)] [&>.resize-end]:right-[calc(var(--right-width)+3px)]`}
+              data-upper-workspace
+            >
+              <MediaPanel />
+              {e.contextOpen && (
+                <AppResizeHandle
+                  label="Resize media panel"
+                  axis="x"
+                  value={e.mediaWidth}
+                  min={260}
+                  max={330}
+                  onValuePreview={(value) => {
+                    previewSize("--media-width", value);
+                    previewSize("--left-width", value);
+                  }}
+                  onValueChange={e.setMediaWidth}
+                />
+              )}
+              <PreviewCanvas />
+              {taskOpen && (
+                <AppResizeHandle
+                  label={
+                    e.aiOpen ? "Resize AI panel" : "Resize properties panel"
+                  }
+                  axis="x"
+                  reverse
+                  end
+                  value={e.aiOpen ? e.aiWidth : e.inspectorWidth}
+                  min={280}
+                  max={360}
+                  onValuePreview={(value) =>
+                    previewSize("--inspector-width", value)
+                  }
+                  onValueChange={e.aiOpen ? e.setAiWidth : e.setInspectorWidth}
+                />
+              )}
+              <EditorTaskPanel onExport={() => setExportOpen(true)} />
+            </div>
+            <AppResizeHandle
+              label="Resize timeline"
+              axis="y"
+              reverse
+              value={e.timelineHeight}
+              min={180}
+              max={e.maxTimeline}
+              onValuePreview={(value) =>
+                previewSize("--timeline-height", value)
+              }
+              onValueChange={e.setTimelineHeight}
+            />
+            <Timeline />
           </div>
-          <AppResizeHandle
-            label="Resize timeline"
-            axis="y"
-            reverse
-            value={e.timelineHeight}
-            min={180}
-            max={e.maxTimeline}
-            onValuePreview={(value) => previewSize("--timeline-height", value)}
-            onValueChange={e.setTimelineHeight}
-          />
-          <Timeline />
+          <footer className="flex h-4 shrink-0 items-center justify-between gap-3 px-1 text-[10px] text-muted-foreground">
+            <span role="status">{e.saveState} · Cloud project</span>
+            <span className="hidden md:inline">
+              Space to play · S to split · Ctrl/⌘ K for AI
+            </span>
+          </footer>
         </div>
-        <footer className="editor-status col-start-2 row-start-3">
-          <span role="status">{e.saveState} · Cloud project</span>
-          <span>Space to play · S to split · Ctrl/⌘ K for AI</span>
-        </footer>
       </main>
       <ExportDialog open={exportOpen} onOpenChange={setExportOpen} />
     </EditorContext.Provider>
@@ -113,23 +130,7 @@ export function EditorShell({ projectId }: { projectId: string }) {
   const project = query.data;
   if (error || !project || !session)
     return (
-      <main className="p-12">
-        <h1 className="text-xl font-medium">
-          {error ? "Unable to open project" : "Project not found"}
-        </h1>
-        <p className="my-4 text-muted-foreground">
-          {error ||
-            "This project may have been removed or belongs to another account."}
-        </p>
-        {error && (
-          <AppButton variant="outline" onClick={() => void query.refetch()}>
-            Retry opening project
-          </AppButton>
-        )}
-        <Link className="text-primary" href="/dashboard">
-          Back to projects
-        </Link>
-      </main>
+      <EditorUnavailable error={error} onRetry={() => void query.refetch()} />
     );
   return (
     <EditorWorkspace

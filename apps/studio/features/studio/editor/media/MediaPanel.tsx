@@ -52,7 +52,8 @@ export function EditorToolRail() {
   const e = useEditor();
   return (
     <nav
-      className="tool-rail col-start-1 row-span-3 row-start-1 w-14 gap-2 border-r border-border md:w-[72px]"
+      className="flex w-14 shrink-0 flex-col gap-1 overflow-y-auto rounded-xl border border-sidebar-border bg-sidebar text-sidebar-foreground px-1 py-3 md:w-[72px]"
+      data-editor-rail
       aria-label="Editor tools"
     >
       <Link
@@ -60,7 +61,7 @@ export function EditorToolRail() {
         className="mb-3 grid min-h-10 place-items-center"
         aria-label="Blynta projects"
       >
-        <StudioLogo collapsed />
+        <StudioLogo collapsed size={28} />
       </Link>
       {tools.map((t) => (
         <AppTooltip key={t.name} content={t.name}>
@@ -69,7 +70,7 @@ export function EditorToolRail() {
             icon={<t.icon />}
             rail
             active={e.contextOpen && e.tool === t.name}
-            className="editor-tool-item w-full px-1"
+            className="min-h-14 w-full shrink-0 gap-1 px-1 text-[11px] shadow-none [&>span>svg]:size-5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
             aria-label={t.name}
             aria-pressed={e.contextOpen && e.tool === t.name}
             onClick={() => {
@@ -83,7 +84,7 @@ export function EditorToolRail() {
           />
         </AppTooltip>
       ))}
-      <div className="mt-auto grid place-items-center pt-6 pb-10">
+      <div className="mt-auto grid place-items-center pt-6">
         <ThemeToggle />
       </div>
     </nav>
@@ -110,14 +111,21 @@ export function MediaPanel() {
   );
   return (
     <aside
-      className={`media-area border border-border max-[1099px]:absolute max-[1099px]:inset-y-0 max-[1099px]:bottom-[calc(var(--timeline-height)+8px)] max-[1099px]:left-0 max-[1099px]:z-25 max-[1099px]:w-(--media-width) max-[1099px]:shadow-lg ${e.contextOpen ? "" : "hidden"}`}
+      data-project-tools
+      aria-label="Project tools"
+      className={`col-start-1 row-start-1 min-h-0 min-w-0 overflow-hidden rounded-xl bg-card ring-1 ring-border/60 max-[1099px]:absolute max-[1099px]:inset-y-0 max-[1099px]:left-0 max-[1099px]:z-25 max-[1099px]:w-(--media-width) max-[1099px]:shadow-lg ${e.contextOpen ? "flex" : "hidden"}`}
     >
-      <div className="tool-panel static w-full">
-        <div className="panel-heading">
-          <h2>{e.tool === "Media" ? "Media library" : e.tool}</h2>
+      <div className="flex min-h-0 min-w-0 w-full flex-col">
+        <div className="flex h-14 shrink-0 items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">Project tools</h2>
+            <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              {e.tool}
+            </span>
+          </div>
           <AppButton
             variant="ghost"
-            size="icon-xs"
+            size="icon"
             title="Collapse contextual panel"
             aria-label="Collapse contextual panel"
             onClick={() => e.setContextOpen(false)}
@@ -125,15 +133,15 @@ export function MediaPanel() {
             <PanelLeftClose />
           </AppButton>
         </div>
-        <AppScrollArea className="flex-1">
-          <div className="media-panel-body">
+        <AppScrollArea className="min-h-0 flex-1">
+          <div className="px-4 pb-4">
             {e.tool === "Media" || e.tool === "Audio" ? (
               <>
                 <AppInput
                   aria-label="Search media"
-                  className="bg-background/80"
+                  className="border-transparent bg-muted/50 text-sm shadow-none"
                   size="default"
-                  prefixIcon={<Search className="h-3.5 w-3.5" />}
+                  prefixIcon={<Search className="size-4" />}
                   value={search}
                   onChange={(v) => setSearch(v.target.value)}
                   placeholder="Search media & files"
@@ -155,10 +163,10 @@ export function MediaPanel() {
                 )}
                 {e.tool === "Media" && (
                   <AppTabs
-                    variant="default"
-                    size="sm"
-                    listClassName="w-full"
-                    triggerClassName="min-w-0 flex-1 px-1.5"
+                    variant="line"
+                    size="default"
+                    listClassName="w-full border-border/50"
+                    triggerClassName="min-w-0 flex-1 rounded-none border-0 border-b-2 border-transparent px-1 text-xs data-selected:border-primary data-active:border-primary aria-selected:border-primary"
                     value={source}
                     onValueChange={setSource}
                     className="mt-3"
@@ -171,13 +179,13 @@ export function MediaPanel() {
                 )}
                 {e.tool === "Media" && (
                   <AppTabs
-                    variant="default"
-                    size="sm"
-                    listClassName="w-full"
-                    triggerClassName="min-w-0 flex-1 px-1.5"
+                    variant="pills"
+                    size="default"
+                    listClassName="w-full border-0 bg-transparent p-0 shadow-none dark:bg-transparent"
+                    triggerClassName="min-w-0 flex-1 border-0 px-1.5 text-xs data-selected:bg-muted data-selected:text-foreground data-active:bg-muted data-active:text-foreground aria-selected:bg-muted aria-selected:text-foreground data-[state=active]:bg-muted data-[state=active]:text-foreground"
                     value={filter}
                     onValueChange={setFilter}
-                    className="mt-3"
+                    className="mt-2"
                     tabs={[
                       { value: "all", label: "All" },
                       { value: "video", label: "Video" },
@@ -188,8 +196,8 @@ export function MediaPanel() {
                 )}
                 <AppButton
                   size="sm"
-                  variant="outline"
-                  className="w-full mt-3"
+                  variant="secondary"
+                  className="mt-4 h-9 w-full bg-primary/10 text-primary hover:bg-primary/15"
                   icon={<Upload className="h-3.5 w-3.5" />}
                   isLoading={busy}
                   onClick={() => fileRef.current?.click()}
@@ -232,7 +240,7 @@ export function MediaPanel() {
                       ))}
                   </section>
                 )}
-                <div className="media-library-grid grid-cols-2">
+                <div className="mt-4 grid grid-cols-1 gap-2">
                   {assets.map((asset) => (
                     <MediaItem key={asset.id} asset={asset} />
                   ))}

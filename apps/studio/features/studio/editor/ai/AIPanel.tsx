@@ -1,14 +1,17 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import {
-  Sparkles,
   ArrowUp,
   Check,
   RotateCcw,
   X,
   WandSparkles,
+  Scissors,
+  Captions,
+  Smartphone,
+  Volume2,
 } from "lucide-react";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppTooltip } from "@blynta/ui";
 import { studioApi } from "../../api";
 import { AppScrollArea } from "@blynta/ui";
 import { AppTextarea } from "@blynta/ui";
@@ -31,14 +34,17 @@ function AIProposalResult({
   canUndo: boolean;
 }) {
   return (
-    <div className="ai-proposal">
-      <div className="flex items-center gap-2 text-xs font-semibold">
+    <div
+      className="rounded-lg bg-muted/40 p-3 ring-1 ring-border/50"
+      data-ai-proposal
+    >
+      <div className="flex items-center gap-2 text-sm font-semibold">
         <WandSparkles size={14} className="text-primary" />
         {proposal.discarded
           ? "Proposal discarded"
           : proposal.applied
             ? `${proposal.actions.length} edits applied`
-            : "Proposed edits"}
+            : `I’ll make ${proposal.actions.length} ${proposal.actions.length === 1 ? "change" : "changes"}`}
       </div>
       <ul className="mt-3 space-y-2 text-xs text-muted-foreground leading-relaxed">
         {proposal.descriptions.map((d) => (
@@ -48,10 +54,10 @@ function AIProposalResult({
           </li>
         ))}
       </ul>
-      <div className="flex gap-2 mt-4">
+      <div className="mt-4 flex flex-wrap gap-2">
         {proposal.applied ? (
           <AppButton
-            size="xs"
+            size="sm"
             variant="outline"
             disabled={!canUndo}
             onClick={onUndo}
@@ -170,58 +176,89 @@ export function AIPanel() {
   return (
     <aside
       id="editor-ai-chat"
-      className="ai-panel ai-chat"
+      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-card [&[hidden]]:hidden"
+      data-ai-workspace
       aria-label="Blynta AI editing agent"
       hidden={!e.aiOpen}
     >
-      <div className="ai-chat-heading">
-        <div className="ai-chat-identity">
-          <Sparkles size={20} />
+      <div
+        className="flex h-14 shrink-0 items-center justify-between gap-2 px-4"
+        data-ai-header
+      >
+        <div className="flex min-w-0 items-center gap-2.5">
           <div>
-            <h2>Blynta AI</h2>
-            <p>Your editing assistant</p>
+            <h2 className="text-sm font-semibold">Blynta AI</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Your editing assistant
+            </p>
           </div>
         </div>
-        <AppButton
-          size="icon-sm"
-          variant="ghost"
-          aria-label="Close Blynta AI"
-          onClick={close}
-        >
-          <X />
-        </AppButton>
+        <AppTooltip content="Close AI workspace">
+          <AppButton
+            size="icon"
+            variant="ghost"
+            aria-label="Close Blynta AI"
+            onClick={close}
+          >
+            <X className="size-4" />
+          </AppButton>
+        </AppTooltip>
       </div>
-      <AppScrollArea className="flex-1">
-        <div className="ai-history">
+      <AppScrollArea className="min-h-0 flex-1" data-ai-content>
+        <div className="space-y-5 px-4 py-3">
           {!history.length && (
-            <div className="ai-welcome">
-              <h3>What should we edit?</h3>
-              <p>Describe an edit. Review changes before applying them.</p>
-              <div className="ai-suggestions">
+            <div className="space-y-3" data-ai-empty-state>
+              <h3 className="text-sm font-medium">What should we edit?</h3>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Describe a change. Blynta prepares the edits for you to review
+                and apply.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-1" data-ai-suggestions>
                 {[
-                  "Trim the first 5 seconds",
-                  "Add captions",
-                  "Make this 9:16",
-                  "Lower the music volume",
-                ].map((command) => (
+                  {
+                    label: "Trim first 5s",
+                    command: "Trim the first 5 seconds",
+                    Icon: Scissors,
+                  },
+                  {
+                    label: "Add captions",
+                    command: "Add captions",
+                    Icon: Captions,
+                  },
+                  {
+                    label: "Make 9:16",
+                    command: "Make this 9:16",
+                    Icon: Smartphone,
+                  },
+                  {
+                    label: "Lower music",
+                    command: "Lower the music volume",
+                    Icon: Volume2,
+                  },
+                ].map(({ label, command, Icon }) => (
                   <AppButton
                     key={command}
                     disabled={busy}
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
-                    className="w-full h-auto min-h-9 whitespace-normal justify-start [&>span]:whitespace-normal [&>span]:shrink [&>span>span]:whitespace-normal [&>span>span]:shrink text-left"
+                    aria-label={command}
+                    className="h-10 w-full justify-start bg-muted/50 px-2 text-xs font-normal hover:bg-accent"
+                    contentClassName="w-full justify-start gap-2"
                     onClick={() => send(command)}
                   >
-                    {command}
+                    <Icon className="size-3.5 shrink-0 text-primary/80" />
+                    {label}
                   </AppButton>
                 ))}
               </div>
             </div>
           )}
           {history.map((proposal) => (
-            <div className="ai-command" key={proposal.id}>
-              <p className="ai-prompt">{proposal.prompt}</p>
-              <p className="mb-2 text-[10px] text-muted-foreground">
+            <div className="space-y-2" key={proposal.id}>
+              <p className="ml-6 rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed [overflow-wrap:anywhere]">
+                {proposal.prompt}
+              </p>
+              <p className="text-xs text-muted-foreground">
                 {proposal.scope === "clip" ? "Selected clip" : "Entire project"}
               </p>
               <AIProposalResult
@@ -297,7 +334,7 @@ export function AIPanel() {
           )}
           {busy && (
             <div
-              className="ai-proposal text-xs flex items-center justify-between"
+              className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 p-3 text-xs"
               role="status"
             >
               Preparing an edit proposal…
@@ -318,30 +355,32 @@ export function AIPanel() {
         </div>
       </AppScrollArea>
       <form
-        className="ai-composer"
+        className="shrink-0 px-3 pb-3 pt-2"
+        data-ai-composer
         onSubmit={(v) => {
           v.preventDefault();
           send();
         }}
       >
-        <div className="ai-composer-box">
+        <div className="rounded-xl bg-muted/40 p-3 ring-1 ring-border/70 transition-shadow focus-within:ring-ring/70">
           <AppTextarea
             ref={input}
             aria-label="Describe an AI edit"
+            aria-describedby="ai-composer-shortcuts"
             placeholder="Ask Blynta to edit…"
             value={prompt}
             onChange={(v) => setPrompt(v.target.value)}
             rows={2}
-            className="min-h-24 resize-none"
+            className="min-h-12 resize-none border-0 bg-transparent p-0 text-sm leading-5 shadow-none focus-visible:ring-0"
             style={{
               height: Math.min(
-                112,
-                64 + (prompt.match(/\n/g)?.length ?? 0) * 20,
+                104,
+                48 + (prompt.match(/\n/g)?.length ?? 0) * 20,
               ),
             }}
             onInput={(event) => {
-              event.currentTarget.style.height = "64px";
-              event.currentTarget.style.height = `${Math.max(64, Math.min(112, event.currentTarget.scrollHeight))}px`;
+              event.currentTarget.style.height = "48px";
+              event.currentTarget.style.height = `${Math.max(48, Math.min(104, event.currentTarget.scrollHeight))}px`;
             }}
             onKeyDown={(v) => {
               if (
@@ -354,11 +393,12 @@ export function AIPanel() {
               }
             }}
           />
-          <div className="ai-composer-actions">
+          <div className="mt-2 flex items-center justify-between gap-2">
             <AppSelect
               aria-label="Editing context"
               size="sm"
-              wrapperClassName="ai-context-select"
+              wrapperClassName="w-40!"
+              triggerClassName="h-7 border-0 bg-transparent px-1 text-xs shadow-none dark:bg-transparent hover:bg-muted"
               value={scope}
               onValueChange={setScope}
               options={[
@@ -370,17 +410,20 @@ export function AIPanel() {
                 },
               ]}
             />
-            <AppButton
-              size="icon-sm"
-              aria-label="Send AI command"
-              type="submit"
-              disabled={busy || !prompt.trim()}
-            >
-              <ArrowUp />
-            </AppButton>
+            <AppTooltip content="Enter to send · Shift + Enter for a new line">
+              <AppButton
+                size="icon"
+                className="rounded-full"
+                aria-label="Send AI command"
+                type="submit"
+                disabled={busy || !prompt.trim()}
+              >
+                <ArrowUp className="size-4" />
+              </AppButton>
+            </AppTooltip>
           </div>
         </div>
-        <p className="ai-composer-hint">
+        <p id="ai-composer-shortcuts" className="sr-only">
           Enter to send · Shift + Enter for a new line
         </p>
       </form>

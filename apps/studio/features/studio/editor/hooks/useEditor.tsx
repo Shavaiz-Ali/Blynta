@@ -63,9 +63,10 @@ export function useEditorState(project: Project, userId: string) {
   const [aiOpen, setAiOpen] = useState(
     () =>
       typeof window !== "undefined" &&
-      new URLSearchParams(window.location.search).get("ai") === "1",
+      (new URLSearchParams(window.location.search).get("ai") === "1" ||
+        window.innerWidth >= 980),
   );
-  const [zoom, setZoom] = useState(18);
+  const [zoom, setZoom] = useState(64);
   const [snapping, setSnapping] = useState(true);
   const [showAllTracks, setShowAllTracks] = useState(false);
   const mainTrack =
@@ -188,8 +189,9 @@ export function useEditorState(project: Project, userId: string) {
     select: (id: string | null) => {
       select(id);
       if (id) {
+        setAiOpen(false);
         layout.setInspectorOpen(true);
-        if (window.innerWidth < 1180) layout.setContextOpen(false);
+        if (window.innerWidth < 1100) layout.setContextOpen(false);
       }
     },
     playback,

@@ -101,12 +101,21 @@ try {
   page.on("pageerror", (error) => errors.push(error.message));
   const asset = {
     id: "image-1",
-    name: "Workspace test image",
+    name: "Northern coast",
     kind: "image",
     duration: 5,
     origin: "Upload",
     status: "ready",
     src: `${origin}/test-media.svg`,
+  };
+  const videoAsset = {
+    ...asset,
+    id: "video-1",
+    name: "Coast video",
+    kind: "video",
+    duration: 50,
+    thumbnail: asset.src,
+    src: undefined,
   };
   const clip = {
     id: "clip-1",
@@ -138,7 +147,7 @@ try {
     revision: 0,
     version: 1,
     demo: false,
-    assets: [asset],
+    assets: [asset, videoAsset],
     clips: [clip],
     tracks: [
       { id: "text", name: "Text 1", kind: "text", muted: false, hidden: false },
@@ -164,7 +173,10 @@ try {
   await page.route("**/test-media.svg", (route) =>
     route.fulfill({
       contentType: "image/svg+xml",
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect width="1280" height="720" fill="#193f47"/><circle cx="800" cy="300" r="160" fill="#608b80"/><text x="100" y="550" font-family="Arial" font-size="70" fill="white">Blynta workspace test</text></svg>',
+      body: fs.readFileSync(
+        path.join(root, "apps/studio/public/northern-light.svg"),
+        "utf8",
+      ),
     }),
   );
   await page.route("**/api/studio/**", async (route) => {
@@ -191,7 +203,7 @@ try {
         json: {
           success: true,
           data: {
-            id: "proposal",
+            id: crypto.randomUUID(),
             prompt: "Make this 9:16",
             actions: [{ type: "ratio", ratio: "9:16" }],
             descriptions: ["Convert canvas to 9:16"],
@@ -222,7 +234,13 @@ try {
       json: {
         success: true,
         data: url.pathname.endsWith("/assets")
-          ? [asset]
+          ? project.assets.map((saved) => ({
+              ...saved,
+              ...(saved.id === asset.id ? { src: asset.src } : {}),
+              ...(saved.id === videoAsset.id
+                ? { thumbnail: videoAsset.thumbnail }
+                : {}),
+            }))
           : url.pathname.endsWith("/projects")
             ? [project]
             : project,
@@ -233,7 +251,7 @@ try {
     waitUntil: "domcontentloaded",
     timeout: 120000,
   });
-  await page.locator(".editor-shell").waitFor();
+  await page.locator("[data-editor-shell]").waitFor();
   await page.getByRole("region", { name: "Video preview" }).waitFor();
   const geometry = async () =>
     page.evaluate(() => {
@@ -242,12 +260,12 @@ try {
         return { x: r.x, y: r.y, w: r.width, h: r.height };
       };
       return {
-        preview: rect(".preview-area"),
-        timeline: rect(".timeline-area"),
-        rail: rect(".tool-rail"),
-        context: rect(".tool-panel"),
+        preview: rect("[data-preview-workspace]"),
+        timeline: rect("[data-timeline-workspace]"),
+        rail: rect("[data-editor-rail]"),
+        context: rect("[data-project-tools]"),
         right: rect(".right-workspace"),
-        frame: rect(".preview-frame"),
+        frame: rect("[data-preview-frame]"),
       };
     });
   await page.screenshot({
@@ -262,24 +280,173 @@ try {
   );
   assert.equal(
     await page
-      .locator('.tool-panel [data-slot="tabs-list"]')
+      .locator('[data-project-tools] [data-slot="tabs-list"]')
       .first()
       .getAttribute("data-variant"),
-    "default",
+    "line",
   );
   let bounds = await geometry();
-  assert.equal(bounds.timeline.w, 1440);
+  assert.equal(bounds.timeline.x, bounds.rail.x + bounds.rail.w + 12);
+  assert.equal(bounds.timeline.w, 1440 - bounds.timeline.x - 12);
   assert.ok(
-    bounds.preview.w >= 1000 && bounds.frame.w > 500,
+    bounds.rail.y < bounds.preview.y &&
+      bounds.rail.h > bounds.preview.h + bounds.timeline.h,
+  );
+  assert.ok(
+    bounds.preview.w >= 650 && bounds.frame.w > 500,
     JSON.stringify(bounds),
   );
   assert.ok(bounds.timeline.h >= 280 && bounds.timeline.h <= 380);
   assert.equal(bounds.rail.w, 72);
   const card = await page.locator(".media-item").first().boundingBox();
-  assert.ok(card.height <= 80 && card.width >= 250, JSON.stringify(card));
+  assert.ok(card.height >= 130 && card.width >= 240, JSON.stringify(card));
+  const library = page.locator("[data-project-tools]");
+  const imageCard = library.locator(".media-item").filter({
+    has: page.getByRole("button", {
+      name: "Add Northern coast to timeline",
+      exact: true,
+    }),
+  });
+  const videoCard = library.locator(".media-item").filter({
+    has: page.getByRole("button", {
+      name: "Add Coast video to timeline",
+      exact: true,
+    }),
+  });
+  assert.equal(await imageCard.innerText(), "");
+  assert.equal(await imageCard.locator("[data-media-duration]").count(), 0);
+  assert.equal(
+    await videoCard.locator("[data-media-duration]").innerText(),
+    "00:50",
+  );
+  await videoCard.scrollIntoViewIfNeeded();
+  await videoCard.screenshot({
+    path: path.join(root, ".test-results/studio-editor-video-card.png"),
+    animations: "disabled",
+  });
+  await imageCard.scrollIntoViewIfNeeded();
+  assert.equal(
+    await library.getByText("Northern coast", { exact: true }).count(),
+    0,
+  );
+  assert.equal(
+    await page.getByRole("button", { name: "Toggle media panel" }).count(),
+    0,
+  );
+  assert.equal(
+    await page.getByRole("button", { name: "Toggle properties panel" }).count(),
+    0,
+  );
+  assert.equal(await page.locator("#editor-ai-launcher svg").count(), 0);
+  assert.equal(await page.locator("[data-ai-header] > div svg").count(), 0);
+  const railDetails = await page
+    .locator("[data-editor-rail]")
+    .evaluate((rail) => {
+      const active = rail.querySelector('[aria-pressed="true"]');
+      const logo = rail.querySelector("a svg").getBoundingClientRect();
+      const box = rail.getBoundingClientRect();
+      return {
+        activeClasses: active.className,
+        logoWidth: logo.width,
+        logoHeight: logo.height,
+        centered: Math.abs(logo.x + logo.width / 2 - box.x - box.width / 2) < 1,
+      };
+    });
+  assert.ok(railDetails.activeClasses.includes("bg-primary "));
+  assert.ok(railDetails.activeClasses.includes("text-primary-foreground"));
+  assert.equal(railDetails.logoWidth, 28);
+  assert.equal(railDetails.logoHeight, 28);
+  assert.ok(railDetails.centered);
+  const verifyRailTheme = async () => {
+    const colors = await page.locator("[data-editor-rail]").evaluate((rail) => {
+      const active = rail.querySelector('[aria-pressed="true"]');
+      const resolve = (token) => {
+        const probe = document.createElement("span");
+        probe.style.color = `var(--${token})`;
+        rail.append(probe);
+        const color = getComputedStyle(probe).color;
+        probe.remove();
+        return color;
+      };
+      return {
+        bg: getComputedStyle(rail).backgroundColor,
+        sidebar: resolve("sidebar"),
+        activeBg: getComputedStyle(active).backgroundColor,
+        primary: resolve("primary"),
+        activeFg: getComputedStyle(active).color,
+        primaryFg: resolve("primary-foreground"),
+      };
+    });
+    assert.equal(colors.bg, colors.sidebar);
+    assert.equal(colors.activeBg, colors.primary);
+    assert.equal(colors.activeFg, colors.primaryFg);
+  };
+  await verifyRailTheme();
+  await page.evaluate(() => document.documentElement.classList.remove("dark"));
+  await page.waitForTimeout(250);
+  await verifyRailTheme();
+  await page.screenshot({
+    path: path.join(root, ".test-results/studio-editor-polish-light.png"),
+  });
+  await page.evaluate(() => document.documentElement.classList.add("dark"));
+  await page.waitForTimeout(250);
   assert.equal(await page.locator(".property-rail").count(), 0);
-  assert.equal(await page.locator(".right-workspace").isVisible(), false);
-  // Selection opens a contextual inspector. AI replaces it and returns it on close.
+  assert.equal(await page.locator(".right-workspace").isVisible(), true);
+  const transportLayout = async () =>
+    page.evaluate(() => {
+      const box = (selector) => {
+        const b = document.querySelector(selector).getBoundingClientRect();
+        return { left: b.left, right: b.right, top: b.top, bottom: b.bottom };
+      };
+      return {
+        time: box("[data-transport-time]"),
+        playback: box("[data-transport-playback]"),
+        display: box("[data-transport-display]"),
+        composer: box("[data-ai-composer]"),
+        suggestions: box("[data-ai-suggestions]"),
+      };
+    });
+  let controls = await transportLayout();
+  assert.ok(controls.time.right <= controls.playback.left);
+  assert.ok(controls.playback.right <= controls.display.left);
+  assert.ok(
+    controls.suggestions.bottom <= controls.composer.top,
+    "All AI suggestions must fit above the composer",
+  );
+  // Compact preview controls still perform real zoom, fit, and aspect changes.
+  await page.getByRole("button", { name: "Preview zoom", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Actual size · 100%", exact: true })
+    .click();
+  assert.equal((await geometry()).frame.w, 1280);
+  await page
+    .getByRole("button", { name: "Enter fullscreen", exact: true })
+    .click();
+  await page.waitForFunction(() => !!document.fullscreenElement);
+  bounds = await geometry();
+  assert.ok(bounds.frame.w <= 1440 && bounds.frame.h <= 900);
+  assert.ok(Math.abs(bounds.frame.w / bounds.frame.h - 16 / 9) < 0.01);
+  await page.evaluate(() => document.exitFullscreen());
+  await page.getByRole("button", { name: "Fit preview", exact: true }).click();
+  assert.ok((await geometry()).frame.w < 1280);
+  await page
+    .getByRole("button", { name: "Canvas aspect ratio", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "9:16", exact: true }).click();
+  bounds = await geometry();
+  assert.ok(Math.abs(bounds.frame.w / bounds.frame.h - 9 / 16) < 0.01);
+  await page
+    .getByRole("button", { name: "Canvas aspect ratio", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "16:9", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Describe an AI edit", exact: true })
+    .press("Control+k");
+  assert.ok(
+    await page.locator("[data-ai-workspace]").isVisible(),
+    "Shortcuts must ignore the AI prompt",
+  );
+  // The right workspace defaults to AI; selection opens a contextual inspector. AI replaces it and returns it on close.
   await page.locator(".timeline-clip").first().click();
   await page.getByText("Clip inspector", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "Image", exact: true }).waitFor();
@@ -337,25 +504,61 @@ try {
   await page.getByText("What should we edit?").waitFor();
   assert.equal(await page.locator(".inspector-task").isVisible(), false);
   bounds = await geometry();
-  assert.equal(bounds.right.w, 400);
+  assert.equal(bounds.right.w, 300);
   await page
     .getByRole("button", { name: "Make this 9:16", exact: true })
     .click();
   await page.getByRole("button", { name: "Apply 1 edit" }).click();
   await page.waitForFunction(
     () =>
-      document.querySelector(".preview-frame").style.aspectRatio === "9 / 16",
+      document.querySelector("[data-preview-frame]").style.aspectRatio ===
+      "9 / 16",
   );
   bounds = await geometry();
   assert.ok(Math.abs(bounds.frame.w / bounds.frame.h - 9 / 16) < 0.01);
   await page.getByRole("button", { name: "Undo changes" }).click();
+  const composerBefore = await page.locator("[data-ai-composer]").boundingBox();
+  for (let i = 0; i < 3; i++) {
+    await page
+      .getByRole("textbox", { name: "Describe an AI edit", exact: true })
+      .fill("Make this 9:16");
+    await page
+      .getByRole("button", { name: "Send AI command", exact: true })
+      .click();
+    await page.waitForFunction(
+      (count) =>
+        document.querySelectorAll("[data-ai-proposal]").length === count,
+      i + 2,
+    );
+  }
+  const composerAfter = await page.locator("[data-ai-composer]").boundingBox();
+  assert.equal(
+    composerAfter.y,
+    composerBefore.y,
+    "Conversation growth must not move the composer",
+  );
+  await page
+    .locator("[data-ai-proposal]")
+    .last()
+    .getByRole("button", { name: "Discard", exact: true })
+    .click();
+  await page.getByText("Proposal discarded", { exact: true }).waitFor();
   await page.getByRole("button", { name: "Close Blynta AI" }).click();
   assert.equal(await page.locator(".inspector-task").isVisible(), true);
   // Both side panels can be collapsed to reclaim all center space.
-  await page.getByRole("button", { name: "Toggle media panel" }).click();
+  await page.getByRole("button", { name: "Collapse contextual panel" }).click();
   await page.getByRole("button", { name: "Close properties panel" }).click();
   bounds = await geometry();
-  assert.ok(bounds.preview.w >= 1360);
+  assert.ok(bounds.preview.w >= 1300);
+  await page
+    .getByRole("button", { name: "Project settings", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Open properties", exact: true })
+    .click();
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator(".inspector-task").isVisible(), true);
+  await page.getByRole("button", { name: "Close properties panel" }).click();
   await page.getByRole("button", { name: "Text", exact: true }).click();
   await page.getByRole("button", { name: "Heading", exact: true }).click();
   assert.equal(await page.locator(".timeline-clip").count(), 2);
@@ -369,7 +572,7 @@ try {
   await name.fill("Saved from workspace test");
   await name.press("Control+k");
   assert.equal(
-    await page.locator(".ai-chat").isVisible(),
+    await page.locator("[data-ai-workspace]").isVisible(),
     false,
     "AI shortcut must be ignored in a text input",
   );
@@ -394,10 +597,10 @@ try {
   assert.equal(
     await page.evaluate(() =>
       document
-        .querySelector(".editor-shell")
+        .querySelector("[data-editor-shell]")
         .style.getPropertyValue("--media-width"),
     ),
-    "320px",
+    "300px",
   );
   await page.mouse.up();
 
@@ -407,10 +610,10 @@ try {
   await page.waitForTimeout(900);
   assert.equal(project.revision, revisionBeforeResize);
   bounds = await geometry();
-  assert.ok(bounds.timeline.h > 324);
+  assert.ok(bounds.timeline.h > 306);
   const savedHeight = JSON.parse(
     await page.evaluate(() =>
-      localStorage.getItem("blynta-studio:workspace:v5"),
+      localStorage.getItem("blynta-studio:workspace:v7"),
     ),
   ).timelineHeight;
   await page.reload();
@@ -428,7 +631,15 @@ try {
   await page
     .getByRole("button", { name: "Show all tracks", exact: true })
     .click();
-  assert.equal(await page.locator(".track-header").count(), 3);
+  assert.equal(await page.locator("[data-track-header]").count(), 3);
+  const headers = await page.locator("[data-track-header]").all();
+  const lanes = await page.locator("[data-track-lane]").all();
+  for (let i = 0; i < headers.length; i++) {
+    const header = await headers[i].boundingBox();
+    const lane = await lanes[i].boundingBox();
+    assert.equal(header.y, lane.y, "Track controls must align with their lane");
+    assert.equal(header.height, lane.height);
+  }
   for (const width of [2560, 1920, 1600, 1440, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForTimeout(100);
@@ -437,10 +648,20 @@ try {
       .getByRole("button", { name: "Open Blynta AI chat", exact: true })
       .click();
     bounds = await geometry();
-    assert.equal(bounds.timeline.w, width);
-    assert.equal(bounds.right.w, 400);
-    assert.ok(bounds.preview.w >= 460, `${width}: ${JSON.stringify(bounds)}`);
+    assert.equal(bounds.timeline.x, bounds.rail.x + bounds.rail.w + 12);
+    assert.equal(bounds.timeline.w, width - bounds.timeline.x - 12);
+    assert.equal(bounds.right.w, 300);
+    assert.ok(bounds.preview.w >= 400, `${width}: ${JSON.stringify(bounds)}`);
     assert.ok(bounds.frame.w > 180 && bounds.frame.h > 150);
+    controls = await transportLayout();
+    assert.ok(
+      controls.time.right <= controls.playback.left,
+      `${width}: time/transport overlap`,
+    );
+    assert.ok(
+      controls.playback.right <= controls.display.left,
+      `${width}: transport/display overlap`,
+    );
     assert.equal(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
@@ -457,9 +678,14 @@ try {
   await page.waitForTimeout(100);
   await page.getByRole("button", { name: "Close properties panel" }).click();
   bounds = await geometry();
-  assert.ok(bounds.preview.w >= 900);
+  assert.ok(bounds.preview.w >= 880);
   await page.getByRole("button", { name: "Media", exact: true }).click();
-  assert.ok(await page.locator(".tool-panel").isVisible());
+  assert.ok(await page.locator("[data-project-tools]").isVisible());
+  controls = await transportLayout();
+  assert.ok(
+    controls.suggestions.bottom <= controls.composer.top,
+    "Reference-sized AI suggestions must remain visible",
+  );
   await page.screenshot({
     animations: "disabled",
     path: path.join(root, ".test-results/studio-editor-1000.png"),
@@ -470,6 +696,74 @@ try {
     .click();
   await page.getByRole("button", { name: "Export video", exact: true }).click();
   await page.getByRole("link", { name: "Download video" }).waitFor();
+  // Capture the populated workspace at the reference image's viewport.
+  project = {
+    ...project,
+    name: "Coastal story",
+    clips: project.clips.map((c) =>
+      c.kind === "text"
+        ? { ...c, name: "A quiet moment", y: 0, fontSize: 44 }
+        : c,
+    ),
+  };
+  await page.setViewportSize({ width: 1252, height: 786 });
+  await page.waitForTimeout(150);
+  await page.evaluate(() =>
+    localStorage.setItem(
+      "blynta-studio:workspace:v7",
+      JSON.stringify({
+        mediaWidth: 280,
+        inspectorWidth: 300,
+        aiWidth: 300,
+        timelineHeight: 267,
+        contextOpen: true,
+        inspectorOpen: true,
+      }),
+    ),
+  );
+  await page.reload();
+  await page.getByRole("region", { name: "Video preview" }).waitFor();
+  await page.getByText("What should we edit?", { exact: true }).waitFor();
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector("[data-editor-shell]")
+        ?.style.getPropertyValue("--timeline-height") === "267px",
+  );
+  assert.ok(await page.locator("[data-project-tools]").isVisible());
+  await page.screenshot({
+    animations: "disabled",
+    path: path.join(root, ".test-results/studio-editor-reference-layout.png"),
+  });
+  // Empty projects retain the workspace, and smaller viewports scroll internally.
+  project = { ...project, clips: [], assets: [] };
+  await page.reload();
+  await page.getByText("Start with your footage", { exact: true }).waitFor();
+  assert.ok(await page.locator("[data-timeline-workspace]").isVisible());
+  assert.equal(await page.locator(".timeline-clip").count(), 0);
+  await page.screenshot({
+    animations: "disabled",
+    path: path.join(root, ".test-results/studio-editor-empty.png"),
+  });
+  for (const width of [768, 640, 390]) {
+    await page.setViewportSize({ width, height: 786 });
+    await page.waitForTimeout(150);
+    assert.equal(
+      await page.evaluate(
+        () =>
+          document.documentElement.scrollWidth > innerWidth ||
+          document.documentElement.scrollHeight > innerHeight,
+      ),
+      false,
+    );
+    bounds = await geometry();
+    assert.ok(bounds.timeline.x >= bounds.rail.x + bounds.rail.w);
+    assert.ok(bounds.timeline.y + bounds.timeline.h <= 786);
+  }
+  await page.screenshot({
+    animations: "disabled",
+    path: path.join(root, ".test-results/studio-editor-mobile.png"),
+  });
   assert.deepEqual(errors, []);
   console.log(
     "Workspace browser checks passed: desktop widths 2560/1920/1600/1440/1280/1000, contextual inspector, alternate AI dock, collapse, resizing persistence without autosave, aspect ratio/source fit, clip history, input shortcut safety, autosave and export UI. API transport is mocked in this UI suite.",

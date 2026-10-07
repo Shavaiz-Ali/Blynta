@@ -151,7 +151,7 @@ export const TimelineClip = memo(function TimelineClip({
         tabIndex={0}
         aria-label={`${clip.name}, starts at ${clip.start.toFixed(1)} seconds, duration ${clip.duration.toFixed(1)} seconds`}
         aria-pressed={e.selectedId === clip.id}
-        className={`timeline-clip clip-${clip.kind} ${e.selectedId === clip.id ? "selected" : ""} ${draft ? "dragging" : ""} ${snapped ? "snapped" : ""}`}
+        className={`timeline-clip group/clip top-1.5! h-[52px]! rounded-md! px-2! py-2! text-xs! [container-type:inline-size] focus-visible:ring-2 focus-visible:ring-ring clip-${clip.kind} ${e.selectedId === clip.id ? "selected" : ""} ${draft ? "dragging" : ""} ${snapped ? "snapped" : ""}`}
         style={{
           left: current.start * e.zoom,
           width: Math.max(12, current.duration * e.zoom),
@@ -177,7 +177,7 @@ export const TimelineClip = memo(function TimelineClip({
         }}
       >
         <span
-          className="trim-handle left"
+          className="trim-handle left w-2! bg-foreground/20! focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
           role="button"
           tabIndex={0}
           aria-label="Trim clip start"
@@ -198,7 +198,7 @@ export const TimelineClip = memo(function TimelineClip({
         />
         {(clip.kind === "video" || clip.kind === "image") && (
           <span
-            className={`clip-filmstrip ${asset?.origin === "Blynta demo" ? "demo-filmstrip" : ""}`}
+            className={`clip-filmstrip opacity-70! ${asset?.origin === "Blynta demo" ? "demo-filmstrip" : ""}`}
             aria-hidden="true"
           >
             {asset?.thumbnail && clip.kind === "video" && (
@@ -209,11 +209,15 @@ export const TimelineClip = memo(function TimelineClip({
             )}
           </span>
         )}
-        <Icon size={12} className="clip-kind-icon" />
-        <span className="clip-caption truncate">{clip.name}</span>
-        <span className="clip-duration">{current.duration.toFixed(1)}s</span>
+        <Icon className="clip-kind-icon size-3.5 shrink-0" />
+        <span className="clip-caption min-w-0 truncate leading-4">
+          {clip.name}
+        </span>
+        <span className="clip-duration text-[11px]! tabular-nums [@container(max-width:100px)]:hidden">
+          {current.duration.toFixed(1)}s
+        </span>
         <span
-          className="trim-handle right"
+          className="trim-handle right w-2! bg-foreground/20! focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
           role="button"
           tabIndex={0}
           aria-label="Trim clip end"
