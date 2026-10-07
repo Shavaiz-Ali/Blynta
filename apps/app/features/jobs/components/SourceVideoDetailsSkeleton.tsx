@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export function SourceVideoDetailsSkeleton() {
   return (
-    <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="space-y-6" role="status" aria-label="Loading video">
       {/* ── Media Detail Header Lockup Skeleton ── */}
       <div className="space-y-4 pb-6 border-b border-border/70">
         {/* Back Link */}
@@ -63,14 +63,14 @@ export function SourceVideoDetailsSkeleton() {
         </div>
 
         {/* 4-Column Vertical 9:16 Clips Grid Skeleton */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
               className="rounded-xl border border-border/70 bg-card/60 overflow-hidden space-y-3 p-0"
             >
               {/* 9:16 Video Thumbnail Skeleton */}
-              <div className="relative aspect-[9/16] w-full bg-muted/40">
+              <div className="relative aspect-[16/10] w-full bg-muted/40">
                 <Skeleton className="h-full w-full rounded-none" />
                 <Skeleton className="absolute top-2.5 left-2.5 h-6 w-16 rounded-full" />
                 <Skeleton className="absolute bottom-2.5 right-2.5 h-4 w-12 rounded-md" />

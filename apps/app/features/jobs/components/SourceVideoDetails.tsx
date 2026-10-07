@@ -112,7 +112,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
     );
   }
 
-  if (error || !job) {
+  if (!job) {
     return (
       <DashboardLayout headerContent={headerContent}>
         <div className="rounded-2xl border border-destructive/30 bg-card p-10 text-center shadow-sm max-w-lg mx-auto my-12">
@@ -138,7 +138,9 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   }
 
   const duration = getJobDurationFormatted(job);
-  const clipsCount = job.clips?.length ?? 0;
+  const clipsCount =
+    job.clips?.filter((clip) => clip.status === JobStatus.COMPLETED).length ??
+    0;
   const isEarlyProcessing =
     job.status === JobStatus.PENDING ||
     job.status === JobStatus.TRANSCRIBING ||
@@ -147,7 +149,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   const isCompleted = job.status === JobStatus.COMPLETED;
   const isFailed = job.status === JobStatus.FAILED;
   const thumbnail = getJobThumbnail(job);
-  const totalHighlightsCount = job.highlights?.length || 6;
+  const totalHighlightsCount = job.highlights?.length || job.clips?.length || 0;
 
   return (
     <DashboardLayout headerContent={headerContent}>
@@ -358,7 +360,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
       </div>
 
       {/* ── Level 2 Main Body ── */}
-      {isEarlyProcessing ? (
+      {isEarlyProcessing || isCuttingClips ? (
         /* Stages 1-3: Downloading, Transcribing, AI Highlight Detection */
         <div className="py-2">
           <JobProcessingView job={job} />
@@ -366,60 +368,12 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
       ) : isFailed ? (
         /* Failed state with retry */
         <div className="py-4">
+          <JobProcessingView job={job} />
           <FailedStateCard job={job} />
         </div>
       ) : (
         /* Stage 4 (Cutting & Captioning) and Completed Stage: Live Shorts Grid */
         <div className="space-y-6 pt-1">
-          {/* Live Cutting Notice Banner when in Stage 4 */}
-          {isCuttingClips && (
-            <div className="flex flex-col gap-4 rounded-xl border border-border/70 bg-card/60 p-5 shadow-xs sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shrink-0">
-                  <FilmIcon className="h-4.5 w-4.5" />
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h4 className="text-sm font-semibold text-foreground">
-                      Preparing your clips
-                    </h4>
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
-                      <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                      {clipsCount} of {totalHighlightsCount} ready
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    We&apos;re formatting vertical video and captions. Finished
-                    clips appear below automatically.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex w-full items-center gap-3 sm:w-auto sm:min-w-48 shrink-0">
-                <div className="h-1.5 flex-1 sm:w-36 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all duration-500"
-                    style={{
-                      width: `${Math.max(
-                        10,
-                        Math.round(
-                          (clipsCount / Math.max(1, totalHighlightsCount)) *
-                            100,
-                        ),
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <span className="w-9 text-right text-xs font-semibold tabular-nums text-foreground">
-                  {Math.round(
-                    (clipsCount / Math.max(1, totalHighlightsCount)) * 100,
-                  )}
-                  %
-                </span>
-              </div>
-            </div>
-          )}
-
           {/* Section Heading for Completed or Cutting Stage */}
           <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
             <div>

@@ -25,7 +25,6 @@ import { JobDetailSkeleton } from "./JobDetailSkeleton";
 import { ScheduleDialog } from "./ScheduleDialog";
 
 // Re-exports for backwards compatibility
-export { PipelineStepper } from "./PipelineStepper";
 export { FailedStateCard } from "./FailedStateCard";
 export { JobDetailSkeleton } from "./JobDetailSkeleton";
 export { VideoMetadataKit } from "./VideoMetadataKit";
@@ -124,67 +123,71 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
   return (
     <DashboardLayout headerContent={headerContent}>
       {/* Processing State: Show only when processing AND no completed clips are ready yet */}
-      {isJobProcessing && completedClips.length === 0 && (
-        <JobProcessingView job={job} />
-      )}
+      {isJobProcessing && <JobProcessingView job={job} />}
 
       {/* Failed State Card */}
-      {isJobFailed && completedClips.length === 0 && (
-        <FailedStateCard job={job} />
+      {isJobFailed && (
+        <>
+          <JobProcessingView job={job} />
+          <FailedStateCard job={job} />
+        </>
       )}
 
       {/* Studio View: Show as soon as clips start getting generated or job completes */}
-      {completedClips.length > 0 && activeClip && (
-        <div className="space-y-6">
-          {/* Top Bar with Clip Selector Tabs */}
-          <StudioTopBar
-            job={job}
-            activeClipIndex={safeClipIndex}
-            onSelectClip={(idx) => setActiveClipIndex(idx)}
-            onSchedule={() => setScheduleOpen(true)}
-          />
+      {!isJobProcessing &&
+        !isJobFailed &&
+        completedClips.length > 0 &&
+        activeClip && (
+          <div className="space-y-6">
+            {/* Top Bar with Clip Selector Tabs */}
+            <StudioTopBar
+              job={job}
+              activeClipIndex={safeClipIndex}
+              onSelectClip={(idx) => setActiveClipIndex(idx)}
+              onSchedule={() => setScheduleOpen(true)}
+            />
 
-          {/* Two-Column Studio Grid Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
-            {/* Left: Video Player + Caption Styling card beneath it */}
-            <div className="lg:col-span-5 order-1 flex flex-col items-center gap-4">
-              <StudioCenterPanel
-                jobId={getJobId(job)}
-                clip={activeClip}
-                job={job}
-                onDeleteClip={() => setDeleteOpen(true)}
-              />
-              {/* Caption Styling sits below the player to fill the left column height */}
-              <div className="w-full max-w-[420px]">
-                <CaptionStylingCard />
+            {/* Two-Column Studio Grid Layout */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:items-start">
+              {/* Left: Video Player + Caption Styling card beneath it */}
+              <div className="lg:col-span-5 order-1 flex flex-col items-center gap-4">
+                <StudioCenterPanel
+                  jobId={getJobId(job)}
+                  clip={activeClip}
+                  job={job}
+                  onDeleteClip={() => setDeleteOpen(true)}
+                />
+                {/* Caption Styling sits below the player to fill the left column height */}
+                <div className="w-full max-w-[420px]">
+                  <CaptionStylingCard />
+                </div>
+              </div>
+
+              {/* Right: Viral Intelligence + Clip Details stacked */}
+              <div className="lg:col-span-7 order-2 flex flex-col gap-4 min-w-0">
+                <StudioLeftPanel
+                  job={job}
+                  activeHighlight={activeHighlight}
+                  activeClip={activeClip}
+                />
+                <StudioRightPanel
+                  job={job}
+                  clip={activeClip}
+                  highlight={activeHighlight}
+                  clipIndex={safeClipIndex}
+                  onDeleteClip={() => setDeleteOpen(true)}
+                />
               </div>
             </div>
 
-            {/* Right: Viral Intelligence + Clip Details stacked */}
-            <div className="lg:col-span-7 order-2 flex flex-col gap-4 min-w-0">
-              <StudioLeftPanel
-                job={job}
-                activeHighlight={activeHighlight}
-                activeClip={activeClip}
-              />
-              <StudioRightPanel
-                job={job}
-                clip={activeClip}
-                highlight={activeHighlight}
-                clipIndex={safeClipIndex}
-                onDeleteClip={() => setDeleteOpen(true)}
-              />
-            </div>
+            {/* AI SEO & Social Growth Kit (Description, Keywords, Hashtags) */}
+            <VideoMetadataKit
+              job={job}
+              activeHighlight={activeHighlight}
+              clipIndex={safeClipIndex}
+            />
           </div>
-
-          {/* AI SEO & Social Growth Kit (Description, Keywords, Hashtags) */}
-          <VideoMetadataKit
-            job={job}
-            activeHighlight={activeHighlight}
-            clipIndex={safeClipIndex}
-          />
-        </div>
-      )}
+        )}
 
       {/* Completed job but 0 completed clips */}
       {isJobComplete && completedClips.length === 0 && (

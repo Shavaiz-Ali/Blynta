@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import type { Metadata } from "next";
 import { PublicationsPage } from "@/features/youtube";
 
@@ -9,15 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function PublicationsRoute() {
-  return (
-    <Suspense
-      fallback={
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          Loading publications...
-        </div>
-      }
-    >
-      <PublicationsPage />
-    </Suspense>
-  );
+  return <PublicationsPage />;
 }

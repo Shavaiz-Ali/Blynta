@@ -48,16 +48,11 @@ export type {
   AIInsightsProps,
   PublishingPackageProps,
 } from "./components/clip-detail";
-export {
-  JobDetailContent,
-  PipelineStepper,
-  FailedStateCard,
-} from "./components/JobDetail";
+export { JobDetailContent, FailedStateCard } from "./components/JobDetail";
 export {
   JobDetailSkeleton,
   ClipWorkspaceSkeleton,
 } from "./components/JobDetailSkeleton";
-export { JobProcessingHeader } from "./components/JobProcessingHeader";
 export { JobProcessingView } from "./components/JobProcessingView";
 export { ScoreGauge } from "./components/ScoreGauge";
 export { TranscriptDialog } from "./components/TranscriptDialog";

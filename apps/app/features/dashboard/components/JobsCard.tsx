@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useViewMode } from "@/features/dashboard/use-view-mode";
 import Link from "next/link";
 import { JobsSkeleton } from "./JobsSkeleton";
 import { Job, JobStatus } from "@/features/jobs";
-import { ViewModeToggle, ViewMode } from "./ViewModeToggle";
+import { ViewModeToggle } from "./ViewModeToggle";
 import { JobCardGrid } from "./JobCardGrid";
 import { JobCardList } from "./JobCardList";
 import {
@@ -61,12 +62,9 @@ export function JobsCard({
   isLoading?: boolean;
 }) {
   // Persistent view mode state
-  const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
-
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem("blynta_dashboard_view_mode_v2", mode);
-  };
+  const [viewMode, handleViewModeChange] = useViewMode(
+    "blynta_dashboard_view_mode_v2",
+  );
 
   const activeCount = jobs.filter(
     (j) =>
@@ -76,7 +74,12 @@ export function JobsCard({
       j.status === JobStatus.CUTTING_CLIPS,
   ).length;
 
-  if (isLoading) return <JobsSkeleton viewMode={viewMode} />;
+  if (viewMode === null || (isLoading && jobs.length === 0))
+    return (
+      <section className="space-y-4 rounded-2xl border border-border/70 bg-card/30 p-4 shadow-xs sm:p-5">
+        <JobsSkeleton viewMode={viewMode} />
+      </section>
+    );
 
   return (
     <section className="space-y-4 rounded-2xl border border-border/70 bg-card/30 p-4 shadow-xs sm:p-5">
@@ -106,7 +109,9 @@ export function JobsCard({
         {jobs.length > 0 && (
           <div className="flex items-center gap-3">
             {/* Grid vs List View Toggle */}
-            <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
+            {viewMode !== null && (
+              <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
+            )}
 
             {/* View all Link */}
             <Link

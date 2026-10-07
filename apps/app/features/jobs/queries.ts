@@ -6,8 +6,8 @@ import {
   useQueryClient,
   UseQueryOptions,
   UseQueryResult,
-  Query,
 } from "@tanstack/react-query";
+import { processingPollInterval } from "./processing-state";
 import { axiosClient } from "@/config/axiosClient";
 import {
   SourcePlatform,
@@ -64,6 +64,10 @@ export function useJobs(
       return data;
     },
     staleTime: 1000 * 10,
+    refetchInterval: (query) =>
+      query.state.data?.jobs.some((job) => processingPollInterval(job.status))
+        ? 5000
+        : false,
     ...opts,
   });
 }
@@ -71,13 +75,6 @@ export function useJobs(
 /* -------------------------------------------------------------------------- */
 /*                         useJob(id) — GET /jobs/:id                         */
 /* -------------------------------------------------------------------------- */
-
-const ACTIVE_JOB_STATUSES: JobStatus[] = [
-  JobStatus.PENDING,
-  JobStatus.TRANSCRIBING,
-  JobStatus.DETECTING_HIGHLIGHTS,
-  JobStatus.CUTTING_CLIPS,
-];
 
 export function useJob(
   id: string,
@@ -91,16 +88,8 @@ export function useJob(
     },
     enabled: Boolean(id),
     staleTime: 1000 * 10,
-    refetchInterval: (query: Query<Job, Error>) => {
-      const status = query.state.data?.status;
-      if (status === JobStatus.CUTTING_CLIPS) {
-        return 2500;
-      }
-      if (status && ACTIVE_JOB_STATUSES.includes(status)) {
-        return 3500;
-      }
-      return false;
-    },
+    refetchInterval: (query) =>
+      processingPollInterval(query.state.data?.status),
     ...opts,
   });
 }

@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import { useViewMode } from "@/features/dashboard/use-view-mode";
 import { useRouter } from "next/navigation";
-import { Job, JobStatus, useJobs } from "@/features/jobs";
+import { JobStatus, useJobs } from "@/features/jobs";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
@@ -11,10 +12,7 @@ import { AppTabs } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
-import {
-  ViewModeToggle,
-  ViewMode,
-} from "@/features/dashboard/components/ViewModeToggle";
+import { ViewModeToggle } from "@/features/dashboard/components/ViewModeToggle";
 import { SourceVideoCard } from "./SourceVideoCard";
 import { ClipsLibrarySkeleton } from "./ClipsLibrarySkeleton";
 import {
@@ -28,7 +26,6 @@ import {
   CheckCircleIcon,
   LightbulbIcon,
 } from "@/features/dashboard/icons";
-import { Skeleton } from "@/components/ui/skeleton";
 
 type StatusFilter =
   "all" | "processing" | JobStatus.COMPLETED | JobStatus.FAILED;
@@ -87,21 +84,10 @@ export function ClipsLibrary() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [sortBy, setSortBy] = React.useState<SortOption>("newest");
   const [page, setPage] = React.useState(1);
-  const [viewMode, setViewMode] = React.useState<ViewMode>("grid");
+  const [viewMode, handleViewModeChange] = useViewMode(
+    "blynta_clips_view_mode",
+  );
   const LIMIT = 24;
-
-  // Load saved view mode
-  React.useEffect(() => {
-    const saved = localStorage.getItem("blynta_clips_view_mode") as ViewMode;
-    if (saved === "grid" || saved === "list") {
-      setViewMode(saved);
-    }
-  }, []);
-
-  const handleViewModeChange = (mode: ViewMode) => {
-    setViewMode(mode);
-    localStorage.setItem("blynta_clips_view_mode", mode);
-  };
 
   const apiStatus =
     statusFilter === "all" || statusFilter === "processing"
@@ -114,7 +100,7 @@ export function ClipsLibrary() {
     limit: LIMIT,
   });
 
-  const allJobs = data?.jobs ?? [];
+  const allJobs = React.useMemo(() => data?.jobs ?? [], [data?.jobs]);
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
@@ -163,11 +149,6 @@ export function ClipsLibrary() {
       return 0;
     });
   }, [allJobs, statusFilter, searchQuery, sortBy]);
-
-  // Reset to page 1 on filter change
-  React.useEffect(() => {
-    setPage(1);
-  }, [statusFilter, searchQuery]);
 
   const headerContent = (
     <div className="flex-1 min-w-0 flex items-center justify-between">
@@ -223,7 +204,10 @@ export function ClipsLibrary() {
         <div className="min-w-0 flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
           <AppTabs
             value={statusFilter}
-            onValueChange={(val) => setStatusFilter(val as StatusFilter)}
+            onValueChange={(val) => {
+              setStatusFilter(val as StatusFilter);
+              setPage(1);
+            }}
             tabs={[
               { value: "all", label: "All Videos" },
               { value: "processing", label: "Processing" },
@@ -241,7 +225,10 @@ export function ClipsLibrary() {
           <div className="min-w-[200px] sm:min-w-[240px]">
             <AppInput
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               placeholder="Search by title, creator, URL..."
               size="default"
               prefixIcon={<SearchIcon className="h-3.5 w-3.5" />}
@@ -267,14 +254,16 @@ export function ClipsLibrary() {
           </div>
 
           {/* Grid vs List View Toggle */}
-          <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
+          {viewMode !== null && (
+            <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
+          )}
         </div>
       </AppCard>
 
       {/* ── Content Area ── */}
-      {isLoading ? (
+      {viewMode === null || (isLoading && !data) ? (
         <ClipsLibrarySkeleton viewMode={viewMode} showHeader={false} />
-      ) : error ? (
+      ) : error && !data ? (
         <AppCard
           className="p-8 text-center border-destructive/30"
           useDefaultClasses={false}
@@ -335,6 +324,7 @@ export function ClipsLibrary() {
               variant="outline"
               size="sm"
               onClick={() => {
+                setPage(1);
                 setStatusFilter("all");
                 setSearchQuery("");
               }}

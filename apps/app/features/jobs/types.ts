@@ -42,6 +42,9 @@ export interface Highlight {
 }
 
 export interface Clip {
+  processingState?: "queued" | "cutting" | "captioning" | "uploading" | "ready" | "failed";
+  errorMessage?: string;
+  errorStage?: string;
   id: string;
   _id: string;
   startTime: number;
@@ -71,6 +74,39 @@ export interface CreateJobInput {
 }
 
 export interface Job {
+  mediaMetadata?: {
+    durationSeconds: number;
+    width?: number;
+    height?: number;
+    fps?: number;
+    codec?: string;
+    bitrate?: number;
+    fileSizeBytes?: number;
+    audioCodec?: string;
+    sampleRate?: number;
+    hasAudio: boolean;
+    hasVideo: boolean;
+  };
+  workload?: { score: number; classification: "small" | "medium" | "large" };
+  render?: {
+    ready: number;
+    failed: number;
+    total: number;
+    progressPercent: number;
+    clips: {
+      clipId: string;
+      status: NonNullable<Clip["processingState"]>;
+      progress: number;
+      renderProgress: number;
+      processedSeconds?: number;
+      durationSeconds: number;
+      speed?: number;
+      etaSeconds?: number;
+      frame?: number;
+      fps?: number;
+      updatedAt?: number;
+    }[];
+  };
   id: string;
   _id: string;
   sourceUrl: string;

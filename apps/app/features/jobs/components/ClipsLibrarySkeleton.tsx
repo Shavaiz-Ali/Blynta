@@ -1,11 +1,11 @@
 "use client";
 
-import * as React from "react";
+import { JobsSkeleton } from "@/features/dashboard/components/JobsSkeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ViewMode } from "@/features/dashboard/components/ViewModeToggle";
 
 interface ClipsLibrarySkeletonProps {
-  viewMode?: ViewMode;
+  viewMode?: ViewMode | null;
   showHeader?: boolean;
 }
 
@@ -13,6 +13,9 @@ export function ClipsLibrarySkeleton({
   viewMode = "grid",
   showHeader = true,
 }: ClipsLibrarySkeletonProps) {
+  if (viewMode === null) {
+    return <JobsSkeleton viewMode={null} showHeader={false} />;
+  }
   return (
     <div className="space-y-6" role="status" aria-label="Loading clips library">
       {showHeader && (

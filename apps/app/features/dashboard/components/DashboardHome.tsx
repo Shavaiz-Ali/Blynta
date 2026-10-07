@@ -91,7 +91,7 @@ export function DashboardHome() {
 
       {/* ── Recent Projects / Clips Section ── */}
       <div className="min-w-0">
-        {jobsError ? (
+        {jobsError && !jobsResult ? (
           <div className="rounded-2xl border border-destructive/30 bg-card p-8 shadow-sm text-center">
             <AlertTriangleIcon className="h-8 w-8 text-destructive mx-auto mb-2" />
             <p className="text-sm font-semibold text-foreground">

@@ -5,9 +5,20 @@ export function JobsSkeleton({
   viewMode = "grid",
   showHeader = true,
 }: {
-  viewMode?: ViewMode;
+  viewMode?: ViewMode | null;
   showHeader?: boolean;
 }) {
+  if (viewMode === null) {
+    return (
+      <div
+        role="status"
+        aria-label="Loading view preference"
+        className="flex min-h-48 items-center justify-center rounded-xl border border-border/70 bg-card/30 text-sm text-muted-foreground"
+      >
+        Loading your library…
+      </div>
+    );
+  }
   return (
     <div className="space-y-4" role="status" aria-label="Loading projects">
       {showHeader && (

@@ -26,6 +26,12 @@ const STAGE_LABELS: Record<string, string> = {
   transcription: "Transcribing audio",
   highlight_detection: "Detecting highlights",
   cutting_clips: "Cutting & captioning clips",
+  pending: "Preparing video",
+  transcribing: "Generating transcript",
+  detecting_highlights: "Finding the best moments",
+  cutting: "Creating clips",
+  captioning: "Adding captions",
+  uploading: "Finalizing clips",
   unknown: "Processing",
 };
 
@@ -87,7 +93,7 @@ export function FailedStateCard({ job }: FailedStateCardProps) {
                   Stage
                 </span>
                 <p className="text-xs font-mono text-muted-foreground/80 mt-0.5">
-                  {stage}
+                  {STAGE_LABELS[stage] ?? "Processing"}
                 </p>
               </div>
               <div>
@@ -95,7 +101,9 @@ export function FailedStateCard({ job }: FailedStateCardProps) {
                   Error
                 </span>
                 <p className="text-sm text-destructive/90 break-words mt-0.5">
-                  {job.errorMessage || "An unknown error occurred."}
+                  {
+                    "We couldn’t finish this video. Please retry, or try another video if the problem continues."
+                  }
                 </p>
               </div>
             </div>
