@@ -69,7 +69,11 @@ export function JobProcessingView({ job }: { job: Job }) {
             <li
               key={step.status}
               aria-current={state === "active" ? "step" : undefined}
-              className="flex min-w-0 gap-3"
+              className={
+                index === 3
+                  ? "flex min-w-0 flex-wrap gap-3"
+                  : "flex min-w-0 gap-3"
+              }
             >
               <Icon
                 aria-hidden="true"
@@ -102,39 +106,39 @@ export function JobProcessingView({ job }: { job: Job }) {
                           : "Completed"}
                   </span>
                 </div>
-                {index === 3 && total > 0 && (
-                  <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-                    {clips.map((clip, clipIndex) =>
-                      clip.status === "completed" ? (
-                        <GeneratedClipCard
-                          key={clip._id || clip.id}
-                          job={job}
-                          clip={clip}
-                          highlight={highlights[clipIndex]}
-                          clipIndex={clipIndex}
-                        />
-                      ) : (
-                        <ClipProcessingCard
-                          key={clip._id || clip.id}
-                          job={job}
-                          clip={clip}
-                          highlight={highlights[clipIndex]}
-                          index={clipIndex}
-                        />
-                      ),
-                    )}
-                    {clips.length === 0 &&
-                      highlights.map((highlight, clipIndex) => (
-                        <ClipProcessingCard
-                          key={clipIndex}
-                          job={job}
-                          highlight={highlight}
-                          index={clipIndex}
-                        />
-                      ))}
-                  </div>
-                )}
               </div>
+              {index === 3 && total > 0 && (
+                <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {clips.map((clip, clipIndex) =>
+                    clip.status === "completed" ? (
+                      <GeneratedClipCard
+                        key={clip._id || clip.id}
+                        job={job}
+                        clip={clip}
+                        highlight={highlights[clipIndex]}
+                        clipIndex={clipIndex}
+                      />
+                    ) : (
+                      <ClipProcessingCard
+                        key={clip._id || clip.id}
+                        job={job}
+                        clip={clip}
+                        highlight={highlights[clipIndex]}
+                        index={clipIndex}
+                      />
+                    ),
+                  )}
+                  {clips.length === 0 &&
+                    highlights.map((highlight, clipIndex) => (
+                      <ClipProcessingCard
+                        key={clipIndex}
+                        job={job}
+                        highlight={highlight}
+                        index={clipIndex}
+                      />
+                    ))}
+                </div>
+              )}
             </li>
           );
         })}
