@@ -74,6 +74,8 @@ export interface CreateJobInput {
 }
 
 export interface Job {
+  /** Optional authoritative full-job estimate. Absent from the current API. */
+  estimatedRemainingSeconds?: number | null;
   mediaMetadata?: {
     durationSeconds: number;
     width?: number;

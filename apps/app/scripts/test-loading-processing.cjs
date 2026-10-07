@@ -58,6 +58,22 @@ const { ClipProcessingCard } = load(
   "features/jobs/components/ClipProcessingCard.tsx",
 );
 const { useViewMode } = load("features/dashboard/use-view-mode.ts");
+const { formatRemainingTime } = load("features/jobs/format-eta.ts");
+for (const [seconds, label] of [
+  [45, "~45 sec remaining"],
+  [90, "~2 min remaining"],
+  [1147, "~19 min remaining"],
+  [1351, "~23 min remaining"],
+  [3600, "~1 hr remaining"],
+  [4500, "~1 hr 15 min remaining"],
+  [59.9, "~1 min remaining"],
+  [3599, "~1 hr remaining"],
+  [0, "~0 sec remaining"],
+]) {
+  assert.equal(formatRemainingTime(seconds), label);
+}
+for (const invalid of [null, undefined, NaN, Infinity, -Infinity, -1, "90", {}])
+  assert.equal(formatRemainingTime(invalid), null);
 const job = {
   _id: "video-a",
   videoTitle: "Test video",
@@ -140,6 +156,50 @@ assert.match(html, /67%/);
 assert.match(html, /27%/);
 assert.ok(html.includes("00:31 / 00:47"));
 assert.match(html, /~15 sec remaining/);
+assert.doesNotMatch(html, /~24 min remaining/);
+assert.match(
+  render(JobProcessingView, {
+    job: { ...rendering, estimatedRemainingSeconds: 1440 },
+  }),
+  /~24 min remaining/,
+);
+for (const invalid of [undefined, null, NaN, -1, Infinity])
+  assert.doesNotMatch(
+    render(JobProcessingView, {
+      job: { ...rendering, estimatedRemainingSeconds: invalid },
+    }),
+    /~24 min remaining/,
+  );
+assert.doesNotMatch(
+  render(JobProcessingView, {
+    job: { ...rendering, status: "failed", estimatedRemainingSeconds: 1440 },
+  }),
+  /~24 min remaining/,
+);
+assert.doesNotMatch(
+  render(JobProcessingView, {
+    job: { ...rendering, status: "completed", estimatedRemainingSeconds: 1440 },
+  }),
+  /~24 min remaining/,
+);
+const longEtaJob = {
+  ...rendering,
+  render: {
+    ...rendering.render,
+    clips: rendering.render.clips.map((entry) => ({
+      ...entry,
+      etaSeconds: 1147,
+    })),
+  },
+};
+assert.match(
+  render(ClipProcessingCard, { job: longEtaJob, clip: clips[0], index: 0 }),
+  /~19 min remaining/,
+);
+assert.doesNotMatch(
+  render(ClipProcessingCard, { job: longEtaJob, clip: clips[0], index: 0 }),
+  /1147 sec remaining/,
+);
 assert.match(html, /1 of 5 clips ready/);
 assert.match(html, /data-ready-clip="d"/);
 assert.match(html, /Processing failed/);

@@ -2,6 +2,7 @@
 import { CheckCircle, AlertTriangle, Clock, LoaderCircle } from "lucide-react";
 import type { Job, Clip, Highlight } from "../types";
 import { clipState, percentage } from "../processing-state";
+import { formatRemainingTime } from "../format-eta";
 
 const labels = {
   queued: "Waiting to process",
@@ -74,10 +75,11 @@ export function ClipProcessingCard({
           : Clock;
   const pct =
     status === "uploading" ? undefined : percentage(progress?.progress);
+  const eta = formatRemainingTime(progress?.etaSeconds);
   return (
     <div className="min-w-0 space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1">
           <p className="text-xs text-muted-foreground">
             Clip {String(index + 1).padStart(2, "0")}
           </p>
@@ -110,11 +112,7 @@ export function ClipProcessingCard({
                 {time(progress.durationSeconds)}
               </span>
             )}
-          {progress.etaSeconds !== undefined &&
-            Number.isFinite(progress.etaSeconds) &&
-            progress.etaSeconds >= 0 && (
-              <span>~{Math.ceil(progress.etaSeconds)} sec remaining</span>
-            )}
+          {eta && <span>{eta}</span>}
         </div>
       )}
       {status === "failed" && (

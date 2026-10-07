@@ -8,6 +8,7 @@ import {
 } from "../processing-state";
 import { ClipProcessingCard, ProcessingProgress } from "./ClipProcessingCard";
 import { GeneratedClipCard } from "./GeneratedClipCard";
+import { formatRemainingTime } from "../format-eta";
 import { getJobDisplayTitle } from "@/features/dashboard/utils";
 
 export function JobProcessingView({ job }: { job: Job }) {
@@ -20,6 +21,11 @@ export function JobProcessingView({ job }: { job: Job }) {
     clips.filter((clip) => clip.status === "completed").length;
   const total = job.render?.total ?? Math.max(clips.length, highlights.length);
   const progress = percentage(job.progressPercent);
+  // Queue capacity and queued work are not exposed: only use an authoritative API estimate.
+  const eta =
+    job.status === "cutting_clips"
+      ? formatRemainingTime(job.estimatedRemainingSeconds)
+      : null;
   return (
     <section
       aria-label="Video processing"
@@ -36,10 +42,15 @@ export function JobProcessingView({ job }: { job: Job }) {
           <ProcessingProgress value={progress} label="Overall progress" />
         )}
         {total > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {ready} of {total} clips ready
-            {job.render?.failed ? " · " + job.render.failed + " failed" : ""}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <p>
+              {ready} of {total} clips ready
+              {job.render?.failed ? " · " + job.render.failed + " failed" : ""}
+            </p>
+            {eta && (
+              <span className="ml-auto text-right tabular-nums">{eta}</span>
+            )}
+          </div>
         )}
       </div>
       {failed && current < 0 && (
