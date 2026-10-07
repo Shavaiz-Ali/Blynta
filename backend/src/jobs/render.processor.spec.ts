@@ -6,6 +6,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { Types } from 'mongoose';
 import { RenderProcessor } from './render.processor';
+import { RenderCapacityService } from './render-capacity.service';
 import { RenderSourceService } from './render-source.service';
 import { JobsService } from './jobs.service';
 import { JobsCompletionService } from './jobs-completion.service';
@@ -164,6 +165,9 @@ describe('independent clip processor lifecycle', () => {
       captions as unknown as CaptionBurningService,
       r2 as unknown as R2Service,
       sources,
+      {
+        startWorker: jest.fn(() => Promise.resolve()),
+      } as unknown as RenderCapacityService,
     );
   });
   afterEach(async () => {
@@ -180,6 +184,8 @@ describe('independent clip processor lifecycle', () => {
       status: JobStatus.COMPLETED,
       hasCaptions: true,
     });
+    for (const value of Object.values(a[0].renderTiming!))
+      expect(Number.isFinite(value)).toBe(true);
     expect(a[1].status).toBe(JobStatus.PENDING);
     expect(parents.get('a')!.status).toBe(JobStatus.CUTTING_CLIPS);
     expect(parents.get('b')!.status).toBe(JobStatus.COMPLETED);
@@ -194,6 +200,26 @@ describe('independent clip processor lifecycle', () => {
       'uploading',
       'ready',
     ]);
+    const captionSample = (
+      a1.updateProgress as jest.MockedFunction<typeof a1.updateProgress>
+    ).mock.calls
+      .map(([p]) => p as ClipRenderProgress)
+      .find((p) => p.status === ClipProcessingState.CAPTIONING);
+    expect(captionSample?.hasCaptions).toBe(true);
+    expect(Number.isFinite(captionSample?.cuttingSeconds)).toBe(true);
+    const samples = (
+      a1.updateProgress as jest.MockedFunction<typeof a1.updateProgress>
+    ).mock.calls.map(([p]) => p as ClipRenderProgress);
+    expect(
+      samples.find((p) => p.status === ClipProcessingState.CAPTIONING)
+        ?.progress,
+    ).toBe(30);
+    expect(
+      samples.find((p) => p.status === ClipProcessingState.UPLOADING)?.progress,
+    ).toBe(90);
+    samples.forEach((p, i) =>
+      expect(p.progress).toBeGreaterThanOrEqual(samples[i - 1]?.progress ?? 0),
+    );
     await processor.process(queueJob('a', a[1]));
     expect(parents.get('a')!.status).toBe(JobStatus.COMPLETED);
   });

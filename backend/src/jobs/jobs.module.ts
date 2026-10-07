@@ -3,6 +3,8 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
+import { RenderCapacityService } from './render-capacity.service';
+import { RenderEtaService } from './render-eta.service';
 import { Job, JobSchema } from './schemas/job.schema';
 import { JOBS_QUEUE, RENDER_QUEUE } from './jobs.constants';
 import { UsersModule } from '../users/users.module';
@@ -28,7 +30,7 @@ import { StudioAssetSchema } from '../studio/studio.schemas';
     ActivitiesModule,
   ],
   controllers: [JobsController],
-  providers: [JobsService],
+  providers: [JobsService, RenderCapacityService, RenderEtaService],
   exports: [JobsService, BullModule, MongooseModule],
 })
 export class JobsModule {}

@@ -8,6 +8,8 @@ import { RenderSourceService } from './render-source.service';
 import { JobsCompletionService } from './jobs-completion.service';
 import { JobsProcessor } from './jobs.processor';
 import { JobsService } from './jobs.service';
+import { RenderCapacityService } from './render-capacity.service';
+import { RenderEtaService } from './render-eta.service';
 import { JobsReconciliationService } from './jobs-reconciliation.service';
 import { Job, JobSchema } from './schemas/job.schema';
 import { JOBS_QUEUE, RENDER_QUEUE } from './jobs.constants';
@@ -68,6 +70,8 @@ const logger = new Logger('JobsWorkerMongoose');
   ],
   providers: [
     JobsService,
+    RenderCapacityService,
+    RenderEtaService,
     JobsCompletionService,
     JobsReconciliationService,
     RenderSourceService,

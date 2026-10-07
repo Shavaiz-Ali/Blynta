@@ -33,7 +33,13 @@ import {
   renderJobId,
 } from './jobs.constants';
 import { clipIdentity } from './clip-identity';
-import { renderSnapshot, ClipRenderProgress } from './render-progress';
+import {
+  renderSnapshot,
+  ClipRenderProgress,
+  clipOverallValue,
+} from './render-progress';
+import { RenderEtaService } from './render-eta.service';
+import type { RenderEtaEntry } from './render-eta';
 import { R2Service } from '../storage/r2.service';
 import type { StudioAsset } from '../studio/studio.schemas';
 import { ActivitiesService } from '../activities/activities.service';
@@ -57,6 +63,7 @@ export class JobsService {
     private configService: ConfigService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
+    private renderEta: RenderEtaService,
     @Optional()
     @InjectModel('StudioAsset')
     private studioAssets?: Model<StudioAsset>,
@@ -383,17 +390,25 @@ export class JobsService {
   }
 
   async getRenderSnapshot(job: JobDocument) {
-    const progress = await Promise.all(
+    const progress: RenderEtaEntry[] = await Promise.all(
       job.clips.map(async (clip) => {
+        const hasCaptions =
+          job.transcript?.some(
+            (segment) =>
+              segment.endTime > clip.startTime &&
+              segment.startTime < clip.endTime,
+          ) ?? clip.hasCaptions;
         if ([JobStatus.COMPLETED, JobStatus.FAILED].includes(clip.status))
-          return { clip, progress: undefined };
+          return { clip, hasCaptions, progress: undefined };
         const bullJob = await this.renderQueue.getJob(
           renderJobId(job._id.toString(), clip._id.toString()),
         );
         const state = bullJob ? await bullJob.getState() : undefined;
-        // Ignore stale progress while an attempt waits for retry.
+        // Retain overall progress across retries, but discard stale stage ETA/time.
         return {
           clip,
+          hasCaptions,
+          queueState: state,
           progress:
             state === 'active' && typeof bullJob?.progress === 'object'
               ? (bullJob.progress as ClipRenderProgress)
@@ -401,15 +416,26 @@ export class JobsService {
                 ? {
                     clipId: clip._id.toString(),
                     status: ClipProcessingState.QUEUED,
-                    progress: 0,
+                    progress:
+                      typeof bullJob?.progress === 'object'
+                        ? clipOverallValue(
+                            bullJob.progress as ClipRenderProgress,
+                          )
+                        : 0,
                     renderProgress: 0,
+                    stageProgress: 0,
                     updatedAt: Date.now(),
                   }
                 : undefined,
         };
       }),
     );
-    return renderSnapshot(progress);
+    const estimatedRemainingSeconds = await this.renderEta.estimate(
+      job._id.toString(),
+      job.status,
+      progress,
+    );
+    return { ...renderSnapshot(progress), estimatedRemainingSeconds };
   }
 
   async reconcileMediaJobs() {

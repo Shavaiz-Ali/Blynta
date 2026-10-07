@@ -19,7 +19,7 @@ import { ListJobsDto } from './dto/list-jobs.dto';
 import { R2Service } from '../storage/r2.service';
 import { UsersService } from '../users/users.service';
 import { UserPlan } from '../users/schemas/user.schema';
-import { JobDocument } from './schemas/job.schema';
+import { JobDocument, JobStatus } from './schemas/job.schema';
 import { STYLE_PRESETS } from '../media/style-presets';
 import { ActivitiesService } from '../activities/activities.service';
 import {
@@ -55,6 +55,11 @@ export class JobsController {
       : undefined;
     return {
       ...responseJob,
+      estimatedRemainingSeconds: render
+        ? render.estimatedRemainingSeconds
+        : job.status === JobStatus.COMPLETED
+          ? 0
+          : null,
       ...(render ? { render, progressPercent: render.progressPercent } : {}),
     };
   }

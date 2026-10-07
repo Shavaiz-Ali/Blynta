@@ -17,8 +17,9 @@ import {
 } from '../media/style-presets';
 import { resolveEditorStyle } from '../media/editor-styles';
 import { FfmpegProgress } from '../media/utils/ffmpeg-progress';
-import { ClipRenderProgress } from './render-progress';
+import { ClipRenderProgress, clipProgressSample } from './render-progress';
 import { RenderSourceService } from './render-source.service';
+import { RenderCapacityService } from './render-capacity.service';
 
 interface RenderData {
   jobId: string;
@@ -45,6 +46,7 @@ export class RenderProcessor
     private captions: CaptionBurningService,
     private r2: R2Service,
     private sources: RenderSourceService,
+    private capacity: RenderCapacityService,
   ) {
     super();
   }
@@ -56,6 +58,7 @@ export class RenderProcessor
     );
     this.worker.on('error', (error) => this.logger.error(error));
     void this.worker.run().catch((error) => this.logger.error(error));
+    void this.capacity.startWorker(this.worker);
   }
 
   @OnWorkerEvent('failed')
@@ -98,7 +101,12 @@ export class RenderProcessor
     let state = ClipProcessingState.QUEUED;
     let ffmpegStarted = 0;
     let ffmpegElapsedMs = 0;
-    let latest: ClipRenderProgress;
+    let cuttingSeconds = 0;
+    let captioningSeconds = 0;
+    let latest =
+      typeof bullJob.progress === 'object'
+        ? (bullJob.progress as ClipRenderProgress)
+        : undefined;
     let lastPublished = 0;
     // Serialize and drain async Redis writes so old stage updates cannot overwrite new ones.
     let publishing: Promise<void> = Promise.resolve();
@@ -113,24 +121,17 @@ export class RenderProcessor
     const hasCaptions = segments.length > 0;
     const objectKey = `clips/${jobId}/${clipId}-captioned.mp4`;
     const publish = (sample?: FfmpegProgress, force = false) => {
-      const stageProgress = sample?.progress ?? 0;
-      const renderProgress =
-        state === ClipProcessingState.READY
-          ? 100
-          : state === ClipProcessingState.UPLOADING
-            ? 95
-            : state === ClipProcessingState.CAPTIONING
-              ? 45 + stageProgress * 0.5
-              : stageProgress * (hasCaptions ? 0.45 : 0.95);
-      latest = {
-        clipId,
-        status: state,
-        progress: stageProgress,
-        renderProgress,
-        durationSeconds: duration,
-        ...sample,
-        updatedAt: Date.now(),
-      };
+      latest = clipProgressSample(
+        {
+          clipId,
+          status: state,
+          durationSeconds: duration,
+          cuttingSeconds,
+          hasCaptions,
+        },
+        sample,
+        latest,
+      );
       if (!force && Date.now() - lastPublished < 750) return;
       lastPublished = Date.now();
       const snapshot = latest;
@@ -199,9 +200,12 @@ export class RenderProcessor
         clip.startTime,
         clip.endTime,
         raw,
-        (sample) => publish(sample),
+        (sample) => {
+          if (state === ClipProcessingState.CUTTING) publish(sample);
+        },
       );
       ffmpegElapsedMs += Date.now() - ffmpegStarted;
+      cuttingSeconds = (Date.now() - ffmpegStarted) / 1000;
       let final = raw;
       if (hasCaptions) {
         await transition(ClipProcessingState.CAPTIONING);
@@ -221,16 +225,31 @@ export class RenderProcessor
           final,
           style,
           duration,
-          (sample) => publish(sample),
+          (sample) => {
+            if (state === ClipProcessingState.CAPTIONING) publish(sample);
+          },
         );
       }
-      if (hasCaptions) ffmpegElapsedMs += Date.now() - ffmpegStarted;
+      if (hasCaptions) {
+        captioningSeconds = (Date.now() - ffmpegStarted) / 1000;
+        ffmpegElapsedMs += captioningSeconds * 1000;
+      }
       const averageSpeed =
         (duration * (hasCaptions ? 2 : 1)) /
         Math.max(0.001, ffmpegElapsedMs / 1000);
       await transition(ClipProcessingState.UPLOADING);
       await this.r2.uploadFile(final, objectKey);
+      const totalSeconds = (Date.now() - started) / 1000;
       await this.jobs.updateClip(jobId, clipId, {
+        renderTiming: {
+          cuttingSeconds,
+          captioningSeconds,
+          overheadSeconds: Math.max(
+            0,
+            totalSeconds - cuttingSeconds - captioningSeconds,
+          ),
+          totalSeconds,
+        },
         status: JobStatus.COMPLETED,
         processingState: ClipProcessingState.READY,
         r2ObjectKey: objectKey,

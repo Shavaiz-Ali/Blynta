@@ -6,7 +6,7 @@ import { formatRemainingTime } from "../format-eta";
 
 const labels = {
   queued: "Waiting to process",
-  cutting: "Creating video",
+  cutting: "Cutting video",
   captioning: "Adding captions",
   uploading: "Finalizing",
   ready: "Ready",
@@ -73,8 +73,7 @@ export function ClipProcessingCard({
         : active
           ? LoaderCircle
           : Clock;
-  const pct =
-    status === "uploading" ? undefined : percentage(progress?.progress);
+  const pct = percentage(progress?.progress);
   const eta = formatRemainingTime(progress?.etaSeconds);
   return (
     <div className="min-w-0 space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs">
@@ -99,7 +98,9 @@ export function ClipProcessingCard({
           }
         />
       </div>
-      <p className="text-xs font-medium">{labels[status]}</p>
+      {(!active || pct === undefined) && (
+        <p className="text-xs font-medium">{labels[status]}</p>
+      )}
       {active && pct !== undefined && (
         <ProcessingProgress value={pct} label={labels[status]} />
       )}
@@ -112,7 +113,7 @@ export function ClipProcessingCard({
                 {time(progress.durationSeconds)}
               </span>
             )}
-          {eta && <span>{eta}</span>}
+          {eta && status !== "uploading" && <span>{eta} in this stage</span>}
         </div>
       )}
       {status === "failed" && (

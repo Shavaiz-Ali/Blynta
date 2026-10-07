@@ -42,7 +42,8 @@ export interface Highlight {
 }
 
 export interface Clip {
-  processingState?: "queued" | "cutting" | "captioning" | "uploading" | "ready" | "failed";
+  processingState?:
+    "queued" | "cutting" | "captioning" | "uploading" | "ready" | "failed";
   errorMessage?: string;
   errorStage?: string;
   id: string;
@@ -99,6 +100,8 @@ export interface Job {
       clipId: string;
       status: NonNullable<Clip["processingState"]>;
       progress: number;
+      stageProgress?: number;
+      etaScope?: "stage";
       renderProgress: number;
       processedSeconds?: number;
       durationSeconds: number;

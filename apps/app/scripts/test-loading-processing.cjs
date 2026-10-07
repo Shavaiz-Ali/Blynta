@@ -152,6 +152,54 @@ const rendering = {
   },
 };
 const html = render(JobProcessingView, { job: rendering });
+const captionCard = render(ClipProcessingCard, {
+  job: {
+    ...rendering,
+    render: {
+      ...rendering.render,
+      clips: [
+        {
+          clipId: "a",
+          status: "captioning",
+          progress: 36,
+          stageProgress: 10,
+          processedSeconds: 4,
+          durationSeconds: 50,
+          etaSeconds: 1147,
+          etaScope: "stage",
+        },
+      ],
+    },
+  },
+  clip: clips[0],
+  index: 0,
+});
+assert.match(captionCard, /36%/);
+assert.doesNotMatch(captionCard, /10%/);
+assert.equal((captionCard.match(/>Adding captions</g) ?? []).length, 1);
+assert.ok(captionCard.includes("00:04 / 00:50"));
+assert.match(captionCard, /~19 min remaining in this stage/);
+const finalizingCard = render(ClipProcessingCard, {
+  job: {
+    ...rendering,
+    render: {
+      ...rendering.render,
+      clips: [
+        {
+          clipId: "a",
+          status: "uploading",
+          progress: 90,
+          stageProgress: 0,
+          durationSeconds: 50,
+        },
+      ],
+    },
+  },
+  clip: clips[0],
+  index: 0,
+});
+assert.match(finalizingCard, /90%/);
+assert.equal((finalizingCard.match(/>Finalizing</g) ?? []).length, 1);
 assert.match(html, /67%/);
 assert.match(html, /27%/);
 assert.ok(html.includes("00:31 / 00:47"));

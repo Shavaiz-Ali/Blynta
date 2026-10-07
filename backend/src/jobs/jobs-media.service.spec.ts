@@ -7,6 +7,7 @@ import { ActivitiesService } from '../activities/activities.service';
 import { Types } from 'mongoose';
 import { ConfigService } from '@nestjs/config';
 import { JobsService } from './jobs.service';
+import { RenderEtaService } from './render-eta.service';
 import { JobStatus, ClipProcessingState } from './schemas/job.schema';
 import { renderJobId } from './jobs.constants';
 
@@ -57,6 +58,7 @@ describe('durable render fan-out and parent completion', () => {
     ),
   };
   interface Queued {
+    progress?: unknown;
     name?: string;
     data?: { jobId: string; clipId: string };
     opts?: JobsOptions;
@@ -102,6 +104,9 @@ describe('durable render fan-out and parent completion', () => {
       new ConfigService(),
       {} as R2Service,
       {} as ActivitiesService,
+      {
+        estimate: jest.fn(() => Promise.resolve(0)),
+      } as unknown as RenderEtaService,
     );
   });
   it('creates six small independent render jobs and duplicate fan-out adds none', async () => {
@@ -189,6 +194,52 @@ describe('durable render fan-out and parent completion', () => {
     });
     expect(queue.getJob).not.toHaveBeenCalled();
   });
+  it('hands existing BullMQ state to the ETA estimator without changing clip progress', async () => {
+    const eta = (service as unknown as { renderEta: RenderEtaService })
+      .renderEta;
+    const estimate = jest.spyOn(eta, 'estimate').mockResolvedValue(444);
+    const active = parent.clips[0];
+    parent.clips.forEach((clip, index) =>
+      queued.set(renderJobId(jobId, clip._id.toString()), {
+        getState: () => Promise.resolve(index === 0 ? 'active' : 'prioritized'),
+        progress:
+          index === 0
+            ? {
+                clipId: active._id.toString(),
+                status: ClipProcessingState.CAPTIONING,
+                progress: 54,
+                stageProgress: 40,
+                renderProgress: 54,
+                processedSeconds: 4,
+                durationSeconds: 10,
+                etaSeconds: 60,
+                cuttingSeconds: 5,
+                updatedAt: Date.now(),
+              }
+            : 0,
+      }),
+    );
+    const snapshot = await service.getRenderSnapshot(parent as JobDocument);
+    expect(snapshot.estimatedRemainingSeconds).toBe(444);
+    expect(snapshot.clips[0]).toMatchObject({
+      progress: 54,
+      stageProgress: 40,
+      etaSeconds: 60,
+    });
+    expect(estimate).toHaveBeenCalledWith(
+      jobId,
+      JobStatus.CUTTING_CLIPS,
+      expect.any(Array),
+    );
+    expect(estimate.mock.calls[0][2][0]).toMatchObject({
+      queueState: 'active',
+      progress: { etaSeconds: 60 },
+    });
+    expect(estimate.mock.calls[0][2][1]).toMatchObject({
+      queueState: 'prioritized',
+      progress: { status: 'queued' },
+    });
+  });
   it('prevents stale reconciliation from overwriting a ready clip', async () => {
     const id = parent.clips[0]._id.toString();
     await service.failUnfinishedClip(jobId, id, 'worker died', 'worker');
@@ -200,5 +251,30 @@ describe('durable render fan-out and parent completion', () => {
         },
       },
     });
+  });
+  it('preserves overall progress while a child waits for retry and drops stage observations', async () => {
+    const clip = parent.clips[0];
+    queued.set(renderJobId(jobId, clip._id.toString()), {
+      getState: () => Promise.resolve('delayed'),
+      progress: {
+        clipId: clip._id.toString(),
+        status: ClipProcessingState.CAPTIONING,
+        progress: 78,
+        stageProgress: 80,
+        renderProgress: 78,
+        processedSeconds: 8,
+        etaSeconds: 5,
+        updatedAt: Date.now(),
+      },
+    });
+    const snapshot = await service.getRenderSnapshot(parent as JobDocument);
+    expect(snapshot.clips[0]).toMatchObject({
+      status: 'queued',
+      progress: 78,
+      renderProgress: 78,
+      stageProgress: 0,
+    });
+    expect(snapshot.clips[0].etaSeconds).toBeUndefined();
+    expect(snapshot.clips[0].processedSeconds).toBeUndefined();
   });
 });

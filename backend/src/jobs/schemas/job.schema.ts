@@ -85,6 +85,15 @@ export const HighlightSchema = SchemaFactory.createForClass(Highlight);
 // A finished, cut clip — the actual deliverable to the user
 @Schema({ timestamps: true })
 export class Clip {
+  // Successful attempt timings, excluding queue wait. Reused for this parent's ETA.
+  @Prop({ type: Object })
+  renderTiming?: {
+    cuttingSeconds: number;
+    captioningSeconds: number;
+    overheadSeconds: number;
+    totalSeconds: number;
+  };
+
   @Prop({ enum: ClipProcessingState, default: ClipProcessingState.QUEUED })
   processingState?: ClipProcessingState;
 
