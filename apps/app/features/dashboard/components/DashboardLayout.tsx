@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 
 import { useCurrentUser } from "@/features/auth/queries";
 import { InviteMembersDialog } from "./InviteMembersDialog";
+import { isNavItemActive, type NavRoute } from "../navigation";
 import {
   UserPlusIcon,
   FilmIcon,
@@ -93,13 +94,11 @@ const Icon = {
 
 export interface NavGroup {
   title: string;
-  items: {
+  items: (NavRoute & {
     label: string;
-    href: string;
     icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
     badge?: string;
-    disabled?: boolean;
-  }[];
+  })[];
 }
 
 export const navGroups: NavGroup[] = [
@@ -234,7 +233,7 @@ function SidebarContent({
               </p>
             )}
             {group.items.map((item) => {
-              const isActive = !item.disabled && pathname === item.href;
+              const isActive = isNavItemActive(pathname, item);
               return (
                 <NavItem
                   key={item.label}
