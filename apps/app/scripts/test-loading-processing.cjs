@@ -34,6 +34,8 @@ function load(relative, overrides = {}) {
       };
     if (id === "@blynta/ui")
       return {
+        AppCardRoot: ({ children, ...props }) =>
+          React.createElement("div", props, children),
         AppButton: ({ children, icon, isLoading, ...props }) =>
           React.createElement("button", props, icon, children),
       };

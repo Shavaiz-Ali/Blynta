@@ -126,7 +126,7 @@ export function JobProcessingView({ job }: { job: Job }) {
                 </div>
               </div>
               {index === 3 && total > 0 && (
-                <div className="grid w-full min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                <div className="grid w-full min-w-0 grid-cols-1 items-start gap-x-3 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
                   {clips.map((clip, clipIndex) =>
                     clip.status === "completed" ? (
                       <GeneratedClipCard

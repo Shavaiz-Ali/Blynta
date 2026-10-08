@@ -223,7 +223,7 @@ export function GeneratedClipsGrid({ job }: GeneratedClipsGridProps) {
           </AppButton>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 items-start gap-x-5 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
           {/* 1. Finished Clips */}
           {filteredAndSortedClips.map(({ clip, highlight, index }) => (
             <GeneratedClipCard

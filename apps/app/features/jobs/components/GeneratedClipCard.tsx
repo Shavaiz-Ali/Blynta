@@ -24,7 +24,7 @@ import {
 import { AppButton } from "@blynta/ui";
 import { AppDropdown } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
-import { AppCard } from "@blynta/ui";
+import { ClipCardLayout, ClipCardTitle } from "./ClipCardLayout";
 
 export interface GeneratedClipCardProps {
   job: Job;
@@ -125,98 +125,83 @@ export function GeneratedClipCard({
 
   return (
     <>
-      <AppCard
+      <ClipCardLayout
+        index={clipIndex}
+        status={
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            Ready
+          </span>
+        }
         onClick={handleOpenClip}
         className={cn(
-          "group relative flex flex-col overflow-hidden transition-all duration-200 text-left border border-border/70 bg-card/70",
-          "hover:border-primary/35 hover:shadow-lg hover:shadow-black/5 cursor-pointer p-0!",
+          "group relative overflow-hidden transition-all duration-200 text-left border border-border/70 bg-card/70",
+          "hover:border-primary/35 hover:shadow-lg hover:shadow-black/5 cursor-pointer",
         )}
-        useDefaultClasses={false}
-        contentClassName="!p-0 py-0!"
-      >
-        {/* ── Thumbnail Area ── */}
-        <div className="relative aspect-[16/10] w-full bg-muted/40 overflow-hidden select-none">
-          {job.thumbnailUrl ? (
-            <img
-              src={job.thumbnailUrl}
-              alt={clipTitle}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-              loading="lazy"
-            />
-          ) : (
-            <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-card via-muted/30 to-background text-muted-foreground">
-              <FilmIcon className="h-6 w-6 text-primary/70 mb-1" />
-              <span className="text-[11px] font-medium">
-                Short clip #{clipIndex + 1}
-              </span>
-            </div>
-          )}
+        media={
+          <>
+            {/* ── Thumbnail Area ── */}
 
-          {/* Dark Overlay Gradient */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent pointer-events-none" />
-
-          {/* Viral Score Badge (Top Left) */}
-          <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-white/15 text-white shadow-xs">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            <span className="text-[11px] font-semibold tracking-tight">
-              {scorePercent}
-            </span>
-            <span className="text-[9px] text-white/65 font-medium uppercase tracking-wider">
-              score
-            </span>
-          </div>
-
-          {/* Hook Badge (Top Right) */}
-          {hookStyle && (
-            <div className="absolute top-3 right-3 max-w-[140px] truncate px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-medium uppercase tracking-wide text-white/80">
-              {hookStyle}
-            </div>
-          )}
-
-          {/* Duration Pill (Bottom Right) */}
-          <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[11px] font-mono font-medium text-white border border-white/15">
-            {formatDuration(durationSec)}
-          </div>
-
-          {/* Timestamp Range Pill (Bottom Left) */}
-          <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-mono text-white/80 border border-white/10">
-            <ClockIcon className="h-2.5 w-2.5 text-white/70" />
-            <span>
-              {formatTime(clip.startTime)} → {formatTime(clip.endTime)}
-            </span>
-          </div>
-
-          {/* Play Icon Hover Overlay */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30 backdrop-blur-[2px]">
-            <div className="h-11 w-11 rounded-full bg-white text-black flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
-              <PlayIcon className="h-4 w-4 ml-0.5" />
-            </div>
-          </div>
-        </div>
-
-        {/* ── Content Body ── */}
-        <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-              <span className="font-medium uppercase tracking-wider">
-                Clip {String(clipIndex + 1).padStart(2, "0")}
-              </span>
-              <span>{formatDuration(durationSec)}</span>
-            </div>
-
-            <h4 className="text-base font-semibold text-foreground line-clamp-1 leading-snug group-hover:text-primary transition-colors">
-              {clipTitle}
-            </h4>
-
-            {reasonText && (
-              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                {reasonText}
-              </p>
+            {job.thumbnailUrl ? (
+              <img
+                src={job.thumbnailUrl}
+                alt={clipTitle}
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                loading="lazy"
+              />
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-card via-muted/30 to-background text-muted-foreground">
+                <FilmIcon className="h-6 w-6 text-primary/70 mb-1" />
+                <span className="text-[11px] font-medium">
+                  Short clip #{clipIndex + 1}
+                </span>
+              </div>
             )}
-          </div>
 
-          {/* Bottom Controls Row */}
-          <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+            {/* Dark Overlay Gradient */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent pointer-events-none" />
+
+            {/* Viral Score Badge (Top Left) */}
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-black/75 backdrop-blur-md border border-white/15 text-white shadow-xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="text-[11px] font-semibold tracking-tight">
+                {scorePercent}
+              </span>
+              <span className="text-[9px] text-white/65 font-medium uppercase tracking-wider">
+                score
+              </span>
+            </div>
+
+            {/* Hook Badge (Top Right) */}
+            {hookStyle && (
+              <div className="absolute top-3 right-3 max-w-[140px] truncate px-2.5 py-1 rounded-md bg-black/60 backdrop-blur-md border border-white/10 text-[9px] font-medium uppercase tracking-wide text-white/80">
+                {hookStyle}
+              </div>
+            )}
+
+            {/* Duration Pill (Bottom Right) */}
+            <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[11px] font-mono font-medium text-white border border-white/15">
+              {formatDuration(durationSec)}
+            </div>
+
+            {/* Timestamp Range Pill (Bottom Left) */}
+            <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-mono text-white/80 border border-white/10">
+              <ClockIcon className="h-2.5 w-2.5 text-white/70" />
+              <span>
+                {formatTime(clip.startTime)} → {formatTime(clip.endTime)}
+              </span>
+            </div>
+
+            {/* Play Icon Hover Overlay */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/30 backdrop-blur-[2px]">
+              <div className="h-11 w-11 rounded-full bg-white text-black flex items-center justify-center shadow-lg transform scale-90 group-hover:scale-100 transition-transform">
+                <PlayIcon className="h-4 w-4 ml-0.5" />
+              </div>
+            </div>
+          </>
+        }
+        footer={
+          <div className="flex items-center justify-between gap-2">
             <AppButton
               variant="outline"
               size="sm"
@@ -273,8 +258,15 @@ export function GeneratedClipCard({
               />
             </div>
           </div>
-        </div>
-      </AppCard>
+        }
+      >
+        <ClipCardTitle>{clipTitle}</ClipCardTitle>
+        {reasonText && (
+          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+            {reasonText}
+          </p>
+        )}
+      </ClipCardLayout>
 
       {/* Delete Confirmation Modal */}
       <AppDialog

@@ -4,6 +4,11 @@ import type { Job, Clip, Highlight } from "../types";
 import { clipState, percentage } from "../processing-state";
 import { formatRemainingTime } from "../format-eta";
 import { FailedClipCard } from "./FailedClipCard";
+import {
+  ClipCardLayout,
+  ClipCardTitle,
+  ClipPendingMedia,
+} from "./ClipCardLayout";
 
 const labels = {
   queued: "Waiting to process",
@@ -83,49 +88,72 @@ export function ClipProcessingCard({
         clip={clip}
         index={index}
         title={highlight?.clipTitle || highlight?.hookText || "Video highlight"}
+        highlight={highlight}
       />
     );
   return (
-    <div className="min-w-0 space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-xs text-muted-foreground">
-            Clip {String(index + 1).padStart(2, "0")}
-          </p>
-          <p className="break-words text-sm font-medium">
-            {highlight?.clipTitle || highlight?.hookText || "Video highlight"}
-          </p>
-        </div>
-        <Icon
-          aria-hidden="true"
-          className={
-            "h-4 w-4 shrink-0 " +
-            (active
-              ? "text-primary animate-spin motion-reduce:animate-none"
-              : status === "failed"
-                ? "text-destructive"
-                : "text-muted-foreground")
+    <ClipCardLayout
+      index={index}
+      status={
+        <span
+          className={`inline-flex items-center gap-1.5 ${active ? "text-primary" : "text-muted-foreground"}`}
+        >
+          <Icon
+            aria-hidden="true"
+            className={`h-3 w-3 ${active ? "animate-spin motion-reduce:animate-none" : ""}`}
+          />
+          {active ? "Processing" : status === "ready" ? "Ready" : "Waiting"}
+        </span>
+      }
+      media={
+        <ClipPendingMedia
+          job={job}
+          clip={clip}
+          highlight={highlight}
+          label="Preview will appear here"
+          icon={
+            <Icon
+              aria-hidden="true"
+              className={`h-5 w-5 ${active ? "text-primary animate-spin motion-reduce:animate-none" : ""}`}
+            />
           }
         />
-      </div>
-      {(!active || pct === undefined) && (
-        <p className="text-xs font-medium">{labels[status]}</p>
-      )}
-      {active && pct !== undefined && (
-        <ProcessingProgress value={pct} label={labels[status]} />
-      )}
-      {active && progress && (
-        <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
-          {Number.isFinite(progress.processedSeconds) &&
-            Number.isFinite(progress.durationSeconds) && (
-              <span>
-                {time(progress.processedSeconds!)} /{" "}
-                {time(progress.durationSeconds)}
-              </span>
-            )}
-          {eta && status !== "uploading" && <span>{eta} in this stage</span>}
+      }
+      footer={
+        <div className="space-y-2" aria-live="polite">
+          {(!active || pct === undefined) && (
+            <p className="text-xs font-medium">{labels[status]}</p>
+          )}
+          {active && pct !== undefined && (
+            <ProcessingProgress value={pct} label={labels[status]} />
+          )}
+          {active && progress && (
+            <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+              {Number.isFinite(progress.processedSeconds) &&
+                Number.isFinite(progress.durationSeconds) && (
+                  <span>
+                    {time(progress.processedSeconds!)} /{" "}
+                    {time(progress.durationSeconds)}
+                  </span>
+                )}
+              {eta && status !== "uploading" && (
+                <span>{eta} in this stage</span>
+              )}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      }
+    >
+      <ClipCardTitle>
+        {highlight?.clipTitle || highlight?.hookText || "Video highlight"}
+      </ClipCardTitle>
+      <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+        {highlight?.reason ||
+          highlight?.clipDescription ||
+          (active
+            ? "Your clip is being created. The preview will appear automatically when it’s ready."
+            : "This clip is queued and will start automatically when processing is available.")}
+      </p>
+    </ClipCardLayout>
   );
 }

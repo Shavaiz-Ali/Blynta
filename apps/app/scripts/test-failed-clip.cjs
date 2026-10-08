@@ -29,11 +29,17 @@ mod.require = (id) => {
       useState: () => [
         expanded,
         (value) => {
-          expanded = value;
+          expanded = typeof value === "function" ? value(expanded) : value;
         },
       ],
     };
   if (id === "@blynta/ui") return { AppButton };
+  if (id === "./ClipCardLayout")
+    return {
+      ClipCardLayout: () => {},
+      ClipCardTitle: () => {},
+      ClipPendingMedia: () => {},
+    };
   if (id === "sonner")
     return {
       toast: {
@@ -85,6 +91,7 @@ function nodes(element) {
   return [
     element,
     ...React.Children.toArray(element.props?.children).flatMap(nodes),
+    ...React.Children.toArray(element.props?.footer).flatMap(nodes),
   ];
 }
 function buttons(tree) {
@@ -97,10 +104,8 @@ async function run() {
     1,
     "No details action without meaningful metadata",
   );
-  assert.ok(
-    tree.props.className.includes("self-start"),
-    "Failed cards do not stretch to fill the row",
-  );
+  assert.ok(tree.props.media, "Failed clips share the media section");
+  assert.ok(tree.props.footer, "Retry actions belong to the shared footer");
   const props = {
     ...base,
     clip: {
@@ -108,6 +113,8 @@ async function run() {
       failure: {
         message: "Captions could not be added.",
         stage: "Adding captions",
+        reason:
+          "Caption rendering stopped before this clip finished. Retry the clip to finish creating it.",
         attempt: 2,
         failedAt: "2026-10-08T01:00:00Z",
         retryAvailable: true,
@@ -127,6 +134,31 @@ async function run() {
   assert.equal(
     nodes(tree).find((node) => node.props?.id === "details").props.inert,
     false,
+  );
+  const region = nodes(tree).find((node) => node.props?.id === "details");
+  assert.equal(region.props.role, "region");
+  assert.equal(region.props["aria-labelledby"], details.props.id);
+  const reason = nodes(tree).find(
+    (node) => node.type === "dt" && node.props.children === "Reason",
+  );
+  const reasonPair = nodes(tree).find((node) =>
+    React.Children.toArray(node.props?.children).some(
+      (child) => child.props === reason.props,
+    ),
+  );
+  assert.ok(
+    reasonPair.props.className.includes("col-span-2"),
+    "Long reasons use the entire panel width",
+  );
+  assert.equal(
+    buttons(
+      FailedClipCard({
+        ...props,
+        job: { ...props.job, updatedAt: "new poll" },
+      }),
+    )[1].props["aria-expanded"],
+    true,
+    "Polling props preserve the disclosure state",
   );
   details.props.onClick();
   assert.equal(buttons(FailedClipCard(props))[1].props["aria-expanded"], false);

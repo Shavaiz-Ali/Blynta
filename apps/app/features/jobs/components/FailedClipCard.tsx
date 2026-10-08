@@ -6,18 +6,25 @@ import { AppButton } from "@blynta/ui";
 import { toast } from "sonner";
 import { isAxiosError } from "axios";
 import { useRetryClip } from "../queries";
-import type { Clip, Job } from "../types";
+import {
+  ClipCardLayout,
+  ClipCardTitle,
+  ClipPendingMedia,
+} from "./ClipCardLayout";
+import type { Clip, Job, Highlight } from "../types";
 
 export function FailedClipCard({
   job,
   clip,
   index,
   title,
+  highlight,
 }: {
   job: Job;
   clip: Clip;
   index: number;
   title: string;
+  highlight?: Highlight;
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
@@ -79,76 +86,99 @@ export function FailedClipCard({
     }
   };
   return (
-    <article
-      className="min-w-0 self-start space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs"
+    <ClipCardLayout
+      index={index}
       aria-label={`Clip ${index + 1}: failed`}
-    >
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="text-muted-foreground">
-          Clip {String(index + 1).padStart(2, "0")}
-        </span>
+      status={
         <span className="inline-flex items-center gap-1.5 text-destructive">
-          <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5" />
+          <AlertTriangle aria-hidden="true" className="h-3 w-3" />
           Failed
         </span>
-      </div>
-      <p className="line-clamp-2 break-words text-sm font-medium" title={title}>
-        {title}
-      </p>
-      <p className="rounded-lg border border-destructive/15 bg-destructive/5 px-3 py-2.5 text-xs leading-relaxed text-foreground/85">
+      }
+      media={
+        <ClipPendingMedia
+          job={job}
+          clip={clip}
+          highlight={highlight}
+          label="Clip could not be created"
+          icon={
+            <AlertTriangle
+              aria-hidden="true"
+              className="h-5 w-5 text-destructive/80"
+            />
+          }
+        />
+      }
+      footer={
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <AppButton
+              size="sm"
+              className="h-9 shrink-0 px-3 text-xs font-medium"
+              icon={<RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />}
+              isLoading={retry.isPending}
+              disabled={!available || retry.isPending}
+              onClick={handleRetry}
+            >
+              {retry.isPending ? "Submitting…" : "Retry clip"}
+            </AppButton>
+            {fields.length > 0 && (
+              <AppButton
+                variant="ghost"
+                size="sm"
+                id={`${detailsId}-trigger`}
+                className="h-9 shrink-0 px-2 text-xs text-muted-foreground"
+                aria-expanded={expanded}
+                aria-controls={detailsId}
+                onClick={() => setExpanded((open) => !open)}
+              >
+                {expanded ? "Hide details" : "View details"}
+                <ChevronDown
+                  aria-hidden="true"
+                  className={`h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
+                />
+              </AppButton>
+            )}
+          </div>
+          {fields.length > 0 && (
+            <div
+              id={detailsId}
+              role="region"
+              aria-labelledby={`${detailsId}-trigger`}
+              aria-hidden={!expanded}
+              inert={!expanded}
+              className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+            >
+              <div className="overflow-hidden">
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border/60 pt-4 text-xs">
+                  {fields.map(([label, value]) => (
+                    <div
+                      key={label}
+                      className={`min-w-0 space-y-1 ${label === "Attempt" || label === "Retry availability" ? "" : "col-span-2"}`}
+                    >
+                      <dt className="text-[11px] font-medium text-muted-foreground">
+                        {label}
+                      </dt>
+                      <dd
+                        className="min-w-0 break-words leading-relaxed text-foreground/90 [overflow-wrap:anywhere]"
+                        suppressHydrationWarning={label === "Failed at"}
+                      >
+                        {value}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </div>
+          )}
+        </>
+      }
+    >
+      <ClipCardTitle>{title}</ClipCardTitle>
+      <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
         {failure?.message ||
           "This clip stopped before it was ready. Retry to create it again."}
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <AppButton
-          size="sm"
-          icon={<RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />}
-          isLoading={retry.isPending}
-          disabled={!available || retry.isPending}
-          onClick={handleRetry}
-        >
-          {retry.isPending ? "Submitting…" : "Retry clip"}
-        </AppButton>
-        {fields.length > 0 && (
-          <AppButton
-            variant="ghost"
-            size="sm"
-            aria-expanded={expanded}
-            aria-controls={detailsId}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {expanded ? "Hide details" : "View details"}
-            <ChevronDown
-              aria-hidden="true"
-              className={`h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
-            />
-          </AppButton>
-        )}
-      </div>
-      {fields.length > 0 && (
-        <div
-          id={detailsId}
-          aria-hidden={!expanded}
-          inert={!expanded}
-          className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
-        >
-          <div className="overflow-hidden">
-            <dl className="grid gap-2 pt-1 text-xs">
-              {fields.map(([label, value]) => (
-                <div key={label} className="grid grid-cols-[7rem_1fr] gap-3">
-                  <dt className="text-muted-foreground">{label}</dt>
-                  <dd
-                    className="min-w-0 break-words leading-relaxed"
-                    suppressHydrationWarning={label === "Failed at"}
-                  >
-                    {value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        </div>
-      )}
-    </article>
+    </ClipCardLayout>
   );
 }
