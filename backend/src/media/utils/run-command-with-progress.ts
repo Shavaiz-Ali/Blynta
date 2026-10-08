@@ -1,6 +1,10 @@
 import { spawn } from 'child_process';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
 import { hostCommand } from './host-command';
+import {
+  cancellationSignal,
+  ProcessingCancelled,
+} from '../../jobs/cancellation-context';
 
 export function runCommandWithProgress(
   command: string,
@@ -8,6 +12,7 @@ export function runCommandWithProgress(
   onLine: (line: string) => void,
   processRegistry?: ProcessRegistryService,
 ): Promise<void> {
+  const signal = cancellationSignal();
   return new Promise((resolve, reject) => {
     processRegistry?.assertRunning();
     const limited = hostCommand(command, args);
@@ -45,6 +50,10 @@ export function runCommandWithProgress(
     proc.on('close', (code) => {
       if (stdoutBuffer) onLine(stdoutBuffer);
       if (stderrBuffer) onLine(stderrBuffer);
+      if (signal?.aborted) {
+        reject(new ProcessingCancelled());
+        return;
+      }
       if (code === 0) resolve();
       else
         reject(

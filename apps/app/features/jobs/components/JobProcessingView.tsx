@@ -13,6 +13,7 @@ import { formatRemainingTime } from "../format-eta";
 import { getJobDisplayTitle } from "@/features/dashboard/utils";
 
 export function JobProcessingView({ job }: { job: Job }) {
+  const stopped = job.status === "cancelling" || job.status === "cancelled";
   const current = pipelineIndex(job);
   const issues = completedWithIssues(job);
   const failed = job.status === "failed" && !issues;
@@ -21,7 +22,21 @@ export function JobProcessingView({ job }: { job: Job }) {
   const ready = clips.filter((clip) => clip.status === "completed").length;
   const failedCount = clips.filter((clip) => clip.status === "failed").length;
   const total = job.render?.total ?? Math.max(clips.length, highlights.length);
-  const progress = percentage(job.progressPercent);
+  const totalSeconds = clips.reduce(
+    (sum, clip) => sum + Math.max(0.001, clip.endTime - clip.startTime),
+    0,
+  );
+  const completedSeconds = clips
+    .filter((clip) => clip.status === "completed")
+    .reduce(
+      (sum, clip) => sum + Math.max(0.001, clip.endTime - clip.startTime),
+      0,
+    );
+  const progress = stopped
+    ? totalSeconds
+      ? Math.floor((100 * completedSeconds) / totalSeconds)
+      : 0
+    : percentage(job.progressPercent);
   // Queue capacity and queued work are not exposed: only use an authoritative API estimate.
   const eta =
     job.status === "cutting_clips"
@@ -34,11 +49,15 @@ export function JobProcessingView({ job }: { job: Job }) {
     >
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">
-          {issues
-            ? "Completed with issues"
-            : failed
-              ? "Processing needs attention"
-              : "Creating your clips"}
+          {stopped
+            ? job.status === "cancelling"
+              ? "Cancelling processing…"
+              : "Processing cancelled"
+            : issues
+              ? "Completed with issues"
+              : failed
+                ? "Processing needs attention"
+                : "Creating your clips"}
         </h2>
         <p className="break-words text-sm text-muted-foreground">
           {getJobDisplayTitle(job, 70)}
@@ -63,10 +82,18 @@ export function JobProcessingView({ job }: { job: Job }) {
           Processing stopped. The failed stage wasn’t reported.
         </p>
       )}
+      {job.cancellationPendingReason && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Worker shutdown is still awaiting confirmation. Use “Check
+          cancellation” in the video menu to check again. If this remains
+          pending, contact support to verify that the worker has stopped.
+        </p>
+      )}
       <ol className="space-y-5">
         {processingSteps.map((step, index) => {
-          const state =
-            index < current
+          const state = stopped
+            ? "stopped"
+            : index < current
               ? "completed"
               : index === current
                 ? failed
@@ -113,15 +140,17 @@ export function JobProcessingView({ job }: { job: Job }) {
                     {step.label}
                   </h3>
                   <span className="text-xs text-muted-foreground">
-                    {state === "upcoming"
-                      ? "Upcoming"
-                      : state === "active"
-                        ? "In progress"
-                        : state === "failed"
-                          ? "Failed"
-                          : issues && index === 3
-                            ? "Completed with issues"
-                            : "Completed"}
+                    {state === "stopped"
+                      ? "Stopped"
+                      : state === "upcoming"
+                        ? "Upcoming"
+                        : state === "active"
+                          ? "In progress"
+                          : state === "failed"
+                            ? "Failed"
+                            : issues && index === 3
+                              ? "Completed with issues"
+                              : "Completed"}
                   </span>
                 </div>
               </div>
@@ -162,9 +191,13 @@ export function JobProcessingView({ job }: { job: Job }) {
         })}
       </ol>
       <p className="text-xs text-muted-foreground">
-        {issues
-          ? "Finished clips are ready to use. Retry any failed clip above to finish creating it."
-          : "You can leave this page while your video processes. Finished clips will appear here automatically."}
+        {stopped
+          ? job.status === "cancelling"
+            ? "Waiting for workers to confirm shutdown. Finished clips are kept. Deletion becomes available when processing has stopped. If shutdown cannot be confirmed, cancellation stays pending; you can safely check again later."
+            : "Finished clips are kept. You can now delete this video from its actions menu."
+          : issues
+            ? "Finished clips are ready to use. Retry any failed clip above to finish creating it."
+            : "You can leave this page while your video processes. Finished clips will appear here automatically."}
       </p>
     </section>
   );

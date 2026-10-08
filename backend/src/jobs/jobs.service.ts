@@ -1,3 +1,6 @@
+import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
+import { mediaExecution, ProcessingCancelled } from './cancellation-context';
 import {
   ConflictException,
   Injectable,
@@ -69,6 +72,146 @@ export class JobsService {
     @InjectModel('StudioAsset')
     private studioAssets?: Model<StudioAsset>,
   ) {}
+
+  async cancelJob(userId: string, jobId: string) {
+    const current = await this.getJobById(userId, jobId);
+    const unconfirmedCompletion =
+      current.status === JobStatus.COMPLETED &&
+      Boolean(current.activeExecutions?.length);
+    await this.jobModel
+      .updateOne(
+        {
+          _id: jobId,
+          deletionRequested: { $ne: true },
+          cancellationRequestedAt: null,
+          status: { $nin: [JobStatus.COMPLETED, JobStatus.CANCELLED] },
+          ...(unconfirmedCompletion
+            ? {
+                status: JobStatus.COMPLETED,
+                'activeExecutions.0': { $exists: true },
+              }
+            : {}),
+        },
+        {
+          $set: {
+            status: JobStatus.CANCELLING,
+            cancellationRequestedAt: new Date(),
+            pipelineRetryRequested: false,
+            renderRetryRequested: false,
+            'clips.$[].retryRequested': false,
+          },
+        },
+      )
+      .exec();
+    await this.finalizeCancellation(jobId).catch((error) =>
+      this.logger.warn(`Cancellation remains pending: ${error}`),
+    );
+    const latest = await this.getJobById(userId, jobId);
+    if (latest.deletionRequested)
+      throw new ConflictException('Video deletion is already underway.');
+    return latest;
+  }
+
+  async finalizeCancellation(jobId: string) {
+    const parent = await this.findJob(jobId);
+    if (
+      parent?.status !== JobStatus.CANCELLING ||
+      parent.activeExecutions?.length
+    )
+      return;
+    // Also fence legacy work and processors still returning from cleanup.
+    if ((await this.activeMediaJobIds()).has(jobId)) return;
+    if (!(await this.removeInactiveMediaJobs(jobId))) return;
+    const total = parent.clips.reduce(
+      (sum, c) => sum + Math.max(0.001, c.endTime - c.startTime),
+      0,
+    );
+    const ready = parent.clips
+      .filter((c) => c.status === JobStatus.COMPLETED)
+      .reduce((sum, c) => sum + Math.max(0.001, c.endTime - c.startTime), 0);
+    await this.jobModel
+      .updateOne(
+        {
+          _id: jobId,
+          status: JobStatus.CANCELLING,
+          $or: [
+            { activeExecutions: { $size: 0 } },
+            { activeExecutions: { $exists: false } },
+          ],
+        },
+        {
+          $set: {
+            status: JobStatus.CANCELLED,
+            cancelledAt: new Date(),
+            progressPercent: total ? Math.floor((100 * ready) / total) : 0,
+            'clips.$[unfinished].status': JobStatus.CANCELLED,
+            'clips.$[unfinished].processingState':
+              ClipProcessingState.CANCELLED,
+            'clips.$[unfinished].retryRequested': false,
+          },
+          $unset: { errorMessage: '', errorStage: '' },
+        },
+        {
+          arrayFilters: [
+            {
+              'unfinished.status': {
+                $nin: [JobStatus.COMPLETED, JobStatus.FAILED],
+              },
+            },
+          ],
+        },
+      )
+      .exec();
+  }
+
+  /** Mongo claim serializes start against cancellation and deletion across all hosts. */
+  async runMediaExecution(jobId: string, work: () => Promise<void>) {
+    const token = `${hostname()}/${process.pid}/${randomUUID()}`;
+    const claimed = await this.jobModel
+      .findOneAndUpdate(
+        {
+          _id: jobId,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
+        },
+        { $addToSet: { activeExecutions: token } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!claimed) return;
+    const controller = new AbortController();
+    const context = {
+      signal: controller.signal,
+      children: new Set<Promise<void>>(),
+    };
+    let checking = false;
+    const poll = setInterval(() => {
+      if (checking) return;
+      checking = true;
+      void this.findJob(jobId)
+        .then((parent) => {
+          if (!parent || parent.cancellationRequestedAt) controller.abort();
+        })
+        .catch(() => controller.abort())
+        .finally(() => {
+          checking = false;
+        });
+    }, 500);
+    try {
+      await mediaExecution.run(context, work);
+    } catch (error) {
+      const parent = await this.findJob(jobId);
+      if (!parent?.cancellationRequestedAt) throw error;
+      // Return normally to BullMQ: intentional cancellation has no automatic retry.
+    } finally {
+      clearInterval(poll);
+      controller.abort();
+      await Promise.all([...context.children]);
+      await this.jobModel
+        .updateOne({ _id: jobId }, { $pull: { activeExecutions: token } })
+        .exec();
+    }
+  }
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
     await this.usersService.deductCredit(userId);
@@ -179,13 +322,48 @@ export class JobsService {
     jobId: string,
     updates: Partial<Job>,
   ): Promise<JobDocument | null> {
-    return this.jobModel
-      .findByIdAndUpdate(jobId, updates, { returnDocument: 'after' })
+    const result = await this.jobModel
+      .findOneAndUpdate(
+        {
+          _id: jobId,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
+        },
+        updates,
+        { returnDocument: 'after' },
+      )
       .exec();
+    if (!result && mediaExecution.getStore()) throw new ProcessingCancelled();
+    return result;
   }
 
   async findJob(jobId: string): Promise<JobDocument | null> {
     return this.jobModel.findById(jobId).exec();
+  }
+
+  private async removeInactiveMediaJobs(jobId: string) {
+    for (const queue of [this.jobsQueue, this.renderQueue]) {
+      const entries = await queue.getJobs([
+        'active',
+        'waiting',
+        'delayed',
+        'prioritized',
+        'completed',
+        'failed',
+        'waiting-children',
+      ]);
+      for (const entry of entries) {
+        if ((entry.data as { jobId?: string }).jobId !== jobId) continue;
+        if ((await entry.getState()) === 'active') return false;
+        // BullMQ remove is atomic and rejects if the worker acquired a lock meanwhile.
+        try {
+          await entry.remove();
+        } catch {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   async activeMediaJobIds() {
@@ -198,9 +376,44 @@ export class JobsService {
     );
   }
 
+  private async dispatchMediaJobs(
+    jobId: string,
+    dispatch: () => Promise<void>,
+  ) {
+    const token = `dispatch/${hostname()}/${process.pid}/${randomUUID()}`;
+    const claimed = await this.jobModel
+      .updateOne(
+        {
+          _id: jobId,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
+        },
+        { $addToSet: { activeExecutions: token } },
+      )
+      .exec();
+    if (claimed.matchedCount === 0) return;
+    try {
+      await dispatch();
+    } finally {
+      await this.jobModel
+        .updateOne({ _id: jobId }, { $pull: { activeExecutions: token } })
+        .exec();
+    }
+  }
+
   async enqueuePipeline(jobId: string) {
+    await this.dispatchMediaJobs(jobId, () => this.dispatchPipeline(jobId));
+  }
+
+  private async dispatchPipeline(jobId: string) {
     const parent = await this.findJob(jobId);
-    if (!parent || parent.renderManifestReady) return;
+    if (
+      !parent ||
+      parent.cancellationRequestedAt ||
+      parent.deletionRequested ||
+      parent.renderManifestReady
+    )
+      return;
     const queued = await this.jobsQueue.getJob(pipelineJobId(jobId));
     if (!queued)
       await this.jobsQueue.add(
@@ -220,7 +433,13 @@ export class JobsService {
 
   async prepareRenderManifest(jobId: string, highlights: HighlightDto[]) {
     const job = await this.findJob(jobId);
-    if (!job || job.renderManifestReady) return;
+    if (
+      !job ||
+      job.cancellationRequestedAt ||
+      job.deletionRequested ||
+      job.renderManifestReady
+    )
+      return;
     const baseUrl = this.configService.get<string>(
       'API_BASE_URL',
       'http://localhost:5001',
@@ -247,7 +466,12 @@ export class JobsService {
     // Manifest precedes fan-out; a retry reads the winner rather than creating new IDs.
     await this.jobModel
       .updateOne(
-        { _id: jobId, renderManifestReady: { $ne: true } },
+        {
+          _id: jobId,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
+          renderManifestReady: { $ne: true },
+        },
         {
           $set: {
             clips,
@@ -262,10 +486,23 @@ export class JobsService {
   }
 
   async enqueueRenders(jobId: string, retryFailed = false) {
+    await this.dispatchMediaJobs(jobId, () =>
+      this.dispatchRenders(jobId, retryFailed),
+    );
+  }
+
+  private async dispatchRenders(jobId: string, retryFailed = false) {
     const job = await this.findJob(jobId);
-    if (!job?.renderManifestReady || !job.sourceObjectKey) return;
+    if (
+      !job?.renderManifestReady ||
+      !job.sourceObjectKey ||
+      job.cancellationRequestedAt ||
+      job.deletionRequested
+    )
+      return;
     retryFailed = retryFailed || !!job.renderRetryRequested;
     for (const [index, clip] of job.clips.entries()) {
+      if ((await this.findJob(jobId))?.cancellationRequestedAt) return;
       if (clip.status === JobStatus.COMPLETED) continue;
       if (clip.status === JobStatus.FAILED && !retryFailed) continue;
       if (clip.retryRequested) {
@@ -301,12 +538,22 @@ export class JobsService {
     const fields = Object.fromEntries(
       Object.entries(updates).map(([key, value]) => [`clips.$.${key}`, value]),
     );
-    return this.jobModel
+    const result = await this.jobModel
       .updateOne(
-        { _id: jobId, 'clips._id': new Types.ObjectId(clipId) },
+        {
+          _id: jobId,
+          ...(updates.status === JobStatus.COMPLETED
+            ? {}
+            : { cancellationRequestedAt: null }),
+          deletionRequested: { $ne: true },
+          'clips._id': new Types.ObjectId(clipId),
+        },
         { $set: fields },
       )
       .exec();
+    if (result.matchedCount === 0 && mediaExecution.getStore())
+      throw new ProcessingCancelled();
+    return result;
   }
 
   async failUnfinishedClip(
@@ -321,6 +568,8 @@ export class JobsService {
       .updateOne(
         {
           _id: jobId,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
           clips: {
             $elemMatch: {
               _id: new Types.ObjectId(clipId),
@@ -362,6 +611,7 @@ export class JobsService {
         {
           _id: jobId,
           status: JobStatus.CUTTING_CLIPS,
+          cancellationRequestedAt: null,
           updatedAt: job.updatedAt,
           clips: {
             $not: {
@@ -446,6 +696,23 @@ export class JobsService {
         };
       }),
     );
+    if (job.cancellationRequestedAt) {
+      const snapshot = renderSnapshot(
+        progress.map((entry) => ({ ...entry, progress: undefined })),
+      );
+      const total = job.clips.reduce(
+        (sum, c) => sum + Math.max(0.001, c.endTime - c.startTime),
+        0,
+      );
+      const ready = job.clips
+        .filter((c) => c.status === JobStatus.COMPLETED)
+        .reduce((sum, c) => sum + Math.max(0.001, c.endTime - c.startTime), 0);
+      return {
+        ...snapshot,
+        progressPercent: total ? Math.floor((100 * ready) / total) : 0,
+        estimatedRemainingSeconds: null,
+      };
+    }
     const estimatedRemainingSeconds = await this.renderEta.estimate(
       job._id.toString(),
       job.status,
@@ -461,6 +728,7 @@ export class JobsService {
           {
             status: {
               $in: [
+                JobStatus.CANCELLING,
                 JobStatus.PENDING,
                 JobStatus.TRANSCRIBING,
                 JobStatus.DETECTING_HIGHLIGHTS,
@@ -477,6 +745,10 @@ export class JobsService {
       .exec();
     for (const job of jobs) {
       const jobId = job._id.toString();
+      if (job.cancellationRequestedAt) {
+        await this.finalizeCancellation(jobId);
+        continue;
+      }
       if (job.renderManifestReady && job.status === JobStatus.CUTTING_CLIPS) {
         await this.enqueueRenders(jobId);
         for (const clip of job.clips) {
@@ -576,6 +848,7 @@ export class JobsService {
     const job = await this.getJobById(userId, jobId); // ownership check + NotFoundException
 
     const activeStatuses: JobStatus[] = [
+      JobStatus.CANCELLING,
       JobStatus.PENDING,
       JobStatus.TRANSCRIBING,
       JobStatus.DETECTING_HIGHLIGHTS,
@@ -586,6 +859,35 @@ export class JobsService {
         'Cannot delete a job that is still processing',
       );
     }
+
+    const claimed = await this.jobModel
+      .findOneAndUpdate(
+        {
+          _id: jobId,
+          status: job.status,
+          $or: [
+            { activeExecutions: { $size: 0 } },
+            { activeExecutions: { $exists: false } },
+          ],
+          deletionRequested: { $ne: true },
+        },
+        { $set: { deletionRequested: true } },
+        { returnDocument: 'after' },
+      )
+      .exec();
+    if (!claimed && !job.deletionRequested)
+      throw new ConflictException(
+        'Workers are still stopping. Please try again shortly.',
+      );
+    if ((await this.activeMediaJobIds()).has(jobId))
+      throw new ConflictException(
+        'Workers are still stopping. Please try again shortly.',
+      );
+
+    if (!(await this.removeInactiveMediaJobs(jobId)))
+      throw new ConflictException(
+        'Workers are still stopping. Please try again shortly.',
+      );
 
     // Local disk cleanup:
     // For COMPLETED jobs the local temp directory was already cleaned up at the
@@ -621,22 +923,27 @@ export class JobsService {
     // per-job deletion must never cascade to the shared cache. SourceVideo-level
     // R2 cleanup is a separate future concern (background cron by referenceCount/age).
     for (const clip of job.clips) {
-      if (clip.r2ObjectKey) {
+      const objectKey =
+        clip.r2ObjectKey ||
+        `clips/${jobId}/${clip._id.toString()}-captioned.mp4`;
+      if (objectKey) {
         try {
-          if (
-            !(await this.studioAssets?.exists({ storageKey: clip.r2ObjectKey }))
-          )
-            await this.r2Service.deleteFile(clip.r2ObjectKey);
-        } catch (err) {
-          this.logger.warn(
-            `Failed to delete R2 object ${clip.r2ObjectKey}: ${err instanceof Error ? err.message : err}`,
+          if (!(await this.studioAssets?.exists({ storageKey: objectKey })))
+            await this.r2Service.deleteFile(objectKey);
+        } catch {
+          throw new ServiceUnavailableException(
+            'Media deletion is pending. Please try deleting again.',
           );
         }
       }
     }
 
-    if (job.sourceObjectKey?.startsWith(`job-sources/${jobId}/`))
-      await this.r2Service.deleteFile(job.sourceObjectKey);
+    // A source upload may have finished just before its Mongo commit was cancelled.
+    await this.r2Service.deleteFile(
+      job.sourceObjectKey?.startsWith(`job-sources/${jobId}/`)
+        ? job.sourceObjectKey
+        : `job-sources/${jobId}/video.mp4`,
+    );
     await this.jobModel.findByIdAndDelete(jobId).exec();
 
     await this.activitiesService.queueCreate({
@@ -665,9 +972,19 @@ export class JobsService {
     clipId: string,
   ): Promise<{ message: string }> {
     const job = await this.getJobById(userId, jobId);
-    if (![JobStatus.COMPLETED, JobStatus.FAILED].includes(job.status))
+    if (
+      ![JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+        job.status,
+      ) ||
+      job.deletionRequested ||
+      job.activeExecutions?.length
+    )
       throw new ConflictException(
         'Cannot delete clips while the job is processing',
+      );
+    if ((await this.activeMediaJobIds()).has(jobId))
+      throw new ConflictException(
+        'Workers are still stopping. Please try again shortly.',
       );
     const clip = job.clips.find((c) => c._id.toString() === clipId);
     if (!clip) throw new NotFoundException('Clip not found');
@@ -737,7 +1054,12 @@ export class JobsService {
     // Claim the retry once; concurrent API calls cannot enqueue duplicate attempts.
     const claimed = await this.jobModel
       .findOneAndUpdate(
-        { _id: jobId, status: JobStatus.FAILED },
+        {
+          _id: jobId,
+          status: JobStatus.FAILED,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
+        },
         {
           $set: {
             status: job.renderManifestReady
@@ -776,6 +1098,9 @@ export class JobsService {
   }
 
   private async enqueueClipRetry(jobId: string, clip: Clip, index: number) {
+    const parent = await this.findJob(jobId);
+    if (!parent || parent.cancellationRequestedAt || parent.deletionRequested)
+      return;
     const clipId = clip._id.toString();
     const queued = await this.renderQueue.getJob(renderJobId(jobId, clipId));
     if (!queued) {
@@ -830,6 +1155,8 @@ export class JobsService {
 
   async retryClip(userId: string, jobId: string, clipId: string) {
     const job = await this.getJobById(userId, jobId);
+    if (job.cancellationRequestedAt || job.deletionRequested)
+      throw new ConflictException('Cancelled videos cannot be retried.');
     const index = job.clips.findIndex((clip) => clip._id.toString() === clipId);
     const clip = job.clips[index];
     if (!clip) throw new NotFoundException('Clip not found');
@@ -869,6 +1196,8 @@ export class JobsService {
         .findOneAndUpdate(
           {
             _id: jobId,
+            cancellationRequestedAt: null,
+            deletionRequested: { $ne: true },
             clips: { $elemMatch: { _id: clip._id, status: JobStatus.FAILED } },
           },
           {
@@ -901,10 +1230,8 @@ export class JobsService {
         (c) => c._id.toString() === clipId,
       );
       if (claimedIndex < 0) throw new NotFoundException('Clip not found');
-      await this.enqueueClipRetry(
-        jobId,
-        claimed.clips[claimedIndex],
-        claimedIndex,
+      await this.dispatchMediaJobs(jobId, () =>
+        this.enqueueClipRetry(jobId, claimed.clips[claimedIndex], claimedIndex),
       );
     } catch (error) {
       this.logger.warn(`Clip retry dispatch will be reconciled: ${error}`);
@@ -923,7 +1250,11 @@ export class JobsService {
   async findAbandonedFailedJobs(cutoff: Date): Promise<JobDocument[]> {
     return this.jobModel
       .find({
-        status: JobStatus.FAILED,
+        status: { $in: [JobStatus.FAILED, JobStatus.CANCELLED] },
+        $or: [
+          { activeExecutions: { $size: 0 } },
+          { activeExecutions: { $exists: false } },
+        ],
         updatedAt: { $lt: cutoff },
       })
       .exec();

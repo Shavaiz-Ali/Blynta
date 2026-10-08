@@ -1,3 +1,7 @@
+import {
+  cancellationSignal,
+  assertNotCancelled,
+} from '../../jobs/cancellation-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Groq from 'groq-sdk';
@@ -88,25 +92,36 @@ export class TranscriptionService {
 
     const { uploadPath, isTemp } = await this.prepareAudioForUpload(audioPath);
     const stopProgressSimulation = this.simulateProgress(audioPath, onProgress);
+    const audioStream = fs.createReadStream(uploadPath);
+    const audioClosed = new Promise<void>((resolve) =>
+      audioStream.once('close', resolve),
+    );
 
     try {
-      const transcription = await this.groq!.audio.transcriptions.create({
-        file: fs.createReadStream(uploadPath),
-        model: this.modelName!,
-        response_format: 'verbose_json',
-        timestamp_granularities: ['segment'],
-        prompt: initialPrompt,
-        language: undefined, // let Groq auto-detect; set explicitly later if you want to force a language
-      });
+      const transcription = await this.groq!.audio.transcriptions.create(
+        {
+          file: audioStream,
+          model: this.modelName!,
+          response_format: 'verbose_json',
+          timestamp_granularities: ['segment'],
+          prompt: initialPrompt,
+          language: undefined, // let Groq auto-detect; set explicitly later if you want to force a language
+        },
+        { signal: cancellationSignal() },
+      );
 
+      assertNotCancelled();
       onProgress?.(100);
       return this.parseGroqOutput(transcription);
     } catch (err) {
+      assertNotCancelled();
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Groq transcription failed: ${message}`);
       throw new Error(`Groq transcription failed: ${message}`);
     } finally {
       stopProgressSimulation();
+      audioStream.destroy();
+      await audioClosed;
       if (isTemp) {
         try {
           await fs.promises.unlink(uploadPath);

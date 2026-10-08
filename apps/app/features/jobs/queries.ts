@@ -345,7 +345,12 @@ export function useRetryClip() {
         queryKey: jobsQueryKeys.detail(jobId),
       });
       queryClient.setQueryData<Job>(jobsQueryKeys.detail(jobId), (job) => {
-        if (!job) return job;
+        if (
+          !job ||
+          job.cancellationRequestedAt ||
+          [JobStatus.CANCELLING, JobStatus.CANCELLED].includes(job.status)
+        )
+          return job;
         const clips = job.clips.map((clip) =>
           (clip._id || clip.id) === clipId
             ? {
@@ -374,6 +379,27 @@ export function useRetryClip() {
       void queryClient.invalidateQueries({
         queryKey: jobsQueryKeys.detail(jobId),
       });
+    },
+  });
+}
+
+export function useCancelJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: async (jobId: string) => {
+      const { data } = await axiosClient.post<Job>(`/jobs/${jobId}/cancel`);
+      return data;
+    },
+    onSuccess: async (job, jobId) => {
+      await queryClient.cancelQueries({
+        queryKey: jobsQueryKeys.detail(jobId),
+      });
+      queryClient.setQueryData(jobsQueryKeys.detail(jobId), job);
+      void queryClient.invalidateQueries({ queryKey: jobsQueryKeys.all });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: jobsQueryKeys.all });
     },
   });
 }

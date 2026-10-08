@@ -37,6 +37,7 @@ describe('clip download HTTP intent and read endpoints', () => {
         {
           provide: JobsService,
           useValue: {
+            finalizeCancellation: () => Promise.resolve(),
             getClipForDownload,
             getJobById: () => Promise.resolve(job),
             getJobsForUser: () => Promise.resolve({ jobs: [job] }),

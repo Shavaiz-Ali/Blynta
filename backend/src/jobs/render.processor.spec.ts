@@ -28,6 +28,9 @@ describe('independent clip processor lifecycle', () => {
   let sources: RenderSourceService;
   const parents = new Map<string, Job>();
   const jobs = {
+    runMediaExecution: jest.fn((_id: string, work: () => Promise<void>) =>
+      work(),
+    ),
     failUnfinishedClip: jest.fn(
       (id: string, clipId: string, message: string, stage: string) => {
         const clip = parents

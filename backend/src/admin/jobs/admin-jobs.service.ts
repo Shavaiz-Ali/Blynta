@@ -124,17 +124,32 @@ export class AdminJobsService {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    if (job.status !== JobStatus.FAILED) {
+    if (
+      job.status !== JobStatus.FAILED ||
+      job.cancellationRequestedAt ||
+      job.deletionRequested
+    ) {
       throw new ConflictException('Only failed jobs can be re-triggered');
     }
 
     // Reset status to PENDING and remove error information
-    await this.jobModel
-      .findByIdAndUpdate(jobObjectId, {
-        $set: { status: JobStatus.PENDING, progressPercent: 0 },
-        $unset: { errorMessage: '', errorStage: '' },
-      })
+    const claimed = await this.jobModel
+      .findOneAndUpdate(
+        {
+          _id: jobObjectId,
+          status: JobStatus.FAILED,
+          cancellationRequestedAt: null,
+          deletionRequested: { $ne: true },
+        },
+        {
+          $set: { status: JobStatus.PENDING, progressPercent: 0 },
+          $unset: { errorMessage: '', errorStage: '' },
+        },
+      )
       .exec();
+
+    if (!claimed)
+      throw new ConflictException('Job state changed; retry is unavailable');
 
     // Re-enqueue in BullMQ
     await this.jobsQueue.add(JOBS_TYPES.CLIP_VIDEO, {

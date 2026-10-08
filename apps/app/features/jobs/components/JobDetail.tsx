@@ -125,6 +125,8 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
       {/* Processing State: Show only when processing AND no completed clips are ready yet */}
       {isJobProcessing && <JobProcessingView job={job} />}
 
+      {job.status === JobStatus.CANCELLED && <JobProcessingView job={job} />}
+
       {/* Failed State Card */}
       {isJobFailed && (
         <>

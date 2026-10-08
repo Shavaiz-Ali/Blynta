@@ -57,6 +57,7 @@ export class JobsReconciliationService {
     }
 
     const cutoff = new Date(Date.now() - ABANDONED_JOB_TTL_MS);
+    const activeIds = await this.jobsService.activeMediaJobIds();
     const abandonedJobs =
       await this.jobsService.findAbandonedFailedJobs(cutoff);
 
@@ -66,6 +67,7 @@ export class JobsReconciliationService {
 
     for (const job of abandonedJobs) {
       const jobId = job._id.toString();
+      if (job.activeExecutions?.length || activeIds.has(jobId)) continue;
       const jobDir = path.join(this.storageRoot, 'jobs', jobId);
       try {
         await fs.promises.rm(jobDir, { recursive: true, force: true });
@@ -80,7 +82,6 @@ export class JobsReconciliationService {
     }
     // Hard-killed workers cannot execute finally. Sweep only old, terminal/orphaned
     // workspaces, and never an active Bull job or a symlink to another directory.
-    const activeIds = await this.jobsService.activeMediaJobIds();
     for (const folder of ['renders', 'render-sources']) {
       const root = path.resolve(this.storageRoot, folder);
       const entries = await fs.promises
@@ -97,7 +98,12 @@ export class JobsReconciliationService {
         const parent = await this.jobsService.findJob(jobId);
         if (
           parent &&
-          ![JobStatus.COMPLETED, JobStatus.FAILED].includes(parent.status)
+          (parent.activeExecutions?.length ||
+            ![
+              JobStatus.COMPLETED,
+              JobStatus.FAILED,
+              JobStatus.CANCELLED,
+            ].includes(parent.status))
         )
           continue;
         await fs.promises.rm(directory, { recursive: true, force: true });

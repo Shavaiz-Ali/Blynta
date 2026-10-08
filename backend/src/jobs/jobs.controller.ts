@@ -44,6 +44,7 @@ export class JobsController {
 
   private async shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
     const responseJob = job.toObject<JobDocument>();
+    Reflect.deleteProperty(responseJob, 'activeExecutions');
     let sourceAvailable: boolean | undefined;
     if (responseJob.clips?.some((clip) => clip.status === JobStatus.FAILED)) {
       sourceAvailable = job.sourceObjectKey
@@ -60,7 +61,14 @@ export class JobsController {
       return {
         ...safe,
         ...(clip.status === JobStatus.FAILED
-          ? { failure: clipFailure(clip, sourceAvailable) }
+          ? {
+              failure: {
+                ...clipFailure(clip, sourceAvailable),
+                ...(job.cancellationRequestedAt
+                  ? { retryAvailable: false }
+                  : {}),
+              },
+            }
           : {}),
       };
     });
@@ -76,6 +84,16 @@ export class JobsController {
       : undefined;
     return {
       ...responseJob,
+      deletionAvailable:
+        [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+          job.status,
+        ) && !job.activeExecutions?.length,
+      ...(job.cancellationRequestedAt && !render ? { progressPercent: 0 } : {}),
+      ...(job.status === JobStatus.CANCELLING &&
+      job.cancellationRequestedAt &&
+      Date.now() - new Date(job.cancellationRequestedAt).getTime() > 30000
+        ? { cancellationPendingReason: 'worker_confirmation_required' }
+        : {}),
       ...(clips ? { clips } : {}),
       ...(job.renderManifestReady && job.status === JobStatus.FAILED
         ? {
@@ -143,12 +161,28 @@ export class JobsController {
     @Request() req: { user: { userId: string } },
     @Param('id') id: string,
   ) {
+    await this.jobsService.getJobById(req.user.userId, id);
+    await this.jobsService
+      .finalizeCancellation(id)
+      .catch((error) =>
+        this.logger.warn(`Cancellation remains pending: ${error}`),
+      );
     const [job, user] = await Promise.all([
       this.jobsService.getJobById(req.user.userId, id),
       this.usersService.findById(req.user.userId),
     ]);
     const plan = user?.plan || UserPlan.FREE;
     return this.shapeJobResponse(job, plan);
+  }
+
+  @Post(':id/cancel')
+  async cancelJob(
+    @Request() req: { user: { userId: string } },
+    @Param('id') id: string,
+  ) {
+    const job = await this.jobsService.cancelJob(req.user.userId, id);
+    const user = await this.usersService.findById(req.user.userId);
+    return this.shapeJobResponse(job, user?.plan || UserPlan.FREE);
   }
 
   // DELETE /jobs/:id — delete a completed/failed job and its files (Task 2)

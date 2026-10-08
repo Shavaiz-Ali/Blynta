@@ -11,6 +11,7 @@ import {
 } from "./ClipCardLayout";
 
 const labels = {
+  cancelled: "Processing cancelled",
   queued: "Waiting to process",
   cutting: "Cutting video",
   captioning: "Adding captions",
@@ -70,7 +71,9 @@ export function ClipProcessingCard({
   const { status, progress } = clip
     ? clipState(job, clip)
     : { status: "queued" as const, progress: undefined };
-  const active = ["cutting", "captioning", "uploading"].includes(status);
+  const stopped = job.status === "cancelling" || job.status === "cancelled";
+  const active =
+    !stopped && ["cutting", "captioning", "uploading"].includes(status);
   const Icon =
     status === "ready"
       ? CheckCircle
@@ -102,7 +105,15 @@ export function ClipProcessingCard({
             aria-hidden="true"
             className={`h-3 w-3 ${active ? "animate-spin motion-reduce:animate-none" : ""}`}
           />
-          {active ? "Processing" : status === "ready" ? "Ready" : "Waiting"}
+          {stopped
+            ? job.status === "cancelling"
+              ? "Cancelling…"
+              : "Cancelled"
+            : active
+              ? "Processing"
+              : status === "ready"
+                ? "Ready"
+                : "Waiting"}
         </span>
       }
       media={
@@ -110,7 +121,7 @@ export function ClipProcessingCard({
           job={job}
           clip={clip}
           highlight={highlight}
-          label="Preview will appear here"
+          label={stopped ? "Processing stopped" : "Preview will appear here"}
           icon={
             <Icon
               aria-hidden="true"
@@ -122,7 +133,13 @@ export function ClipProcessingCard({
       footer={
         <div className="space-y-2" aria-live="polite">
           {(!active || pct === undefined) && (
-            <p className="text-xs font-medium">{labels[status]}</p>
+            <p className="text-xs font-medium">
+              {stopped
+                ? job.status === "cancelling"
+                  ? "Stopping remaining work…"
+                  : "Processing cancelled"
+                : labels[status]}
+            </p>
           )}
           {active && pct !== undefined && (
             <ProcessingProgress value={pct} label={labels[status]} />
@@ -150,9 +167,11 @@ export function ClipProcessingCard({
       <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
         {highlight?.reason ||
           highlight?.clipDescription ||
-          (active
-            ? "Your clip is being created. The preview will appear automatically when it’s ready."
-            : "This clip is queued and will start automatically when processing is available.")}
+          (stopped
+            ? "Finished clips are kept. This clip was not completed."
+            : active
+              ? "Your clip is being created. The preview will appear automatically when it’s ready."
+              : "This clip is queued and will start automatically when processing is available.")}
       </p>
     </ClipCardLayout>
   );

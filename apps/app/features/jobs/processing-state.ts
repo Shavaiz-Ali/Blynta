@@ -41,11 +41,13 @@ export function clipState(job: Job, clip: Clip) {
     (entry) => entry.clipId === (clip._id || clip.id),
   );
   const status =
-    clip.status === "completed"
-      ? "ready"
-      : clip.status === "failed"
-        ? "failed"
-        : (progress?.status ?? clip.processingState ?? "queued");
+    clip.status === "cancelled"
+      ? "cancelled"
+      : clip.status === "completed"
+        ? "ready"
+        : clip.status === "failed"
+          ? "failed"
+          : (progress?.status ?? clip.processingState ?? "queued");
   return { status, progress };
 }
 
@@ -56,6 +58,7 @@ export function percentage(value: number | undefined) {
 }
 
 export function processingPollInterval(status: string | undefined) {
+  if (status === "cancelling") return 1000;
   if (status === "cutting_clips") return 1000;
   return ["pending", "transcribing", "detecting_highlights"].includes(
     status ?? "",

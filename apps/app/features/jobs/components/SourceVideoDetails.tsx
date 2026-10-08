@@ -3,7 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { JobStatus, useJob, useDeleteJob, useRetryJob } from "@/features/jobs";
+import {
+  JobStatus,
+  useJob,
+  useDeleteJob,
+  useRetryJob,
+  useCancelJob,
+} from "@/features/jobs";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
@@ -49,10 +55,39 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+  const cancellingSubmission = React.useRef(false);
+  const cancelMutation = useCancelJob();
+  const handleCancelConfirm = async () => {
+    if (cancellingSubmission.current) return;
+    cancellingSubmission.current = true;
+    try {
+      const result = await cancelMutation.mutateAsync(jobId);
+      setCancelOpen(false);
+      if (result.status === JobStatus.CANCELLED)
+        toast.success("Processing cancelled. Finished clips are kept.");
+      else if (result.status === JobStatus.COMPLETED)
+        toast.info("Processing has already finished.");
+      else toast.info("Cancellation requested. Finished clips will be kept.");
+    } catch {
+      toast.error("Could not request cancellation. Please try again.");
+    } finally {
+      cancellingSubmission.current = false;
+    }
+  };
+
   const deleteMutation = useDeleteJob();
   const retryMutation = useRetryJob();
 
   const handleDeleteConfirm = async () => {
+    if (
+      isDeleting ||
+      !job ||
+      ![JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+        job.status,
+      )
+    )
+      return;
     setIsDeleting(true);
     try {
       await deleteMutation.mutateAsync(jobId);
@@ -147,6 +182,17 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
     job.status === JobStatus.TRANSCRIBING ||
     job.status === JobStatus.DETECTING_HIGHLIGHTS;
   const isCuttingClips = job.status === JobStatus.CUTTING_CLIPS;
+  const isCancelling = job.status === JobStatus.CANCELLING;
+  const isCancelled = job.status === JobStatus.CANCELLED;
+  const shutdownUnconfirmed =
+    [JobStatus.COMPLETED, JobStatus.FAILED].includes(job.status) &&
+    job.deletionAvailable === false;
+  const canDelete =
+    [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+      job.status,
+    ) &&
+    !cancelMutation.isPending &&
+    job.deletionAvailable !== false;
   const isCompleted = job.status === JobStatus.COMPLETED;
   const isFailed = job.status === JobStatus.FAILED;
   const hasIssues = completedWithIssues(job);
@@ -204,7 +250,13 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
             {/* Video metadata details */}
             <div className="min-w-0 flex-1 space-y-2 px-4 py-3 sm:self-center sm:px-5">
               <div className="flex items-center gap-2 flex-wrap">
-                {hasIssues ? (
+                {isCancelling || isCancelled ? (
+                  <Badge variant="outline">
+                    {isCancelling
+                      ? "Cancelling processing…"
+                      : "Processing cancelled"}
+                  </Badge>
+                ) : hasIssues ? (
                   <Badge
                     variant="outline"
                     className="gap-1 text-[11px] font-semibold"
@@ -334,6 +386,29 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
                 </button>
               }
               items={[
+                ...(isCancelling
+                  ? [
+                      {
+                        label: "Check cancellation",
+                        disabled: cancelMutation.isPending,
+                        onClick: handleCancelConfirm,
+                      },
+                    ]
+                  : []),
+                ...(isEarlyProcessing ||
+                isCuttingClips ||
+                isCancelling ||
+                shutdownUnconfirmed
+                  ? [
+                      {
+                        label: isCancelling
+                          ? "Cancelling processing…"
+                          : "Cancel processing",
+                        disabled: isCancelling || cancelMutation.isPending,
+                        onClick: () => setCancelOpen(true),
+                      },
+                    ]
+                  : []),
                 ...(job.sourceUrl
                   ? [
                       {
@@ -360,7 +435,11 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
                     ]
                   : []),
                 {
-                  label: "Delete Video & Clips",
+                  label: "Delete video",
+                  disabled: !canDelete,
+                  description: !canDelete
+                    ? "Available after processing stops"
+                    : undefined,
                   icon: <TrashIcon className="h-3.5 w-3.5" />,
                   onClick: () => setDeleteOpen(true),
                   destructive: true,
@@ -373,7 +452,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
       </div>
 
       {/* ── Level 2 Main Body ── */}
-      {isEarlyProcessing || isCuttingClips ? (
+      {isEarlyProcessing || isCuttingClips || isCancelling || isCancelled ? (
         /* Stages 1-3: Downloading, Transcribing, AI Highlight Detection */
         <div className="py-2">
           <JobProcessingView job={job} />
@@ -405,6 +484,35 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
         </div>
       )}
 
+      <AppDialog
+        open={cancelOpen}
+        onOpenChange={(open) => {
+          if (!cancelMutation.isPending) setCancelOpen(open);
+        }}
+        title="Cancel video processing?"
+        description="This will stop processing the remaining clips. Clips that have already finished will be kept."
+        footer={
+          <>
+            <AppButton
+              variant="outline"
+              size="sm"
+              disabled={cancelMutation.isPending}
+              onClick={() => setCancelOpen(false)}
+            >
+              Keep processing
+            </AppButton>
+            <AppButton
+              variant="destructive"
+              size="sm"
+              disabled={cancelMutation.isPending || isCancelling || isCancelled}
+              isLoading={cancelMutation.isPending}
+              onClick={handleCancelConfirm}
+            >
+              Cancel processing
+            </AppButton>
+          </>
+        }
+      />
       {/* Delete Video & Clips Modal */}
       <AppDialog
         open={deleteOpen}
@@ -425,6 +533,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
               variant="destructive"
               size="sm"
               onClick={handleDeleteConfirm}
+              disabled={!canDelete || isDeleting}
               isLoading={isDeleting}
               icon={<TrashIcon className="h-3.5 w-3.5" />}
             >

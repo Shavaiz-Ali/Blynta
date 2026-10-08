@@ -38,6 +38,10 @@ export function JobActionsMenu({
   const retryJob = useRetryJob();
 
   const jobId = (job as any)._id || job.id;
+  const canDelete =
+    [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+      job.status,
+    ) && job.deletionAvailable !== false;
   const isFailed = job.status === JobStatus.FAILED;
 
   const handleDelete = () => {
@@ -114,6 +118,7 @@ export function JobActionsMenu({
 
           <DropdownMenuItem
             variant="destructive"
+            disabled={!canDelete}
             className="rounded-lg text-xs font-medium cursor-pointer"
             onClick={() => setDeleteOpen(true)}
           >

@@ -1,3 +1,4 @@
+import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -73,6 +74,7 @@ export class RenderProcessor
     try {
       if (!job || (await job.getState()) !== 'failed') return;
       const current = await this.jobs.findJob(job.data.jobId);
+      if (current?.cancellationRequestedAt) return;
       const clip = current?.clips.find(
         (c) => c._id.toString() === job.data.clipId,
       );
@@ -96,10 +98,26 @@ export class RenderProcessor
     }
   }
 
+  @OnWorkerEvent('completed')
+  async onCompleted(bullJob: BullJob<RenderData>) {
+    await this.jobs
+      .finalizeCancellation(bullJob.data.jobId)
+      .catch((error) =>
+        this.logger.warn(`Cancellation will be reconciled: ${error}`),
+      );
+  }
+
   async process(bullJob: BullJob<RenderData>) {
+    await this.jobs.runMediaExecution(bullJob.data.jobId, () =>
+      this.processRender(bullJob),
+    );
+  }
+
+  private async processRender(bullJob: BullJob<RenderData>) {
     if (bullJob.name !== RENDER_CLIP)
       throw new Error(`Unknown render job: ${bullJob.name}`);
     const { jobId, clipId } = bullJob.data;
+    assertNotCancelled();
     const parent = await this.jobs.findJob(jobId);
     const clip = parent?.clips.find((c) => c._id.toString() === clipId);
     if (!parent || !clip) return;
@@ -212,8 +230,11 @@ export class RenderProcessor
       );
       await mkdir(root, { recursive: true });
       directory = await mkdtemp(join(root, `${jobId}-${clipId}-`));
+      assertNotCancelled();
       await transition(ClipProcessingState.QUEUED);
+      assertNotCancelled();
       sourceLease = await this.sources.acquire(jobId, parent.sourceObjectKey);
+      assertNotCancelled();
       await transition(ClipProcessingState.CUTTING);
       const raw = join(directory, 'clip.mp4');
       ffmpegStarted = Date.now();
@@ -230,6 +251,7 @@ export class RenderProcessor
       cuttingSeconds = (Date.now() - ffmpegStarted) / 1000;
       let final = raw;
       if (hasCaptions) {
+        assertNotCancelled();
         await transition(ClipProcessingState.CAPTIONING);
         const preset = resolveStylePreset(parent.stylePreset);
         const highlight = parent.highlights.find(
@@ -259,6 +281,7 @@ export class RenderProcessor
       const averageSpeed =
         (duration * (hasCaptions ? 2 : 1)) /
         Math.max(0.001, ffmpegElapsedMs / 1000);
+      assertNotCancelled();
       await transition(ClipProcessingState.UPLOADING);
       await this.r2.uploadFile(final, objectKey);
       const totalSeconds = (Date.now() - started) / 1000;
@@ -300,6 +323,7 @@ export class RenderProcessor
         }),
       );
     } catch (error) {
+      assertNotCancelled();
       const message = error instanceof Error ? error.message : String(error);
       const failureStage =
         state === ClipProcessingState.QUEUED ? 'source_download' : state;
@@ -324,14 +348,18 @@ export class RenderProcessor
       );
       throw error;
     } finally {
+      await drainMediaChildren();
       await publishing;
       const finalParent = await this.jobs.findJob(jobId).catch(() => null);
       await sourceLease
         ?.release(
           !finalParent ||
-            [JobStatus.COMPLETED, JobStatus.FAILED].includes(
-              finalParent.status,
-            ),
+            [
+              JobStatus.COMPLETED,
+              JobStatus.FAILED,
+              JobStatus.CANCELLING,
+              JobStatus.CANCELLED,
+            ].includes(finalParent.status),
         )
         .catch((error) =>
           this.logger.warn(

@@ -31,7 +31,14 @@ export function FailedClipCard({
   const submitting = useRef(false);
   const retry = useRetryClip();
   const failure = clip.failure;
-  const available = failure?.retryAvailable !== false;
+  const cancelled =
+    Boolean(job.cancellationRequestedAt) ||
+    ["cancelling", "cancelled"].includes(job.status);
+  const available =
+    !job.deletionRequested &&
+    !job.cancellationRequestedAt &&
+    !["cancelling", "cancelled"].includes(job.status) &&
+    failure?.retryAvailable !== false;
   const date = failure?.failedAt ? new Date(failure.failedAt) : undefined;
   const fields = [
     failure?.stage ? ["Failed during", failure.stage] : null,
@@ -51,7 +58,13 @@ export function FailedClipCard({
     failure?.retryAvailable !== undefined
       ? [
           "Retry availability",
-          available ? "Available" : "Original video unavailable",
+          available
+            ? "Available"
+            : cancelled
+              ? "Processing cancelled"
+              : job.deletionRequested
+                ? "Deletion pending"
+                : "Original video unavailable",
         ]
       : null,
   ].filter((field): field is string[] => field !== null);
@@ -177,7 +190,9 @@ export function FailedClipCard({
       <ClipCardTitle>{title}</ClipCardTitle>
       <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
         {failure?.message ||
-          "This clip stopped before it was ready. Retry to create it again."}
+          (cancelled
+            ? "This clip failed before processing was cancelled."
+            : "This clip stopped before it was ready. Retry to create it again.")}
       </p>
     </ClipCardLayout>
   );

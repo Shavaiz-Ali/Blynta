@@ -16,6 +16,8 @@ export enum JobStatus {
   CUTTING_CLIPS = "cutting_clips",
   COMPLETED = "completed",
   FAILED = "failed",
+  CANCELLING = "cancelling",
+  CANCELLED = "cancelled",
 }
 
 /* -------------------------------------------------------------------------- */
@@ -51,7 +53,13 @@ export interface Clip {
     retryAvailable?: boolean;
   };
   processingState?:
-    "queued" | "cutting" | "captioning" | "uploading" | "ready" | "failed";
+    | "queued"
+    | "cutting"
+    | "captioning"
+    | "uploading"
+    | "ready"
+    | "failed"
+    | "cancelled";
   errorMessage?: string;
   errorStage?: string;
   id: string;
@@ -83,6 +91,11 @@ export interface CreateJobInput {
 }
 
 export interface Job {
+  cancellationRequestedAt?: string;
+  cancelledAt?: string;
+  cancellationPendingReason?: "worker_confirmation_required";
+  deletionRequested?: boolean;
+  deletionAvailable?: boolean;
   /** Optional authoritative full-job estimate. Absent from the current API. */
   estimatedRemainingSeconds?: number | null;
   mediaMetadata?: {

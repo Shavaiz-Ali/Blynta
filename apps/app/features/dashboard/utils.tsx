@@ -65,6 +65,7 @@ export function countCompletedClips(jobs: Job[]): number {
 
 export function getActiveJobs(jobs: Job[]): Job[] {
   const active: JobStatus[] = [
+    JobStatus.CANCELLING,
     JobStatus.PENDING,
     JobStatus.TRANSCRIBING,
     JobStatus.DETECTING_HIGHLIGHTS,
@@ -81,6 +82,16 @@ export const STATUS_META: Record<
   JobStatus,
   { label: string; dot: string; chip: string }
 > = {
+  [JobStatus.CANCELLING]: {
+    label: "Cancelling processing…",
+    dot: "bg-muted-foreground/50",
+    chip: "bg-muted text-muted-foreground",
+  },
+  [JobStatus.CANCELLED]: {
+    label: "Processing cancelled",
+    dot: "bg-muted-foreground/50",
+    chip: "bg-muted text-muted-foreground",
+  },
   [JobStatus.PENDING]: {
     label: "Pending",
     dot: "bg-muted-foreground/50",
@@ -134,6 +145,7 @@ export function platformIcon(platform: SourcePlatform, className = "h-4 w-4") {
 
 export function isProcessingStatus(status: JobStatus): boolean {
   return (
+    status === JobStatus.CANCELLING ||
     status === JobStatus.PENDING ||
     status === JobStatus.TRANSCRIBING ||
     status === JobStatus.DETECTING_HIGHLIGHTS ||

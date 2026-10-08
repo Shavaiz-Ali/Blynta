@@ -57,6 +57,10 @@ export function GeneratedClipCard({
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
+  const canDelete =
+    ["completed", "failed", "cancelled"].includes(job.status) &&
+    !job.deletionRequested &&
+    job.deletionAvailable !== false;
   const jobId = job._id || job.id;
   const clipId = clip._id || clip.id;
 
@@ -110,6 +114,7 @@ export function GeneratedClipCard({
   };
 
   const handleDeleteConfirm = async () => {
+    if (!canDelete || isDeleting) return;
     setIsDeleting(true);
     try {
       await deleteMutation.mutateAsync({ jobId, clipId });
@@ -249,6 +254,7 @@ export function GeneratedClipCard({
                   },
                   {
                     label: "Delete Clip",
+                    disabled: !canDelete,
                     icon: <TrashIcon className="h-3.5 w-3.5" />,
                     onClick: () => setDeleteOpen(true),
                     destructive: true,
@@ -288,6 +294,7 @@ export function GeneratedClipCard({
               variant="destructive"
               size="sm"
               onClick={handleDeleteConfirm}
+              disabled={!canDelete || isDeleting}
               isLoading={isDeleting}
               icon={<TrashIcon className="h-3.5 w-3.5" />}
             >

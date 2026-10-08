@@ -1,3 +1,7 @@
+import {
+  assertNotCancelled,
+  trackCancellableProcess,
+} from '../../jobs/cancellation-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ChildProcess, execFileSync } from 'child_process';
 import { FfmpegCommand } from 'fluent-ffmpeg';
@@ -10,6 +14,7 @@ export class ProcessRegistryService {
   private stopping = false;
 
   assertRunning(): void {
+    assertNotCancelled();
     if (this.stopping) throw new Error('Worker is shutting down');
   }
 
@@ -27,6 +32,7 @@ export class ProcessRegistryService {
       proc.kill('SIGKILL');
       throw new Error('Worker is shutting down');
     }
+    trackCancellableProcess(proc);
     this.activeProcesses.add(proc);
     proc.once('exit', () => this.activeProcesses.delete(proc));
     proc.once('close', () => this.activeProcesses.delete(proc));

@@ -158,7 +158,11 @@ describe('durable render fan-out and parent completion', () => {
       r2ObjectKey: 'output',
     });
     expect(model.updateOne).toHaveBeenCalledWith(
-      { _id: jobId, 'clips._id': new Types.ObjectId(id) },
+      {
+        _id: jobId,
+        'clips._id': new Types.ObjectId(id),
+        deletionRequested: { $ne: true },
+      },
       {
         $set: {
           'clips.$.status': JobStatus.COMPLETED,

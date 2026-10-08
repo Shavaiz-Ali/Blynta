@@ -1,3 +1,8 @@
+import { setTimeout as abortableDelay } from 'node:timers/promises';
+import {
+  cancellationSignal,
+  assertNotCancelled,
+} from '../../jobs/cancellation-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { generateObject, NoObjectGeneratedError, RetryError } from 'ai';
@@ -223,7 +228,7 @@ export class HighlightDetectionService {
       this.logger.log(
         `Rate budget check: ${used}/${budget} tokens used in the last 60s, need room for ~${estimatedTokens} more — waiting ${Math.ceil(waitMs / 1000)}s`,
       );
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      await abortableDelay(waitMs, undefined, { signal: cancellationSignal() });
     }
   }
 
@@ -291,7 +296,9 @@ export class HighlightDetectionService {
       : `Full Video Transcript:\n${transcriptText}`;
 
     try {
+      assertNotCancelled();
       const request = {
+        abortSignal: cancellationSignal(),
         model: this.model,
         schemaName: 'HighlightsResponse',
         schemaDescription: 'List of video highlights and metadata',
@@ -306,6 +313,7 @@ export class HighlightDetectionService {
       try {
         parsedObj = (await generateObject(request)).object;
       } catch (error) {
+        assertNotCancelled();
         if (!NoObjectGeneratedError.isInstance(error)) throw error;
 
         this.logger.warn(
@@ -348,6 +356,7 @@ export class HighlightDetectionService {
         highlights: topHighlights,
       };
     } catch (e: any) {
+      assertNotCancelled();
       if (NoObjectGeneratedError.isInstance(e)) {
         this.logger.error(
           `Invalid highlight output: finishReason=${e.finishReason}, outputChars=${e.text?.length ?? 0}`,
@@ -529,7 +538,9 @@ export class HighlightDetectionService {
     userPrompt: string,
     temperature: number,
   ) {
+    assertNotCancelled();
     const base: any = {
+      abortSignal: cancellationSignal(),
       model,
       schemaName: 'HighlightsResponse',
       schemaDescription: 'List of video highlights and metadata',
@@ -606,6 +617,7 @@ export class HighlightDetectionService {
         highlights: this.toDto(parsed),
       };
     } catch (e: any) {
+      assertNotCancelled();
       if (this.isRateLimitError(e)) {
         this.recordUsage(estimatedTokens);
         if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) {
@@ -669,6 +681,7 @@ export class HighlightDetectionService {
             highlights: this.toDto(parsedRetry),
           };
         } catch (retryError: any) {
+          assertNotCancelled();
           this.recordUsage(estimatedTokens);
           this.logFullErrorBody(retryError, 'Retry failure');
 
@@ -693,7 +706,9 @@ export class HighlightDetectionService {
             this.logger.warn(
               `Low-temp retry hit connection error (attempt ${rateLimitRetryCount + 1}/${MAX_RATE_LIMIT_RETRIES}) — waiting 5s then retrying`,
             );
-            await new Promise((r) => setTimeout(r, 5000));
+            await abortableDelay(5000, undefined, {
+              signal: cancellationSignal(),
+            });
             return this.detectHighlightsInChunkWithMetadata(
               segments,
               options,
@@ -729,7 +744,9 @@ export class HighlightDetectionService {
           this.logger.warn(
             `Chunk hit connection error (attempt ${rateLimitRetryCount + 1}/${MAX_RATE_LIMIT_RETRIES}): ${e instanceof Error ? e.message : e} — waiting 5s then retrying`,
           );
-          await new Promise((r) => setTimeout(r, 5000));
+          await abortableDelay(5000, undefined, {
+            signal: cancellationSignal(),
+          });
           return this.detectHighlightsInChunkWithMetadata(
             segments,
             options,

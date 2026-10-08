@@ -6,6 +6,7 @@ export {
   useDownloadClip,
   useClipSignedUrl,
   useDeleteJob,
+  useCancelJob,
   useDeleteClip,
   useRetryJob,
   jobsQueryKeys,

@@ -1,3 +1,4 @@
+import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -90,11 +91,12 @@ export class JobsProcessor
     try {
       if (bullJob && (await bullJob.getState()) === 'failed') {
         const parent = await this.jobsService.findJob(bullJob.data.jobId);
-        if (!parent?.renderManifestReady)
-          await this.jobsService.updateJob(bullJob.data.jobId, {
-            status: JobStatus.FAILED,
-            errorMessage: error.message,
-          });
+        if (parent?.cancellationRequestedAt) return;
+        if (!parent?.renderManifestReady) assertNotCancelled();
+        await this.jobsService.updateJob(bullJob.data.jobId, {
+          status: JobStatus.FAILED,
+          errorMessage: error.message,
+        });
         await this.completion.publish(bullJob.data.jobId);
       }
     } catch (failure) {
@@ -102,11 +104,22 @@ export class JobsProcessor
     }
   }
 
+  @OnWorkerEvent('completed')
+  async onCompleted(bullJob: BullJob<{ jobId: string }>) {
+    await this.jobsService
+      .finalizeCancellation(bullJob.data.jobId)
+      .catch((error) =>
+        this.logger.warn(`Cancellation will be reconciled: ${error}`),
+      );
+  }
+
   async process(bullJob: BullJob<{ jobId: string }>): Promise<void> {
     switch (bullJob.name) {
       case JOBS_TYPES.CLIP_VIDEO: {
         const { jobId } = bullJob.data;
-        await this.processClipVideoJob(jobId, bullJob);
+        await this.jobsService.runMediaExecution(jobId, () =>
+          this.processClipVideoJob(jobId, bullJob),
+        );
         break;
       }
       default:
@@ -119,9 +132,11 @@ export class JobsProcessor
     bullJob: BullJob<{ jobId: string }>,
   ): Promise<void> {
     const started = Date.now();
+    assertNotCancelled();
     const existing = await this.jobsService.findJob(jobId);
     if (!existing) return;
     if (existing.renderManifestReady) {
+      assertNotCancelled();
       await this.jobsService.enqueueRenders(jobId);
       await this.completion.finalize(jobId);
       return;
@@ -257,6 +272,7 @@ export class JobsProcessor
           !(await this.r2Service.fileExists(key))
         )
           await this.r2Service.uploadFile(input, key);
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           sourceObjectKey: key,
           mediaMetadata: metadata,
@@ -283,6 +299,7 @@ export class JobsProcessor
         audioPath = job.localAudioPath ?? '';
         transcript = job.transcript;
         await prepareSource(videoPath);
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, { progressPercent: 100 });
       } else if (hasLocalVideo && hasLocalAudio) {
         // -----------------------------------------------------------------------
@@ -298,6 +315,7 @@ export class JobsProcessor
 
         this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio (resumed)`);
         lastProgressUpdate = 0;
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           status: JobStatus.TRANSCRIBING,
           progressPercent: 0,
@@ -314,6 +332,7 @@ export class JobsProcessor
             text: t.text,
           }),
         );
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           transcript: transcriptDocsResumed,
           progressPercent: 100,
@@ -361,6 +380,7 @@ export class JobsProcessor
             transcript = sourceVideo.transcript;
             await prepareSource(videoPath, sourceVideo);
 
+            assertNotCancelled();
             await this.jobsService.updateJob(jobId, {
               sourceVideoId: sourceVideo._id,
               localVideoPath: videoPath,
@@ -374,6 +394,7 @@ export class JobsProcessor
               progressPercent: 100,
             });
           } catch (cacheErr) {
+            assertNotCancelled();
             this.logger.warn(
               `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id.toString()} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
             );
@@ -394,6 +415,7 @@ export class JobsProcessor
           this.logger.log(
             `[${jobId}] Stage 1/5: Downloading video (${resolution})`,
           );
+          assertNotCancelled();
           await this.jobsService.updateJob(jobId, {
             status: JobStatus.PENDING,
             progressPercent: 0,
@@ -417,6 +439,7 @@ export class JobsProcessor
           audioPath = dlAudioPath;
           await prepareSource(videoPath);
 
+          assertNotCancelled();
           await this.jobsService.updateJob(jobId, {
             localVideoPath: videoPath,
             localAudioPath: audioPath,
@@ -430,6 +453,7 @@ export class JobsProcessor
           // --- Stage 2: Transcribe ---
           this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio`);
           lastProgressUpdate = 0;
+          assertNotCancelled();
           await this.jobsService.updateJob(jobId, {
             status: JobStatus.TRANSCRIBING,
             progressPercent: 0,
@@ -446,6 +470,7 @@ export class JobsProcessor
             endTime: t.endTime,
             text: t.text,
           }));
+          assertNotCancelled();
           await this.jobsService.updateJob(jobId, {
             transcript: transcriptDocs,
             progressPercent: 100,
@@ -474,6 +499,7 @@ export class JobsProcessor
                 thumbnailUrl,
                 videoDuration: duration,
               });
+            assertNotCancelled();
             await this.jobsService.updateJob(jobId, {
               sourceVideoId: newSourceVideo._id,
             });
@@ -554,10 +580,12 @@ export class JobsProcessor
           `[${jobId}] Resuming: skipping highlight detection (already have ${job.highlights.length} highlight(s))`,
         );
         highlights = job.highlights;
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           status: JobStatus.DETECTING_HIGHLIGHTS,
         });
       } else {
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           status: JobStatus.DETECTING_HIGHLIGHTS,
         });
@@ -603,6 +631,7 @@ export class JobsProcessor
           }
         }
 
+        assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           ...(detectionResult?.videoDescription
             ? { videoDescription: detectionResult.videoDescription }
@@ -628,7 +657,9 @@ export class JobsProcessor
         });
       }
 
+      assertNotCancelled();
       await this.jobsService.prepareRenderManifest(jobId, highlights);
+      assertNotCancelled();
       await this.jobsService.enqueueRenders(jobId);
       await this.completion.finalize(jobId);
       this.logger.log(
@@ -645,8 +676,10 @@ export class JobsProcessor
         }),
       );
     } catch (err) {
+      assertNotCancelled();
       const latest = await this.jobsService.findJob(jobId);
       const message = err instanceof Error ? err.message : String(err);
+      assertNotCancelled();
       await this.jobsService.updateJob(jobId, {
         status: latest?.renderManifestReady ? latest.status : JobStatus.PENDING,
         errorMessage: message,
@@ -663,8 +696,9 @@ export class JobsProcessor
       );
       throw err;
     } finally {
+      await drainMediaChildren();
       const latest = await this.jobsService.findJob(jobId);
-      if (latest?.renderManifestReady) {
+      if (latest?.renderManifestReady || latest?.cancellationRequestedAt) {
         // Render workers use their own R2-backed workspace, never this directory.
         await fs.promises
           .rm(jobDir, { recursive: true, force: true })

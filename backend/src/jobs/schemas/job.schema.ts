@@ -14,6 +14,8 @@ export enum JobStatus {
   CUTTING_CLIPS = 'cutting_clips',
   COMPLETED = 'completed',
   FAILED = 'failed',
+  CANCELLING = 'cancelling',
+  CANCELLED = 'cancelled',
 }
 
 export enum SourcePlatform {
@@ -29,6 +31,7 @@ export enum ClipProcessingState {
   CAPTIONING = 'captioning',
   UPLOADING = 'uploading',
   READY = 'ready',
+  CANCELLED = 'cancelled',
   FAILED = 'failed',
 }
 
@@ -151,6 +154,19 @@ export const ClipSchema = SchemaFactory.createForClass(Clip);
 
 @Schema({ timestamps: true })
 export class Job {
+  @Prop()
+  cancellationRequestedAt?: Date;
+
+  @Prop()
+  cancelledAt?: Date;
+
+  // Never expire these automatically: a lost queue lock is not proof that FFmpeg stopped.
+  @Prop({ type: [String], default: [] })
+  activeExecutions?: string[];
+
+  @Prop({ default: false })
+  deletionRequested?: boolean;
+
   updatedAt: Date;
 
   @Prop({ default: false })

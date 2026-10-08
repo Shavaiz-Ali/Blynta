@@ -1,3 +1,8 @@
+import {
+  cancellationSignal,
+  assertNotCancelled,
+} from '../jobs/cancellation-context';
+import { pipeline } from 'node:stream/promises';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -83,15 +88,25 @@ export class R2Service {
    * Example: await r2Service.uploadFile('/tmp/jobs/abc/clips/clip-1-captioned.mp4', 'clips/abc/clip-1-captioned.mp4')
    */
   async uploadFile(localPath: string, objectKey: string): Promise<string> {
+    assertNotCancelled();
     const fileStream = fs.createReadStream(localPath);
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: objectKey,
-        Body: fileStream,
-        ContentType: 'video/mp4',
-      }),
+    const closed = new Promise<void>((resolve) =>
+      fileStream.once('close', resolve),
     );
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: objectKey,
+          Body: fileStream,
+          ContentType: 'video/mp4',
+        }),
+        { abortSignal: cancellationSignal() },
+      );
+    } finally {
+      fileStream.destroy();
+      await closed;
+    }
     this.logger.log(`Uploaded ${localPath} to R2 as ${objectKey}`);
     return objectKey;
   }
@@ -138,13 +153,11 @@ export class R2Service {
   ): Promise<void> {
     const result = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      { abortSignal: cancellationSignal() },
     );
     const writeStream = fs.createWriteStream(localDestPath);
-    await new Promise<void>((resolve, reject) => {
-      (result.Body as NodeJS.ReadableStream)
-        .pipe(writeStream)
-        .on('finish', resolve)
-        .on('error', reject);
+    await pipeline(result.Body as Readable, writeStream, {
+      signal: cancellationSignal(),
     });
   }
 

@@ -384,3 +384,24 @@ delete global.window;
     "PASS: SSR preference, persisted list/grid/default/blocked storage, instant switching, cached background fetch, job isolation, pipeline reconstruction, concurrent progress, queued/ready/failed clips, terminal polling, reduced motion and responsive markup.",
   );
 })();
+
+// Cancellation remains pollable, then terminates without spinners or stage ETAs.
+assert.equal(processingPollInterval("cancelling"), 1000);
+assert.equal(processingPollInterval("cancelled"), false);
+for (const status of ["cancelling", "cancelled"]) {
+  const stoppedJob = {
+    ...rendering, status, cancellationRequestedAt: new Date().toISOString(),
+    progressPercent: 100, estimatedRemainingSeconds: 100,
+    clips: rendering.clips.map((clip, index) => ({
+      ...clip,
+      status: index === 0 ? "completed" : "cancelled",
+      processingState: index === 0 ? "ready" : "cancelled",
+    })),
+  };
+  const stoppedHtml = render(JobProcessingView, { job: stoppedJob });
+  assert.match(stoppedHtml, status === "cancelling" ? /Cancelling processing/ : /Processing cancelled/);
+  assert.doesNotMatch(stoppedHtml, /animate-spin|sec remaining|min remaining|100%/);
+  assert.match(stoppedHtml, /data-ready-clip/);
+  assert.match(stoppedHtml, status === "cancelling" ? /Stopping remaining work/ : /Processing cancelled/);
+}
+console.log("Cancellation UI checks passed");
