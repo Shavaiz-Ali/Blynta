@@ -16,6 +16,7 @@ const requests = [],
   errors = [],
   successes = [];
 const AppButton = () => {};
+const ClipFailureDetailsDialog = () => {};
 const mod = new Module(filename, module);
 mod.filename = filename;
 mod.paths = Module._nodeModulePaths(path.dirname(filename));
@@ -33,11 +34,14 @@ mod.require = (id) => {
         },
       ],
     };
+  if (id === "./ClipFailureDetailsDialog") return { ClipFailureDetailsDialog };
   if (id === "@blynta/ui") return { AppButton };
   if (id === "./ClipCardLayout")
     return {
       ClipCardLayout: () => {},
       ClipCardTitle: () => {},
+      ClipCardDescription: () => {},
+      ClipCardControls: () => {},
       ClipPendingMedia: () => {},
     };
   if (id === "sonner")
@@ -104,8 +108,24 @@ async function run() {
     1,
     "No details action without meaningful metadata",
   );
-  assert.ok(tree.props.media, "Failed clips share the media section");
-  assert.ok(tree.props.footer, "Retry actions belong to the shared footer");
+  assert.equal(
+    buttons(
+      FailedClipCard({
+        ...base,
+        clip: { ...base.clip, failure: { retryAvailable: true } },
+      }),
+    ).length,
+    1,
+    "Retry availability alone must not open a redundant details dialog",
+  );
+  assert.ok(
+    tree.props.children[0].props.media,
+    "Failed clips share the media section",
+  );
+  assert.ok(
+    tree.props.children[0].props.footer,
+    "Retry actions belong to the shared footer",
+  );
   const props = {
     ...base,
     clip: {
@@ -123,45 +143,28 @@ async function run() {
   };
   tree = FailedClipCard(props);
   let details = buttons(tree)[1];
-  assert.equal(details.props["aria-expanded"], false);
+  const dialog = (tree) =>
+    nodes(tree).find((node) => node.type === ClipFailureDetailsDialog);
+  assert.equal(details.props["aria-haspopup"], "dialog");
+  assert.equal(dialog(tree).props.open, false);
   details.props.onClick();
   tree = FailedClipCard(props);
-  details = buttons(tree)[1];
-  assert.equal(details.props["aria-expanded"], true);
-  assert.ok(
-    React.Children.toArray(details.props.children).includes("Hide details"),
-  );
+  assert.equal(dialog(tree).props.open, true);
   assert.equal(
-    nodes(tree).find((node) => node.props?.id === "details").props.inert,
+    nodes(tree).some((node) => node.props?.role === "region"),
     false,
-  );
-  const region = nodes(tree).find((node) => node.props?.id === "details");
-  assert.equal(region.props.role, "region");
-  assert.equal(region.props["aria-labelledby"], details.props.id);
-  const reason = nodes(tree).find(
-    (node) => node.type === "dt" && node.props.children === "Reason",
-  );
-  const reasonPair = nodes(tree).find((node) =>
-    React.Children.toArray(node.props?.children).some(
-      (child) => child.props === reason.props,
-    ),
-  );
-  assert.ok(
-    reasonPair.props.className.includes("col-span-2"),
-    "Long reasons use the entire panel width",
+    "No inline disclosure",
   );
   assert.equal(
-    buttons(
-      FailedClipCard({
-        ...props,
-        job: { ...props.job, updatedAt: "new poll" },
-      }),
-    )[1].props["aria-expanded"],
+    dialog(
+      FailedClipCard({ ...props, job: { ...props.job, updatedAt: "poll" } }),
+    ).props.open,
     true,
-    "Polling props preserve the disclosure state",
+    "Polling preserves dialog state",
   );
-  details.props.onClick();
-  assert.equal(buttons(FailedClipCard(props))[1].props["aria-expanded"], false);
+  dialog(tree).props.onOpenChange(false);
+  assert.equal(dialog(FailedClipCard(props)).props.open, false);
+  buttons(tree)[1].props.onClick();
   const action = buttons(tree)[0].props.onClick;
   const first = action();
   await action();
@@ -174,10 +177,21 @@ async function run() {
   resolveRetry({});
   await first;
   assert.equal(successes.length, 1);
+  assert.equal(
+    dialog(FailedClipCard(props)).props.open,
+    false,
+    "Successful retry closes details",
+  );
+  buttons(FailedClipCard(props))[1].props.onClick();
   const second = buttons(FailedClipCard(props))[0].props.onClick();
   rejectRetry(new Error("private backend exception"));
   await second;
   assert.equal(errors.length, 1);
+  assert.equal(
+    dialog(FailedClipCard(props)).props.open,
+    true,
+    "Failed retry preserves dialog context",
+  );
   assert.doesNotMatch(errors[0], /private|exception/);
   assert.equal(lock.current, false);
   const unavailable = buttons(
@@ -221,7 +235,7 @@ async function run() {
     false,
   );
   console.log(
-    "PASS: failed cards with/without metadata, show/hide details, accessible expansion, retry success/failure, duplicate clicks, loading, unavailable source, and overall terminal status.",
+    "PASS: failed cards with/without metadata, details dialog, polling persistence, retry success/failure, duplicate clicks, loading, unavailable source, and overall terminal status.",
   );
 }
 run().catch((error) => {

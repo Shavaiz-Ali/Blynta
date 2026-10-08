@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
-import { AlertTriangle, ChevronDown, RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { AppButton } from "@blynta/ui";
 import { toast } from "sonner";
 import { isAxiosError } from "axios";
@@ -9,8 +9,11 @@ import { useRetryClip } from "../queries";
 import {
   ClipCardLayout,
   ClipCardTitle,
+  ClipCardDescription,
+  ClipCardControls,
   ClipPendingMedia,
 } from "./ClipCardLayout";
+import { ClipFailureDetailsDialog } from "./ClipFailureDetailsDialog";
 import type { Clip, Job, Highlight } from "../types";
 
 export function FailedClipCard({
@@ -26,8 +29,7 @@ export function FailedClipCard({
   title: string;
   highlight?: Highlight;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const detailsId = useId();
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const submitting = useRef(false);
   const retry = useRetryClip();
   const failure = clip.failure;
@@ -68,6 +70,9 @@ export function FailedClipCard({
         ]
       : null,
   ].filter((field): field is string[] => field !== null);
+  const hasDetails = fields.some(
+    ([label]) => label !== "Retry availability" || !available,
+  );
   const handleRetry = async () => {
     if (submitting.current || retry.isPending || !available) return;
     submitting.current = true;
@@ -76,6 +81,7 @@ export function FailedClipCard({
         jobId: job._id || job.id,
         clipId: clip._id || clip.id,
       });
+      setDetailsOpen(false);
       toast.success("Clip queued for retry");
     } catch (error) {
       // Only display known public responses; never render infrastructure errors.
@@ -84,6 +90,7 @@ export function FailedClipCard({
         isAxiosError(error) &&
         error.response?.data?.code === "CLIP_RETRY_PENDING"
       ) {
+        setDetailsOpen(false);
         toast.info(
           "Retry saved. Processing will resume when the service is available.",
         );
@@ -99,101 +106,90 @@ export function FailedClipCard({
     }
   };
   return (
-    <ClipCardLayout
-      index={index}
-      aria-label={`Clip ${index + 1}: failed`}
-      status={
-        <span className="inline-flex items-center gap-1.5 text-destructive">
-          <AlertTriangle aria-hidden="true" className="h-3 w-3" />
-          Failed
-        </span>
-      }
-      media={
-        <ClipPendingMedia
-          job={job}
-          clip={clip}
-          highlight={highlight}
-          label="Clip could not be created"
-          icon={
-            <AlertTriangle
-              aria-hidden="true"
-              className="h-5 w-5 text-destructive/80"
-            />
-          }
-        />
-      }
-      footer={
-        <>
-          <div className="flex items-center justify-between gap-2">
-            <AppButton
-              size="sm"
-              className="h-9 shrink-0 px-3 text-xs font-medium"
-              icon={<RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />}
-              isLoading={retry.isPending}
-              disabled={!available || retry.isPending}
-              onClick={handleRetry}
-            >
-              {retry.isPending ? "Submitting…" : "Retry clip"}
-            </AppButton>
-            {fields.length > 0 && (
+    <>
+      <ClipCardLayout
+        index={index}
+        aria-label={`Clip ${index + 1}: failed`}
+        status={
+          <span className="inline-flex items-center gap-1.5 text-destructive">
+            <AlertTriangle aria-hidden="true" className="h-3 w-3" />
+            Failed
+          </span>
+        }
+        media={
+          <ClipPendingMedia
+            job={job}
+            clip={clip}
+            highlight={highlight}
+            label="Clip could not be created"
+            icon={
+              <AlertTriangle
+                aria-hidden="true"
+                className="h-5 w-5 text-destructive/80"
+              />
+            }
+          />
+        }
+        footer={
+          <>
+            <ClipCardControls>
               <AppButton
-                variant="ghost"
                 size="sm"
-                id={`${detailsId}-trigger`}
-                className="h-9 shrink-0 px-2 text-xs text-muted-foreground"
-                aria-expanded={expanded}
-                aria-controls={detailsId}
-                onClick={() => setExpanded((open) => !open)}
+                className="h-9 shrink-0 px-3 text-xs font-medium"
+                icon={<RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />}
+                isLoading={retry.isPending}
+                disabled={!available || retry.isPending}
+                onClick={handleRetry}
               >
-                {expanded ? "Hide details" : "View details"}
-                <ChevronDown
-                  aria-hidden="true"
-                  className={`h-3.5 w-3.5 transition-transform duration-200 motion-reduce:transition-none ${expanded ? "rotate-180" : ""}`}
-                />
+                {retry.isPending ? "Submitting…" : "Retry clip"}
               </AppButton>
-            )}
-          </div>
-          {fields.length > 0 && (
-            <div
-              id={detailsId}
-              role="region"
-              aria-labelledby={`${detailsId}-trigger`}
-              aria-hidden={!expanded}
-              inert={!expanded}
-              className={`grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none ${expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
-            >
-              <div className="overflow-hidden">
-                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-4 border-t border-border/60 pt-4 text-xs">
-                  {fields.map(([label, value]) => (
-                    <div
-                      key={label}
-                      className={`min-w-0 space-y-1 ${label === "Attempt" || label === "Retry availability" ? "" : "col-span-2"}`}
-                    >
-                      <dt className="text-[11px] font-medium text-muted-foreground">
-                        {label}
-                      </dt>
-                      <dd
-                        className="min-w-0 break-words leading-relaxed text-foreground/90 [overflow-wrap:anywhere]"
-                        suppressHydrationWarning={label === "Failed at"}
-                      >
-                        {value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            </div>
-          )}
-        </>
-      }
-    >
-      <ClipCardTitle>{title}</ClipCardTitle>
-      <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-        {failure?.message ||
-          (cancelled
-            ? "This clip failed before processing was cancelled."
-            : "This clip stopped before it was ready. Retry to create it again.")}
-      </p>
-    </ClipCardLayout>
+              {hasDetails && (
+                <AppButton
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 shrink-0 px-2 text-xs text-muted-foreground"
+                  aria-haspopup="dialog"
+                  onClick={() => setDetailsOpen(true)}
+                >
+                  View details
+                </AppButton>
+              )}
+            </ClipCardControls>
+          </>
+        }
+      >
+        <ClipCardTitle>{title}</ClipCardTitle>
+        <ClipCardDescription>
+          {failure?.message ||
+            (cancelled
+              ? "This clip failed before processing was cancelled."
+              : "This clip stopped before it was ready. Retry to create it again.")}
+        </ClipCardDescription>
+      </ClipCardLayout>
+      {hasDetails && (
+        <ClipFailureDetailsDialog
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          index={index}
+          title={title}
+          fields={
+            fields.some(([label]) => label === "Reason")
+              ? fields
+              : [
+                  ...fields.filter(([label]) => label === "Failed during"),
+                  [
+                    "Reason",
+                    failure?.message ||
+                      "This clip stopped before it was ready.",
+                  ],
+                  ...fields.filter(([label]) => label !== "Failed during"),
+                ]
+          }
+          available={available}
+          pending={retry.isPending}
+          onRetry={handleRetry}
+        />
+      )}
+    </>
   );
 }

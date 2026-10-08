@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { VideoActionsDropdown } from "./VideoActionsDropdown";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -33,10 +34,8 @@ import {
   TrashIcon,
   RefreshCwIcon,
   ExternalLinkIcon,
-  MoreVerticalIcon,
   AlertTriangleIcon,
 } from "@/features/dashboard/icons";
-import { AppDropdown } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
 import { Badge } from "@/components/ui/badge";
@@ -375,77 +374,21 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
               </AppButton>
             )}
 
-            <AppDropdown
-              trigger={
-                <button
-                  type="button"
-                  className="h-8 w-8 rounded-lg flex items-center justify-center border border-border/80 bg-background text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                  aria-label="Video actions"
-                >
-                  <MoreVerticalIcon className="h-4 w-4" />
-                </button>
-              }
-              items={[
-                ...(isCancelling
-                  ? [
-                      {
-                        label: "Check cancellation",
-                        disabled: cancelMutation.isPending,
-                        onClick: handleCancelConfirm,
-                      },
-                    ]
-                  : []),
-                ...(isEarlyProcessing ||
+            <VideoActionsDropdown
+              sourceUrl={job.sourceUrl}
+              cancellationAvailable={
+                isEarlyProcessing ||
                 isCuttingClips ||
                 isCancelling ||
                 shutdownUnconfirmed
-                  ? [
-                      {
-                        label: isCancelling
-                          ? "Cancelling processing…"
-                          : "Cancel processing",
-                        disabled: isCancelling || cancelMutation.isPending,
-                        onClick: () => setCancelOpen(true),
-                      },
-                    ]
-                  : []),
-                ...(job.sourceUrl
-                  ? [
-                      {
-                        label: "Open Source Link",
-                        icon: <ExternalLinkIcon className="h-3.5 w-3.5" />,
-                        onClick: () =>
-                          window.open(
-                            job.sourceUrl,
-                            "_blank",
-                            "noopener,noreferrer",
-                          ),
-                      },
-                    ]
-                  : []),
-                ...(isFailed && !hasClipFailures
-                  ? [
-                      {
-                        label: "Retry Pipeline",
-                        icon: (
-                          <RefreshCwIcon className="h-3.5 w-3.5 text-primary" />
-                        ),
-                        onClick: handleRetry,
-                      },
-                    ]
-                  : []),
-                {
-                  label: "Delete video",
-                  disabled: !canDelete,
-                  description: !canDelete
-                    ? "Available after processing stops"
-                    : undefined,
-                  icon: <TrashIcon className="h-3.5 w-3.5" />,
-                  onClick: () => setDeleteOpen(true),
-                  destructive: true,
-                  separatorBefore: true,
-                },
-              ]}
+              }
+              cancelling={isCancelling || cancelMutation.isPending}
+              canDelete={canDelete}
+              onCancel={() => setCancelOpen(true)}
+              onDelete={() => setDeleteOpen(true)}
+              onRetryPipeline={
+                isFailed && !hasClipFailures ? handleRetry : undefined
+              }
             />
           </div>
         </AppCard>

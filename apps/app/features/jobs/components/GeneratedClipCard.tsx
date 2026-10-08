@@ -24,7 +24,12 @@ import {
 import { AppButton } from "@blynta/ui";
 import { AppDropdown } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
-import { ClipCardLayout, ClipCardTitle } from "./ClipCardLayout";
+import {
+  ClipCardLayout,
+  ClipCardTitle,
+  ClipCardDescription,
+  ClipCardControls,
+} from "./ClipCardLayout";
 
 export interface GeneratedClipCardProps {
   job: Job;
@@ -206,14 +211,14 @@ export function GeneratedClipCard({
           </>
         }
         footer={
-          <div className="flex items-center justify-between gap-2">
+          <ClipCardControls>
             <AppButton
               variant="outline"
               size="sm"
               onClick={handleOpenClip}
               icon={<ArrowRightIcon className="h-3.5 w-3.5" />}
               iconPosition="right"
-              className="h-8 text-xs font-medium hover:border-primary hover:text-primary"
+              className="h-9 px-3 text-xs font-medium hover:border-primary hover:text-primary"
             >
               Open clip
             </AppButton>
@@ -226,7 +231,7 @@ export function GeneratedClipCard({
                 trigger={
                   <button
                     type="button"
-                    className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                    className="h-9 w-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                     aria-label="Clip options"
                   >
                     <MoreVerticalIcon className="h-4 w-4" />
@@ -263,15 +268,11 @@ export function GeneratedClipCard({
                 ]}
               />
             </div>
-          </div>
+          </ClipCardControls>
         }
       >
         <ClipCardTitle>{clipTitle}</ClipCardTitle>
-        {reasonText && (
-          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-            {reasonText}
-          </p>
-        )}
+        <ClipCardDescription>{reasonText}</ClipCardDescription>
       </ClipCardLayout>
 
       {/* Delete Confirmation Modal */}

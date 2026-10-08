@@ -45,7 +45,7 @@ export function ClipCardLayout({
       </div>
       <div
         data-clip-section="footer"
-        className="min-w-0 border-t border-border/60 px-4 py-3"
+        className="mt-auto min-w-0 border-t border-border/60 px-4 py-3"
       >
         {footer}
       </div>
@@ -64,18 +64,42 @@ export function ClipCardTitle({ children }: { children: string }) {
   );
 }
 
+// Reserve the same two text lines as the description clamp, rather than a card
+// height. Missing/short metadata must not pull the footer above its neighbors.
+export function ClipCardDescription({ children }: { children?: ReactNode }) {
+  return (
+    <p
+      className="min-h-[2lh] line-clamp-2 text-xs leading-relaxed text-muted-foreground"
+      aria-hidden={!children || undefined}
+    >
+      {children}
+    </p>
+  );
+}
+
+export function ClipCardControls({ children }: { children: ReactNode }) {
+  // Match the shared 36px action buttons; stage progress fits within this slot.
+  return (
+    <div className="flex min-h-9 items-center justify-between gap-2">
+      {children}
+    </div>
+  );
+}
+
 export function ClipPendingMedia({
   job,
   clip,
   highlight,
   label,
   icon,
+  information,
 }: {
   job: Job;
   clip?: Clip;
   highlight?: Highlight;
   label: string;
   icon: ReactNode;
+  information?: ReactNode;
 }) {
   const start = clip?.startTime ?? highlight?.startTime;
   const end = clip?.endTime ?? highlight?.endTime;
@@ -85,13 +109,13 @@ export function ClipPendingMedia({
         <img
           src={job.thumbnailUrl}
           alt=""
-          className="h-full w-full object-cover opacity-25 saturate-50"
+          className="h-full w-full object-cover opacity-40 saturate-75"
           loading="lazy"
         />
       ) : (
         <div className="absolute inset-0 bg-gradient-to-br from-muted/30 via-card to-background" />
       )}
-      <div className="absolute inset-0 bg-background/35" />
+      <div className="absolute inset-0 bg-background/25" />
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-card/80 text-muted-foreground">
           {icon || <Film className="h-5 w-5" />}
@@ -100,6 +124,11 @@ export function ClipPendingMedia({
           {label}
         </span>
       </div>
+      {information && (
+        <div className="absolute inset-x-4 bottom-10 flex flex-wrap justify-between gap-x-3 gap-y-1 text-[11px] tabular-nums text-foreground/80">
+          {information}
+        </div>
+      )}
       {start !== undefined && end !== undefined && (
         <div className="absolute inset-x-3 bottom-2.5 flex justify-between gap-2 text-[10px] tabular-nums text-muted-foreground">
           <span>

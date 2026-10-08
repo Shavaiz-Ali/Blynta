@@ -7,6 +7,8 @@ import { FailedClipCard } from "./FailedClipCard";
 import {
   ClipCardLayout,
   ClipCardTitle,
+  ClipCardDescription,
+  ClipCardControls,
   ClipPendingMedia,
 } from "./ClipCardLayout";
 
@@ -121,7 +123,32 @@ export function ClipProcessingCard({
           job={job}
           clip={clip}
           highlight={highlight}
-          label={stopped ? "Processing stopped" : "Preview will appear here"}
+          label={
+            stopped
+              ? "Processing stopped"
+              : active
+                ? "Creating your preview"
+                : "Queued for processing"
+          }
+          information={
+            <>
+              {" "}
+              {active && progress && (
+                <>
+                  {Number.isFinite(progress.processedSeconds) &&
+                    Number.isFinite(progress.durationSeconds) && (
+                      <span>
+                        {time(progress.processedSeconds!)} /{" "}
+                        {time(progress.durationSeconds)}
+                      </span>
+                    )}
+                  {eta && status !== "uploading" && (
+                    <span>{eta} in this stage</span>
+                  )}
+                </>
+              )}{" "}
+            </>
+          }
           icon={
             <Icon
               aria-hidden="true"
@@ -131,40 +158,29 @@ export function ClipProcessingCard({
         />
       }
       footer={
-        <div className="space-y-2" aria-live="polite">
-          {(!active || pct === undefined) && (
-            <p className="text-xs font-medium">
-              {stopped
-                ? job.status === "cancelling"
-                  ? "Stopping remaining work…"
-                  : "Processing cancelled"
-                : labels[status]}
-            </p>
-          )}
-          {active && pct !== undefined && (
-            <ProcessingProgress value={pct} label={labels[status]} />
-          )}
-          {active && progress && (
-            <div className="flex flex-wrap justify-between gap-2 text-xs tabular-nums text-muted-foreground">
-              {Number.isFinite(progress.processedSeconds) &&
-                Number.isFinite(progress.durationSeconds) && (
-                  <span>
-                    {time(progress.processedSeconds!)} /{" "}
-                    {time(progress.durationSeconds)}
-                  </span>
-                )}
-              {eta && status !== "uploading" && (
-                <span>{eta} in this stage</span>
-              )}
-            </div>
-          )}
-        </div>
+        <ClipCardControls>
+          <div className="w-full" aria-live="polite">
+            {(!active || pct === undefined) && (
+              <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                {stopped
+                  ? job.status === "cancelling"
+                    ? "Stopping remaining work…"
+                    : "Processing cancelled"
+                  : labels[status]}
+              </p>
+            )}
+            {active && pct !== undefined && (
+              <ProcessingProgress value={pct} label={labels[status]} />
+            )}
+          </div>
+        </ClipCardControls>
       }
     >
       <ClipCardTitle>
         {highlight?.clipTitle || highlight?.hookText || "Video highlight"}
       </ClipCardTitle>
-      <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+      <ClipCardDescription>
         {highlight?.reason ||
           highlight?.clipDescription ||
           (stopped
@@ -172,7 +188,7 @@ export function ClipProcessingCard({
             : active
               ? "Your clip is being created. The preview will appear automatically when it’s ready."
               : "This clip is queued and will start automatically when processing is available.")}
-      </p>
+      </ClipCardDescription>
     </ClipCardLayout>
   );
 }
