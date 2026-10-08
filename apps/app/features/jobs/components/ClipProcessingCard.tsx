@@ -3,6 +3,7 @@ import { CheckCircle, AlertTriangle, Clock, LoaderCircle } from "lucide-react";
 import type { Job, Clip, Highlight } from "../types";
 import { clipState, percentage } from "../processing-state";
 import { formatRemainingTime } from "../format-eta";
+import { FailedClipCard } from "./FailedClipCard";
 
 const labels = {
   queued: "Waiting to process",
@@ -75,6 +76,15 @@ export function ClipProcessingCard({
           : Clock;
   const pct = percentage(progress?.progress);
   const eta = formatRemainingTime(progress?.etaSeconds);
+  if (status === "failed" && clip)
+    return (
+      <FailedClipCard
+        job={job}
+        clip={clip}
+        index={index}
+        title={highlight?.clipTitle || highlight?.hookText || "Video highlight"}
+      />
+    );
   return (
     <div className="min-w-0 space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs">
       <div className="flex items-start justify-between gap-3">
@@ -115,12 +125,6 @@ export function ClipProcessingCard({
             )}
           {eta && status !== "uploading" && <span>{eta} in this stage</span>}
         </div>
-      )}
-      {status === "failed" && (
-        <p className="text-xs text-muted-foreground">
-          This clip couldn’t be created. You can retry from the video’s
-          processing page.
-        </p>
       )}
     </div>
   );

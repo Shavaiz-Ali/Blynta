@@ -25,6 +25,18 @@ function load(relative, overrides = {}) {
   const original = mod.require.bind(mod);
   mod.require = (id) => {
     if (id in overrides) return overrides[id];
+    if (id === "../queries" && filename.endsWith("FailedClipCard.tsx"))
+      return {
+        useRetryClip: () => ({
+          isPending: false,
+          mutateAsync: async () => ({}),
+        }),
+      };
+    if (id === "@blynta/ui")
+      return {
+        AppButton: ({ children, icon, isLoading, ...props }) =>
+          React.createElement("button", props, icon, children),
+      };
     if (id === "./GeneratedClipCard")
       return {
         GeneratedClipCard: ({ clip }) =>
@@ -250,7 +262,7 @@ assert.doesNotMatch(
 );
 assert.match(html, /1 of 5 clips ready/);
 assert.match(html, /data-ready-clip="d"/);
-assert.match(html, /Processing failed/);
+assert.match(html, /Retry clip/);
 assert.doesNotMatch(
   render(ClipProcessingCard, { job: rendering, clip: clips[2], index: 2 }),
   /progressbar|animate-spin/,

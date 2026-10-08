@@ -85,6 +85,21 @@ export const HighlightSchema = SchemaFactory.createForClass(Highlight);
 // A finished, cut clip — the actual deliverable to the user
 @Schema({ timestamps: true })
 export class Clip {
+  @Prop({ default: false })
+  retryRequested?: boolean;
+
+  @Prop({ default: 0 })
+  retryCount?: number;
+
+  @Prop()
+  retryQueuedAt?: Date;
+
+  @Prop()
+  failedAt?: Date;
+
+  @Prop()
+  attemptCount?: number;
+
   // Successful attempt timings, excluding queue wait. Reused for this parent's ETA.
   @Prop({ type: Object })
   renderTiming?: {

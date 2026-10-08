@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -266,6 +267,11 @@ export class JobsService {
     retryFailed = retryFailed || !!job.renderRetryRequested;
     for (const [index, clip] of job.clips.entries()) {
       if (clip.status === JobStatus.COMPLETED) continue;
+      if (clip.status === JobStatus.FAILED && !retryFailed) continue;
+      if (clip.retryRequested) {
+        await this.enqueueClipRetry(jobId, clip, index);
+        continue;
+      }
       const id = renderJobId(jobId, clip._id.toString());
       const queued = await this.renderQueue.getJob(id);
       if (queued) {
@@ -308,6 +314,7 @@ export class JobsService {
     clipId: string,
     message: string,
     stage: string,
+    retryCount?: number,
   ) {
     // Reconciliation reads a snapshot: a worker may finish before this update executes.
     return this.jobModel
@@ -318,6 +325,8 @@ export class JobsService {
             $elemMatch: {
               _id: new Types.ObjectId(clipId),
               status: { $ne: JobStatus.COMPLETED },
+              retryRequested: { $ne: true },
+              retryCount: retryCount || { $in: [null, 0] },
             },
           },
         },
@@ -327,6 +336,7 @@ export class JobsService {
             'clips.$.processingState': ClipProcessingState.FAILED,
             'clips.$.errorMessage': message,
             'clips.$.errorStage': stage,
+            'clips.$.failedAt': new Date(),
           },
         },
       )
@@ -352,6 +362,7 @@ export class JobsService {
         {
           _id: jobId,
           status: JobStatus.CUTTING_CLIPS,
+          updatedAt: job.updatedAt,
           clips: {
             $not: {
               $elemMatch: {
@@ -404,24 +415,29 @@ export class JobsService {
           renderJobId(job._id.toString(), clip._id.toString()),
         );
         const state = bullJob ? await bullJob.getState() : undefined;
+        const sample =
+          typeof bullJob?.progress === 'object'
+            ? (bullJob.progress as ClipRenderProgress)
+            : undefined;
+        const fresh =
+          sample &&
+          (!clip.retryQueuedAt ||
+            sample.updatedAt >= new Date(clip.retryQueuedAt).getTime())
+            ? sample
+            : undefined;
         // Retain overall progress across retries, but discard stale stage ETA/time.
         return {
           clip,
           hasCaptions,
           queueState: state,
           progress:
-            state === 'active' && typeof bullJob?.progress === 'object'
-              ? (bullJob.progress as ClipRenderProgress)
+            state === 'active' && fresh
+              ? fresh
               : ['waiting', 'prioritized', 'delayed'].includes(state ?? '')
                 ? {
                     clipId: clip._id.toString(),
                     status: ClipProcessingState.QUEUED,
-                    progress:
-                      typeof bullJob?.progress === 'object'
-                        ? clipOverallValue(
-                            bullJob.progress as ClipRenderProgress,
-                          )
-                        : 0,
+                    progress: fresh ? clipOverallValue(fresh) : 0,
                     renderProgress: 0,
                     stageProgress: 0,
                     updatedAt: Date.now(),
@@ -475,7 +491,8 @@ export class JobsService {
               jobId,
               clip._id.toString(),
               queued!.failedReason,
-              'worker',
+              clip.errorStage || 'worker',
+              clip.retryCount,
             );
           else if (state === 'completed') {
             // Completed Bull job without durable output is inconsistent, fail explicitly.
@@ -484,6 +501,7 @@ export class JobsService {
               clip._id.toString(),
               'Render finished without durable output',
               'worker',
+              clip.retryCount,
             );
           }
         }
@@ -755,6 +773,149 @@ export class JobsService {
     }
 
     return { jobId, status: 'queued_for_retry' };
+  }
+
+  private async enqueueClipRetry(jobId: string, clip: Clip, index: number) {
+    const clipId = clip._id.toString();
+    const queued = await this.renderQueue.getJob(renderJobId(jobId, clipId));
+    if (!queued) {
+      await this.renderQueue.add(
+        RENDER_CLIP,
+        { jobId, clipId },
+        {
+          ...MEDIA_JOB_OPTIONS,
+          jobId: renderJobId(jobId, clipId),
+          priority: index + 1,
+        },
+      );
+    } else {
+      const state = await queued.getState();
+      if (state === 'failed' || state === 'completed') {
+        // The persisted retry timestamp fences progress from the previous attempt.
+        try {
+          await queued.retry(state, { resetAttemptsMade: true });
+        } catch (error) {
+          // Another reconciler/API may have already released this deterministic job.
+          if (
+            !['waiting', 'prioritized', 'delayed', 'active'].includes(
+              await queued.getState(),
+            )
+          )
+            throw error;
+        }
+      } else if (
+        !['waiting', 'prioritized', 'delayed', 'active'].includes(state)
+      ) {
+        throw new ServiceUnavailableException(
+          'Clip retry is temporarily unavailable. Please try again.',
+        );
+      }
+    }
+    await this.jobModel
+      .updateOne(
+        {
+          _id: jobId,
+          clips: {
+            $elemMatch: {
+              _id: clip._id,
+              retryCount: clip.retryCount,
+              retryRequested: true,
+            },
+          },
+        },
+        { $set: { 'clips.$.retryRequested': false } },
+      )
+      .exec();
+  }
+
+  async retryClip(userId: string, jobId: string, clipId: string) {
+    const job = await this.getJobById(userId, jobId);
+    const index = job.clips.findIndex((clip) => clip._id.toString() === clipId);
+    const clip = job.clips[index];
+    if (!clip) throw new NotFoundException('Clip not found');
+    if (clip.status !== JobStatus.FAILED && !clip.retryRequested)
+      throw new ConflictException('This clip is already processing or ready.');
+    if (!job.renderManifestReady)
+      throw new ConflictException(
+        'This video must finish preparation before clips can be retried.',
+      );
+    let sourceAvailable: boolean;
+    try {
+      sourceAvailable =
+        !!job.sourceObjectKey &&
+        (await this.r2Service.fileExists(job.sourceObjectKey));
+    } catch {
+      throw new ServiceUnavailableException(
+        'Could not check the original video. Please try again shortly.',
+      );
+    }
+    if (!sourceAvailable)
+      throw new ConflictException(
+        'The original video is no longer available. Add the video again to create this clip.',
+      );
+    // A terminal Mongo failure can briefly precede BullMQ releasing the worker lock.
+    const queued = await this.renderQueue.getJob(renderJobId(jobId, clipId));
+    if (
+      !clip.retryRequested &&
+      queued &&
+      (await queued.getState()) === 'active'
+    )
+      throw new ConflictException(
+        'This clip is still finishing its previous attempt. Please try again shortly.',
+      );
+    let claimed = job;
+    if (!clip.retryRequested) {
+      const result = await this.jobModel
+        .findOneAndUpdate(
+          {
+            _id: jobId,
+            clips: { $elemMatch: { _id: clip._id, status: JobStatus.FAILED } },
+          },
+          {
+            $set: {
+              status: JobStatus.CUTTING_CLIPS,
+              completionPublished: false,
+              'clips.$.status': JobStatus.PENDING,
+              'clips.$.processingState': ClipProcessingState.QUEUED,
+              'clips.$.retryRequested': true,
+              'clips.$.retryQueuedAt': new Date(),
+            },
+            $inc: { 'clips.$.retryCount': 1 },
+            $unset: {
+              errorMessage: '',
+              errorStage: '',
+              'clips.$.errorMessage': '',
+              'clips.$.errorStage': '',
+              'clips.$.failedAt': '',
+            },
+          },
+          { returnDocument: 'after' },
+        )
+        .exec();
+      if (!result)
+        throw new ConflictException('This clip retry has already started.');
+      claimed = result;
+    }
+    try {
+      const claimedIndex = claimed.clips.findIndex(
+        (c) => c._id.toString() === clipId,
+      );
+      if (claimedIndex < 0) throw new NotFoundException('Clip not found');
+      await this.enqueueClipRetry(
+        jobId,
+        claimed.clips[claimedIndex],
+        claimedIndex,
+      );
+    } catch (error) {
+      this.logger.warn(`Clip retry dispatch will be reconciled: ${error}`);
+      // Durable intent remains pending, including across a server restart.
+      throw new ServiceUnavailableException({
+        code: 'CLIP_RETRY_PENDING',
+        message:
+          'Retry is saved, but processing is temporarily unavailable. It will resume automatically.',
+      });
+    }
+    return { jobId, clipId, status: 'queued' as const };
   }
 
   // Finds FAILED jobs that have not been updated (i.e. not retried) since the

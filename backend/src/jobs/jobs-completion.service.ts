@@ -102,7 +102,7 @@ export class JobsCompletionService {
           title: 'Clip generation failed',
           message:
             successfulClipCount > 0
-              ? `${successfulClipCount} clips are ready. Some clips failed; retry the job to render only the failed clips.`
+              ? `${successfulClipCount} clips are ready. You can retry individual failed clips on the video's processing page.`
               : 'We were unable to generate clips from your video. Please try again.',
           actionUrl: `/dashboard/jobs/${jobId}`,
           actionLabel: 'View job',

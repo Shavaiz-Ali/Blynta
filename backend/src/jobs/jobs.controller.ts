@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DownloadClipDto } from './dto/download-clip.dto';
+import { clipFailure } from './clip-failure';
 import { AuthGuard } from '@nestjs/passport';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -43,6 +44,26 @@ export class JobsController {
 
   private async shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
     const responseJob = job.toObject<JobDocument>();
+    let sourceAvailable: boolean | undefined;
+    if (responseJob.clips?.some((clip) => clip.status === JobStatus.FAILED)) {
+      sourceAvailable = job.sourceObjectKey
+        ? await this.r2Service
+            .fileExists(job.sourceObjectKey)
+            .catch(() => undefined)
+        : false;
+    }
+    const clips = responseJob.clips?.map((clip) => {
+      const { errorMessage, errorStage, retryRequested, ...safe } = clip;
+      void errorMessage;
+      void errorStage;
+      void retryRequested;
+      return {
+        ...safe,
+        ...(clip.status === JobStatus.FAILED
+          ? { failure: clipFailure(clip, sourceAvailable) }
+          : {}),
+      };
+    });
     if (userPlan === UserPlan.FREE && responseJob.highlights) {
       responseJob.highlights = responseJob.highlights.map((h) => {
         const copy = { ...h };
@@ -55,6 +76,13 @@ export class JobsController {
       : undefined;
     return {
       ...responseJob,
+      ...(clips ? { clips } : {}),
+      ...(job.renderManifestReady && job.status === JobStatus.FAILED
+        ? {
+            errorMessage:
+              'Some clips could not be created. Retry the failed clips to finish this video.',
+          }
+        : {}),
       estimatedRemainingSeconds: render
         ? render.estimatedRemainingSeconds
         : job.status === JobStatus.COMPLETED
@@ -140,6 +168,15 @@ export class JobsController {
     @Param('id') id: string,
   ) {
     return this.jobsService.retryJob(req.user.userId, id);
+  }
+
+  @Post(':jobId/clips/:clipId/retry')
+  retryClip(
+    @Request() req: { user: { userId: string } },
+    @Param('jobId') jobId: string,
+    @Param('clipId') clipId: string,
+  ) {
+    return this.jobsService.retryClip(req.user.userId, jobId, clipId);
   }
 
   // Keep old GET clients safe: URL retrieval never records a user download.

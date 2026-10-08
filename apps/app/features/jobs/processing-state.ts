@@ -8,6 +8,7 @@ export const processingSteps = [
 ] as const;
 
 export function pipelineIndex(job: Job) {
+  if (completedWithIssues(job)) return processingSteps.length;
   if (job.status === "completed") return processingSteps.length;
   const stage = job.status === "failed" ? job.errorStage : job.status;
   const aliases: Record<string, string> = {
@@ -21,6 +22,17 @@ export function pipelineIndex(job: Job) {
   };
   return processingSteps.findIndex(
     (step) => step.status === (aliases[stage ?? ""] ?? stage),
+  );
+}
+
+export function completedWithIssues(job: Job) {
+  const clips = job.clips ?? [];
+  return (
+    clips.length > 0 &&
+    clips.some((clip) => clip.status === "failed") &&
+    clips.every(
+      (clip) => clip.status === "completed" || clip.status === "failed",
+    )
   );
 }
 

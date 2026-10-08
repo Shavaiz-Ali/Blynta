@@ -5,6 +5,7 @@ import {
   pipelineIndex,
   processingSteps,
   percentage,
+  completedWithIssues,
 } from "../processing-state";
 import { ClipProcessingCard, ProcessingProgress } from "./ClipProcessingCard";
 import { GeneratedClipCard } from "./GeneratedClipCard";
@@ -13,12 +14,12 @@ import { getJobDisplayTitle } from "@/features/dashboard/utils";
 
 export function JobProcessingView({ job }: { job: Job }) {
   const current = pipelineIndex(job);
-  const failed = job.status === "failed";
+  const issues = completedWithIssues(job);
+  const failed = job.status === "failed" && !issues;
   const clips = job.clips ?? [];
   const highlights = job.highlights ?? [];
-  const ready =
-    job.render?.ready ??
-    clips.filter((clip) => clip.status === "completed").length;
+  const ready = clips.filter((clip) => clip.status === "completed").length;
+  const failedCount = clips.filter((clip) => clip.status === "failed").length;
   const total = job.render?.total ?? Math.max(clips.length, highlights.length);
   const progress = percentage(job.progressPercent);
   // Queue capacity and queued work are not exposed: only use an authoritative API estimate.
@@ -33,7 +34,11 @@ export function JobProcessingView({ job }: { job: Job }) {
     >
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">
-          {failed ? "Processing needs attention" : "Creating your clips"}
+          {issues
+            ? "Completed with issues"
+            : failed
+              ? "Processing needs attention"
+              : "Creating your clips"}
         </h2>
         <p className="break-words text-sm text-muted-foreground">
           {getJobDisplayTitle(job, 70)}
@@ -45,7 +50,7 @@ export function JobProcessingView({ job }: { job: Job }) {
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <p>
               {ready} of {total} clips ready
-              {job.render?.failed ? " · " + job.render.failed + " failed" : ""}
+              {failedCount ? " · " + failedCount + " failed" : ""}
             </p>
             {eta && (
               <span className="ml-auto text-right tabular-nums">{eta}</span>
@@ -114,7 +119,9 @@ export function JobProcessingView({ job }: { job: Job }) {
                         ? "In progress"
                         : state === "failed"
                           ? "Failed"
-                          : "Completed"}
+                          : issues && index === 3
+                            ? "Completed with issues"
+                            : "Completed"}
                   </span>
                 </div>
               </div>
@@ -155,8 +162,9 @@ export function JobProcessingView({ job }: { job: Job }) {
         })}
       </ol>
       <p className="text-xs text-muted-foreground">
-        You can leave this page while your video processes. Finished clips will
-        appear here automatically.
+        {issues
+          ? "Finished clips are ready to use. Retry any failed clip above to finish creating it."
+          : "You can leave this page while your video processes. Finished clips will appear here automatically."}
       </p>
     </section>
   );

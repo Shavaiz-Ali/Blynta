@@ -320,3 +320,60 @@ export function useRetryJob(
     ...restOpts,
   });
 }
+
+export function useRetryClip() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: async ({
+      jobId,
+      clipId,
+    }: {
+      jobId: string;
+      clipId: string;
+    }) => {
+      const { data } = await axiosClient.post<{
+        jobId: string;
+        clipId: string;
+        status: "queued";
+      }>(`/jobs/${jobId}/clips/${clipId}/retry`);
+      return data;
+    },
+    onSuccess: async (_, { jobId, clipId }) => {
+      // Cancel an older poll before publishing the backend-confirmed transition.
+      await queryClient.cancelQueries({
+        queryKey: jobsQueryKeys.detail(jobId),
+      });
+      queryClient.setQueryData<Job>(jobsQueryKeys.detail(jobId), (job) => {
+        if (!job) return job;
+        const clips = job.clips.map((clip) =>
+          (clip._id || clip.id) === clipId
+            ? {
+                ...clip,
+                status: JobStatus.PENDING,
+                processingState: "queued" as const,
+                failure: undefined,
+              }
+            : clip,
+        );
+        return {
+          ...job,
+          status: JobStatus.CUTTING_CLIPS,
+          clips,
+          render: undefined,
+          progressPercent: undefined,
+        };
+      });
+      await queryClient.invalidateQueries({
+        queryKey: jobsQueryKeys.detail(jobId),
+      });
+      void queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
+    },
+    onError: (_, { jobId }) => {
+      // A lost response can still have committed durable retry intent.
+      void queryClient.invalidateQueries({
+        queryKey: jobsQueryKeys.detail(jobId),
+      });
+    },
+  });
+}

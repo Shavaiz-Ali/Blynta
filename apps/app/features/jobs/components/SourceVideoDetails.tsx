@@ -35,6 +35,7 @@ import { AppDialog } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { completedWithIssues } from "../processing-state";
 
 export interface SourceVideoDetailsProps {
   jobId: string;
@@ -148,6 +149,10 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   const isCuttingClips = job.status === JobStatus.CUTTING_CLIPS;
   const isCompleted = job.status === JobStatus.COMPLETED;
   const isFailed = job.status === JobStatus.FAILED;
+  const hasIssues = completedWithIssues(job);
+  const hasClipFailures = job.clips?.some(
+    (clip) => clip.status === JobStatus.FAILED,
+  );
   const thumbnail = getJobThumbnail(job);
   const totalHighlightsCount = job.highlights?.length || job.clips?.length || 0;
 
@@ -199,7 +204,15 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
             {/* Video metadata details */}
             <div className="min-w-0 flex-1 space-y-2 px-4 py-3 sm:self-center sm:px-5">
               <div className="flex items-center gap-2 flex-wrap">
-                {isCompleted ? (
+                {hasIssues ? (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 text-[11px] font-semibold"
+                  >
+                    <AlertTriangleIcon className="h-3 w-3 text-destructive" />
+                    Completed with issues
+                  </Badge>
+                ) : isCompleted ? (
                   <Badge
                     variant="secondary"
                     className="gap-1 bg-primary/10 text-primary border-primary/20 text-[11px] font-semibold"
@@ -284,7 +297,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
 
           {/* Right Action Menu */}
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-4 py-3 lg:border-t-0 lg:border-l lg:self-stretch">
-            {isFailed && (
+            {isFailed && !hasClipFailures && (
               <AppButton
                 variant="default"
                 size="sm"
@@ -335,7 +348,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
                       },
                     ]
                   : []),
-                ...(isFailed
+                ...(isFailed && !hasClipFailures
                   ? [
                       {
                         label: "Retry Pipeline",
@@ -369,7 +382,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
         /* Failed state with retry */
         <div className="py-4">
           <JobProcessingView job={job} />
-          <FailedStateCard job={job} />
+          {!hasClipFailures && <FailedStateCard job={job} />}
         </div>
       ) : (
         /* Stage 4 (Cutting & Captioning) and Completed Stage: Live Shorts Grid */

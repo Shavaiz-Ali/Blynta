@@ -42,6 +42,14 @@ export interface Highlight {
 }
 
 export interface Clip {
+  failure?: {
+    message: string;
+    reason?: string;
+    stage?: string;
+    failedAt?: string;
+    attempt?: number;
+    retryAvailable?: boolean;
+  };
   processingState?:
     "queued" | "cutting" | "captioning" | "uploading" | "ready" | "failed";
   errorMessage?: string;

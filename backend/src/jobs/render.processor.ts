@@ -77,12 +77,18 @@ export class RenderProcessor
         (c) => c._id.toString() === job.data.clipId,
       );
       // Never replace a durable success when completion publication alone failed.
-      if (clip && clip.status !== JobStatus.COMPLETED)
+      if (
+        clip &&
+        !clip.retryRequested &&
+        clip.status !== JobStatus.COMPLETED &&
+        (await job.getState()) === 'failed'
+      )
         await this.jobs.failUnfinishedClip(
           job.data.jobId,
           job.data.clipId,
           error.message,
           clip.errorStage ?? 'worker',
+          clip.retryCount,
         );
       await this.completion.finalize(job.data.jobId);
     } catch (failure) {
@@ -114,6 +120,12 @@ export class RenderProcessor
       typeof bullJob.progress === 'object'
         ? (bullJob.progress as ClipRenderProgress)
         : undefined;
+    if (
+      clip.retryQueuedAt &&
+      latest &&
+      latest.updatedAt < new Date(clip.retryQueuedAt).getTime()
+    )
+      latest = undefined;
     let lastPublished = 0;
     // Serialize and drain async Redis writes so old stage updates cannot overwrite new ones.
     let publishing: Promise<void> = Promise.resolve();
@@ -162,6 +174,9 @@ export class RenderProcessor
       publish(undefined, true);
     };
     try {
+      await this.jobs.updateClip(jobId, clipId, {
+        attemptCount: (clip.attemptCount ?? 0) + 1,
+      });
       if (!parent.sourceObjectKey)
         throw new Error('Durable source reference missing');
       if (!Number.isFinite(duration) || duration <= 0)
