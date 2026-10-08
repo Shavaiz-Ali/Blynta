@@ -8,6 +8,7 @@ import {
   UseQueryResult,
 } from "@tanstack/react-query";
 import { processingPollInterval } from "./processing-state";
+import { mergeJobProgress } from "./merge-job-progress";
 import { axiosClient } from "@/config/axiosClient";
 import {
   SourcePlatform,
@@ -80,11 +81,15 @@ export function useJob(
   id: string,
   opts?: Omit<UseQueryOptions<Job, Error>, "queryKey" | "queryFn">,
 ): UseQueryResult<Job, Error> {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: jobsQueryKeys.detail(id),
-    queryFn: async () => {
-      const { data } = await axiosClient.get<Job>(`/jobs/${id}`);
-      return data;
+    queryFn: async ({ signal }) => {
+      const { data } = await axiosClient.get<Job>(`/jobs/${id}`, { signal });
+      return mergeJobProgress(
+        queryClient.getQueryData<Job>(jobsQueryKeys.detail(id)),
+        data,
+      );
     },
     enabled: Boolean(id),
     staleTime: 1000 * 10,

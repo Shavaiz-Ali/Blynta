@@ -93,12 +93,14 @@ export function ClipPendingMedia({
   highlight,
   label,
   icon,
+  indicator,
 }: {
   job: Job;
   clip?: Clip;
   highlight?: Highlight;
   label: string;
   icon: ReactNode;
+  indicator?: ReactNode;
 }) {
   const start = clip?.startTime ?? highlight?.startTime;
   const end = clip?.endTime ?? highlight?.endTime;
@@ -119,10 +121,18 @@ export function ClipPendingMedia({
         <div className="absolute inset-0 bg-gradient-to-br from-muted/30 via-card to-background" />
       )}
       <div className="absolute inset-0 bg-background/25" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-card/80 text-muted-foreground">
-          {icon || <Film className="h-5 w-5" />}
-        </div>
+      <div
+        className={
+          indicator
+            ? "absolute inset-x-0 top-0 bottom-8 flex flex-col items-center justify-center gap-2"
+            : "absolute inset-0 flex flex-col items-center justify-center gap-3"
+        }
+      >
+        {indicator || (
+          <div className="flex h-11 w-11 items-center justify-center rounded-full border border-border/80 bg-card/80 text-muted-foreground">
+            {icon || <Film className="h-5 w-5" />}
+          </div>
+        )}
         <span className="text-xs font-medium text-muted-foreground">
           {label}
         </span>

@@ -148,12 +148,43 @@ async function start() {
       : request.url.includes("tablet")
         ? 820
         : undefined;
-    const cards = clips.map((clip, index) =>
+    const scenarioClips = clips.map((clip, index) =>
+      request.url.includes("multiple") && index < 3
+        ? {
+            ...clip,
+            status: "cutting_clips",
+            processingState: ["cutting", "captioning", "uploading"][index],
+          }
+        : request.url.includes("multiple") && index === 4
+          ? { ...clip, status: "cancelled", processingState: "cancelled" }
+          : request.url.includes("ring") && index === 0
+            ? { ...clip, status: "completed" }
+            : clip,
+    );
+    const scenarioJob = request.url.includes("multiple")
+      ? {
+          ...job,
+          render: {
+            ...job.render,
+            clips: scenarioClips
+              .slice(0, 3)
+              .map((clip, index) => ({
+                clipId: clip._id,
+                status: clip.processingState,
+                progress: [0, 38, 99][index],
+                durationSeconds: 48,
+                processedSeconds: 22,
+                etaSeconds: 90,
+              })),
+          },
+        }
+      : job;
+    const cards = scenarioClips.map((clip, index) =>
       React.createElement(
         clip.status === "completed" ? GeneratedClipCard : ClipProcessingCard,
         {
           key: clip._id,
-          job,
+          job: scenarioJob,
           clip,
           highlight: highlights[index],
           clipIndex: index,

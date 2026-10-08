@@ -191,14 +191,13 @@ const captionCard = render(ClipProcessingCard, {
 assert.match(captionCard, /36%/);
 assert.doesNotMatch(captionCard, /10%/);
 assert.equal((captionCard.match(/>Adding captions</g) ?? []).length, 1);
-assert.ok(captionCard.includes("00:04 / 00:50"));
-assert.match(captionCard, /~19 min remaining in this stage/);
-const mediaMarkup = captionCard.split('data-clip-section="media"')[1].split('data-clip-section="content"')[0];
-const footerMarkup = captionCard.split('data-clip-section="footer"')[1];
-assert.doesNotMatch(mediaMarkup, /Stage time|00:04 \/ 00:50|remaining/);
-assert.match(footerMarkup, /Stage time:.*00:04 \/ 00:50/);
-assert.ok(footerMarkup.indexOf('role="progressbar"') < footerMarkup.indexOf('data-clip-stage-timing'), 'Stage timing follows the progress bar');
-assert.match(footerMarkup, /overall clip progress/);
+assert.ok(!captionCard.includes('00:04 / 00:50'));
+assert.match(captionCard,/~19 min remaining/);
+const mediaMarkup=captionCard.split('data-clip-section="media"')[1].split('data-clip-section="content"')[0];
+const footerMarkup=captionCard.split('data-clip-section="footer"')[1];
+assert.match(mediaMarkup,/overall clip progress/);
+assert.doesNotMatch(mediaMarkup,/remaining/);
+assert.doesNotMatch(footerMarkup,/progressbar|data-clip-stage-timing|36%/);
 const { clipTimeRange, formatClipTime } = load('features/jobs/clip-time.ts');
 const fractionalRange = clipTimeRange(2795.8, 2845.3);
 assert.deepEqual(fractionalRange, { start: 2795, end: 2845, duration: 50 });
@@ -208,7 +207,7 @@ assert.equal(formatClipTime(fractionalRange.duration), '00:50');
 for (const patch of [{etaSeconds:NaN}, {etaSeconds:Infinity}, {etaSeconds:-1}, {etaSeconds:0}, {etaSeconds:undefined}, {speed:0}, {speed:NaN}, {processedSeconds:-1}, {processedSeconds:51}, {durationSeconds:0}]) {
   const entry={clipId:'a',status:'captioning',progress:36,processedSeconds:4,durationSeconds:50,etaSeconds:1147,...patch};
   const invalidCard=render(ClipProcessingCard,{job:{...rendering,render:{...rendering.render,clips:[entry]}},clip:clips[0],index:0});
-  assert.doesNotMatch(invalidCard,/remaining in this stage/, 'Unreliable or unavailable stage ETA is hidden');
+  assert.doesNotMatch(invalidCard,/remaining/, 'Unreliable or unavailable stage ETA is hidden');
 }
 const finalizingCard = render(ClipProcessingCard, {
   job: {
@@ -230,10 +229,10 @@ const finalizingCard = render(ClipProcessingCard, {
   index: 0,
 });
 assert.match(finalizingCard, /90%/);
-assert.equal((finalizingCard.match(/>Finalizing</g) ?? []).length, 1);
+assert.equal((finalizingCard.match(/>Uploading clip</g) ?? []).length, 1);
 assert.match(html, /67%/);
 assert.match(html, /27%/);
-assert.ok(html.includes("00:31 / 00:47"));
+assert.ok(!html.includes("00:31 / 00:47"));
 assert.match(html, /~15 sec remaining/);
 assert.doesNotMatch(html, /~24 min remaining/);
 assert.match(
