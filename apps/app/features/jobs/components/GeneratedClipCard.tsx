@@ -31,25 +31,13 @@ import {
   ClipCardControls,
 } from "./ClipCardLayout";
 
+import { clipTimeRange, formatClipTime } from "../clip-time";
+
 export interface GeneratedClipCardProps {
   job: Job;
   clip: Clip;
   highlight?: Highlight;
   clipIndex: number;
-}
-
-function formatTime(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return "00:00";
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
-}
-
-function formatDuration(durationSec: number): string {
-  if (!durationSec || isNaN(durationSec)) return "0:00";
-  const m = Math.floor(durationSec / 60);
-  const s = Math.floor(durationSec % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
 export function GeneratedClipCard({
@@ -72,7 +60,7 @@ export function GeneratedClipCard({
   const downloadMutation = useDownloadClip();
   const deleteMutation = useDeleteClip();
 
-  const durationSec = Math.max(0, clip.endTime - clip.startTime);
+  const range = clipTimeRange(clip.startTime, clip.endTime);
   const scorePercent = highlight?.score
     ? Math.round(highlight.score * 100)
     : 85;
@@ -191,14 +179,14 @@ export function GeneratedClipCard({
 
             {/* Duration Pill (Bottom Right) */}
             <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/80 backdrop-blur-md text-[11px] font-mono font-medium text-white border border-white/15">
-              {formatDuration(durationSec)}
+              {formatClipTime(range.duration, false)}
             </div>
 
             {/* Timestamp Range Pill (Bottom Left) */}
             <div className="absolute bottom-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-md bg-black/60 backdrop-blur-md text-[10px] font-mono text-white/80 border border-white/10">
               <ClockIcon className="h-2.5 w-2.5 text-white/70" />
               <span>
-                {formatTime(clip.startTime)} → {formatTime(clip.endTime)}
+                {formatClipTime(range.start)} → {formatClipTime(range.end)}
               </span>
             </div>
 

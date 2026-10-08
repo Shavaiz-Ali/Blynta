@@ -3,6 +3,7 @@ import { CheckCircle, AlertTriangle, Clock, LoaderCircle } from "lucide-react";
 import type { Job, Clip, Highlight } from "../types";
 import { clipState, percentage } from "../processing-state";
 import { formatRemainingTime } from "../format-eta";
+import { formatClipTime } from "../clip-time";
 import { FailedClipCard } from "./FailedClipCard";
 import {
   ClipCardLayout,
@@ -21,14 +22,6 @@ const labels = {
   ready: "Ready",
   failed: "Processing failed",
 };
-function time(seconds: number) {
-  const value = Math.max(0, Math.floor(seconds));
-  return (
-    String(Math.floor(value / 60)).padStart(2, "0") +
-    ":" +
-    String(value % 60).padStart(2, "0")
-  );
-}
 export function ProcessingProgress({
   value,
   label,
@@ -45,7 +38,7 @@ export function ProcessingProgress({
       </div>
       <div
         role="progressbar"
-        aria-label={label}
+        aria-label={`${label} — overall clip progress`}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={percent}
@@ -85,7 +78,24 @@ export function ClipProcessingCard({
           ? LoaderCircle
           : Clock;
   const pct = percentage(progress?.progress);
-  const eta = formatRemainingTime(progress?.etaSeconds);
+  const hasStageTime =
+    active &&
+    progress &&
+    Number.isFinite(progress.processedSeconds) &&
+    progress.processedSeconds! >= 0 &&
+    Number.isFinite(progress.durationSeconds) &&
+    progress.durationSeconds > 0 &&
+    progress.processedSeconds! <= progress.durationSeconds;
+  const eta =
+    hasStageTime &&
+    status !== "uploading" &&
+    progress.processedSeconds! < progress.durationSeconds &&
+    (progress.speed === undefined ||
+      (Number.isFinite(progress.speed) && progress.speed > 0)) &&
+    progress.etaSeconds !== undefined &&
+    progress.etaSeconds > 0
+      ? formatRemainingTime(progress.etaSeconds)
+      : null;
   if (status === "failed" && clip)
     return (
       <FailedClipCard
@@ -130,25 +140,6 @@ export function ClipProcessingCard({
                 ? "Creating your preview"
                 : "Queued for processing"
           }
-          information={
-            <>
-              {" "}
-              {active && progress && (
-                <>
-                  {Number.isFinite(progress.processedSeconds) &&
-                    Number.isFinite(progress.durationSeconds) && (
-                      <span>
-                        {time(progress.processedSeconds!)} /{" "}
-                        {time(progress.durationSeconds)}
-                      </span>
-                    )}
-                  {eta && status !== "uploading" && (
-                    <span>{eta} in this stage</span>
-                  )}
-                </>
-              )}{" "}
-            </>
-          }
           icon={
             <Icon
               aria-hidden="true"
@@ -158,23 +149,41 @@ export function ClipProcessingCard({
         />
       }
       footer={
-        <ClipCardControls>
-          <div className="w-full" aria-live="polite">
-            {(!active || pct === undefined) && (
-              <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
-                {stopped
-                  ? job.status === "cancelling"
-                    ? "Stopping remaining work…"
-                    : "Processing cancelled"
-                  : labels[status]}
-              </p>
-            )}
-            {active && pct !== undefined && (
-              <ProcessingProgress value={pct} label={labels[status]} />
-            )}
-          </div>
-        </ClipCardControls>
+        <div className="space-y-2">
+          <ClipCardControls>
+            <div className="w-full" aria-live="polite">
+              {(!active || pct === undefined) && (
+                <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                  {stopped
+                    ? job.status === "cancelling"
+                      ? "Stopping remaining work…"
+                      : "Processing cancelled"
+                    : labels[status]}
+                </p>
+              )}
+              {active && pct !== undefined && (
+                <ProcessingProgress value={pct} label={labels[status]} />
+              )}
+            </div>
+          </ClipCardControls>
+          {hasStageTime && (
+            <div
+              className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 text-[11px] leading-relaxed tabular-nums text-muted-foreground"
+              data-clip-stage-timing
+            >
+              <span className="shrink-0">
+                Stage time: {formatClipTime(progress.processedSeconds!)} /{" "}
+                {formatClipTime(progress.durationSeconds)}
+              </span>
+              {eta && (
+                <span className="min-w-0 flex-1 basis-32 break-words text-right">
+                  {eta} in this stage
+                </span>
+              )}
+            </div>
+          )}
+        </div>
       }
     >
       <ClipCardTitle>

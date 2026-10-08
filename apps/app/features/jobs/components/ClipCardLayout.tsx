@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { AppCardRoot } from "@blynta/ui";
 import { Film } from "lucide-react";
 import type { Clip, Highlight, Job } from "../types";
+import { clipTimeRange, formatClipTime } from "../clip-time";
 
 // Share the card composition, but keep height intrinsic to each card. Disclosures
 // must never resize neighboring cards through shared grid tracks.
@@ -92,17 +93,19 @@ export function ClipPendingMedia({
   highlight,
   label,
   icon,
-  information,
 }: {
   job: Job;
   clip?: Clip;
   highlight?: Highlight;
   label: string;
   icon: ReactNode;
-  information?: ReactNode;
 }) {
   const start = clip?.startTime ?? highlight?.startTime;
   const end = clip?.endTime ?? highlight?.endTime;
+  const range =
+    start !== undefined && end !== undefined
+      ? clipTimeRange(start, end)
+      : undefined;
   return (
     <>
       {job.thumbnailUrl ? (
@@ -124,26 +127,14 @@ export function ClipPendingMedia({
           {label}
         </span>
       </div>
-      {information && (
-        <div className="absolute inset-x-4 bottom-10 flex flex-wrap justify-between gap-x-3 gap-y-1 text-[11px] tabular-nums text-foreground/80">
-          {information}
-        </div>
-      )}
-      {start !== undefined && end !== undefined && (
+      {range && (
         <div className="absolute inset-x-3 bottom-2.5 flex justify-between gap-2 text-[10px] tabular-nums text-muted-foreground">
           <span>
-            {clipTime(start)} → {clipTime(end)}
+            {formatClipTime(range.start)} → {formatClipTime(range.end)}
           </span>
-          <span>{clipTime(Math.max(0, end - start))}</span>
+          <span>{formatClipTime(range.duration)}</span>
         </div>
       )}
     </>
   );
-}
-
-function clipTime(seconds: number) {
-  const value = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(value / 60)
-    .toString()
-    .padStart(2, "0")}:${(value % 60).toString().padStart(2, "0")}`;
 }
