@@ -166,6 +166,7 @@ describe('independent clip processor lifecycle', () => {
       r2 as unknown as R2Service,
       sources,
       {
+        setGlobalConcurrency: jest.fn(() => Promise.resolve()),
         startWorker: jest.fn(() => Promise.resolve()),
       } as unknown as RenderCapacityService,
     );
@@ -282,7 +283,7 @@ describe('independent clip processor lifecycle', () => {
     expect(clips[0].status).toBe(JobStatus.COMPLETED);
     expect(parents.get('a')!.status).toBe(JobStatus.FAILED);
   });
-  it('sets bounded worker concurrency from configuration before consuming jobs', () => {
+  it('sets bounded worker concurrency and Redis capacity before consuming jobs', async () => {
     const fakeWorker = {
       concurrency: 0,
       on: jest.fn(),
@@ -292,8 +293,43 @@ describe('independent clip processor lifecycle', () => {
       _worker: fakeWorker,
       config: new ConfigService({ RENDER_CONCURRENCY: '2' }),
     });
-    processor.onApplicationBootstrap();
+    await processor.onApplicationBootstrap();
     expect(fakeWorker.concurrency).toBe(2);
     expect(fakeWorker.run).toHaveBeenCalledTimes(1);
+  });
+  it('does not consume jobs before Redis confirms the global limit', async () => {
+    let confirm!: () => void;
+    const limit = jest.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          confirm = resolve;
+        }),
+    );
+    const run = jest.fn(() => Promise.resolve());
+    Object.assign(processor, {
+      _worker: { concurrency: 1, on: jest.fn(), run },
+      capacity: { setGlobalConcurrency: limit, startWorker: jest.fn() },
+    });
+    const startup = processor.onApplicationBootstrap();
+    expect(limit).toHaveBeenCalledWith(1);
+    expect(run).not.toHaveBeenCalled();
+    confirm();
+    await startup;
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+  it('fails closed when Redis cannot set global concurrency', async () => {
+    const run = jest.fn();
+    Object.assign(processor, {
+      _worker: { concurrency: 1, on: jest.fn(), run },
+      capacity: {
+        setGlobalConcurrency: jest
+          .fn()
+          .mockRejectedValue(new Error('Redis unavailable')),
+      },
+    });
+    await expect(processor.onApplicationBootstrap()).rejects.toThrow(
+      'Redis unavailable',
+    );
+    expect(run).not.toHaveBeenCalled();
   });
 });

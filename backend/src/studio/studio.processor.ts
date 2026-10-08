@@ -1,6 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectModel } from '@nestjs/mongoose';
-import { Logger } from '@nestjs/common';
+import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { workerConcurrency } from '../jobs/jobs.constants';
 import { Model } from 'mongoose';
 import { Job } from 'bullmq';
 import { mkdtemp, writeFile, rm } from 'fs/promises';
@@ -14,8 +16,17 @@ import { runCommandWithProgress } from '../media/utils/run-command-with-progress
 import type { StudioAsset, StudioRender } from './studio.schemas';
 import { renderPlan, RenderInput } from './studio.renderer';
 
-@Processor('studio', { concurrency: 2 })
-export class StudioProcessor extends WorkerHost {
+@Processor('studio', {
+  concurrency: 1,
+  autorun: false,
+  lockDuration: 60000,
+  stalledInterval: 30000,
+  maxStalledCount: 1,
+})
+export class StudioProcessor
+  extends WorkerHost
+  implements OnApplicationBootstrap
+{
   private logger = new Logger(StudioProcessor.name);
   constructor(
     @InjectModel('StudioAsset') private assets: Model<StudioAsset>,
@@ -24,8 +35,17 @@ export class StudioProcessor extends WorkerHost {
     private transcription: TranscriptionService,
     private registry: ProcessRegistryService,
     private inspection: MediaInspectionService,
+    private config: ConfigService,
   ) {
     super();
+  }
+  onApplicationBootstrap() {
+    this.worker.concurrency = workerConcurrency(
+      this.config.get('STUDIO_CONCURRENCY'),
+      'STUDIO_CONCURRENCY',
+    );
+    this.worker.on('error', (error) => this.logger.error(error));
+    void this.worker.run().catch((error) => this.logger.error(error));
   }
   async process(
     job: Job<{

@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
+import { hostCommand } from './host-command';
 
 export function runCommandWithProgress(
   command: string,
@@ -8,7 +9,13 @@ export function runCommandWithProgress(
   processRegistry?: ProcessRegistryService,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(command, args, { detached: true, windowsHide: true });
+    processRegistry?.assertRunning();
+    const limited = hostCommand(command, args);
+    const proc = spawn(limited.command, limited.args, {
+      detached: true,
+      windowsHide: true,
+      env: limited.env,
+    });
     processRegistry?.register(proc);
 
     let stderrBuffer = '';

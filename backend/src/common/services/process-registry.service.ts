@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChildProcess } from 'child_process';
+import { ChildProcess, execFileSync } from 'child_process';
 import { FfmpegCommand } from 'fluent-ffmpeg';
 
 @Injectable()
@@ -7,6 +7,15 @@ export class ProcessRegistryService {
   private readonly logger = new Logger(ProcessRegistryService.name);
   private readonly activeProcesses = new Set<ChildProcess>();
   private readonly activeFfmpegCommands = new Set<FfmpegCommand>();
+  private stopping = false;
+
+  assertRunning(): void {
+    if (this.stopping) throw new Error('Worker is shutting down');
+  }
+
+  beginShutdown(): void {
+    this.stopping = true;
+  }
 
   /**
    * Call this immediately after spawn(), e.g.:
@@ -14,6 +23,10 @@ export class ProcessRegistryService {
    *   this.processRegistry.register(proc);
    */
   register(proc: ChildProcess): void {
+    if (this.stopping) {
+      proc.kill('SIGKILL');
+      throw new Error('Worker is shutting down');
+    }
     this.activeProcesses.add(proc);
     proc.once('exit', () => this.activeProcesses.delete(proc));
     proc.once('close', () => this.activeProcesses.delete(proc));
@@ -33,6 +46,7 @@ export class ProcessRegistryService {
    * child / ffmpeg command, waits briefly, then SIGKILLs anything that didn't exit.
    */
   async killAll(timeoutMs = 5000): Promise<void> {
+    this.beginShutdown();
     const procCount = this.activeProcesses.size;
     const ffmpegCount = this.activeFfmpegCommands.size;
 
@@ -45,8 +59,7 @@ export class ProcessRegistryService {
     );
 
     // 1. Signal fluent-ffmpeg commands
-    const ffmpegCmds = Array.from(this.activeFfmpegCommands);
-    for (const cmd of ffmpegCmds) {
+    for (const cmd of this.activeFfmpegCommands) {
       try {
         cmd.kill('SIGTERM');
       } catch (err) {
@@ -64,6 +77,18 @@ export class ProcessRegistryService {
           // Negative PID sends the signal to the whole process group
           process.kill(-proc.pid, 'SIGTERM');
         } catch {
+          if (process.platform === 'win32') {
+            try {
+              execFileSync('taskkill', ['/PID', String(proc.pid), '/T', '/F'], {
+                windowsHide: true,
+                timeout: 2000,
+                stdio: 'ignore',
+              });
+              continue;
+            } catch {
+              /* already exited, fall back to the child handle */
+            }
+          }
           try {
             proc.kill('SIGTERM');
           } catch {
@@ -77,7 +102,7 @@ export class ProcessRegistryService {
     await new Promise((resolve) => setTimeout(resolve, timeoutMs));
 
     // 3. Force kill any remaining ffmpeg commands
-    for (const cmd of ffmpegCmds) {
+    for (const cmd of this.activeFfmpegCommands) {
       try {
         cmd.kill('SIGKILL');
       } catch {
@@ -86,8 +111,10 @@ export class ProcessRegistryService {
     }
 
     // 4. Force kill any remaining child processes
+    // A supervisor can exit while a child still lives in its process group.
     for (const proc of procs) {
-      if (!proc.killed && proc.pid) {
+      // killed means a signal was sent, not that the process exited.
+      if (proc.pid) {
         this.logger.warn(
           `Force-killing process PID ${proc.pid} (did not exit after SIGTERM)`,
         );

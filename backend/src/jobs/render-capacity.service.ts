@@ -32,6 +32,10 @@ export class RenderCapacityService implements OnModuleDestroy {
   private stopped = false;
   constructor(@InjectQueue(RENDER_QUEUE) private readonly queue: Queue) {}
 
+  async setGlobalConcurrency(limit: number): Promise<void> {
+    await this.queue.setGlobalConcurrency(limit);
+  }
+
   async startWorker(worker: Worker): Promise<void> {
     const id = randomUUID();
     const publish = async () => {

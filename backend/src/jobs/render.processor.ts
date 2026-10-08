@@ -51,10 +51,17 @@ export class RenderProcessor
     super();
   }
 
-  onApplicationBootstrap() {
+  async onApplicationBootstrap() {
     this.worker.concurrency = workerConcurrency(
       this.config.get('RENDER_CONCURRENCY'),
       'RENDER_CONCURRENCY',
+    );
+    // Configure Redis before any job can be acquired; failure prevents startup.
+    await this.capacity.setGlobalConcurrency(
+      workerConcurrency(
+        this.config.get('RENDER_GLOBAL_CONCURRENCY'),
+        'RENDER_GLOBAL_CONCURRENCY',
+      ),
     );
     this.worker.on('error', (error) => this.logger.error(error));
     void this.worker.run().catch((error) => this.logger.error(error));
