@@ -12,6 +12,8 @@ export function DashboardHeaderRight({ profile }: { profile: UserProfile }) {
       credits={
         <AppCreditsControl
           balance={profile.creditsBalance}
+          reserved={profile.creditsReserved}
+          resetAt={profile.creditsResetAt}
           plan={plan}
           allowance={allowance}
           billingLink={<Link href="/billing" />}

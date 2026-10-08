@@ -124,19 +124,19 @@ export class BillingController {
       });
     }
 
-    // ── Acknowledge immediately after signature is verified ──────────────────
-    // Responding 200 here prevents Paddle from retrying due to slow DB/API
-    // work inside the handler (Paddle retries after ~30s timeout).
-    // All processing below happens fire-and-forget after the response.
-    res.status(HttpStatus.OK).json({ received: true });
-
-    // ── Process event asynchronously ─────────────────────────────────────────
-    this.processWebhookEvent(event).catch((err: any) => {
-      this.logger.error(
-        `[Paddle Webhook] Unhandled error in processWebhookEvent: ${err?.message}`,
-        err?.stack,
-      );
-    });
+    // Acknowledge only after durable processing; failed processing must be retried by Paddle.
+    try {
+      await this.processWebhookEvent(event);
+      return res.status(HttpStatus.OK).json({ received: true });
+    } catch (error) {
+      this.logger.error({
+        event: 'billing.webhook.failed',
+        error: String(error),
+      });
+      return res
+        .status(HttpStatus.SERVICE_UNAVAILABLE)
+        .json({ error: 'Webhook processing failed; retry required' });
+    }
   }
 
   private async processWebhookEvent(event: any): Promise<void> {
@@ -170,6 +170,7 @@ export class BillingController {
         case 'subscription.updated':
         case 'subscription.activated':
         case 'subscription.paused':
+        case 'subscription.past_due':
         case 'subscription.resumed':
           await this.billingService.handleSubscriptionUpdated(
             data,
@@ -224,7 +225,7 @@ export class BillingController {
         `[Paddle Webhook] Error processing event ${eventType} (ID: ${eventId}): ${err?.message}`,
         err?.stack,
       );
-      // Do NOT mark as processed on error — allow Paddle retry to re-attempt
+      throw err; // Do NOT mark as processed on error — allow Paddle retry to re-attempt
     }
   }
 }

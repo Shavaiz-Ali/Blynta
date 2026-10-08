@@ -82,6 +82,15 @@ export class User {
   creditsBalance: number;
 
   @Prop({ default: 0 })
+  creditsReserved: number;
+
+  @Prop({ default: false })
+  creditLedgerInitialized: boolean;
+
+  @Prop()
+  freeCreditGrantAt?: Date;
+
+  @Prop({ default: 0 })
   totalCreditsUsed: number;
 
   @Prop({ default: () => new Date() })

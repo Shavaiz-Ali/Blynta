@@ -12,6 +12,7 @@ export interface StudioProject {
   updatedAt: Date;
 }
 export interface StudioAsset {
+  transcriptionCreditOperationId?: string;
   userId: string;
   projectId: string;
   assetId: string;
@@ -32,6 +33,7 @@ export interface StudioAsset {
   error?: string;
 }
 export interface StudioRender {
+  creditOperationId?: string;
   userId: string;
   projectId: string;
   status: string;
@@ -62,6 +64,7 @@ StudioProjectSchema.index(
 );
 export const StudioAssetSchema = new Schema<StudioAsset>(
   {
+    transcriptionCreditOperationId: String,
     userId: String,
     projectId: String,
     assetId: String,
@@ -89,6 +92,7 @@ StudioAssetSchema.index(
 );
 export const StudioRenderSchema = new Schema<StudioRender>(
   {
+    creditOperationId: String,
     userId: String,
     projectId: String,
     status: { type: String, default: 'queued' },

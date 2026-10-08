@@ -1,3 +1,4 @@
+import { invalidateCurrentUser } from "@/features/billing/queries";
 import {
   useMutation,
   UseMutationOptions,
@@ -118,6 +119,11 @@ export function useCreateJob(
       const body: Record<string, unknown> = {
         sourceUrl: input.sourceUrl,
         sourcePlatform: input.sourcePlatform,
+        operationId: input.operationId,
+        sourceSeconds: input.sourceSeconds,
+        maxOutputSeconds: input.maxOutputSeconds,
+        authorizedCredits: input.authorizedCredits,
+        pricingVersion: input.pricingVersion,
       };
       if (input.customPrompt && input.customPrompt.trim().length > 0) {
         body.customPrompt = input.customPrompt.trim();
@@ -132,6 +138,7 @@ export function useCreateJob(
       return data;
     },
     onSuccess: (data, variables, context) => {
+      invalidateCurrentUser(queryClient);
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
       queryClient.setQueryData(jobsQueryKeys.detail(data.id), data);
       if (userOnSuccess)
@@ -247,6 +254,7 @@ export function useDeleteJob(): UseMutationResult<
       return data;
     },
     onSuccess: () => {
+      invalidateCurrentUser(queryClient);
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
     },
   });
@@ -280,6 +288,7 @@ export function useDeleteClip(): UseMutationResult<
       queryClient.invalidateQueries({
         queryKey: jobsQueryKeys.detail(variables.jobId),
       });
+      invalidateCurrentUser(queryClient);
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
     },
   });
@@ -312,6 +321,7 @@ export function useRetryJob(
       queryClient.invalidateQueries({
         queryKey: jobsQueryKeys.detail(data.jobId),
       });
+      invalidateCurrentUser(queryClient);
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
       if (userOnSuccess)
         (
@@ -377,7 +387,8 @@ export function useRetryClip() {
       await queryClient.invalidateQueries({
         queryKey: jobsQueryKeys.detail(jobId),
       });
-      void queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
+      void invalidateCurrentUser(queryClient);
+      queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });
     },
     onError: (_, { jobId }) => {
       // A lost response can still have committed durable retry intent.

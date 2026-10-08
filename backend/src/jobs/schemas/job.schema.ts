@@ -154,6 +154,16 @@ export const ClipSchema = SchemaFactory.createForClass(Clip);
 
 @Schema({ timestamps: true })
 export class Job {
+  @Prop({ type: [{ token: String, expiresAt: Date }], default: [] })
+  mediaExecutionLeases: { token: string; expiresAt: Date }[];
+  @Prop()
+  creditOperationId?: string;
+
+  @Prop()
+  creditSourceSeconds?: number;
+
+  @Prop()
+  creditOutputSeconds?: number;
   @Prop()
   cancellationRequestedAt?: Date;
 

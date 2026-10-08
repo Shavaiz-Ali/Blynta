@@ -27,6 +27,7 @@ export interface UserProfile {
   avatarUrl?: string | null;
   plan: UserPlan;
   creditsBalance: number;
+  creditsReserved?: number;
   creditsResetAt: string;
   role: UserRole;
   isWelcomed: boolean;

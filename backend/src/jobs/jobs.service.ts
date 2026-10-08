@@ -1,4 +1,6 @@
 import { hostname } from 'node:os';
+import { CreditsService } from '../billing/credits.service';
+import { clipPrice, eligibleClipPrice } from '../billing/credit-pricing';
 import { randomUUID } from 'node:crypto';
 import { mediaExecution, ProcessingCancelled } from './cancellation-context';
 import {
@@ -13,7 +15,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
-import { Model, Types } from 'mongoose';
+import { Model, Types, ClientSession } from 'mongoose';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -43,6 +45,7 @@ import {
   clipOverallValue,
 } from './render-progress';
 import { RenderEtaService } from './render-eta.service';
+import { STYLE_PRESETS } from '../media/style-presets';
 import type { RenderEtaEntry } from './render-eta';
 import { R2Service } from '../storage/r2.service';
 import type { StudioAsset } from '../studio/studio.schemas';
@@ -71,6 +74,7 @@ export class JobsService {
     @Optional()
     @InjectModel('StudioAsset')
     private studioAssets?: Model<StudioAsset>,
+    @Optional() private credits?: CreditsService,
   ) {}
 
   async cancelJob(userId: string, jobId: string) {
@@ -174,7 +178,15 @@ export class JobsService {
           cancellationRequestedAt: null,
           deletionRequested: { $ne: true },
         },
-        { $addToSet: { activeExecutions: token } },
+        {
+          $addToSet: {
+            activeExecutions: token,
+            mediaExecutionLeases: {
+              token,
+              expiresAt: new Date(Date.now() + 120_000),
+            },
+          },
+        },
         { returnDocument: 'after' },
       )
       .exec();
@@ -185,12 +197,33 @@ export class JobsService {
       children: new Set<Promise<void>>(),
     };
     let checking = false;
+    let lastHeartbeat = 0;
     const poll = setInterval(() => {
       if (checking) return;
       checking = true;
       void this.findJob(jobId)
         .then((parent) => {
-          if (!parent || parent.cancellationRequestedAt) controller.abort();
+          if (
+            !parent ||
+            parent.cancellationRequestedAt ||
+            !parent.activeExecutions?.includes(token)
+          )
+            controller.abort();
+          if (Date.now() - lastHeartbeat > 10_000) {
+            lastHeartbeat = Date.now();
+            return this.jobModel
+              .updateOne(
+                { _id: jobId, 'mediaExecutionLeases.token': token },
+                {
+                  $set: {
+                    'mediaExecutionLeases.$.expiresAt': new Date(
+                      Date.now() + 120_000,
+                    ),
+                  },
+                },
+              )
+              .exec();
+          }
         })
         .catch(() => controller.abort())
         .finally(() => {
@@ -198,7 +231,25 @@ export class JobsService {
         });
     }, 500);
     try {
-      await mediaExecution.run(context, work);
+      if (claimed.creditOperationId && this.credits) {
+        await this.credits.capture(claimed.creditOperationId, token, () =>
+          mediaExecution.run(context, work),
+        );
+        const latest = await this.findJob(jobId);
+        await this.credits.record(claimed.creditOperationId, token, 'media', {
+          source: latest?.mediaMetadata,
+          sourceSeconds: latest?.videoDuration,
+          outputs: latest?.clips
+            .filter((c) => c.status === JobStatus.COMPLETED)
+            .map((c) => ({
+              clipId: String(c._id),
+              duration: c.endTime - c.startTime,
+              storageKey: c.r2ObjectKey,
+              resolution: latest.resolutionUsed,
+              codec: 'h264',
+            })),
+        });
+      } else await mediaExecution.run(context, work);
     } catch (error) {
       const parent = await this.findJob(jobId);
       if (!parent?.cancellationRequestedAt) throw error;
@@ -208,15 +259,90 @@ export class JobsService {
       controller.abort();
       await Promise.all([...context.children]);
       await this.jobModel
-        .updateOne({ _id: jobId }, { $pull: { activeExecutions: token } })
+        .updateOne(
+          { _id: jobId },
+          {
+            $pull: { activeExecutions: token, mediaExecutionLeases: { token } },
+          },
+        )
         .exec();
+      await this.finalizeCredits(jobId);
     }
   }
 
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
-    await this.usersService.deductCredit(userId);
+    let operationId: string | undefined;
+    let relatedId: string | undefined;
+    if (this.credits?.enabled) {
+      if (
+        !dto.operationId ||
+        !dto.sourceSeconds ||
+        !dto.maxOutputSeconds ||
+        !dto.authorizedCredits
+      )
+        throw new ConflictException(
+          'Confirm a source duration limit and output budget before starting',
+        );
+      const pricing = this.credits.pricing();
+      if (dto.pricingVersion !== pricing.version)
+        throw new ConflictException(
+          'Pricing changed. Review your estimate again.',
+        );
+      const amount = clipPrice(
+        dto.sourceSeconds,
+        dto.maxOutputSeconds,
+        pricing,
+      ).totalCredits;
+      if (amount !== dto.authorizedCredits)
+        throw new ConflictException('Review the current credit estimate');
+      const user = await this.usersService.findById(userId);
+      if (!user || !user.isActive)
+        throw new ConflictException('Account is not active');
+      if (
+        user.plan === 'free' &&
+        (dto.customPrompt ||
+          (dto.aiModel && dto.aiModel !== 'default') ||
+          STYLE_PRESETS[dto.stylePreset || 'default']?.isPro)
+      )
+        throw new ConflictException(
+          'Advanced clip options require a paid plan',
+        );
+      operationId = `clips-${userId}-${dto.operationId}`;
+      const op = await this.credits.reserve({
+        userId,
+        operationId,
+        product: 'ai-clips',
+        relatedId: new Types.ObjectId().toString(),
+        sourceSeconds: dto.sourceSeconds,
+        maxOutputSeconds: dto.maxOutputSeconds,
+        amount,
+        pricing,
+        fingerprint: JSON.stringify([
+          dto.sourceUrl,
+          dto.sourceSeconds,
+          dto.maxOutputSeconds,
+          dto.customPrompt,
+          dto.aiModel,
+          dto.stylePreset,
+          pricing.version,
+        ]),
+      });
+      relatedId = op.relatedId;
+      const existing = await this.findJob(relatedId);
+      if (existing) return existing;
+      if (op.status !== 'reserved')
+        throw new ConflictException(
+          'This operation has ended. Submit a new authorization.',
+        );
+    } else {
+      await this.usersService.deductCredit(userId);
+    }
 
     const job = new this.jobModel({
+      ...(relatedId ? { _id: new Types.ObjectId(relatedId) } : {}),
+      creditOperationId: operationId,
+      creditSourceSeconds: dto.sourceSeconds,
+      creditOutputSeconds: dto.maxOutputSeconds,
       userId: new Types.ObjectId(userId),
       sourceUrl: dto.sourceUrl,
       sourcePlatform: dto.sourcePlatform,
@@ -228,9 +354,29 @@ export class JobsService {
       progressPercent: 0,
       pipelineRetryRequested: true,
     });
-    const saved = await job.save();
+    let saved: JobDocument;
+    try {
+      saved = await job.save();
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000 && relatedId) {
+        const existing = await this.findJob(relatedId);
+        if (existing) return existing;
+      }
+      // Durable reservations without a parent are recovered by reconciliation.
+      throw error;
+    }
 
-    await this.enqueuePipeline(saved._id.toString());
+    try {
+      await this.enqueuePipeline(saved._id.toString());
+    } catch (error) {
+      if (!operationId) throw error;
+      this.logger.warn({
+        event: 'billing.dispatch.pending',
+        jobId: String(saved._id),
+        error: String(error),
+      });
+      // pipelineRetryRequested is a durable outbox intent; worker reconciliation re-enqueues.
+    }
 
     // Activities for Job Creation and Credit Usage
     await this.activitiesService.queueCreate({
@@ -254,25 +400,26 @@ export class JobsService {
       },
     });
 
-    await this.activitiesService.queueCreate({
-      userId: saved.userId,
-      type: ActivityType.CREDIT_DEDUCT,
-      dedupeKey: `activity:job:${saved._id.toString()}:credit-deduct`,
-      category: ActivityCategory.CREDIT,
-      title: 'Credit used',
-      description: '1 credit used for video clip generation.',
-      activityUrl: '/billing',
-      entityType: 'job',
-      entityId: saved._id,
-      actorType: ActivityActorType.USER,
-      actorId: saved.userId,
-      status: ActivityStatus.SUCCESS,
-      severity: ActivitySeverity.INFO,
-      metadata: {
-        amount: 1,
-        jobId: saved._id.toString(),
-      },
-    });
+    if (!operationId)
+      await this.activitiesService.queueCreate({
+        userId: saved.userId,
+        type: ActivityType.CREDIT_DEDUCT,
+        dedupeKey: `activity:job:${saved._id.toString()}:credit-deduct`,
+        category: ActivityCategory.CREDIT,
+        title: 'Credit used',
+        description: '1 credit used for video clip generation.',
+        activityUrl: '/billing',
+        entityType: 'job',
+        entityId: saved._id,
+        actorType: ActivityActorType.USER,
+        actorId: saved.userId,
+        status: ActivityStatus.SUCCESS,
+        severity: ActivitySeverity.INFO,
+        metadata: {
+          amount: 1,
+          jobId: saved._id.toString(),
+        },
+      });
 
     return saved;
   }
@@ -334,6 +481,11 @@ export class JobsService {
       )
       .exec();
     if (!result && mediaExecution.getStore()) throw new ProcessingCancelled();
+    if (
+      result &&
+      [JobStatus.FAILED, JobStatus.COMPLETED].includes(result.status)
+    )
+      await this.finalizeCredits(jobId);
     return result;
   }
 
@@ -388,7 +540,15 @@ export class JobsService {
           cancellationRequestedAt: null,
           deletionRequested: { $ne: true },
         },
-        { $addToSet: { activeExecutions: token } },
+        {
+          $addToSet: {
+            activeExecutions: token,
+            mediaExecutionLeases: {
+              token,
+              expiresAt: new Date(Date.now() + 120_000),
+            },
+          },
+        },
       )
       .exec();
     if (claimed.matchedCount === 0) return;
@@ -396,7 +556,12 @@ export class JobsService {
       await dispatch();
     } finally {
       await this.jobModel
-        .updateOne({ _id: jobId }, { $pull: { activeExecutions: token } })
+        .updateOne(
+          { _id: jobId },
+          {
+            $pull: { activeExecutions: token, mediaExecutionLeases: { token } },
+          },
+        )
         .exec();
     }
   }
@@ -440,6 +605,22 @@ export class JobsService {
       job.renderManifestReady
     )
       return;
+    if (job.creditOperationId) {
+      let remaining = job.creditOutputSeconds || 0;
+      highlights = highlights.flatMap((h) => {
+        const duration = h.endTime - h.startTime;
+        if (
+          !Number.isFinite(duration) ||
+          duration <= 0 ||
+          h.startTime < 0 ||
+          h.endTime > (job.videoDuration || 0)
+        )
+          return [];
+        if (duration > remaining) return [];
+        remaining -= duration;
+        return [h];
+      });
+    }
     const baseUrl = this.configService.get<string>(
       'API_BASE_URL',
       'http://localhost:5001',
@@ -606,7 +787,7 @@ export class JobsService {
       (c) => c.status === JobStatus.FAILED,
     ).length;
     const success = job.clips.length > 0 && failed === 0;
-    return this.jobModel
+    const finalized = await this.jobModel
       .findOneAndUpdate(
         {
           _id: jobId,
@@ -639,6 +820,77 @@ export class JobsService {
         { returnDocument: 'after' },
       )
       .exec();
+    if (finalized) await this.finalizeCredits(jobId);
+    return finalized;
+  }
+
+  async finalizeCredits(jobId: string) {
+    const job = await this.findJob(jobId);
+    if (
+      !job?.creditOperationId ||
+      !this.credits ||
+      job.activeExecutions?.length ||
+      ![JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+        job.status,
+      )
+    )
+      return;
+    const op = await this.credits.operations.findOne({
+      operationId: job.creditOperationId,
+    });
+    if (!op || op.status === 'settled') return;
+    const outputs = new Map(
+      (op.deliveredOutputs || []).map((o) => [o.id, o.seconds]),
+    );
+    for (const c of job.clips.filter(
+      (c) => c.status === JobStatus.COMPLETED && c.r2ObjectKey,
+    ))
+      outputs.set(String(c._id), Math.max(0, c.endTime - c.startTime));
+    const delivered = [...outputs.values()].reduce(
+      (n, seconds) => n + seconds,
+      0,
+    );
+    await this.credits.settle(
+      op.operationId,
+      Math.max(
+        op.charged,
+        eligibleClipPrice(job.videoDuration || 0, delivered, op.pricing),
+      ),
+      [...outputs].map(([id, seconds]) => ({ id, seconds })),
+    );
+  }
+
+  async assertSourceBudget(jobId: string, duration: number) {
+    const job = await this.findJob(jobId);
+    if (job?.creditOperationId)
+      await this.credits!.assertSourceBudget(job.creditOperationId, duration);
+  }
+  async recoverExecutionLeases(jobId: string) {
+    if ((await this.activeMediaJobIds()).has(jobId)) return;
+    const job = await this.findJob(jobId);
+    for (const lease of job?.mediaExecutionLeases || []) {
+      if (new Date(lease.expiresAt).getTime() >= Date.now()) continue;
+      await this.jobModel
+        .updateOne(
+          {
+            _id: jobId,
+            mediaExecutionLeases: {
+              $elemMatch: {
+                token: lease.token,
+                expiresAt: { $lt: new Date() },
+              },
+            },
+          },
+          {
+            $pull: {
+              activeExecutions: lease.token,
+              mediaExecutionLeases: { token: lease.token },
+            },
+          },
+        )
+        .exec();
+      this.logger.warn({ event: 'billing.execution.lease-recovered', jobId });
+    }
   }
 
   async markCompletionPublished(jobId: string, status: JobStatus) {
@@ -846,6 +1098,7 @@ export class JobsService {
   // Task 2 — delete an entire job + its clips from R2
   async deleteJob(userId: string, jobId: string): Promise<{ message: string }> {
     const job = await this.getJobById(userId, jobId); // ownership check + NotFoundException
+    await this.finalizeCredits(jobId);
 
     const activeStatuses: JobStatus[] = [
       JobStatus.CANCELLING,
@@ -972,6 +1225,7 @@ export class JobsService {
     clipId: string,
   ): Promise<{ message: string }> {
     const job = await this.getJobById(userId, jobId);
+    await this.finalizeCredits(jobId);
     if (
       ![JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
         job.status,
@@ -1033,13 +1287,10 @@ export class JobsService {
   }
 
   // Resume-in-place retry — re-enqueues the SAME job instead of creating a new one.
-  // Does NOT deduct a credit (same job, continuing from where it stopped).
+  // V2 reserves the remaining original authorization; delivered work is charged cumulatively.
   // Only resets terminal error fields; leaves localVideoPath, transcript,
   // highlights, and clips intact so the processor can detect which stages
   // are already complete and skip straight past them.
-  //
-  // TODO: confirm with product — should a resumed retry consume a credit?
-  // Currently it does NOT because it re-uses the same job document.
   async retryJob(
     userId: string,
     jobId: string,
@@ -1052,41 +1303,52 @@ export class JobsService {
     }
 
     // Claim the retry once; concurrent API calls cannot enqueue duplicate attempts.
-    const claimed = await this.jobModel
-      .findOneAndUpdate(
-        {
-          _id: jobId,
-          status: JobStatus.FAILED,
-          cancellationRequestedAt: null,
-          deletionRequested: { $ne: true },
-        },
-        {
-          $set: {
-            status: job.renderManifestReady
-              ? JobStatus.CUTTING_CLIPS
-              : JobStatus.PENDING,
-            completionPublished: false,
-            pipelineRetryRequested: !job.renderManifestReady,
+    const claim = async (session: ClientSession | null = null) =>
+      this.jobModel
+        .findOneAndUpdate(
+          {
+            _id: jobId,
+            status: JobStatus.FAILED,
+            cancellationRequestedAt: null,
+            deletionRequested: { $ne: true },
+          },
+          {
+            $set: {
+              status: job.renderManifestReady
+                ? JobStatus.CUTTING_CLIPS
+                : JobStatus.PENDING,
+              completionPublished: false,
+              pipelineRetryRequested: !job.renderManifestReady,
+              ...(job.renderManifestReady
+                ? {
+                    renderRetryRequested: true,
+                    'clips.$[failed].status': JobStatus.PENDING,
+                    'clips.$[failed].processingState':
+                      ClipProcessingState.QUEUED,
+                    'clips.$[failed].errorMessage': '',
+                    'clips.$[failed].errorStage': '',
+                  }
+                : {}),
+            },
+            $unset: { errorMessage: '', errorStage: '' },
+          },
+          {
+            returnDocument: 'after',
             ...(job.renderManifestReady
-              ? {
-                  renderRetryRequested: true,
-                  'clips.$[failed].status': JobStatus.PENDING,
-                  'clips.$[failed].processingState': ClipProcessingState.QUEUED,
-                  'clips.$[failed].errorMessage': '',
-                  'clips.$[failed].errorStage': '',
-                }
+              ? { arrayFilters: [{ 'failed.status': JobStatus.FAILED }] }
               : {}),
           },
-          $unset: { errorMessage: '', errorStage: '' },
-        },
-        {
-          returnDocument: 'after',
-          ...(job.renderManifestReady
-            ? { arrayFilters: [{ 'failed.status': JobStatus.FAILED }] }
-            : {}),
-        },
-      )
-      .exec();
+        )
+        .session(session)
+        .exec();
+    const activate = async (session: ClientSession | null = null) => {
+      const result = await claim(session);
+      if (!result) throw new ConflictException('Job retry already started');
+      return result;
+    };
+    const claimed = job.creditOperationId
+      ? await this.credits!.retry(job.creditOperationId, activate)
+      : await activate();
     if (!claimed) throw new ConflictException('Job retry already started');
     if (job.renderManifestReady) {
       await this.enqueueRenders(jobId, true);
@@ -1192,35 +1454,47 @@ export class JobsService {
       );
     let claimed = job;
     if (!clip.retryRequested) {
-      const result = await this.jobModel
-        .findOneAndUpdate(
-          {
-            _id: jobId,
-            cancellationRequestedAt: null,
-            deletionRequested: { $ne: true },
-            clips: { $elemMatch: { _id: clip._id, status: JobStatus.FAILED } },
-          },
-          {
-            $set: {
-              status: JobStatus.CUTTING_CLIPS,
-              completionPublished: false,
-              'clips.$.status': JobStatus.PENDING,
-              'clips.$.processingState': ClipProcessingState.QUEUED,
-              'clips.$.retryRequested': true,
-              'clips.$.retryQueuedAt': new Date(),
+      const claim = async (session: ClientSession | null = null) =>
+        this.jobModel
+          .findOneAndUpdate(
+            {
+              _id: jobId,
+              cancellationRequestedAt: null,
+              deletionRequested: { $ne: true },
+              clips: {
+                $elemMatch: { _id: clip._id, status: JobStatus.FAILED },
+              },
             },
-            $inc: { 'clips.$.retryCount': 1 },
-            $unset: {
-              errorMessage: '',
-              errorStage: '',
-              'clips.$.errorMessage': '',
-              'clips.$.errorStage': '',
-              'clips.$.failedAt': '',
+            {
+              $set: {
+                status: JobStatus.CUTTING_CLIPS,
+                completionPublished: false,
+                'clips.$.status': JobStatus.PENDING,
+                'clips.$.processingState': ClipProcessingState.QUEUED,
+                'clips.$.retryRequested': true,
+                'clips.$.retryQueuedAt': new Date(),
+              },
+              $inc: { 'clips.$.retryCount': 1 },
+              $unset: {
+                errorMessage: '',
+                errorStage: '',
+                'clips.$.errorMessage': '',
+                'clips.$.errorStage': '',
+                'clips.$.failedAt': '',
+              },
             },
-          },
-          { returnDocument: 'after' },
-        )
-        .exec();
+            { returnDocument: 'after' },
+          )
+          .session(session)
+          .exec();
+      const activate = async (session: ClientSession | null = null) => {
+        const result = await claim(session);
+        if (!result) throw new ConflictException('Clip retry already started');
+        return result;
+      };
+      const result = job.creditOperationId
+        ? await this.credits!.retry(job.creditOperationId, activate)
+        : await activate();
       if (!result)
         throw new ConflictException('This clip retry has already started.');
       claimed = result;

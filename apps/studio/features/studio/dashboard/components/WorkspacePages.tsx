@@ -1,10 +1,11 @@
 "use client";
+import type { CreditHistoryPage, CreditBalance } from "@blynta/types";
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useSession } from "@blynta/auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AppButton, AppCard, AppSkeleton } from "@blynta/ui";
+import { AppButton, AppCard, AppSkeleton, AppSelect } from "@blynta/ui";
 import { Film, ImageIcon, Music } from "lucide-react";
 import { toast } from "sonner";
 import { studioRequest } from "../../api";
@@ -226,15 +227,12 @@ export function MediaLibrary({
 export function UsagePage() {
   const profile = useWorkspaceQuery<AccountProfile>("users/me");
   const [page, setPage] = useState(1);
-  const activity = useWorkspaceQuery<{
-    activities: {
-      _id: string;
-      title: string;
-      description?: string;
-      createdAt: string;
-    }[];
-    totalPages: number;
-  }>(`activities?category=credit&limit=20&page=${page}`);
+  const balance = useWorkspaceQuery<CreditBalance>("billing/credits");
+  const [product, setProduct] = useState("");
+  const [type, setType] = useState("");
+  const activity = useWorkspaceQuery<CreditHistoryPage>(
+    `billing/credits/history?limit=20&page=${page}${product ? `&product=${product}` : ""}${type ? `&type=${type}` : ""}`,
+  );
   return (
     <div className="space-y-6">
       {profile.isPending && <AppSkeleton className="h-28" />}
@@ -258,7 +256,8 @@ export function UsagePage() {
             <div>
               <p className="text-xs text-muted-foreground">Credits remaining</p>
               <p className="mt-2 text-lg font-semibold">
-                {profile.data.creditsBalance}
+                {balance.data?.available ?? profile.data.creditsBalance} (
+                {balance.data?.reserved ?? 0} held)
               </p>
             </div>
             <div>
@@ -266,8 +265,8 @@ export function UsagePage() {
                 Account credit reset date
               </p>
               <p className="mt-2 text-sm font-medium">
-                {profile.data.creditsResetAt
-                  ? new Date(profile.data.creditsResetAt).toLocaleDateString()
+                {balance.data?.nextRenewal
+                  ? new Date(balance.data?.nextRenewal).toLocaleDateString()
                   : "Not available"}
               </p>
             </div>
@@ -275,8 +274,9 @@ export function UsagePage() {
         </AppCard>
       )}
       <p className="text-sm text-muted-foreground">
-        Studio shares your Blynta account and plan. Studio-specific credit
-        charges and operation history are not yet recorded.
+        Studio shares your Blynta account and plan. Credits held for running
+        jobs cannot be spent again. Editing is included; eligible cloud and AI
+        operations use this shared balance.
       </p>
       {blyntaUrl && (
         <AppButton
@@ -288,9 +288,43 @@ export function UsagePage() {
         </AppButton>
       )}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold">
-          Recent account credit activity
-        </h2>
+        <div className="flex gap-2">
+          <AppSelect
+            label="Product filter"
+            value={product}
+            onValueChange={(value) => {
+              setProduct(value);
+              setPage(1);
+            }}
+            options={[
+              { value: "", label: "All products" },
+              { value: "studio", label: "Studio" },
+              { value: "ai-clips", label: "AI Clips" },
+              { value: "account", label: "Account" },
+            ]}
+          />
+          <AppSelect
+            label="Transaction filter"
+            value={type}
+            onValueChange={(value) => {
+              setType(value);
+              setPage(1);
+            }}
+            options={[
+              { value: "", label: "All types" },
+              ...[
+                "charge",
+                "grant",
+                "reserve",
+                "release",
+                "refund",
+                "adjustment",
+                "opening",
+              ].map((value) => ({ value, label: value })),
+            ]}
+          />
+        </div>
+        <h2 className="text-sm font-semibold">Credit transaction history</h2>
         {activity.isPending && <AppSkeleton className="h-24" />}
         {activity.error && (
           <DataError
@@ -298,14 +332,29 @@ export function UsagePage() {
             retry={() => void activity.refetch()}
           />
         )}
-        {activity.data?.activities.length === 0 && (
+        {activity.data?.rows.length === 0 && (
           <p className="text-sm text-muted-foreground">
-            No recorded credit activity.
+            No matching credit transactions.
           </p>
         )}
-        {activity.data?.activities.map((item) => (
+        {activity.data?.rows.map((item) => (
           <div key={item._id} className="border-b pb-3 text-sm">
-            <p className="font-medium">{item.title}</p>
+            <p className="font-medium">
+              {item.product === "studio"
+                ? "Studio"
+                : item.product === "ai-clips"
+                  ? "AI Clips"
+                  : "Account"}{" "}
+              — {item.type}:{" "}
+              {item.type === "reserve"
+                ? `${item.amount} held`
+                : item.type === "release"
+                  ? `${item.amount} unlocked`
+                  : item.type === "charge"
+                    ? `−${item.amount}`
+                    : `${item.availableDelta >= 0 ? "+" : ""}${item.availableDelta}`}{" "}
+              credits
+            </p>
             <p className="text-muted-foreground text-xs mt-1">
               {item.description}
             </p>

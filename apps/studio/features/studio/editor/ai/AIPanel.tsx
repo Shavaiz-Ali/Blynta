@@ -11,8 +11,15 @@ import {
   Smartphone,
   Volume2,
 } from "lucide-react";
-import { AppButton, AppTooltip } from "@blynta/ui";
-import { studioApi } from "../../api";
+import {
+  AppButton,
+  AppTooltip,
+  AppDialog,
+  InsufficientCredits,
+} from "@blynta/ui";
+import { studioApi, studioRequest, persistentDocument } from "../../api";
+import type { CreditEstimate } from "@blynta/types";
+import { useQueryClient } from "@tanstack/react-query";
 import { AppScrollArea } from "@blynta/ui";
 import { AppTextarea } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
@@ -85,6 +92,22 @@ function AIProposalResult({
   );
 }
 export function AIPanel() {
+  const queryClient = useQueryClient();
+  const [budget, setBudget] = useState<{
+    estimate: CreditEstimate;
+    value: string;
+    doc: EditorDocument;
+    targetId?: string;
+    operationId: string;
+  } | null>(null);
+  const authorizedRequest = useRef<{
+    signature: string;
+    authorization: {
+      operationId: string;
+      authorizedCredits: number;
+      pricingVersion: string;
+    };
+  } | null>(null);
   const e = useEditor();
   const { aiOpen, setAiOpen } = e;
   const [prompt, setPrompt] = useState("");
@@ -142,7 +165,14 @@ export function AIPanel() {
     request.current?.abort();
     setBusy(false);
   }
-  async function send(value = prompt) {
+  async function send(
+    value = prompt,
+    authorization?: {
+      operationId: string;
+      authorizedCredits: number;
+      pricingVersion: string;
+    },
+  ) {
     if (!value.trim() || busy) return;
     if (scope === "clip" && !e.selected) {
       setError("Select a timeline clip first.");
@@ -152,17 +182,49 @@ export function AIPanel() {
     setError("");
     const doc = e.history.present;
     const targetId = scope === "clip" ? (e.selectedId ?? undefined) : undefined;
+    const signature = JSON.stringify([
+      value,
+      persistentDocument(doc),
+      targetId,
+    ]);
+    if (!authorization && authorizedRequest.current?.signature === signature)
+      authorization = authorizedRequest.current.authorization;
+    if (authorization) authorizedRequest.current = { signature, authorization };
     request.current = new AbortController();
     try {
+      if (!authorization) {
+        const estimate = await studioRequest<CreditEstimate>(
+          `projects/${e.projectId}/ai/estimate`,
+          "POST",
+          {
+            prompt: value,
+            document: persistentDocument(doc),
+            targetClipId: targetId,
+          },
+        );
+        if (estimate.enabled) {
+          setBudget({
+            estimate,
+            value,
+            doc,
+            targetId,
+            operationId: crypto.randomUUID(),
+          });
+          setBusy(false);
+          return;
+        }
+      }
       const proposal = await studioApi.propose(
         e.projectId,
         value,
         doc,
         targetId,
         request.current.signal,
+        authorization,
       );
       snapshots.current.set(proposal.id, doc);
       setHistory((h) => [...h, proposal]);
+      authorizedRequest.current = null;
       setPrompt("");
     } catch (err) {
       if (request.current?.signal.aborted) return;
@@ -172,6 +234,7 @@ export function AIPanel() {
       );
     }
     setBusy(false);
+    void queryClient.invalidateQueries({ queryKey: ["workspace"] });
   }
   return (
     <aside
@@ -181,6 +244,65 @@ export function AIPanel() {
       aria-label="Blynta AI editing agent"
       hidden={!e.aiOpen}
     >
+      <AppDialog
+        open={!!budget}
+        onOpenChange={(open) => {
+          if (!open) setBudget(null);
+        }}
+        title="Confirm AI operation"
+        description="AI editing uses your shared Blynta credits. Cached captions are included."
+        footer={
+          <AppButton
+            disabled={
+              !budget ||
+              budget.estimate.totalCredits > budget.estimate.available ||
+              busy
+            }
+            onClick={() => {
+              if (!budget) return;
+              if (e.history.present !== budget.doc) {
+                setError("Timeline changed. Review a fresh estimate.");
+                setBudget(null);
+                return;
+              }
+              const b = budget;
+              setBudget(null);
+              void send(b.value, {
+                operationId: b.operationId,
+                authorizedCredits: b.estimate.totalCredits,
+                pricingVersion: b.estimate.pricingVersion,
+              });
+            }}
+          >
+            Authorize {budget?.estimate.totalCredits} credits
+          </AppButton>
+        }
+      >
+        {budget && (
+          <div className="space-y-3 text-sm">
+            <p>
+              {budget.estimate.totalCredits} credits maximum ·{" "}
+              {budget.estimate.available} available.
+            </p>
+            <p>
+              AI proposals are charged when delivered. New caption transcription
+              uses source duration; existing transcripts are reused without
+              another charge. Failed work releases its hold.
+            </p>
+            {budget.estimate.totalCredits > budget.estimate.available && (
+              <InsufficientCredits
+                required={budget.estimate.totalCredits}
+                available={budget.estimate.available}
+                billingUrl={
+                  process.env.NEXT_PUBLIC_BLYNTA_URL
+                    ? `${process.env.NEXT_PUBLIC_BLYNTA_URL}/billing`
+                    : undefined
+                }
+              />
+            )}
+          </div>
+        )}
+      </AppDialog>
       <div
         className="flex h-14 shrink-0 items-center justify-between gap-2 px-4"
         data-ai-header

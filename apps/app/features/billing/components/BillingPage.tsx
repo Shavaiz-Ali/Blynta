@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { CreditHistory } from "./CreditHistory";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -13,6 +14,7 @@ import {
   useCreateCheckoutSession,
   useCustomerPortal,
   invalidateCurrentUser,
+  useCreditBalance,
 } from "@/features/billing/queries";
 import type { UserPlan as BillingUserPlan } from "./types";
 import type { BillingPlanTier } from "@/features/billing/queries";
@@ -50,8 +52,8 @@ interface PlanMeta {
 /*                           Plan display config                              */
 /* -------------------------------------------------------------------------- */
 /* NOTE: these are DISPLAY values only. The real source of truth for billing
-   amounts is the corresponding Stripe Price object configured in the
-   dashboard. Keep these strings in sync with Stripe's configured amounts. */
+   amounts is the corresponding Paddle Price object configured in the
+   dashboard. Keep these strings in sync with Paddle's configured amounts. */
 
 const DISPLAY_PLANS: PlanMeta[] = [
   {
@@ -63,9 +65,10 @@ const DISPLAY_PLANS: PlanMeta[] = [
     cta: (current) => (current === "free" ? "Current plan" : "Downgrade"),
     features: [
       "5 credits per month",
-      "Standard exports",
-      "Community support",
-      "Watermark on clips",
+      "AI Clips and Studio access",
+      "Local timeline editing included",
+      "Cloud exports use shared credits",
+      "720p and 1080p Studio exports",
     ],
     accent: "border-border/60 bg-card",
     icon: <FilmIcon className="h-5 w-5" />,
@@ -85,10 +88,11 @@ const DISPLAY_PLANS: PlanMeta[] = [
     badge: "Most popular",
     features: [
       "50 credits per month",
-      "HD clip exports (no watermark)",
-      "Priority queue processing",
-      "Brand templates & custom fonts",
-      "Email support",
+      "AI Clips and Studio access",
+      "Local timeline editing included",
+      "Cloud exports use shared credits",
+      "Advanced clip prompts and styles",
+      "720p and 1080p Studio exports",
     ],
     accent:
       "border-primary/60 bg-primary/[0.08] shadow-[0_0_0_1px_rgba(13,148,136,0.25)]",
@@ -105,10 +109,9 @@ const DISPLAY_PLANS: PlanMeta[] = [
     features: [
       "200 credits per month",
       "Everything in Pro",
-      "Top-priority processing",
-      "Unlimited brand templates",
-      "Team seats (coming soon)",
-      "Dedicated support SLA",
+      "Shared credits for both products",
+      "Cloud exports use shared credits",
+      "720p and 1080p Studio exports",
     ],
     accent: "border-border/60 bg-card",
     icon: <BuildingIcon className="h-5 w-5" />,
@@ -159,14 +162,14 @@ interface CurrentPlanBarProps {
   currentPlan: UserPlan;
   creditsBalance: number;
   creditsResetText: string;
-  clipsGenerated: number;
+  reserved: number;
 }
 
 function CurrentPlanBar({
   currentPlan,
   creditsBalance,
   creditsResetText,
-  clipsGenerated,
+  reserved,
 }: CurrentPlanBarProps) {
   const planLabel =
     currentPlan === "free"
@@ -181,15 +184,8 @@ function CurrentPlanBar({
     <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 rounded-xl border border-border/60 bg-muted/20">
       <StatItem
         icon={<CoinsIcon className="h-4 w-4" />}
-        label="Credits remaining"
-        value={
-          <>
-            <span>{creditsBalance}</span>
-            <span className="text-[10px] font-normal text-muted-foreground ml-1">
-              · {creditsResetText}
-            </span>
-          </>
-        }
+        label="Credits available"
+        value={creditsBalance}
         accent="bg-secondary/15 text-secondary-foreground"
       />
 
@@ -197,8 +193,8 @@ function CurrentPlanBar({
 
       <StatItem
         icon={<FilmIcon className="h-4 w-4" />}
-        label="Clips generated"
-        value={clipsGenerated}
+        label="Reserved credits"
+        value={reserved}
         accent="bg-chart-1/15 text-chart-1"
       />
 
@@ -207,8 +203,14 @@ function CurrentPlanBar({
       <StatItem
         icon={<CrownIcon className="h-4 w-4" />}
         label="Current plan"
-        value={planLabel}
+        value={`${planLabel} · ${currentPlan === "business" ? 200 : currentPlan === "pro" ? 50 : 5}/month`}
         accent="bg-primary/15 text-primary"
+      />
+      <StatItem
+        icon={<CoinsIcon className="h-4 w-4" />}
+        label="Next allocation"
+        value={creditsResetText}
+        accent="bg-secondary/15 text-secondary-foreground"
       />
     </div>
   );
@@ -229,7 +231,6 @@ function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
   const tierRank = PLAN_ORDER[plan.id];
   const currentRank = PLAN_ORDER[currentPlan] ?? 0;
   const isCurrent = plan.id === currentPlan;
-  const isUpgrade = tierRank > currentRank;
   const isDowngrade = tierRank < currentRank;
 
   // Action state: current plan -> disabled badge, downgrade -> disabled, upgrade -> actionable
@@ -371,13 +372,11 @@ function FeedbackBanner({ variant, onDismiss }: FeedbackBannerProps) {
         </div>
         <div className="min-w-0">
           <p className="font-semibold text-foreground">
-            {isSuccess
-              ? "Upgrade successful — welcome!"
-              : "Checkout was canceled."}
+            {isSuccess ? "Checkout completed" : "Checkout was canceled."}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
             {isSuccess
-              ? "Your plan has been updated and credits have been added to your account. Start creating more clips!"
+              ? "Your subscription is being confirmed. Credits appear after payment is verified; this page refreshes automatically."
               : "No charges were made. Your plan remains unchanged — upgrade whenever you're ready."}
           </p>
         </div>
@@ -452,16 +451,16 @@ function PlanCardSkeleton() {
 /* -------------------------------------------------------------------------- */
 
 export function BillingPage() {
+  const credits = useCreditBalance();
   const router = useRouter();
   const searchParams = useSearchParams();
   const showSuccess = searchParams?.get("success") === "true";
   const showCanceled = searchParams?.get("canceled") === "true";
 
   const { data: profile, isLoading: profileLoading } = useCurrentUser();
-  const clipsGenerated = 0;
 
   const createCheckout = useCreateCheckoutSession({
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.dismiss();
       toast.error(
         err?.message || "Failed to initiate checkout. Please try again.",
@@ -474,19 +473,19 @@ export function BillingPage() {
   const handleManageSubscription = () => {
     toast.loading("Opening subscription management portal...");
     customerPortal.mutate(undefined, {
-      onError: (err: any) => {
+      onError: (err: Error) => {
         toast.dismiss();
         toast.error(err?.message || "Failed to open customer portal.");
       },
     });
   };
 
-  const creditsResetText = profile?.creditsResetAt
-    ? new Date(profile.creditsResetAt).toLocaleDateString(undefined, {
+  const creditsResetText = credits.data?.nextRenewal
+    ? new Date(credits.data.nextRenewal).toLocaleDateString(undefined, {
         month: "short",
         day: "numeric",
       })
-    : "Resets monthly";
+    : "Renewal date unavailable";
 
   const currentPlan: UserPlan = (profile?.plan as UserPlan) ?? "free";
 
@@ -500,7 +499,7 @@ export function BillingPage() {
   React.useEffect(() => {
     if (showSuccess) {
       toast.success(
-        "Upgrade successful! Your plan & credits have been updated.",
+        "Checkout completed. Confirming your subscription and credits.",
       );
       invalidateCurrentUser(queryClient);
 
@@ -609,9 +608,11 @@ export function BillingPage() {
       ) : (
         <CurrentPlanBar
           currentPlan={currentPlan}
-          creditsBalance={profile?.creditsBalance ?? 0}
+          creditsBalance={
+            credits.data?.available ?? profile?.creditsBalance ?? 0
+          }
           creditsResetText={creditsResetText}
-          clipsGenerated={clipsGenerated}
+          reserved={credits.data?.reserved ?? 0}
         />
       )}
 
@@ -631,6 +632,37 @@ export function BillingPage() {
       </div>
 
       {/* ── Footer note ── */}
+      <section className="rounded-2xl border border-border/60 bg-muted/20 p-5 space-y-3">
+        <h2 className="text-base font-bold">One balance across Blynta</h2>
+        <div className="grid gap-4 sm:grid-cols-2 text-sm text-muted-foreground">
+          <p>
+            <strong className="text-foreground">AI Clips</strong>
+            <br />1 credit per{" "}
+            {((credits.data?.pricing.sourceSeconds || 300) / 60).toFixed(
+              0,
+            )}{" "}
+            minutes of source video, plus 1 per{" "}
+            {credits.data?.pricing.outputSeconds || 60} seconds of delivered
+            clips, rounded up. A 60-minute source and eight 45-second clips cost
+            18 credits at the initial rates.
+          </p>
+          <p>
+            <strong className="text-foreground">Studio</strong>
+            <br />
+            Basic editing and local previews are included. Cloud exports use{" "}
+            {credits.data?.pricing.studioModifier || 1} credits per{" "}
+            {credits.data?.pricing.studioSeconds || 60} seconds, rounded up.
+            Review an estimate before confirming a billable operation.
+          </p>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Credits are held while work runs. Failed operations with no delivered
+          output release the hold; partial jobs charge only eligible delivered
+          work. Subscription grants add to your balance and do not expire under
+          this policy.
+        </p>
+      </section>
+      <CreditHistory />
       <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p>
           All charges are in USD and processed securely by Paddle. Monthly

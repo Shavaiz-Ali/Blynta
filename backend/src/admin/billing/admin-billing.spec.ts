@@ -1,3 +1,4 @@
+import { CreditsService } from '../../billing/credits.service';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { Types } from 'mongoose';
@@ -66,6 +67,7 @@ describe('AdminBilling Module', () => {
       controllers: [AdminBillingController],
       providers: [
         AdminBillingService,
+        { provide: CreditsService, useValue: { enabled: false } },
         {
           provide: getModelToken(Customer.name),
           useValue: customerModelMock,

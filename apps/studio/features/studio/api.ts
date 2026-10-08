@@ -88,11 +88,21 @@ export const studioApi = {
     document: EditorDocument,
     targetClipId?: string,
     signal?: AbortSignal,
+    authorization?: {
+      operationId: string;
+      authorizedCredits: number;
+      pricingVersion: string;
+    },
   ) =>
     studioRequest<AIProposal>(
       `projects/${id}/ai/propose`,
       "POST",
-      { prompt, document: persistentDocument(document), targetClipId },
+      {
+        prompt,
+        document: persistentDocument(document),
+        targetClipId,
+        ...authorization,
+      },
       signal,
     ),
 };

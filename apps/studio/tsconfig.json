@@ -19,6 +19,7 @@
       }
     ],
     "paths": {
+      "@blynta/types": ["../../packages/types/src/index.ts"],
       "@/*": ["./*"]
     }
   },

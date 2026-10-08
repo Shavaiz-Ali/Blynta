@@ -15,6 +15,11 @@ const CreateJobSchema = z.object({
     })
     .optional(),
   resolution: z.string().optional(),
+  operationId: z.string().uuid().optional(),
+  sourceSeconds: z.number().positive().max(14400).optional(),
+  maxOutputSeconds: z.number().positive().max(3600).optional(),
+  authorizedCredits: z.number().int().positive().max(10000).optional(),
+  pricingVersion: z.string().max(80).optional(),
   // progressPercent: z.number()
 });
 

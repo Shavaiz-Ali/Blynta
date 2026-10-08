@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { AppButton } from "@blynta/ui";
 import { cn } from "@/lib/utils";
@@ -14,7 +13,7 @@ interface Props {
 }
 
 function formatResetDate(dateStr?: string | null): string {
-  if (!dateStr) return "Next billing cycle";
+  if (!dateStr) return "Date unavailable";
   try {
     return new Date(dateStr).toLocaleDateString("en-US", {
       month: "short",
@@ -31,11 +30,6 @@ export function ProfilePlanCard({ profile }: Props) {
   const isPro = planLabel === "pro" || planLabel === "business";
   const credits = profile.creditsBalance ?? 0;
   const maxCredits = planLabel === "business" ? 200 : isPro ? 50 : 5;
-  const usedPercent = Math.min(
-    100,
-    Math.round(((maxCredits - credits) / maxCredits) * 100),
-  );
-  const remainPercent = 100 - usedPercent;
 
   return (
     <div className="rounded-xl border border-border/80 bg-card shadow-xs overflow-hidden">
@@ -49,7 +43,7 @@ export function ProfilePlanCard({ profile }: Props) {
               Plan &amp; Credits
             </h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Subscription tier and generation credits
+              One balance for AI Clips and Studio
             </p>
           </div>
         </div>
@@ -95,12 +89,11 @@ export function ProfilePlanCard({ profile }: Props) {
               Credits
             </p>
             <span className="text-xs font-bold text-foreground tabular-nums">
-              {credits} / {maxCredits}
+              {credits} available
             </span>
           </div>
-          <Progress value={remainPercent} className="h-1.5" />
           <p className="text-[11px] text-muted-foreground">
-            {usedPercent}% of period used
+            {profile.creditsReserved ?? 0} held · {maxCredits} included monthly
           </p>
         </div>
 

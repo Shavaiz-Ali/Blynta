@@ -83,6 +83,11 @@ export interface StylePresetInfo {
 }
 
 export interface CreateJobInput {
+  operationId?: string;
+  sourceSeconds?: number;
+  maxOutputSeconds?: number;
+  authorizedCredits?: number;
+  pricingVersion?: string;
   sourceUrl: string;
   sourcePlatform: SourcePlatform;
   customPrompt?: string;
@@ -91,6 +96,13 @@ export interface CreateJobInput {
 }
 
 export interface Job {
+  billing?: {
+    authorized: number;
+    held: number;
+    charged: number;
+    status: "reserved" | "settled";
+    pricingVersion: string;
+  };
   processingFailure?: { code: string; message: string };
   cancellationRequestedAt?: string;
   cancelledAt?: string;

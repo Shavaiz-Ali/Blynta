@@ -4,9 +4,38 @@ import {
   UseMutationOptions,
   UseMutationResult,
   useQueryClient,
+  useQuery,
 } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
 import { userQueryKeys } from "@/features/auth/queries";
+import type { CreditBalance, CreditHistoryPage } from "@blynta/types";
+
+export function useCreditBalance() {
+  return useQuery({
+    queryKey: ["billing", "credits"],
+    queryFn: async () =>
+      (await axiosClient.get<CreditBalance>("/billing/credits")).data,
+    refetchInterval: 15000,
+    staleTime: 5000,
+  });
+}
+export function useCreditHistory(page: number, product: string, type: string) {
+  return useQuery({
+    queryKey: ["billing", "history", page, product, type],
+    queryFn: async () =>
+      (
+        await axiosClient.get<CreditHistoryPage>("/billing/credits/history", {
+          params: {
+            page,
+            limit: 20,
+            ...(product ? { product } : {}),
+            ...(type ? { type } : {}),
+          },
+        })
+      ).data,
+    refetchInterval: 15000,
+  });
+}
 
 /* -------------------------------------------------------------------------- */
 /*                              Types & DTOs                                  */
@@ -90,4 +119,5 @@ export function useCustomerPortal() {
 
 export function invalidateCurrentUser(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: userQueryKeys.me() });
+  queryClient.invalidateQueries({ queryKey: ["billing"] });
 }

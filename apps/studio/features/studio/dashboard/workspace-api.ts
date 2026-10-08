@@ -8,6 +8,7 @@ export interface AccountProfile {
   avatarUrl?: string;
   plan: string;
   creditsBalance: number;
+  creditsReserved?: number;
   creditsResetAt?: string;
 }
 export interface AccountNotification {
@@ -40,6 +41,6 @@ export function useWorkspaceQuery<T>(path: string) {
     queryFn: () => workspaceRequest<T>(path),
     enabled: !!session?.user.id,
     staleTime: 30000,
-    refetchInterval: 60000,
+    refetchInterval: 15000,
   });
 }

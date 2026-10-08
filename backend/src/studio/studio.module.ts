@@ -1,3 +1,4 @@
+import { CreditsModule } from '../billing/credits.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
@@ -23,6 +24,7 @@ const database = MongooseModule.forFeature([
 ]);
 @Module({
   imports: [
+    CreditsModule,
     database,
     StorageModule,
     BullModule.registerQueue({ name: 'studio' }),

@@ -8,7 +8,6 @@ import { AppButton } from "./AppButton";
 import { AppPopover } from "./AppPopover";
 import { AppIdentityAvatar } from "./AppIdentityAvatar";
 import { Badge } from "../primitives/badge";
-import { Progress } from "../primitives/progress";
 import { Separator } from "../primitives/separator";
 import {
   DropdownMenu,
@@ -89,6 +88,7 @@ export function AppHeaderActions({
 
 export function AppCreditsControl({
   balance,
+  reserved,
   plan,
   allowance,
   resetAt,
@@ -97,6 +97,7 @@ export function AppCreditsControl({
   usageLink,
 }: {
   balance?: number;
+  reserved?: number;
   plan?: string;
   allowance?: number;
   resetAt?: string;
@@ -105,10 +106,6 @@ export function AppCreditsControl({
   usageLink?: ReactElement;
 }) {
   const paid = plan === "pro" || plan === "business";
-  const remaining =
-    balance !== undefined && allowance
-      ? Math.max(0, Math.min(100, (balance / allowance) * 100))
-      : undefined;
   return (
     <AppPopover
       contentClassName="w-64 p-4 rounded-xl"
@@ -150,23 +147,23 @@ export function AppCreditsControl({
         ) : (
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Remaining</span>
-              <span className="font-bold tabular-nums">
-                {balance}
-                {allowance !== undefined && ` / ${allowance}`}
-              </span>
+              <span className="text-muted-foreground">Available</span>
+              <span className="font-bold tabular-nums">{balance}</span>
             </div>
-            {remaining !== undefined && (
-              <>
-                <Progress value={remaining} className="h-1.5" />
-                <p className="text-[11px] text-muted-foreground">
-                  {Math.round(100 - remaining)}% used this period
-                </p>
-              </>
+            {reserved !== undefined && (
+              <p className="text-xs text-muted-foreground">
+                {reserved} reserved for ongoing work
+              </p>
+            )}
+            {allowance !== undefined && (
+              <p className="text-xs text-muted-foreground">
+                {allowance} included monthly · shared across Blynta
+              </p>
             )}
             {resetAt && (
               <p className="text-[11px] text-muted-foreground">
-                Account reset: {new Date(resetAt).toLocaleDateString()}
+                Next allocation / renewal:{" "}
+                {new Date(resetAt).toLocaleDateString()}
               </p>
             )}
           </div>

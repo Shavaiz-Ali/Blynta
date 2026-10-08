@@ -1,3 +1,4 @@
+import { BillingRateLimitGuard } from '../billing/billing-rate-limit.guard';
 import { Test } from '@nestjs/testing';
 import { INestApplication, NotFoundException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -53,6 +54,8 @@ describe('clip download HTTP intent and read endpoints', () => {
         { provide: ActivitiesService, useValue: { queueCreate } },
       ],
     })
+      .overrideGuard(BillingRateLimitGuard)
+      .useValue({ canActivate: () => true })
       .overrideGuard(AuthGuard('jwt'))
       .useValue({ canActivate: () => true })
       .compile();

@@ -260,6 +260,10 @@ export class JobsProcessor
           (await this.inspection.inspect(input));
         if (!metadata.hasVideo || metadata.durationSeconds <= 0)
           throw new Error('Invalid source video metadata');
+        await this.jobsService.assertSourceBudget(
+          jobId,
+          metadata.durationSeconds,
+        );
         const key =
           latest?.sourceObjectKey ??
           cached?.videoObjectKey ??
@@ -434,6 +438,7 @@ export class JobsProcessor
             jobDir,
             resolution,
             makeThrottledProgressUpdate(),
+            job.creditSourceSeconds,
           );
           videoPath = dlVideoPath;
           audioPath = dlAudioPath;

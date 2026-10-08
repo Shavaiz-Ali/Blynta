@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
 import { hostCommand } from './host-command';
+import { usageExecution, usageSample } from '../../billing/usage-context';
 import {
   cancellationSignal,
   ProcessingCancelled,
@@ -13,9 +14,15 @@ export function runCommandWithProgress(
   processRegistry?: ProcessRegistryService,
 ): Promise<void> {
   const signal = cancellationSignal();
+  const startedAt = Date.now();
   return new Promise((resolve, reject) => {
     processRegistry?.assertRunning();
-    const limited = hostCommand(command, args);
+    const limited = hostCommand(
+      command,
+      command === 'ffmpeg' && usageExecution.getStore()
+        ? ['-benchmark', ...args]
+        : args,
+    );
     const proc = spawn(limited.command, limited.args, {
       detached: true,
       windowsHide: true,
@@ -48,6 +55,14 @@ export function runCommandWithProgress(
     });
 
     proc.on('close', (code) => {
+      if (command === 'ffmpeg') {
+        const cpu = fullStderr.match(/utime=([\d.]+)s stime=([\d.]+)s/);
+        usageSample('ffmpeg', {
+          wallSeconds: (Date.now() - startedAt) / 1000,
+          cpuSeconds: cpu ? Number(cpu[1]) + Number(cpu[2]) : null,
+          exitCode: code,
+        });
+      }
       if (stdoutBuffer) onLine(stdoutBuffer);
       if (stderrBuffer) onLine(stderrBuffer);
       if (signal?.aborted) {

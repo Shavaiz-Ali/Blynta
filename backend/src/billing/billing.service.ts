@@ -1,3 +1,5 @@
+import { CreditsService } from './credits.service';
+import { Optional } from '@nestjs/common';
 import {
   Injectable,
   BadRequestException,
@@ -55,6 +57,7 @@ export class BillingService {
     private subscriptionEventModel: Model<SubscriptionEventDocument>,
     @InjectModel(ProcessedPaddleEvent.name)
     private processedEventModel: Model<ProcessedPaddleEventDocument>,
+    @Optional() private credits?: CreditsService,
   ) {}
 
   /* =========================================================================
@@ -475,10 +478,57 @@ export class BillingService {
     const previousPriceId = customerDoc?.paddlePriceId;
 
     // --- Update User (only plan + credits — no Paddle IDs) ---
+    const accounting =
+      !!this.credits && (this.credits.enabled || user.creditLedgerInitialized);
+    const shouldGrant = accounting
+      ? grantCredits && eventType === 'transaction.completed'
+      : grantCredits;
     const userUpdate: Record<string, any> = { plan };
-    if (grantCredits) {
-      const resetAt = billingPeriodEndsAt ?? this.nextMonth();
-      userUpdate.creditsBalance = PLAN_CREDITS[plan];
+    let actualCreditsGranted = accounting
+      ? 0
+      : shouldGrant
+        ? PLAN_CREDITS[plan]
+        : 0;
+    if (
+      accounting &&
+      shouldGrant &&
+      !billingPeriodEndsAt &&
+      paddleSubscriptionId
+    ) {
+      const subscription =
+        await this.paddleService.paddle.subscriptions.get(paddleSubscriptionId);
+      params.billingPeriodEndsAt = subscription.currentBillingPeriod?.endsAt
+        ? new Date(subscription.currentBillingPeriod.endsAt)
+        : undefined;
+    }
+    const verifiedBillingEnd = params.billingPeriodEndsAt;
+    if (shouldGrant) {
+      const resetAt =
+        verifiedBillingEnd ?? (accounting ? null : this.nextMonth());
+      if (accounting) {
+        const transactionId = rawPayload?.id;
+        if (!transactionId || eventType !== 'transaction.completed')
+          throw new BadRequestException(
+            'A completed payment is required for a credit grant',
+          );
+        const period = rawPayload?.billingPeriod || rawPayload?.billing_period;
+        const endsAt =
+          period?.endsAt ||
+          period?.ends_at ||
+          verifiedBillingEnd?.toISOString();
+        if (!endsAt || !paddleSubscriptionId)
+          throw new BadRequestException(
+            'A verified subscription billing period is required for credit allocation',
+          );
+        const cycleKey = `cycle:${paddleSubscriptionId}:${new Date(endsAt).toISOString()}`;
+        actualCreditsGranted = await this.credits!.grantSubscriptionCycle(
+          String(user._id),
+          PLAN_CREDITS[plan],
+          cycleKey,
+          transactionId,
+          plan,
+        );
+      } else userUpdate.creditsBalance = PLAN_CREDITS[plan];
       userUpdate.creditsResetAt = resetAt;
     }
     await this.userModel
@@ -496,8 +546,8 @@ export class BillingService {
       customerUpdate.paddleSubscriptionId = paddleSubscriptionId;
     if (productId) customerUpdate.paddleProductId = productId;
     if (priceId) customerUpdate.paddlePriceId = priceId;
-    if (billingPeriodEndsAt)
-      customerUpdate.currentBillingPeriodEndsAt = billingPeriodEndsAt;
+    if (verifiedBillingEnd)
+      customerUpdate.currentBillingPeriodEndsAt = verifiedBillingEnd;
 
     await this.customerModel.findOneAndUpdate(
       { userId: user._id },
@@ -521,7 +571,7 @@ export class BillingService {
           newPlan: plan,
           previousPriceId,
           newPriceId: priceId,
-          creditsGranted: grantCredits ? PLAN_CREDITS[plan] : 0,
+          creditsGranted: actualCreditsGranted,
           rawPayload,
         });
       } catch (auditErr) {
@@ -532,7 +582,7 @@ export class BillingService {
     }
 
     // --- Notifications / email / activity (only when granting credits) ---
-    if (!grantCredits) return;
+    if (!shouldGrant || actualCreditsGranted === 0) return;
 
     try {
       const subId =
@@ -544,7 +594,7 @@ export class BillingService {
         type: NotificationType.SUCCESS,
         category: NotificationCategory.BILLING,
         title: `Upgraded to ${plan.toUpperCase()}`,
-        message: `Your account has been upgraded to ${plan.toUpperCase()} with ${PLAN_CREDITS[plan]} credits.`,
+        message: `Your account has been upgraded to ${plan.toUpperCase()} with ${actualCreditsGranted} credits.`,
         actionUrl: '/billing',
         actionLabel: 'View plan',
         dedupeKey: upgradeDedupeKey,
@@ -554,7 +604,7 @@ export class BillingService {
         await this.mailService.queueSubscriptionActivatedEmail(
           user.email,
           plan,
-          PLAN_CREDITS[plan],
+          actualCreditsGranted,
           `sub-activated:${subId}`,
         );
       }
@@ -564,7 +614,7 @@ export class BillingService {
         type: ActivityType.BILLING_SUBSCRIPTION_CREATE,
         category: ActivityCategory.BILLING,
         title: `Subscribed to ${plan.toUpperCase()}`,
-        description: `Upgraded to ${plan.toUpperCase()} plan with ${PLAN_CREDITS[plan]} monthly credits.`,
+        description: `Upgraded to ${plan.toUpperCase()} plan with ${actualCreditsGranted} monthly credits.`,
         activityUrl: '/billing',
         entityType: 'subscription',
         entityId: user._id,
@@ -575,7 +625,7 @@ export class BillingService {
         dedupeKey: `activity:billing:sub:${subId}`,
         metadata: {
           plan,
-          creditsGranted: PLAN_CREDITS[plan],
+          creditsGranted: actualCreditsGranted,
           paddleSubscriptionId: subId,
         },
       });
@@ -585,7 +635,7 @@ export class BillingService {
         type: ActivityType.CREDIT_PURCHASE,
         category: ActivityCategory.CREDIT,
         title: 'Credits added',
-        description: `${PLAN_CREDITS[plan]} credits added with ${plan.toUpperCase()} plan.`,
+        description: `${actualCreditsGranted} credits added with ${plan.toUpperCase()} plan.`,
         activityUrl: '/billing',
         entityType: 'subscription',
         entityId: user._id,
@@ -594,7 +644,7 @@ export class BillingService {
         status: ActivityStatus.SUCCESS,
         severity: ActivitySeverity.SUCCESS,
         dedupeKey: `activity:billing:credits:${subId}`,
-        metadata: { amount: PLAN_CREDITS[plan], plan },
+        metadata: { amount: actualCreditsGranted, plan },
       });
     } catch (err) {
       this.logger.warn(
@@ -655,8 +705,12 @@ export class BillingService {
       .findByIdAndUpdate(user._id, {
         $set: {
           plan: UserPlan.FREE,
-          creditsBalance: PLAN_CREDITS[UserPlan.FREE],
-          creditsResetAt: this.nextMonth(),
+          ...(this.credits?.enabled || user.creditLedgerInitialized
+            ? { creditsResetAt: null, freeCreditGrantAt: this.nextMonth() }
+            : {
+                creditsBalance: PLAN_CREDITS[UserPlan.FREE],
+                creditsResetAt: this.nextMonth(),
+              }),
         },
       })
       .exec();
@@ -890,7 +944,7 @@ export class BillingService {
       scheduledChangeAction,
       scheduledChangeAt,
       billingPeriodEndsAt,
-      grantCredits: isRealPlanChange,
+      grantCredits: this.credits?.enabled ? false : isRealPlanChange,
       paddleEventId,
       eventType: originalEventType,
       rawPayload: subscription,
@@ -1015,6 +1069,8 @@ export class BillingService {
       `[handleTransactionCompleted] txId=${transactionId} subId=${subscriptionId} customerId=${customerId} userId=${userId} plan=${targetPlan}`,
     );
 
+    const period = transaction?.billingPeriod || transaction?.billing_period;
+    const verifiedPeriodEnd = period?.endsAt || period?.ends_at;
     if (targetPlan && (subscriptionId || customerId || userId || userEmail)) {
       await this.applyPaddleSubscription({
         userId,
@@ -1025,8 +1081,13 @@ export class BillingService {
         productId,
         priceId,
         status: 'active',
+        billingPeriodEndsAt: verifiedPeriodEnd
+          ? new Date(verifiedPeriodEnd)
+          : undefined,
         // A real payment always grants credits — renewal or new subscription
-        grantCredits: true,
+        grantCredits: this.credits?.enabled
+          ? originalEventType === 'transaction.completed'
+          : true,
         paddleEventId,
         eventType: originalEventType,
         rawPayload: transaction,

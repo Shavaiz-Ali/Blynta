@@ -24,6 +24,10 @@ import { AppSelect } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
+import { InsufficientCredits } from "@blynta/ui";
+import { useCreditBalance } from "@/features/billing/queries";
+import { axiosClient } from "@/config/axiosClient";
+import type { CreditEstimate } from "@blynta/types";
 import { useRouter } from "next/navigation";
 
 /* -------------------------------------------------------------------------- */
@@ -95,6 +99,17 @@ interface HeroInputProps {
 
 export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: profile } = useCurrentUser();
+  const balance = useCreditBalance();
+  const [sourceMinutes, setSourceMinutes] = React.useState("5");
+  const [outputMinutes, setOutputMinutes] = React.useState("1");
+  const [confirmation, setConfirmation] = React.useState<{
+    body: Parameters<ReturnType<typeof useCreateJob>["mutate"]>[0];
+    estimate: CreditEstimate;
+  } | null>(null);
+  const [estimating, setEstimating] = React.useState(false);
+  const operationRef = React.useRef<
+    { signature: string; id: string } | undefined
+  >(undefined);
   const { data: fetchedPresets } = useStylePresets();
   const router = useRouter();
   const isPaid = profile?.plan === "pro" || profile?.plan === "business";
@@ -111,6 +126,8 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
   const { mutate, isPending, failureReason, reset } = useCreateJob({
     onSuccess: (data) => {
+      setConfirmation(null);
+      operationRef.current = undefined;
       setUrl("");
       setStylePreset("default");
       setFieldError(undefined);
@@ -136,9 +153,10 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const hasAdvancedOverrides = isCustomPromptSet || isCustomModelSet;
   const platformError =
     failureReason instanceof Error ? failureReason.message : undefined;
-  const submitDisabled = !url.trim() || isPending;
+  const submitDisabled =
+    !url.trim() || isPending || estimating || !balance.data;
 
-  function handleSubmit(e?: React.FormEvent) {
+  async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
     if (!url.trim()) {
       setFieldError(
@@ -168,7 +186,45 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       body.aiModel = aiModel;
     }
 
-    mutate(body);
+    if (!balance.data) return;
+    if (!balance.data.enabled) {
+      mutate(body);
+      return;
+    }
+    setEstimating(true);
+    try {
+      const estimate = (
+        await axiosClient.post<CreditEstimate>("/billing/credits/estimate", {
+          sourceSeconds: Number(sourceMinutes) * 60,
+          maxOutputSeconds: Number(outputMinutes) * 60,
+        })
+      ).data;
+      const signature = JSON.stringify([
+        body,
+        sourceMinutes,
+        outputMinutes,
+        estimate.pricingVersion,
+      ]);
+      if (operationRef.current?.signature !== signature)
+        operationRef.current = { signature, id: crypto.randomUUID() };
+      setConfirmation({
+        body: {
+          ...body,
+          operationId: operationRef.current.id,
+          sourceSeconds: Number(sourceMinutes) * 60,
+          maxOutputSeconds: Number(outputMinutes) * 60,
+          authorizedCredits: estimate.totalCredits,
+          pricingVersion: estimate.pricingVersion,
+        },
+        estimate,
+      });
+    } catch (error) {
+      setFieldError(
+        error instanceof Error ? error.message : "Could not estimate credits",
+      );
+    } finally {
+      setEstimating(false);
+    }
   }
 
   return (
@@ -198,7 +254,11 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
           </div>
           <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
             <CoinsIcon className="h-3 w-3 text-amber-500" />
-            <span>1 credit per job</span>
+            <span>
+              {balance.data?.enabled
+                ? "Duration-based credits"
+                : "1 credit per job"}
+            </span>
           </span>
         </div>
 
@@ -242,7 +302,9 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
               size="sm"
               className="h-12 w-full shrink-0 cursor-pointer rounded-xl px-5 text-sm font-semibold shadow-sm sm:w-auto"
             >
-              Generate shorts
+              {balance.data?.enabled
+                ? "Review credit budget"
+                : "Generate shorts"}
             </AppButton>
           </div>
 
@@ -254,6 +316,52 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             </p>
           )}
         </form>
+        {balance.data?.enabled && (
+          <div className="grid gap-3 sm:grid-cols-2 text-sm">
+            <label className="space-y-1">
+              Source duration limit (minutes)
+              <input
+                className="w-full rounded-lg border bg-background p-2"
+                type="number"
+                min="0.1"
+                max="240"
+                step="0.1"
+                value={sourceMinutes}
+                onChange={(e) => setSourceMinutes(e.target.value)}
+              />
+            </label>
+            <label className="space-y-1">
+              Maximum total clip output (minutes)
+              <input
+                className="w-full rounded-lg border bg-background p-2"
+                type="number"
+                min="0.1"
+                max="60"
+                step="0.1"
+                value={outputMinutes}
+                onChange={(e) => setOutputMinutes(e.target.value)}
+              />
+            </label>
+            <p className="sm:col-span-2 text-xs text-muted-foreground">
+              Source duration is verified before AI processing. Videos over your
+              limit stop without a charge. Blynta renders only highlights that
+              fit the approved output budget. Final charges cannot exceed your
+              confirmation.
+            </p>
+          </div>
+        )}
+        {balance.error && (
+          <p role="alert" className="text-sm text-destructive">
+            Credit balance unavailable.{" "}
+            <button
+              type="button"
+              className="underline"
+              onClick={() => void balance.refetch()}
+            >
+              Try again
+            </button>
+          </p>
+        )}
 
         {/* ── Highlight Style Presets ── */}
         <div className="relative space-y-2.5 border-t border-border/60 pt-4">
@@ -325,6 +433,56 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         </div>
       </AppCard>
 
+      <AppDialog
+        open={!!confirmation}
+        onOpenChange={(open) => {
+          if (!open && !isPending) setConfirmation(null);
+        }}
+        title="Confirm credit budget"
+        description="One shared balance for AI Clips and Studio."
+        footer={
+          <AppButton
+            isLoading={isPending}
+            disabled={
+              !confirmation ||
+              confirmation.estimate.totalCredits >
+                (balance.data?.available ?? 0)
+            }
+            onClick={() => confirmation && mutate(confirmation.body)}
+          >
+            Authorize {confirmation?.estimate.totalCredits} credits and start
+          </AppButton>
+        }
+      >
+        {confirmation && (
+          <div className="space-y-3 text-sm">
+            <p>
+              Source limit: {sourceMinutes} minutes. Output budget: up to{" "}
+              {outputMinutes} minutes of clips.
+            </p>
+            <p>
+              <strong>
+                {confirmation.estimate.totalCredits} credits maximum
+              </strong>{" "}
+              · {balance.data?.available ?? confirmation.estimate.available}{" "}
+              available.
+            </p>
+            <p className="text-muted-foreground">
+              We reserve this budget now and charge only eligible delivered
+              work. Unused credits are released. Retrying uses the remaining
+              original budget.
+            </p>
+            {confirmation.estimate.totalCredits >
+              (balance.data?.available ?? 0) && (
+              <InsufficientCredits
+                required={confirmation.estimate.totalCredits}
+                available={balance.data?.available ?? 0}
+                billingUrl="/billing"
+              />
+            )}
+          </div>
+        )}
+      </AppDialog>
       <AppDialog
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}

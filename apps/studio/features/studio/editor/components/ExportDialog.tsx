@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { CreditEstimate } from "@blynta/types";
+import { InsufficientCredits } from "@blynta/ui";
 import { Download, FileJson, Film } from "lucide-react";
 import { AppDialog, AppSelect, AppButton } from "@blynta/ui";
 import { useEditor } from "../hooks/useEditor";
@@ -18,11 +20,37 @@ export function ExportDialog({
   onOpenChange: (value: boolean) => void;
 }) {
   const e = useEditor();
+  const queryClient = useQueryClient();
+  const operationId = useRef<{ signature: string; id: string } | undefined>(
+    undefined,
+  );
   const [resolution, setResolution] = useState("1080p");
   const [fps, setFps] = useState("30");
   const [renderId, setRenderId] = useState("");
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
+  const estimate = useQuery({
+    queryKey: [
+      "studio",
+      "export-estimate",
+      e.projectId,
+      e.doc,
+      resolution,
+      fps,
+    ],
+    queryFn: () =>
+      studioRequest<CreditEstimate>(
+        `projects/${e.projectId}/render-estimate`,
+        "POST",
+        {
+          document: persistentDocument(e.doc),
+          settings: { resolution, fps: Number(fps), format: "mp4" },
+        },
+      ),
+    enabled: open && !!e.duration,
+    staleTime: 5000,
+    refetchInterval: open ? 15000 : false,
+  });
   const status = useQuery({
     queryKey: studioKeys.render(renderId, e.userId),
     queryFn: () => studioRequest<RenderStatus>(`renders/${renderId}`),
@@ -36,17 +64,46 @@ export function ExportDialog({
     preparing ||
     (!!renderId &&
       !["completed", "failed"].includes(status.data?.status || ""));
+  const renderState = status.data?.status;
+  const refetchEstimate = estimate.refetch;
+  useEffect(() => {
+    if (renderState && ["completed", "failed"].includes(renderState)) {
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
+      void refetchEstimate();
+      operationId.current = undefined;
+    }
+  }, [renderState, queryClient, refetchEstimate]);
   async function render() {
     setPreparing(true);
     setError("");
     try {
       const revision = await e.flushSave();
+      const signature = JSON.stringify([
+        e.projectId,
+        revision,
+        resolution,
+        fps,
+        estimate.data?.pricingVersion,
+      ]);
+      if (operationId.current?.signature !== signature)
+        operationId.current = { signature, id: crypto.randomUUID() };
       const result = await studioRequest<RenderStatus>(
         `projects/${e.projectId}/renders`,
         "POST",
-        { revision, settings: { resolution, fps: Number(fps), format: "mp4" } },
+        {
+          revision,
+          settings: { resolution, fps: Number(fps), format: "mp4" },
+          ...(estimate.data?.enabled
+            ? {
+                operationId: operationId.current.id,
+                authorizedCredits: estimate.data.totalCredits,
+                pricingVersion: estimate.data.pricingVersion,
+              }
+            : {}),
+        },
       );
       setRenderId(result.id);
+      void queryClient.invalidateQueries({ queryKey: ["workspace"] });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start export");
     } finally {
@@ -86,12 +143,22 @@ export function ExportDialog({
             Download edit plan
           </AppButton>
           <AppButton
-            disabled={active || !e.duration}
+            disabled={
+              active ||
+              !e.duration ||
+              !estimate.data ||
+              (estimate.data.enabled &&
+                estimate.data.totalCredits > estimate.data.available)
+            }
             isLoading={preparing}
             icon={<Film size={16} />}
             onClick={render}
           >
-            {renderId ? "Export again" : "Export video"}
+            {estimate.data?.enabled
+              ? `Authorize ${estimate.data.totalCredits} credits and export`
+              : renderId
+                ? "Export again"
+                : "Export video"}
           </AppButton>
         </>
       }
@@ -127,6 +194,40 @@ export function ExportDialog({
           }))}
         />
       </div>
+      {estimate.isPending && !!e.duration && (
+        <p role="status">Estimating export credits…</p>
+      )}
+      {estimate.error && (
+        <p role="alert">
+          {estimate.error.message}{" "}
+          <AppButton variant="link" onClick={() => void estimate.refetch()}>
+            Retry estimate
+          </AppButton>
+        </p>
+      )}
+      {estimate.data?.enabled && (
+        <div className="space-y-2 text-sm">
+          <p>
+            {estimate.data.totalCredits} credits for this cloud export ·{" "}
+            {estimate.data.available} available.
+          </p>
+          <p className="text-muted-foreground">
+            Credits are held while rendering and charged on delivery. Failed
+            exports release the hold. Editing and local previews are included.
+          </p>
+          {estimate.data.totalCredits > estimate.data.available && (
+            <InsufficientCredits
+              required={estimate.data.totalCredits}
+              available={estimate.data.available}
+              billingUrl={
+                process.env.NEXT_PUBLIC_BLYNTA_URL
+                  ? `${process.env.NEXT_PUBLIC_BLYNTA_URL}/billing`
+                  : undefined
+              }
+            />
+          )}
+        </div>
+      )}
       {!e.duration && (
         <p className="export-empty-hint">
           Add media to your timeline to export a video.

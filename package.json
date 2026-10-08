@@ -13,6 +13,7 @@
     "test:sso": "node scripts/test-sso.mjs",
     "test:session-expiration": "node --test scripts/tests/session-expiration.test.mjs scripts/tests/product-session-read.test.mjs",
     "test:auth-errors": "node --test scripts/tests/identity-client.test.mjs",
+    "test:billing-ui": "node --test scripts/tests/billing-ui.test.mjs",
     "test:product-ssr": "node --test scripts/tests/product-ssr.test.mjs",
     "test:startup": "node scripts/test-startup.mjs",
     "dev:backend": "npm --prefix backend run start:dev",

@@ -1,3 +1,5 @@
+import { CreditsModule } from '../billing/credits.module';
+import { CreditsRecoveryService } from './credits-recovery.service';
 import { Module, Logger, DynamicModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -29,6 +31,7 @@ const logger = new Logger('JobsWorkerMongoose');
 
 @Module({
   imports: [
+    CreditsModule,
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     CommonModule,
@@ -69,6 +72,7 @@ const logger = new Logger('JobsWorkerMongoose');
     BullModule.registerQueue({ name: 'studio' }),
   ],
   providers: [
+    CreditsRecoveryService,
     JobsService,
     RenderCapacityService,
     RenderEtaService,

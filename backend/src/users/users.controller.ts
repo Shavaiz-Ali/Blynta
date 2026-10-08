@@ -14,6 +14,8 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from './users.service';
+import { CreditsService } from '../billing/credits.service';
+import { Optional } from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SendReferralInviteDto } from './dto/send-referral-invite.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -32,12 +34,16 @@ export class UsersController {
   constructor(
     private usersService: UsersService,
     private activitiesService: ActivitiesService,
+    @Optional() private credits?: CreditsService,
   ) {}
 
   @Get('me')
   async getProfile(@Request() req) {
     const user = await this.usersService.findById(req.user.userId);
     if (!user) throw new NotFoundException('User not found');
+    const billing = this.credits
+      ? await this.credits.balance(req.user.userId)
+      : undefined;
 
     return {
       id: user._id,
@@ -46,7 +52,8 @@ export class UsersController {
       avatarUrl: user.avatarUrl,
       plan: user.plan,
       creditsBalance: user.creditsBalance,
-      creditsResetAt: user.creditsResetAt,
+      creditsReserved: user.creditsReserved || 0,
+      creditsResetAt: billing?.nextRenewal,
       role: user.role,
       isWelcomed: user.isWelcomed,
       referralCode: user.referralCode,

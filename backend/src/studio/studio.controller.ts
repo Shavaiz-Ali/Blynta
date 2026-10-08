@@ -14,6 +14,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import type { Request } from 'express';
 import { StudioService } from './studio.service';
+import { BillingRateLimitGuard } from '../billing/billing-rate-limit.guard';
 type UserRequest = Request & { user: { userId: string } };
 @Controller('studio')
 @UseGuards(AuthGuard('jwt'))
@@ -80,19 +81,41 @@ export class StudioController {
   ) {
     return this.studio.complete(req.user.userId, id, body);
   }
-  @Post('projects/:id/ai/propose') propose(
+  @UseGuards(BillingRateLimitGuard)
+  @Post('projects/:id/ai/propose')
+  propose(
     @Req() req: UserRequest,
     @Param('id') id: string,
     @Body() body: unknown,
   ) {
     return this.studio.propose(req.user.userId, id, body);
   }
-  @Post('projects/:id/renders') render(
+  @UseGuards(BillingRateLimitGuard)
+  @Post('projects/:id/ai/estimate')
+  aiEstimate(
+    @Req() req: UserRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.studio.aiEstimate(req.user.userId, id, body);
+  }
+  @UseGuards(BillingRateLimitGuard)
+  @Post('projects/:id/renders')
+  render(
     @Req() req: UserRequest,
     @Param('id') id: string,
     @Body() body: unknown,
   ) {
     return this.studio.render(req.user.userId, id, body);
+  }
+  @UseGuards(BillingRateLimitGuard)
+  @Post('projects/:id/render-estimate')
+  estimate(
+    @Req() req: UserRequest,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.studio.exportEstimate(req.user.userId, id, body);
   }
   @Get('renders/:id') status(@Req() req: UserRequest, @Param('id') id: string) {
     return this.studio.renderStatus(req.user.userId, id);

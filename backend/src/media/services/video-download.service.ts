@@ -38,6 +38,7 @@ export class VideoDownloadService {
     outputDir: string,
     resolution: '720p' | '1080p' | '360p' | '240p',
     onProgress?: (percent: number) => void,
+    maxDurationSeconds?: number,
   ): Promise<{
     videoPath: string;
     audioPath: string;
@@ -49,9 +50,23 @@ export class VideoDownloadService {
     await fs.promises.mkdir(outputDir, { recursive: true });
     const videoPath = path.join(outputDir, 'source.mp4');
     const audioPath = path.join(outputDir, 'audio.wav');
-    const maxHeight = resolution === '1080p' ? 1080 : 720;
+    const maxHeight = Number.parseInt(resolution, 10);
 
+    if (maxDurationSeconds) {
+      const preliminary = await this.fetchVideoMetadata(sourceUrl);
+      if (
+        !Number.isFinite(preliminary.duration) ||
+        preliminary.duration <= 0 ||
+        preliminary.duration > maxDurationSeconds
+      )
+        throw new Error(
+          'Source duration is unavailable or exceeds the approved duration limit',
+        );
+    }
     const ytDlpArgs = [
+      '--no-playlist',
+      '--socket-timeout',
+      '30',
       '--js-runtimes',
       'deno',
       '-f',

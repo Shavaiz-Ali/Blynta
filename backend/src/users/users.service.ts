@@ -1,3 +1,5 @@
+import { CreditsService } from '../billing/credits.service';
+import { Optional } from '@nestjs/common';
 import {
   BadRequestException,
   ConflictException,
@@ -57,6 +59,7 @@ export class UsersService {
     private configService: ConfigService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
+    @Optional() private credits?: CreditsService,
   ) {}
 
   private async generateUniqueReferralCode(): Promise<string> {
@@ -172,6 +175,13 @@ export class UsersService {
   }
 
   async deductCredit(userId: string): Promise<void> {
+    if (
+      this.credits?.enabled ||
+      (await this.findById(userId))?.creditLedgerInitialized
+    )
+      throw new ConflictException(
+        'New processing is paused during billing rollout. Use a credit reservation when billing is enabled.',
+      );
     const result = await this.userModel.updateOne(
       { _id: userId, creditsBalance: { $gt: 0 } },
       { $inc: { creditsBalance: -1, totalCreditsUsed: 1 } },
@@ -397,6 +407,26 @@ export class UsersService {
       return;
     }
 
+    const referredAccount = await this.findById(referredUserId);
+    const accounting =
+      !!this.credits &&
+      (this.credits.enabled ||
+        referrer.creditLedgerInitialized ||
+        referredAccount?.creditLedgerInitialized);
+    if (accounting) {
+      await this.credits!.adjust(
+        String(referrerId),
+        REFERRAL_CONFIG.REFERRER_CREDITS,
+        `referral:${referredUserId}:referrer`,
+        'Referral bonus',
+      );
+      await this.credits!.adjust(
+        String(referredUserId),
+        REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS,
+        `referral:${referredUserId}:welcome`,
+        'Referral welcome bonus',
+      );
+    }
     try {
       await this.referralRewardModel.create({
         referrerId,
@@ -413,16 +443,21 @@ export class UsersService {
       { _id: referrerId },
       {
         $inc: {
-          creditsBalance: REFERRAL_CONFIG.REFERRER_CREDITS,
+          ...(accounting
+            ? {}
+            : { creditsBalance: REFERRAL_CONFIG.REFERRER_CREDITS }),
           successfulReferralCount: 1,
         },
       },
       { new: true },
     );
-    await this.userModel.updateOne(
-      { _id: referredUserId },
-      { $inc: { creditsBalance: REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS } },
-    );
+    if (!accounting)
+      await this.userModel.updateOne(
+        { _id: referredUserId },
+        {
+          $inc: { creditsBalance: REFERRAL_CONFIG.REFERRED_USER_BONUS_CREDITS },
+        },
+      );
 
     try {
       // In-app notification for referrer

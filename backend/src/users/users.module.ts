@@ -1,3 +1,4 @@
+import { CreditsModule } from '../billing/credits.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { UsersService } from './users.service';
@@ -14,6 +15,7 @@ import { ActivitiesModule } from '../activities/activities.module';
 
 @Module({
   imports: [
+    CreditsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: ReferralReward.name, schema: ReferralRewardSchema },

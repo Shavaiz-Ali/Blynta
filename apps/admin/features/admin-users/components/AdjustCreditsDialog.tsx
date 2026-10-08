@@ -36,23 +36,31 @@ export function AdjustCreditsDialog({
   const [reason, setReason] = React.useState("");
 
   const mutation = useAdjustCreditsMutation();
+  const authorization = React.useRef<{ signature: string; id: string } | null>(
+    null,
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId || !amount || !reason.trim()) return;
 
     const delta = type === "add" ? Math.abs(amount) : -Math.abs(amount);
+    const signature = JSON.stringify([userId, delta, reason]);
+    if (authorization.current?.signature !== signature)
+      authorization.current = { signature, id: crypto.randomUUID() };
 
     mutation.mutate(
       {
         userId,
         payload: {
           amount: delta,
+          operationId: authorization.current.id,
           reason,
         },
       },
       {
         onSuccess: () => {
+          authorization.current = null;
           onOpenChange(false);
           setReason("");
           setAmount(10);

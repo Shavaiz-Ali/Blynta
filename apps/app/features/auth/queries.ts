@@ -57,7 +57,8 @@ export function useCurrentUser(
       const { data } = await axiosClient.get<UserProfile>("/users/me");
       return data;
     },
-    staleTime: 1000 * 30,
+    staleTime: 1000 * 10,
+    refetchInterval: 15000,
     ...opts,
   });
 }

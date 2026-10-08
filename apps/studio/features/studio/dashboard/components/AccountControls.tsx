@@ -26,6 +26,7 @@ export function AccountControls() {
       credits={
         <AppCreditsControl
           balance={profile.data?.creditsBalance}
+          reserved={profile.data?.creditsReserved}
           plan={profile.data?.plan}
           resetAt={profile.data?.creditsResetAt}
           error={profile.error?.message}

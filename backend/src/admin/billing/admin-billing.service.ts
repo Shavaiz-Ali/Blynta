@@ -32,6 +32,9 @@ import { PaddleService } from '../../paddle/paddle.service';
 import { BillingService } from '../../billing/billing.service';
 import { ListCustomersAdminDto } from '../dto/list-customers-admin.dto';
 import { AdjustCreditsDto } from '../dto/adjust-credits.dto';
+import { CreditsService } from '../../billing/credits.service';
+import { Optional } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { CancelSubscriptionAdminDto } from '../dto/update-subscription-admin.dto';
 import { PaginatedResult } from '../dto/list-query.dto';
 
@@ -51,6 +54,7 @@ export class AdminBillingService {
     private readonly activitiesService: ActivitiesService,
     private readonly paddleService: PaddleService,
     private readonly billingService: BillingService,
+    @Optional() private readonly credits?: CreditsService,
   ) {}
 
   private toObjectId(id: string): Types.ObjectId {
@@ -177,11 +181,27 @@ export class AdminBillingService {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
-    const previousBalance = user.creditsBalance ?? 0;
-    const newBalance = Math.max(0, previousBalance + dto.amount);
+    let previousBalance = user.creditsBalance ?? 0;
+    let newBalance = Math.max(0, previousBalance + dto.amount);
 
-    user.creditsBalance = newBalance;
-    await user.save();
+    if (
+      this.credits &&
+      (this.credits.enabled || user.creditLedgerInitialized)
+    ) {
+      const entry = await this.credits.adjust(
+        userId,
+        dto.amount,
+        `admin:${adminId}:${dto.operationId || randomUUID()}`,
+        dto.reason,
+        'adjustment',
+        { adminId },
+      );
+      newBalance = entry.availableAfter;
+      previousBalance = entry.availableAfter - entry.availableDelta;
+    } else {
+      user.creditsBalance = newBalance;
+      await user.save();
+    }
 
     // 1. Write dedicated CreditAdjustment record
     const creditAdjustment = await this.creditAdjustmentModel.create({

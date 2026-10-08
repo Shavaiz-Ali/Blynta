@@ -1,3 +1,4 @@
+import { usageSample } from '../../billing/usage-context';
 import {
   cancellationSignal,
   assertNotCancelled,
@@ -76,9 +77,32 @@ export class TranscriptionService {
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
   ): Promise<TranscriptSegmentDto[]> {
-    return this.provider === 'groq'
-      ? this.transcribeWithGroq(audioPath, onProgress, initialPrompt)
-      : this.transcribeWithWhisperCpp(audioPath, onProgress, initialPrompt);
+    const startedAt = Date.now();
+    try {
+      const result = await (this.provider === 'groq'
+        ? this.transcribeWithGroq(audioPath, onProgress, initialPrompt)
+        : this.transcribeWithWhisperCpp(audioPath, onProgress, initialPrompt));
+      usageSample('transcription', {
+        provider: this.provider,
+        model: this.modelName || this.whisperModelPath,
+        audioDurationSeconds:
+          (await this.getAudioDurationSeconds(audioPath)) || null,
+        // Transcript end is recorded separately; verified audio duration is supplied by the operation.
+        transcriptEndSeconds: result.length
+          ? Math.max(...result.map((s) => s.endTime))
+          : 0,
+        wallSeconds: (Date.now() - startedAt) / 1000,
+      });
+      return result;
+    } catch (error) {
+      usageSample('transcription', {
+        provider: this.provider,
+        model: this.modelName,
+        failed: true,
+        wallSeconds: (Date.now() - startedAt) / 1000,
+      });
+      throw error;
+    }
   }
 
   private async transcribeWithGroq(

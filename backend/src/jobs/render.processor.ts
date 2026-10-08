@@ -3,7 +3,8 @@ import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job as BullJob } from 'bullmq';
-import { mkdtemp, mkdir, rm } from 'fs/promises';
+import { mkdtemp, mkdir, rm, stat } from 'fs/promises';
+import { usageSample } from '../billing/usage-context';
 import { join } from 'path';
 import { JobsService } from './jobs.service';
 import { JobsCompletionService } from './jobs-completion.service';
@@ -284,6 +285,12 @@ export class RenderProcessor
       assertNotCancelled();
       await transition(ClipProcessingState.UPLOADING);
       await this.r2.uploadFile(final, objectKey);
+      usageSample('storage', {
+        outputDurationSeconds: duration,
+        codec: 'h264',
+        storageBytes: (await stat(final)).size,
+        objectKey,
+      });
       const totalSeconds = (Date.now() - started) / 1000;
       await this.jobs.updateClip(jobId, clipId, {
         renderTiming: {

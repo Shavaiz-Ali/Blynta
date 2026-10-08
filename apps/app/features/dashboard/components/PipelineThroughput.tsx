@@ -14,9 +14,6 @@ export function PipelineThroughput({
   totalClips = 0,
 }: PipelineThroughputProps) {
   const creditsBalance = profile?.creditsBalance ?? 0;
-  const creditsTotal =
-    profile?.plan === "pro" ? 100 : profile?.plan === "business" ? 500 : 5;
-  const creditsUsed = Math.max(0, creditsTotal - creditsBalance);
 
   return (
     <div className="space-y-4 pt-2">
@@ -50,13 +47,13 @@ export function PipelineThroughput({
           <div className="h-7 w-px bg-border" />
           <div className="text-right">
             <p className="text-sm font-bold font-mono text-foreground">
-              {creditsUsed}{" "}
+              {creditsBalance}{" "}
               <span className="text-muted-foreground font-normal text-xs">
-                / {creditsTotal}
+                {profile?.creditsReserved ?? 0} held
               </span>
             </p>
             <p className="text-[11px] text-muted-foreground font-medium">
-              Monthly Ingests
+              Credits available
             </p>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import { meteredGenerateObject } from '../../billing/metered-ai';
 import { setTimeout as abortableDelay } from 'node:timers/promises';
 import {
   cancellationSignal,
@@ -5,7 +6,7 @@ import {
 } from '../../jobs/cancellation-context';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { generateObject, NoObjectGeneratedError, RetryError } from 'ai';
+import { NoObjectGeneratedError, RetryError } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { z } from 'zod';
@@ -311,7 +312,7 @@ export class HighlightDetectionService {
       };
       let parsedObj: z.infer<typeof HighlightsResponseSchema>;
       try {
-        parsedObj = (await generateObject(request)).object;
+        parsedObj = (await meteredGenerateObject(request)).object;
       } catch (error) {
         assertNotCancelled();
         if (!NoObjectGeneratedError.isInstance(error)) throw error;
@@ -329,7 +330,7 @@ export class HighlightDetectionService {
             'Retrying highlight generation once with stricter JSON instructions',
           );
           parsedObj = (
-            await generateObject({
+            await meteredGenerateObject({
               ...request,
               temperature: 0.1,
               maxOutputTokens:
@@ -599,7 +600,7 @@ export class HighlightDetectionService {
     await this.waitForBudget(estimatedTokens);
 
     try {
-      const result = await generateObject(
+      const result = await meteredGenerateObject(
         this.buildGenerateObjectOptions(
           this.model,
           systemPrompt,
@@ -661,7 +662,7 @@ export class HighlightDetectionService {
         await this.waitForBudget(estimatedTokens);
 
         try {
-          const retryResult = await generateObject(
+          const retryResult = await meteredGenerateObject(
             this.buildGenerateObjectOptions(
               this.model,
               systemPrompt,

@@ -60,6 +60,9 @@ describe('individual clip retry recovery', () => {
       }),
     }));
     model.findOneAndUpdate.mockImplementation((filter, updates) => ({
+      session() {
+        return this;
+      },
       exec: async () => {
         const clip = parent.clips.find((c) =>
           c._id.equals(filter.clips.$elemMatch._id),

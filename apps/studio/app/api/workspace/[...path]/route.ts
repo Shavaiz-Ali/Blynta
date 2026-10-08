@@ -13,6 +13,8 @@ async function handle(
     request.method === "GET"
       ? [
           "users/me",
+          "billing/credits",
+          "billing/credits/history",
           "notifications",
           "notifications/unread-count",
           "activities",
@@ -43,7 +45,14 @@ async function handle(
     );
   const query = new URLSearchParams();
   const incoming = new URL(request.url).searchParams;
-  for (const key of ["page", "limit", "status", "category"]) {
+  for (const key of [
+    "page",
+    "limit",
+    "status",
+    "category",
+    "product",
+    "type",
+  ]) {
     if (incoming.has(key)) query.set(key, incoming.get(key)!);
   }
   try {

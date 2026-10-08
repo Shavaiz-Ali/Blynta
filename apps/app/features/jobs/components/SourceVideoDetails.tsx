@@ -184,6 +184,20 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
 
   return (
     <DashboardLayout headerContent={headerContent}>
+      {job.billing && (
+        <div
+          role="status"
+          className="rounded-xl border border-border/60 bg-muted/20 px-4 py-3 text-sm"
+        >
+          {job.billing.status === "reserved"
+            ? `${job.billing.held} credits reserved · ${job.billing.authorized} authorized maximum`
+            : `${job.billing.charged} credits charged · unused hold released`}
+          <p className="text-xs text-muted-foreground mt-1">
+            Shared with Studio. Retries charge only newly delivered work within
+            this budget.
+          </p>
+        </div>
+      )}
       {/* ── Level 2: Media Detail Header Lockup ── */}
       <div className="flex flex-col gap-4 pb-7 border-b border-border/60">
         {/* Back Link */}

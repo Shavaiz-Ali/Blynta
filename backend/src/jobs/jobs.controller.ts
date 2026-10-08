@@ -16,6 +16,9 @@ import { clipFailure } from './clip-failure';
 import { jobFailure } from './job-failure';
 import { AuthGuard } from '@nestjs/passport';
 import { JobsService } from './jobs.service';
+import { BillingRateLimitGuard } from '../billing/billing-rate-limit.guard';
+import { CreditsService } from '../billing/credits.service';
+import { Optional } from '@nestjs/common';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { R2Service } from '../storage/r2.service';
@@ -41,6 +44,7 @@ export class JobsController {
     private usersService: UsersService,
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
+    @Optional() private credits?: CreditsService,
   ) {}
 
   private async shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
@@ -48,6 +52,7 @@ export class JobsController {
     const processingFailure = jobFailure(responseJob);
     Reflect.deleteProperty(responseJob, 'errorMessage');
     Reflect.deleteProperty(responseJob, 'activeExecutions');
+    Reflect.deleteProperty(responseJob, 'mediaExecutionLeases');
     let sourceAvailable: boolean | undefined;
     if (responseJob.clips?.some((clip) => clip.status === JobStatus.FAILED)) {
       sourceAvailable = job.sourceObjectKey
@@ -85,8 +90,28 @@ export class JobsController {
     const render = job.renderManifestReady
       ? await this.jobsService.getRenderSnapshot(job)
       : undefined;
+    const creditOperation =
+      job.creditOperationId && this.credits
+        ? await this.credits.operations
+            .findOne({
+              operationId: job.creditOperationId,
+              userId: String(job.userId),
+            })
+            .lean()
+        : null;
     return {
       ...responseJob,
+      ...(creditOperation
+        ? {
+            billing: {
+              authorized: creditOperation.authorized,
+              held: creditOperation.held,
+              charged: creditOperation.charged,
+              status: creditOperation.status,
+              pricingVersion: creditOperation.pricing.version,
+            },
+          }
+        : {}),
       ...(processingFailure
         ? { processingFailure, errorMessage: processingFailure.message }
         : {}),
@@ -118,6 +143,7 @@ export class JobsController {
 
   // POST /jobs — create a new clip job
   @Post()
+  @UseGuards(BillingRateLimitGuard)
   async create(
     @Request() req: { user: { userId: string } },
     @Body() dto: CreateJobDto,

@@ -353,6 +353,9 @@ importers:
       '@blynta/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@blynta/types':
+        specifier: workspace:*
+        version: link:../../packages/types
       '@blynta/ui':
         specifier: workspace:*
         version: link:../../packages/ui

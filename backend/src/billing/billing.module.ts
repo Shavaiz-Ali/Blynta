@@ -1,3 +1,4 @@
+import { CreditsModule } from './credits.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BillingService } from './billing.service';
@@ -19,6 +20,7 @@ import {
 
 @Module({
   imports: [
+    CreditsModule,
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
       { name: Customer.name, schema: CustomerSchema },

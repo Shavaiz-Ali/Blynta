@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { CreditDetails } from "./CreditDetails";
 import {
   useAdminCustomersQuery,
   useCancelSubscriptionMutation,
@@ -49,6 +50,7 @@ export function BillingView() {
     sortOrder: "desc",
   });
   const [credits, setCredits] = useState<AdminCustomerItem | null>(null);
+  const [inspect, setInspect] = useState<string | null>(null);
   const [cancel, setCancel] = useState<AdminCustomerItem | null>(null);
   const [reason, setReason] = useState("");
   const query = useAdminCustomersQuery(params);
@@ -166,6 +168,13 @@ export function BillingView() {
                       <AppButton
                         size="sm"
                         variant="outline"
+                        onClick={() => setInspect(getCustomerUserId(c))}
+                      >
+                        Usage and costs
+                      </AppButton>
+                      <AppButton
+                        size="sm"
+                        variant="outline"
                         onClick={() => setCredits(c)}
                       >
                         Credits
@@ -206,6 +215,7 @@ export function BillingView() {
         open={!!credits}
         onOpenChange={(open) => !open && setCredits(null)}
       />
+      <CreditDetails userId={inspect} onClose={() => setInspect(null)} />
       <AppDialog
         open={!!cancel}
         onOpenChange={(open) => !open && !mutation.isPending && setCancel(null)}

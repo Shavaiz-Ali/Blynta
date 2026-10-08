@@ -2,6 +2,7 @@ import { axiosClient } from "@/config/axiosClient";
 import { ListCustomersParams, PaginatedCustomersResponse } from "./types";
 
 export interface AdjustCreditsPayload {
+  operationId?: string;
   amount: number;
   reason: string;
 }

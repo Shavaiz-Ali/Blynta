@@ -5,7 +5,8 @@ import { ConfigService } from '@nestjs/config';
 import { workerConcurrency } from '../jobs/jobs.constants';
 import { Model } from 'mongoose';
 import { Job } from 'bullmq';
-import { mkdtemp, writeFile, rm } from 'fs/promises';
+import { mkdtemp, writeFile, rm, stat } from 'fs/promises';
+import { usageSample } from '../billing/usage-context';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { MediaInspectionService } from '../media/services/media-inspection.service';
@@ -15,6 +16,9 @@ import { ProcessRegistryService } from '../common/services/process-registry.serv
 import { runCommandWithProgress } from '../media/utils/run-command-with-progress';
 import type { StudioAsset, StudioRender } from './studio.schemas';
 import { renderPlan, RenderInput } from './studio.renderer';
+import { CreditsService } from '../billing/credits.service';
+import { studioPrice } from '../billing/credit-pricing';
+import { Optional } from '@nestjs/common';
 
 @Processor('studio', {
   concurrency: 1,
@@ -36,6 +40,7 @@ export class StudioProcessor
     private registry: ProcessRegistryService,
     private inspection: MediaInspectionService,
     private config: ConfigService,
+    @Optional() private credits?: CreditsService,
   ) {
     super();
   }
@@ -57,9 +62,39 @@ export class StudioProcessor
   ) {
     const directory = await mkdtemp(join(tmpdir(), 'blynta-studio-'));
     try {
-      if (job.name === 'render') await this.render(job, directory);
-      else await this.media(job, directory);
+      const render =
+        job.name === 'render'
+          ? await this.renders.findById(job.data.renderId)
+          : null;
+      const asset =
+        job.name === 'transcribe'
+          ? await this.assets.findOne({
+              userId: job.data.userId,
+              projectId: job.data.projectId,
+              assetId: job.data.assetId,
+            })
+          : null;
+      const operationId =
+        render?.creditOperationId || asset?.transcriptionCreditOperationId;
+      const work = async () => {
+        if (job.name === 'render') await this.render(job, directory);
+        else await this.media(job, directory);
+      };
+      if (operationId && this.credits)
+        await this.credits.capture(
+          operationId,
+          `${job.id}-${job.attemptsMade}`,
+          work,
+        );
+      else await work();
     } catch (error) {
+      if (job.name === 'render') {
+        const delivered = await this.renders.findById(job.data.renderId);
+        if (delivered?.status === 'completed') {
+          await this.settleRender(delivered);
+          return; // Never erase durable success because settlement or publication retried.
+        }
+      }
       this.logger.error(
         `Studio ${job.name} job ${job.id} failed`,
         error instanceof Error ? error.stack : String(error),
@@ -109,6 +144,28 @@ export class StudioProcessor
             },
           },
         );
+      if (final && job.name === 'render') {
+        const failed = await this.renders.findById(job.data.renderId);
+        if (failed?.creditOperationId)
+          await this.credits!.settle(failed.creditOperationId, 0);
+      }
+      if (final && job.name === 'transcribe') {
+        const asset = await this.assets.findOne({
+          userId: job.data.userId,
+          projectId: job.data.projectId,
+          assetId: job.data.assetId,
+        });
+        if (asset?.transcriptionCreditOperationId) {
+          const op = await this.credits!.operations.findOne({
+            operationId: asset.transcriptionCreditOperationId,
+          });
+          if (op)
+            await this.credits!.settle(
+              op.operationId,
+              asset.transcript?.length ? op.authorized : 0,
+            );
+        }
+      }
       throw error;
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -127,7 +184,22 @@ export class StudioProcessor
     const input = join(directory, 'input');
     await this.r2.downloadToLocal(a.storageKey, input);
     if (job.name === 'transcribe') {
-      if (a.transcript?.length) return;
+      if (a.transcript?.length) {
+        if (a.transcriptionCreditOperationId) {
+          const op = await this.credits!.operations.findOne({
+            operationId: a.transcriptionCreditOperationId,
+          });
+          if (op) await this.credits!.settle(op.operationId, op.authorized);
+        }
+        return;
+      }
+      if (a.transcriptionCreditOperationId) {
+        const metadata = await this.inspection.inspect(input);
+        await this.credits!.assertSourceBudget(
+          a.transcriptionCreditOperationId,
+          metadata.durationSeconds,
+        );
+      }
       await this.assets.updateOne(
         { _id: a._id },
         { $set: { transcriptStatus: 'processing' } },
@@ -155,6 +227,12 @@ export class StudioProcessor
           $unset: { error: '' },
         },
       );
+      if (a.transcriptionCreditOperationId) {
+        const op = await this.credits!.operations.findOne({
+          operationId: a.transcriptionCreditOperationId,
+        });
+        if (op) await this.credits!.settle(op.operationId, op.authorized);
+      }
       return;
     }
     const metadata = await this.inspection.inspect(input);
@@ -199,7 +277,11 @@ export class StudioProcessor
   }
   private async render(job: Job<{ renderId: string }>, directory: string) {
     const r = await this.renders.findById(job.data.renderId);
-    if (!r || r.status === 'completed') return;
+    if (!r) return;
+    if (r.status === 'completed') {
+      await this.settleRender(r);
+      return;
+    }
     await this.renders.updateOne(
       { _id: r._id },
       { $set: { status: 'processing', progress: 1 }, $unset: { error: '' } },
@@ -275,6 +357,13 @@ export class StudioProcessor
         : new Error('Could not persist render progress');
     const outputKey = `studio/${r.userId}/${r.projectId}/renders/${String(r._id)}.mp4`;
     await this.r2.uploadFile(join(directory, 'output.mp4'), outputKey);
+    usageSample('storage', {
+      outputDurationSeconds: plan.duration,
+      resolution: r.settings.resolution,
+      codec: 'h264',
+      storageBytes: (await stat(join(directory, 'output.mp4'))).size,
+      objectKey: outputKey,
+    });
     await this.renders.updateOne(
       { _id: r._id },
       {
@@ -286,5 +375,29 @@ export class StudioProcessor
         },
       },
     );
+    if (r.creditOperationId) {
+      const op = await this.credits!.operations.findOne({
+        operationId: r.creditOperationId,
+      });
+      if (op)
+        await this.credits!.settle(
+          op.operationId,
+          studioPrice(plan.duration, op.pricing),
+        );
+    }
+  }
+  private async settleRender(r: StudioRender) {
+    if (!r.creditOperationId) return;
+    const op = await this.credits!.operations.findOne({
+      operationId: r.creditOperationId,
+    });
+    if (op)
+      await this.credits!.settle(
+        op.operationId,
+        studioPrice(
+          Math.max(...r.document.clips.map((c) => c.start + c.duration)),
+          op.pricing,
+        ),
+      );
   }
 }
