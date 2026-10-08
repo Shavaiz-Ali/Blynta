@@ -34,6 +34,7 @@ export interface AppDropdownProps {
   children?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  onOpenChangeComplete?: (open: boolean) => void;
 }
 
 export function AppDropdown({
@@ -47,9 +48,14 @@ export function AppDropdown({
   children,
   open,
   onOpenChange,
+  onOpenChangeComplete,
 }: AppDropdownProps) {
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={onOpenChange}
+      onOpenChangeComplete={onOpenChangeComplete}
+    >
       <DropdownMenuTrigger render={trigger as React.ReactElement} />
 
       <DropdownMenuContent

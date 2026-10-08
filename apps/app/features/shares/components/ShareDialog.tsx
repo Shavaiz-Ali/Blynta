@@ -16,6 +16,7 @@ interface ShareDialogProps {
   jobId: string;
   clipId: string;
   clipTitle?: string;
+  finalFocus?: React.ComponentProps<typeof AppDialog>["finalFocus"];
 }
 
 const EXPIRY_OPTIONS: AppSelectOption[] = [
@@ -30,6 +31,7 @@ export function ShareDialog({
   jobId,
   clipId,
   clipTitle,
+  finalFocus,
 }: ShareDialogProps) {
   const [expiryOption, setExpiryOption] = React.useState<string>("7d");
   const [copied, setCopied] = React.useState(false);
@@ -39,7 +41,8 @@ export function ShareDialog({
 
   // Fetch any existing shares for this clip
   const { data: shares, isLoading: isSharesLoading } = useShares(
-    open ? clipId : undefined,
+    clipId,
+    { enabled: open && Boolean(jobId && clipId) },
   );
 
   const activeShare: ShareView | undefined = React.useMemo(() => {
@@ -202,6 +205,7 @@ export function ShareDialog({
           : "Create a public link for this clip. Anyone with the link can view this clip."
       }
       size="md"
+      finalFocus={finalFocus}
     >
       <div className="space-y-4 pt-1">
         {isSharesLoading ? (
@@ -253,7 +257,7 @@ export function ShareDialog({
                     />
                     <AppButton
                       size="sm"
-                      variant={copied ? "outline" : ("primary" as any)}
+                      variant={copied ? "outline" : "default"}
                       className={`h-9 gap-1.5 shrink-0 px-3 font-medium transition-all ${
                         copied
                           ? "border-emerald-500/50 text-emerald-500 bg-emerald-500/10"

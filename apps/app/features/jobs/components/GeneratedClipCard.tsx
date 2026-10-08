@@ -11,6 +11,7 @@ import {
 } from "@/features/jobs";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ShareDialog } from "@/features/shares";
 import {
   PlayIcon,
   ClockIcon,
@@ -48,6 +49,10 @@ export function GeneratedClipCard({
 }: GeneratedClipCardProps) {
   const router = useRouter();
   const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const shareAfterMenuClose = React.useRef(false);
+  const menuTriggerRef = React.useRef<HTMLButtonElement>(null);
   const [isDeleting, setIsDeleting] = React.useState(false);
 
   const canDelete =
@@ -95,15 +100,10 @@ export function GeneratedClipCard({
     }
   };
 
-  const handleShare = async (e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    const clipUrl = `${window.location.origin}/my-clips/${jobId}/clips/${clipId}`;
-    try {
-      await navigator.clipboard.writeText(clipUrl);
-      toast.success("Clip link copied to clipboard!");
-    } catch {
-      toast.error("Failed to copy link");
-    }
+  const handleShare = () => {
+    // Let the menu finish closing and restoring focus before opening the dialog.
+    shareAfterMenuClose.current = true;
+    setMenuOpen(false);
   };
 
   const handleDeleteConfirm = async () => {
@@ -211,8 +211,17 @@ export function GeneratedClipCard({
               onClick={(e) => e.stopPropagation()}
             >
               <AppDropdown
+                open={menuOpen}
+                onOpenChange={setMenuOpen}
+                onOpenChangeComplete={(open) => {
+                  if (!open && shareAfterMenuClose.current) {
+                    shareAfterMenuClose.current = false;
+                    setShareOpen(true);
+                  }
+                }}
                 trigger={
                   <button
+                    ref={menuTriggerRef}
                     type="button"
                     className="h-9 w-9 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                     aria-label="Clip options"
@@ -222,11 +231,6 @@ export function GeneratedClipCard({
                 }
                 items={[
                   {
-                    label: "Open in Studio",
-                    icon: <PlayIcon className="h-3.5 w-3.5 text-primary" />,
-                    onClick: handleOpenClip,
-                  },
-                  {
                     label: "Download MP4",
                     icon: <DownloadIcon className="h-3.5 w-3.5" />,
                     onClick: () => {
@@ -234,11 +238,9 @@ export function GeneratedClipCard({
                     },
                   },
                   {
-                    label: "Copy Link",
+                    label: "Share",
                     icon: <Share2Icon className="h-3.5 w-3.5" />,
-                    onClick: () => {
-                      handleShare();
-                    },
+                    onClick: handleShare,
                   },
                   {
                     label: "Delete Clip",
@@ -257,6 +259,16 @@ export function GeneratedClipCard({
         <ClipCardTitle>{clipTitle}</ClipCardTitle>
         <ClipCardDescription>{reasonText}</ClipCardDescription>
       </ClipCardLayout>
+
+      <ShareDialog
+        key={`${jobId}:${clipId}`}
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        jobId={jobId}
+        clipId={clipId}
+        clipTitle={clipTitle}
+        finalFocus={menuTriggerRef}
+      />
 
       {/* Delete Confirmation Modal */}
       <AppDialog

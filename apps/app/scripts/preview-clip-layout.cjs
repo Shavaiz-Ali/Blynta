@@ -29,6 +29,7 @@ function load(filename) {
         AppDropdown: ({ trigger }) => trigger,
       };
     if (id === "next/navigation") return { useRouter: () => ({ push() {} }) };
+    if (id === "@/features/shares") return { ShareDialog: () => null };
     if (id === "../queries" || id === "@/features/jobs")
       return {
         useRetryJob: () => ({

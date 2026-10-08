@@ -519,10 +519,11 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
 
       {/* Share Dialog */}
       <ShareDialog
+        key={`${jobId}:${activeClip._id || activeClip.id || clipId}`}
         open={shareOpen}
         onOpenChange={setShareOpen}
         jobId={jobId}
-        clipId={clipId}
+        clipId={String(activeClip._id || activeClip.id || clipId)}
         clipTitle={clipTitle}
       />
 

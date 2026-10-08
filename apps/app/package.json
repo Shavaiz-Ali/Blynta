@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test:clip-sharing": "node --test scripts/test-clip-sharing.cjs",
     "test:sidebar-navigation": "node --test scripts/test-sidebar-navigation.cjs",
     "dev": "next dev",
     "build": "next build",

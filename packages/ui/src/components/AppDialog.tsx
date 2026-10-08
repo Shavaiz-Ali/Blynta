@@ -28,6 +28,7 @@ export interface AppDialogProps {
   size?: "sm" | "md" | "lg";
   /** When false, clicking outside or pressing Escape will NOT close the dialog. Defaults to true. */
   dismissible?: boolean;
+  finalFocus?: React.ComponentProps<typeof DialogContent>["finalFocus"];
 }
 
 const sizeMap = {
@@ -51,6 +52,7 @@ function AppDialog({
   descriptionClassName,
   size = "md",
   dismissible = true,
+  finalFocus,
 }: AppDialogProps) {
   return (
     <Dialog
@@ -61,6 +63,7 @@ function AppDialog({
       }}
     >
       <DialogContent
+        finalFocus={finalFocus}
         className={cn(
           "gap-0 overflow-hidden p-0 rounded-xl",
           sizeMap[size],
