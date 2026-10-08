@@ -13,6 +13,8 @@ export function pipelineIndex(job: Job) {
   const stage = job.status === "failed" ? job.errorStage : job.status;
   const aliases: Record<string, string> = {
     download: "pending",
+    source_download: "pending",
+    preparing: "pending",
     transcription: "transcribing",
     highlight_detection: "detecting_highlights",
     cutting: "cutting_clips",

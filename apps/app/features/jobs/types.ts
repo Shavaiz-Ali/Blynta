@@ -91,6 +91,7 @@ export interface CreateJobInput {
 }
 
 export interface Job {
+  processingFailure?: { code: string; message: string };
   cancellationRequestedAt?: string;
   cancelledAt?: string;
   cancellationPendingReason?: "worker_confirmation_required";

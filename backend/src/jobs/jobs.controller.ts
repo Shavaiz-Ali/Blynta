@@ -13,6 +13,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { DownloadClipDto } from './dto/download-clip.dto';
 import { clipFailure } from './clip-failure';
+import { jobFailure } from './job-failure';
 import { AuthGuard } from '@nestjs/passport';
 import { JobsService } from './jobs.service';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -44,6 +45,8 @@ export class JobsController {
 
   private async shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
     const responseJob = job.toObject<JobDocument>();
+    const processingFailure = jobFailure(responseJob);
+    Reflect.deleteProperty(responseJob, 'errorMessage');
     Reflect.deleteProperty(responseJob, 'activeExecutions');
     let sourceAvailable: boolean | undefined;
     if (responseJob.clips?.some((clip) => clip.status === JobStatus.FAILED)) {
@@ -84,6 +87,9 @@ export class JobsController {
       : undefined;
     return {
       ...responseJob,
+      ...(processingFailure
+        ? { processingFailure, errorMessage: processingFailure.message }
+        : {}),
       deletionAvailable:
         [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
           job.status,

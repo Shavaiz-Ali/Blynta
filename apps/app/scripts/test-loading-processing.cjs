@@ -166,6 +166,13 @@ const rendering = {
   },
 };
 const html = render(JobProcessingView, { job: rendering });
+for (const [stage, completedCount] of [["pending",0], ["transcribing",1], ["detecting_highlights",2], ["cutting_clips",3], ["source_download",0]]) {
+  const failedMarkup = render(JobProcessingView, {job:{...rendering,status:"failed",errorStage:stage,clips:[],highlights:[],render:undefined}});
+  assert.doesNotMatch(failedMarkup,/animate-spin|In progress/);
+  assert.equal((failedMarkup.match(/>Completed</g) ?? []).length, completedCount);
+  assert.equal((failedMarkup.match(/>Failed</g) ?? []).length,1);
+  assert.equal((failedMarkup.match(/>Not started</g) ?? []).length,3-completedCount);
+}
 const captionCard = render(ClipProcessingCard, {
   job: {
     ...rendering,

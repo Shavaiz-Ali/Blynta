@@ -31,6 +31,10 @@ function load(filename) {
     if (id === "next/navigation") return { useRouter: () => ({ push() {} }) };
     if (id === "../queries" || id === "@/features/jobs")
       return {
+        useRetryJob: () => ({
+          isPending: false,
+          mutateAsync: async () => ({}),
+        }),
         useRetryClip: () => ({
           isPending: false,
           mutateAsync: async () => ({}),
@@ -38,6 +42,10 @@ function load(filename) {
         useDeleteClip: () => ({ isPending: false }),
         useDownloadClip: () => ({ isPending: false }),
       };
+    if (id === "@/features/jobs/types")
+      return load(path.join(root, "features/jobs/types.ts"));
+    if (id === "@/features/dashboard/utils")
+      return { getJobDisplayTitle: (job) => job.videoTitle || job.sourceUrl };
     if (id === "@/lib/utils") return load(path.join(ui, "lib/utils.ts"));
     if (id === "@/features/dashboard/icons")
       return Object.fromEntries(
@@ -143,6 +151,49 @@ async function start() {
       return;
     }
     expanded = request.url.includes("expanded");
+    if (request.url.includes("failure")) {
+      const failedJob = {
+        ...job,
+        status: "failed",
+        errorStage: request.url.includes("transcript")
+          ? "transcribing"
+          : "pending",
+        videoTitle: "Long title already shown in the main video header",
+        clips: [],
+        highlights: [],
+        render: undefined,
+        processingFailure: {
+          code: request.url.includes("transcript")
+            ? "processing_failed"
+            : "source_authentication_required",
+          message: request.url.includes("transcript")
+            ? "We couldn’t generate the transcript for this video. Retry processing to continue."
+            : "Couldn’t access this YouTube video. The source may require authentication. Please try again later.",
+        },
+      };
+      const content = React.createElement(
+        "main",
+        { className: "mx-auto max-w-3xl space-y-4 p-4 sm:p-6" },
+        React.createElement(
+          load(
+            path.join(root, "features/jobs/components/JobProcessingView.tsx"),
+          ).JobProcessingView,
+          { job: failedJob },
+        ),
+        React.createElement(
+          load(path.join(root, "features/jobs/components/FailedStateCard.tsx"))
+            .FailedStateCard,
+          { job: failedJob },
+        ),
+      );
+      response.setHeader("Content-Type", "text/html; charset=utf-8");
+      response.end(
+        '<!doctype html><html class="dark"><head><title>Blynta failure preview</title><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/style.css"></head><body class="bg-background text-foreground">' +
+          renderToStaticMarkup(content) +
+          "</body></html>",
+      );
+      return;
+    }
     const width = request.url.includes("mobile")
       ? 390
       : request.url.includes("tablet")
@@ -166,16 +217,14 @@ async function start() {
           ...job,
           render: {
             ...job.render,
-            clips: scenarioClips
-              .slice(0, 3)
-              .map((clip, index) => ({
-                clipId: clip._id,
-                status: clip.processingState,
-                progress: [0, 38, 99][index],
-                durationSeconds: 48,
-                processedSeconds: 22,
-                etaSeconds: 90,
-              })),
+            clips: scenarioClips.slice(0, 3).map((clip, index) => ({
+              clipId: clip._id,
+              status: clip.processingState,
+              progress: [0, 38, 99][index],
+              durationSeconds: 48,
+              processedSeconds: 22,
+              etaSeconds: 90,
+            })),
           },
         }
       : job;

@@ -4,13 +4,7 @@ import * as React from "react";
 import { VideoActionsDropdown } from "./VideoActionsDropdown";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  JobStatus,
-  useJob,
-  useDeleteJob,
-  useRetryJob,
-  useCancelJob,
-} from "@/features/jobs";
+import { JobStatus, useJob, useDeleteJob, useCancelJob } from "@/features/jobs";
 import { useCurrentUser } from "@/features/auth/queries";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
@@ -32,7 +26,6 @@ import {
   SparklesIcon,
   ClockIcon,
   TrashIcon,
-  RefreshCwIcon,
   ExternalLinkIcon,
   AlertTriangleIcon,
 } from "@/features/dashboard/icons";
@@ -76,7 +69,6 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   };
 
   const deleteMutation = useDeleteJob();
-  const retryMutation = useRetryJob();
 
   const handleDeleteConfirm = async () => {
     if (
@@ -98,17 +90,6 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
       toast.error(msg);
     } finally {
       setIsDeleting(false);
-    }
-  };
-
-  const handleRetry = async () => {
-    try {
-      toast.info("Resuming video processing...");
-      await retryMutation.mutateAsync(jobId);
-      toast.success("Job re-queued successfully");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to retry job";
-      toast.error(msg);
     }
   };
 
@@ -348,18 +329,6 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
 
           {/* Right Action Menu */}
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-4 py-3 lg:border-t-0 lg:border-l lg:self-stretch">
-            {isFailed && !hasClipFailures && (
-              <AppButton
-                variant="default"
-                size="sm"
-                onClick={handleRetry}
-                icon={<RefreshCwIcon className="h-3.5 w-3.5" />}
-                className="h-8 text-xs font-semibold"
-              >
-                Retry Processing
-              </AppButton>
-            )}
-
             {job.sourceUrl && (
               <AppButton
                 variant="outline"
@@ -386,9 +355,6 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
               canDelete={canDelete}
               onCancel={() => setCancelOpen(true)}
               onDelete={() => setDeleteOpen(true)}
-              onRetryPipeline={
-                isFailed && !hasClipFailures ? handleRetry : undefined
-              }
             />
           </div>
         </AppCard>
@@ -402,7 +368,11 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
         </div>
       ) : isFailed ? (
         /* Failed state with retry */
-        <div className="py-4">
+        <div
+          className={
+            hasClipFailures ? "space-y-4 py-2" : "max-w-3xl space-y-4 py-2"
+          }
+        >
           <JobProcessingView job={job} />
           {!hasClipFailures && <FailedStateCard job={job} />}
         </div>

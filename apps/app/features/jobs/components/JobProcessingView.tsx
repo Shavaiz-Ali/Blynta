@@ -56,12 +56,14 @@ export function JobProcessingView({ job }: { job: Job }) {
             : issues
               ? "Completed with issues"
               : failed
-                ? "Processing needs attention"
+                ? "Processing stages"
                 : "Creating your clips"}
         </h2>
-        <p className="break-words text-sm text-muted-foreground">
-          {getJobDisplayTitle(job, 70)}
-        </p>
+        {!failed && (
+          <p className="break-words text-sm text-muted-foreground">
+            {getJobDisplayTitle(job, 70)}
+          </p>
+        )}
         {progress !== undefined && !failed && (
           <ProcessingProgress value={progress} label="Overall progress" />
         )}
@@ -89,7 +91,7 @@ export function JobProcessingView({ job }: { job: Job }) {
           pending, contact support to verify that the worker has stopped.
         </p>
       )}
-      <ol className="space-y-5">
+      <ol className={failed ? "space-y-3" : "space-y-5"}>
         {processingSteps.map((step, index) => {
           const state = stopped
             ? "stopped"
@@ -143,7 +145,11 @@ export function JobProcessingView({ job }: { job: Job }) {
                     {state === "stopped"
                       ? "Stopped"
                       : state === "upcoming"
-                        ? "Upcoming"
+                        ? failed
+                          ? current < 0
+                            ? "Pending"
+                            : "Not started"
+                          : "Upcoming"
                         : state === "active"
                           ? "In progress"
                           : state === "failed"
@@ -190,15 +196,17 @@ export function JobProcessingView({ job }: { job: Job }) {
           );
         })}
       </ol>
-      <p className="text-xs text-muted-foreground">
-        {stopped
-          ? job.status === "cancelling"
-            ? "Waiting for workers to confirm shutdown. Finished clips are kept. Deletion becomes available when processing has stopped. If shutdown cannot be confirmed, cancellation stays pending; you can safely check again later."
-            : "Finished clips are kept. You can now delete this video from its actions menu."
-          : issues
-            ? "Finished clips are ready to use. Retry any failed clip above to finish creating it."
-            : "You can leave this page while your video processes. Finished clips will appear here automatically."}
-      </p>
+      {!failed && (
+        <p className="text-xs text-muted-foreground">
+          {stopped
+            ? job.status === "cancelling"
+              ? "Waiting for workers to confirm shutdown. Finished clips are kept. Deletion becomes available when processing has stopped. If shutdown cannot be confirmed, cancellation stays pending; you can safely check again later."
+              : "Finished clips are kept. You can now delete this video from its actions menu."
+            : issues
+              ? "Finished clips are ready to use. Retry any failed clip above to finish creating it."
+              : "You can leave this page while your video processes. Finished clips will appear here automatically."}
+        </p>
+      )}
     </section>
   );
 }
