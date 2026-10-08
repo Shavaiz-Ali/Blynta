@@ -174,6 +174,7 @@ export class UsersService {
     return newUser.save();
   }
 
+  /** @deprecated No new job calls this; retained only for pre-ledger compatibility. */
   async deductCredit(userId: string): Promise<void> {
     if (
       this.credits?.enabled ||

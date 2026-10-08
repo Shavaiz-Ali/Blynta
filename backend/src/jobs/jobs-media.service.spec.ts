@@ -282,3 +282,63 @@ describe('durable render fan-out and parent completion', () => {
     expect(snapshot.clips[0].processedSeconds).toBeUndefined();
   });
 });
+
+test.each([6, 9])(
+  'persists and dispatches %s authorized clips idempotently',
+  async (limit) => {
+    const jobId = new Types.ObjectId().toString();
+    const parent: any = {
+      _id: new Types.ObjectId(jobId),
+      clips: [],
+      clipTargetMax: limit,
+      creditOperationId: 'op',
+      creditOutputSeconds: limit * 60,
+      videoDuration: 3000,
+      sourceObjectKey: 'source',
+      status: JobStatus.DETECTING_HIGHLIGHTS,
+      renderManifestReady: false,
+    };
+    const queued = new Map<string, any>();
+    const model: any = {
+      updateOne: jest.fn((_filter, update) => ({
+        exec: async () => {
+          Object.assign(parent, update.$set);
+          return { modifiedCount: 1 };
+        },
+      })),
+    };
+    const queue: any = {
+      getJob: async (id) => queued.get(id),
+      add: jest.fn(async (_name, _data, options) => {
+        queued.set(options.jobId, { getState: async () => 'waiting' });
+      }),
+    };
+    const service = Object.create(JobsService.prototype) as any;
+    Object.assign(service, {
+      jobModel: model,
+      renderQueue: queue,
+      configService: new ConfigService(),
+      logger: { log: jest.fn() },
+      findJob: async () => parent,
+      dispatchMediaJobs: async (_id, work) => work(),
+    });
+    const highlights = Array.from({ length: 12 }, (_, i) => ({
+      startTime: i * 80,
+      endTime: i * 80 + 45,
+      reason: 'Moment',
+      score: 0.9,
+      clipTitle: 'Moment',
+      clipDescription: 'Moment',
+      style: 'curiosity-hook',
+    }));
+    await service.prepareRenderManifest(jobId, highlights);
+    expect(parent.clips).toHaveLength(limit);
+    const ids = parent.clips.map((c) => String(c._id));
+    await service.prepareRenderManifest(jobId, highlights);
+    expect(parent.clips.map((c) => String(c._id))).toEqual(ids);
+    await service.enqueueRenders(jobId);
+    await service.enqueueRenders(jobId);
+    expect(queue.add).toHaveBeenCalledTimes(limit);
+    expect(parent.generationSummary.shortfall).toBe(0);
+  },
+);

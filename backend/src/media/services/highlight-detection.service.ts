@@ -150,7 +150,7 @@ const CHUNK_MAX_OUTPUT_TOKENS = 2500; // generous room for hidden reasoning + fi
 const CHUNK_OVERLAP_SECONDS = 45;
 const MIN_SEGMENT_CHARS = 8;
 const HIGHLIGHTS_PER_CHUNK = 2;
-const FINAL_HIGHLIGHT_COUNT = 8;
+const FINAL_HIGHLIGHT_COUNT = 9;
 const MAX_RATE_LIMIT_RETRIES = 3;
 
 const TPM_LIMIT = 8000;
@@ -245,7 +245,12 @@ export class HighlightDetectionService {
 
   async detectHighlights(
     segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string; videoDuration?: number },
+    options?: {
+      customPrompt?: string;
+      model?: string;
+      videoDuration?: number;
+      maxHighlights?: number;
+    },
   ): Promise<HighlightDto[]> {
     const res = await this.detectHighlightsWithMetadata(segments, options);
     return res.highlights;
@@ -253,7 +258,12 @@ export class HighlightDetectionService {
 
   async detectHighlightsWithMetadata(
     segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string; videoDuration?: number },
+    options?: {
+      customPrompt?: string;
+      model?: string;
+      videoDuration?: number;
+      maxHighlights?: number;
+    },
   ): Promise<HighlightDetectionResult> {
     const filtered = segments.filter(
       (s) => s.text.trim().length >= MIN_SEGMENT_CHARS,
@@ -264,17 +274,88 @@ export class HighlightDetectionService {
       );
     }
     const usableSegments = filtered.length > 0 ? filtered : segments;
+    if (!usableSegments.length)
+      throw new Error('No usable transcript for highlight detection');
 
-    if (this.provider === 'groq') {
-      return this.detectHighlightsGroqWithMetadata(usableSegments, options);
+    const duration =
+      options?.videoDuration ||
+      Math.max(...usableSegments.map((s) => s.endTime));
+    const max = options?.maxHighlights === 6 ? 6 : 9;
+    const result =
+      this.provider === 'groq'
+        ? await this.detectHighlightsGroqWithMetadata(usableSegments, options)
+        : await this.detectHighlightsDirectWithMetadata(
+            usableSegments,
+            options,
+          );
+    let accepted = this.validateCandidates(
+      result.highlights,
+      usableSegments,
+      duration,
+      max,
+    );
+    // One bounded recovery excerpt; never invent missing moments or loop until a quota is filled.
+    if (accepted.length < 6 && duration >= 600) {
+      const uncovered = usableSegments.filter(
+        (s) =>
+          !accepted.some(
+            (h) => s.startTime < h.endTime && s.endTime > h.startTime,
+          ),
+      );
+      const excerpt = this.chunkSegments(uncovered)[0];
+      if (excerpt?.length) {
+        const recoveryOptions = {
+          ...options,
+          videoDuration: duration,
+          maxHighlights: Math.max(1, max - accepted.length),
+          customPrompt: `${options?.customPrompt || ''}\nFind up to ${max - accepted.length} additional distinct highlights only in this uncovered excerpt. Never overlap these accepted ranges: ${JSON.stringify(accepted.map((h) => [h.startTime, h.endTime]))}. Return fewer when no genuine complete moments exist.`,
+        };
+        try {
+          assertNotCancelled();
+          const recovered =
+            this.provider === 'groq'
+              ? await this.detectHighlightsInChunkWithMetadata(
+                  excerpt,
+                  recoveryOptions,
+                  duration,
+                )
+              : await this.detectHighlightsDirectWithMetadata(
+                  excerpt,
+                  recoveryOptions,
+                );
+          accepted = this.validateCandidates(
+            [...accepted, ...recovered.highlights],
+            usableSegments,
+            duration,
+            max,
+          );
+        } catch {
+          assertNotCancelled();
+          this.logger.warn({
+            event: 'highlights.recovery.failed',
+            retained: accepted.length,
+          });
+        }
+      }
     }
-
-    return this.detectHighlightsDirectWithMetadata(usableSegments, options);
+    this.logger.log({
+      event: 'highlights.selected',
+      requestedMin: 6,
+      requestedMax: max,
+      accepted: accepted.length,
+      shortfall: Math.max(0, 6 - accepted.length),
+    });
+    return { ...result, highlights: accepted };
   }
 
   private async detectHighlightsDirectWithMetadata(
     segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string; videoDuration?: number },
+    options?: {
+      customPrompt?: string;
+      model?: string;
+      videoDuration?: number;
+      maxHighlights?: number;
+    },
   ): Promise<HighlightDetectionResult> {
     this.logger.log(
       `Detecting highlights for full transcript in a single call (${segments.length} segments) — provider=${this.provider}, model=${this.resolvedModelName}`,
@@ -290,7 +371,10 @@ export class HighlightDetectionService {
     const totalDuration =
       segments.length > 0 ? segments[segments.length - 1].endTime : 0;
     const duration = options?.videoDuration ?? totalDuration;
-    const systemPrompt = buildHighlightSystemPrompt(duration);
+    const systemPrompt = buildHighlightSystemPrompt(
+      duration,
+      options?.maxHighlights,
+    );
 
     const userPrompt = options?.customPrompt
       ? `${options.customPrompt}\n\nFull Video Transcript:\n${transcriptText}`
@@ -305,7 +389,7 @@ export class HighlightDetectionService {
         schemaDescription: 'List of video highlights and metadata',
         schema: HighlightsResponseSchema,
         system: systemPrompt,
-        prompt: `${userPrompt}\n\nReturn at most ${FINAL_HIGHLIGHT_COUNT} highlights in one complete JSON object. Keep descriptions concise.`,
+        prompt: `${userPrompt}\n\nReturn at most ${options?.maxHighlights || FINAL_HIGHLIGHT_COUNT} highlights in one complete JSON object. Keep descriptions concise.`,
         temperature: 0.3,
         maxOutputTokens: DIRECT_MAX_OUTPUT_TOKENS,
         maxRetries: 2,
@@ -337,7 +421,7 @@ export class HighlightDetectionService {
                 error.finishReason === 'length'
                   ? DIRECT_MAX_OUTPUT_TOKENS * 2
                   : DIRECT_MAX_OUTPUT_TOKENS,
-              prompt: `${userPrompt}\n\nReturn only one complete JSON object matching the schema, without Markdown or commentary. Return at most ${FINAL_HIGHLIGHT_COUNT} highlights and keep descriptions concise.`,
+              prompt: `${userPrompt}\n\nReturn only one complete JSON object matching the schema, without Markdown or commentary. Return at most ${options?.maxHighlights || FINAL_HIGHLIGHT_COUNT} highlights and keep descriptions concise.`,
             })
           ).object;
         }
@@ -345,9 +429,7 @@ export class HighlightDetectionService {
 
       const dtos = this.toDto(parsedObj);
       const merged = this.mergeCandidates(dtos);
-      const topHighlights = merged
-        .sort((a, b) => b.score - a.score)
-        .slice(0, FINAL_HIGHLIGHT_COUNT);
+      const topHighlights = merged.sort((a, b) => b.score - a.score);
 
       return {
         videoTitle: parsedObj.videoTitle || '',
@@ -393,7 +475,12 @@ export class HighlightDetectionService {
 
   private async detectHighlightsGroqWithMetadata(
     segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string; videoDuration?: number },
+    options?: {
+      customPrompt?: string;
+      model?: string;
+      videoDuration?: number;
+      maxHighlights?: number;
+    },
   ): Promise<HighlightDetectionResult> {
     const chunks = this.chunkSegments(segments);
     this.logger.log(
@@ -429,9 +516,7 @@ export class HighlightDetectionService {
     }
 
     const merged = this.mergeCandidates(allCandidates);
-    const topHighlights = merged
-      .sort((a, b) => b.score - a.score)
-      .slice(0, FINAL_HIGHLIGHT_COUNT);
+    const topHighlights = merged.sort((a, b) => b.score - a.score);
 
     return {
       videoTitle,
@@ -516,21 +601,20 @@ export class HighlightDetectionService {
    * diagnosing WHY validation failed (truncation vs. malformed structure
    * vs. something else), and previously was never logged.
    */
-  private logFullErrorBody(e: any, label: string): void {
-    if (e?.responseBody) {
-      this.logger.error(`${label} — responseBody: ${e.responseBody}`);
-    } else if (e?.lastError?.responseBody) {
-      this.logger.error(
-        `${label} — lastError.responseBody: ${e.lastError.responseBody}`,
-      );
-    } else if (Array.isArray(e?.errors)) {
-      e.errors.forEach((err: any, i: number) => {
-        if (err?.responseBody)
-          this.logger.error(
-            `${label} — errors[${i}].responseBody: ${err.responseBody}`,
-          );
-      });
-    }
+  private logFullErrorBody(error: unknown, label: string): void {
+    const e = error as
+      | {
+          statusCode?: number;
+          name?: string;
+          lastError?: { statusCode?: number };
+        }
+      | undefined;
+    this.logger.error({
+      event: 'highlights.provider.failed',
+      label,
+      statusCode: e?.statusCode ?? e?.lastError?.statusCode,
+      name: e?.name,
+    });
   }
 
   private buildGenerateObjectOptions(
@@ -564,7 +648,12 @@ export class HighlightDetectionService {
 
   private async detectHighlightsInChunk(
     segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string; videoDuration?: number },
+    options?: {
+      customPrompt?: string;
+      model?: string;
+      videoDuration?: number;
+      maxHighlights?: number;
+    },
     videoDuration = 0,
     rateLimitRetryCount = 0,
   ): Promise<HighlightDto[]> {
@@ -579,7 +668,12 @@ export class HighlightDetectionService {
 
   private async detectHighlightsInChunkWithMetadata(
     segments: TranscriptSegmentDto[],
-    options?: { customPrompt?: string; model?: string; videoDuration?: number },
+    options?: {
+      customPrompt?: string;
+      model?: string;
+      videoDuration?: number;
+      maxHighlights?: number;
+    },
     videoDuration = 0,
     rateLimitRetryCount = 0,
   ): Promise<HighlightDetectionResult> {
@@ -590,7 +684,10 @@ export class HighlightDetectionService {
       )
       .join('\n');
 
-    const systemPrompt = buildHighlightSystemPrompt(videoDuration);
+    const systemPrompt = buildHighlightSystemPrompt(
+      videoDuration,
+      options?.maxHighlights,
+    );
 
     const userPrompt = options?.customPrompt
       ? `${options.customPrompt}\n\nTranscript excerpt:\n${transcriptText}`
@@ -770,9 +867,7 @@ export class HighlightDetectionService {
           e?.constructor?.name === 'AI_APICallError' ||
           e?.name === 'AI_APICallError'
         ) {
-          this.logger.error(
-            `Chunk AI_APICallError — status: ${e.statusCode}, responseBody: ${e.responseBody}`,
-          );
+          this.logger.error(`Chunk AI_APICallError — status: ${e.statusCode}`);
         } else if (e?.name === 'AI_RetryError' || e?.name === 'RetryError') {
           this.logger.error(
             `Chunk RetryError — lastError: ${e?.lastError?.message ?? e?.message}`,
@@ -794,11 +889,18 @@ export class HighlightDetectionService {
   private toDto(
     object: z.infer<typeof HighlightsResponseSchema>,
   ): HighlightDto[] {
+    this.logger.log({
+      event: 'highlights.parsed',
+      returned: object.highlights?.length || 0,
+    });
     return (object.highlights || [])
       .filter((h) => {
         const valid = h.endTime > h.startTime;
         if (!valid)
-          this.logger.warn(`Dropping invalid highlight: ${JSON.stringify(h)}`);
+          this.logger.warn({
+            event: 'highlights.rejected',
+            reason: 'invalid_timestamp',
+          });
         return valid;
       })
       .map((h, index) => {
@@ -828,6 +930,55 @@ export class HighlightDetectionService {
       });
   }
 
+  private validateCandidates(
+    candidates: HighlightDto[],
+    segments: TranscriptSegmentDto[],
+    duration: number,
+    max: number,
+  ) {
+    const accepted: HighlightDto[] = [];
+    const rejected: Record<string, number> = {};
+    for (const h of [...candidates].sort((a, b) => b.score - a.score)) {
+      const seconds = h.endTime - h.startTime;
+      const covered = segments.reduce(
+        (total, s) =>
+          total +
+          Math.max(
+            0,
+            Math.min(h.endTime, s.endTime) - Math.max(h.startTime, s.startTime),
+          ),
+        0,
+      );
+      const reason =
+        !Number.isFinite(h.startTime) ||
+        !Number.isFinite(h.endTime) ||
+        h.startTime < 0 ||
+        h.endTime > duration ||
+        seconds <= 0
+          ? 'invalid_timestamp'
+          : seconds > 60 || (duration >= 600 && seconds < 45)
+            ? 'duration'
+            : covered < seconds * 0.5
+              ? 'transcript_coverage'
+              : accepted.some(
+                    (a) => h.startTime < a.endTime && h.endTime > a.startTime,
+                  )
+                ? 'overlap'
+                : accepted.length >= max
+                  ? 'plan_limit'
+                  : undefined;
+      if (reason) rejected[reason] = (rejected[reason] || 0) + 1;
+      else accepted.push(h);
+    }
+    this.logger.log({
+      event: 'highlights.filtered',
+      parsed: candidates.length,
+      accepted: accepted.length,
+      rejected,
+    });
+    return accepted;
+  }
+
   private mergeCandidates(candidates: HighlightDto[]): HighlightDto[] {
     const sorted = [...candidates].sort((a, b) => b.score - a.score);
     const kept: HighlightDto[] = [];
@@ -845,6 +996,12 @@ export class HighlightDetectionService {
       if (!overlapsExisting) kept.push(candidate);
     }
 
+    this.logger.log({
+      event: 'highlights.deduplicated',
+      parsed: candidates.length,
+      accepted: kept.length,
+      rejectedOverlap: candidates.length - kept.length,
+    });
     return kept;
   }
 }

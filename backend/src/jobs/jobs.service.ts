@@ -1,3 +1,4 @@
+import { highlightPolicy } from '../media/highlight-policy';
 import { hostname } from 'node:os';
 import { CreditsService } from '../billing/credits.service';
 import { clipPrice, eligibleClipPrice } from '../billing/credit-pricing';
@@ -273,7 +274,12 @@ export class JobsService {
   async createJob(userId: string, dto: CreateJobDto): Promise<JobDocument> {
     let operationId: string | undefined;
     let relatedId: string | undefined;
-    if (this.credits?.enabled) {
+    let clipTargetMax: number | undefined;
+    if (!this.credits?.enabled)
+      throw new ServiceUnavailableException(
+        'Usage-based billing is not active. New processing is temporarily unavailable.',
+      );
+    if (this.credits.enabled) {
       if (
         !dto.operationId ||
         !dto.sourceSeconds ||
@@ -307,6 +313,12 @@ export class JobsService {
         throw new ConflictException(
           'Advanced clip options require a paid plan',
         );
+      const policy = highlightPolicy(user.plan, dto.sourceSeconds);
+      if (dto.maxOutputSeconds < policy.outputSeconds)
+        throw new ConflictException(
+          `Output budget is too small for the ${policy.min}–${policy.max} clip target. Review a larger estimate.`,
+        );
+      clipTargetMax = policy.max;
       operationId = `clips-${userId}-${dto.operationId}`;
       const op = await this.credits.reserve({
         userId,
@@ -334,13 +346,12 @@ export class JobsService {
         throw new ConflictException(
           'This operation has ended. Submit a new authorization.',
         );
-    } else {
-      await this.usersService.deductCredit(userId);
     }
 
     const job = new this.jobModel({
       ...(relatedId ? { _id: new Types.ObjectId(relatedId) } : {}),
       creditOperationId: operationId,
+      clipTargetMax,
       creditSourceSeconds: dto.sourceSeconds,
       creditOutputSeconds: dto.maxOutputSeconds,
       userId: new Types.ObjectId(userId),
@@ -399,27 +410,6 @@ export class JobsService {
         stylePreset: dto.stylePreset || 'default',
       },
     });
-
-    if (!operationId)
-      await this.activitiesService.queueCreate({
-        userId: saved.userId,
-        type: ActivityType.CREDIT_DEDUCT,
-        dedupeKey: `activity:job:${saved._id.toString()}:credit-deduct`,
-        category: ActivityCategory.CREDIT,
-        title: 'Credit used',
-        description: '1 credit used for video clip generation.',
-        activityUrl: '/billing',
-        entityType: 'job',
-        entityId: saved._id,
-        actorType: ActivityActorType.USER,
-        actorId: saved.userId,
-        status: ActivityStatus.SUCCESS,
-        severity: ActivitySeverity.INFO,
-        metadata: {
-          amount: 1,
-          jobId: saved._id.toString(),
-        },
-      });
 
     return saved;
   }
@@ -605,6 +595,8 @@ export class JobsService {
       job.renderManifestReady
     )
       return;
+    const requestedCount = highlights.length;
+    highlights = highlights.slice(0, job.clipTargetMax || 9);
     if (job.creditOperationId) {
       let remaining = job.creditOutputSeconds || 0;
       highlights = highlights.flatMap((h) => {
@@ -621,6 +613,25 @@ export class JobsService {
         return [h];
       });
     }
+    this.logger.log({
+      event: 'highlights.manifest',
+      jobId,
+      requested: requestedCount,
+      accepted: highlights.length,
+      rejected: requestedCount - highlights.length,
+    });
+    const generationSummary = {
+      targetMin: 6,
+      targetMax: job.clipTargetMax || 9,
+      accepted: highlights.length,
+      shortfall: Math.max(0, 6 - highlights.length),
+      reason:
+        highlights.length >= 6
+          ? 'target_met'
+          : highlights.length < requestedCount
+            ? 'output_budget_or_clip_limit'
+            : 'insufficient_valid_highlights',
+    };
     const baseUrl = this.configService.get<string>(
       'API_BASE_URL',
       'http://localhost:5001',
@@ -657,6 +668,7 @@ export class JobsService {
           $set: {
             clips,
             renderManifestReady: true,
+            generationSummary,
             status: JobStatus.CUTTING_CLIPS,
             progressPercent: 0,
           },
@@ -820,7 +832,16 @@ export class JobsService {
         { returnDocument: 'after' },
       )
       .exec();
-    if (finalized) await this.finalizeCredits(jobId);
+    if (finalized) {
+      this.logger.log({
+        event: 'highlights.rendered',
+        jobId,
+        persisted: job.clips.length,
+        rendered: job.clips.length - failed,
+        failed,
+      });
+      await this.finalizeCredits(jobId);
+    }
     return finalized;
   }
 

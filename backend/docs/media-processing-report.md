@@ -154,3 +154,70 @@ The matrix covers pipeline concurrency 1, 2, 3 crossed with render concurrency 1
 Provision shared Redis/BullMQ, Mongo and R2 access; supply independent local temp storage and media binaries. Start additional instances with `MEDIA_WORKER_ROLE=pipeline` or `render` and a bounded per-instance concurrency. Jobs contain durable IDs and media references, so they can be consumed on another host without a shared disk or pipeline redesign.
 
 Production infrastructure still needs resource budgets, worker health/graceful shutdown, queue-wait/throughput metrics, source/history retention, and infrastructure-level scaling policy. AWS/ECS/Kubernetes/Docker orchestration and autoscaling were not implemented.
+
+
+## October 9: Caption and highlight fixes
+
+### Incident evidence and verification limits
+
+Read-only inspection of job `6ac7d47f0203cb83c6e452d1` found a completed 3237.661-second source, 817 readable English transcript segments, one persisted highlight (90–138 seconds) and one completed captioned clip. An independently decoded frame from its downloaded MP4 contains square boxes. The defect is burned into the video and occurs downstream of transcription; no player change is needed. The original ASS file and EC2 FFmpeg/font logs are not retained in accessible records. The precise missing font or Fontconfig configuration on that worker has not been verified.
+
+The local Ubuntu 24.04 worker equivalent has FFmpeg 6.1.1 with libass, Fontconfig, FriBidi and HarfBuzz. Its initial font set lacks Hindi and some Urdu glyphs. Missing-font rendering was reproduced; supplied official Noto fonts plus explicit script-font selection render correctly. Merely supplying a fonts directory is insufficient for reliable fallback to an otherwise unregistered script font, so Hindi/Arabic runs select their matching Noto family explicitly. Latin typography, color, outline and positioning retain the selected style. Script text size is normalized to a comparable visible height. Font binaries are QA-only and are not committed.
+
+For the representative production job, the count is already one at persisted highlight detection, before fan-out. It is a legacy job with no V2 authorization, so V2 output-budget filtering cannot explain this incident. Historical raw LLM responses and intermediate counts are unavailable; whether the provider returned one candidate, earlier filtering removed others, or a low-count cache was reused cannot be proven. Existing code accepted and cached a single result without a count-recovery pass.
+
+Separately, a confirmed V2 integration defect defaulted the frontend output budget to 60 seconds. Long-video clips are 45–60 seconds, so the render manifest generally retained only one whole highlight. The existing credit ceiling is correct and remains enforced; the default authorization was insufficient for the intended generation target.
+
+### Implementation
+
+- `CaptionBurningService`: canonical UTF-8 ASS, safe literal text, horizontal margins and smart wrapping; explicit Noto script runs; cached Linux Fontconfig glyph coverage checks; optional `CAPTION_FONTS_DIR`; bounded font-selection diagnostics; missing-glyph renders fail before upload even when FFmpeg exits zero. Both preliminary “glyph not found, selecting another font” and terminal fallback failures are distinguished, so successful fallback is accepted. ASS paths follow the output filename rather than overwriting the input path.
+- `highlight-policy.ts`: backend-owned Free target 6/max 6, paid target 6–9/max 9. No additional authoritative count restriction was found in the existing backend plan entitlements. Budgets cover up to 60 seconds per target clip, bounded by source length.
+- `JobsController.estimate()` / `JobsService.createJob()`: reject insufficient requested output budgets explicitly; preflight caps short-source estimates to source length; admission stores the backend clip target. No silent single-clip alternative is introduced. Users lacking credits see the existing insufficient-credit/upgrade route.
+- `JobsProcessor`: passes measured source duration and persisted plan target to detection; plan/version-specific highlight cache keys avoid replaying old low-count caches. Long-source results below six are not accepted as reusable default caches. Existing persisted job highlights/manifests remain resumable.
+- `HighlightDetectionService`: keeps the existing provider/JSON-recovery paths, validates timestamps/source coverage/duration, rejects overlapping moments, applies plan limits after validation and performs at most one additional uncovered-excerpt recovery pass for eligible long sources. This pass uses existing metered provider calls and existing bounded SDK/provider retries. It never fills quotas with synthetic clips or timestamps. Short sources or genuine low-count results return the valid subset.
+- `JobsService.prepareRenderManifest()`: preserves whole-clip budget enforcement and stable IDs; records target/accepted/shortfall summary. Diagnostics distinguish returned/parsed/filtered/deduplicated/persisted/rendered counts without full transcript logging. Terminal job completion still waits for all children.
+- Main submission uses six/nine-minute default output budgets and confirms the authoritative returned budget. My Clips displays a shortfall explanation. Player UI is unchanged. Ledger formula, cumulative settlement, retry operations and Paddle prices remain unchanged.
+
+At exactly 50 minutes, Free authorization for six minutes of output is 10 + 6 = 16 credits; paid authorization for nine minutes is 10 + 9 = 19. These are reservation ceilings, not final charges. Six 45-second delivered clips charge 10 + ceil(270/60) = 15. A single 45-second delivered clip still charges 11, and unused authorization is released. Existing Free monthly allocation remains five credits; a large-source six-clip authorization may require carried-over/referral credits or an upgrade. The implementation reports insufficient funds rather than reducing output silently.
+
+### Required Linux deployment checks (not executed on production)
+
+Run as the operator on the actual EC2 worker after draining rendering. Install supported packages on Ubuntu/Debian:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y ffmpeg fontconfig fonts-noto-core fonts-dejavu-core fonts-liberation
+fc-cache -f
+ffmpeg -version
+ffmpeg -hide_banner -filters | grep subtitles
+fc-list : family | sort -u
+fc-match Montserrat
+fc-match 'Noto Sans Arabic:charset=06c1 06d2'
+fc-match 'Noto Sans Devanagari:charset=0939 0940'
+```
+
+Check these commands under the same OS account and Fontconfig environment as PM2; a developer Windows font or root-only font is not sufficient. Inspect `FONTCONFIG_FILE`/`FONTCONFIG_PATH` locally for stale overrides. Verify libass has HarfBuzz complex shaping and FriBidi bidi support in render logs. Generic fallback styles work with the installed fonts; install licensed Montserrat/Impact/Georgia files separately if exact Latin font identity is required. Do not copy proprietary Windows fonts blindly.
+
+Optionally set `CAPTION_FONTS_DIR` to an absolute readable folder of reviewed `.ttf`/`.otf` fonts. Files used for glyph preflight are directly inside that folder. Script families must be named `Noto Sans Arabic` and `Noto Sans Devanagari`. Restart the compatible media worker after changing fonts/configuration because coverage is cached. No font install, production restart, retroactive charge or historical job regeneration was performed by this task.
+
+Build and run on a dedicated Linux staging/test worker:
+
+```sh
+npm run build
+MEDIA_CAPTION_QA_DIR=/tmp/blynta-caption-qa node test/caption-render-smoke.cjs
+```
+
+The smoke test generates actual MP4s and extracted PNG frames for English, Hindi, Urdu, both mixed-script cases, long English/Hindi/Urdu, special punctuation and all ten existing preset/editor style configurations (19 cases). It rejects terminal glyph failures and checks visible caption pixels remain within safe vertical-frame bounds. Review the PNGs and play the MP4s as well: pixel bounds alone do not prove shaping or textual correctness. Noto font sources and script coverage: [official Noto usage guide](https://github.com/notofonts/noto-docs/blob/main/docs/website/use.md).
+
+Deploy API and media worker from the same reviewed build and update the main frontend; follow the billing rollout guide for V2 activation. Verify a new staging job on Free and paid plans, then one canary account: log counts, clip IDs, delivered durations, reservation/charge/release entries and shortfall message. Do not reset existing manifests or reprocess historical user jobs automatically. Recovery adds internal provider usage, while customer credits still depend only on eligible delivery within the original authorization.
+
+### Test results and remaining limitations
+
+- Focused caption/highlight/fan-out/render/recovery/billing suite: **125 passed, zero failed, three skipped**.
+- Full backend suite: **372 passed, two existing unrelated health/notification failures, three skipped MongoDB tests**.
+- Backend production build and main app typecheck pass. Caption/policy/prompt lint passes; frontend lint has only an existing image-element warning. Broad legacy service lint retains existing enum/unsafe-any issues and is not reported as clean.
+- Billing UI regression tests: **four passed**.
+- Actual Linux caption smoke: **19 MP4s** rendered; extracted frames visually inspected for script shaping and representative styling, with safe-bound checks across all cases. This is local Ubuntu verification, not EC2 verification.
+- Mocked tests cover Free/paid limits, bounded count recovery, retained valid shortfall, invalid/overlapping/silent ranges, six/nine persisted and queued clips, duplicate fan-out, worker failures/retries, recovery and unchanged accounting. These do not prove live provider quality or live BullMQ/replica-set behavior.
+
+Remaining gates: actual EC2 font/config/build inspection (including `LLM_PROVIDER` and `LLM_MODEL_NAME`, without printing API keys), provider-enabled staging end-to-end processing and the previously documented dedicated MongoDB tests. A generation target is not a guarantee that six genuine moments exist; valid shortfalls remain explicit. Existing animation metadata/behavior is retained; this change does not add new karaoke/word-pop timing.

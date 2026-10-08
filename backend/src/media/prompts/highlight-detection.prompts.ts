@@ -5,8 +5,9 @@ import { EDITOR_STYLES, EditorStyleKey } from '../editor-styles';
 // Every generation uses this as its foundation, with the per-style blocks
 // and output-format instructions appended after it.
 // ---------------------------------------------------------------------------
-export function buildBasePrompt(): string {
-  return `You are a professional video editor and virality expert. Given a complete timestamped transcript from a video, identify AT LEAST 6 (ideally 6–8) of the most engaging, interesting, and self-contained moments suitable for short vertical clips. Never return fewer than 6 unless the transcript is genuinely too short to contain 6 non-overlapping moments.
+export function buildBasePrompt(maxHighlights = 9): string {
+  const minimum = Math.min(6, maxHighlights);
+  return `You are a professional video editor and virality expert. Given a complete timestamped transcript from a video, identify ${minimum}–${maxHighlights} of the most engaging, interesting, and self-contained moments suitable for short vertical clips. Return fewer only when the transcript cannot support ${minimum} genuine, complete, non-overlapping moments. Never invent content or timestamps. Never exceed ${maxHighlights} highlights.
 
 For each moment, evaluate its specific conversational context, emotional delivery, pacing, and subject matter, then assign it the MOST FITTING editing style from the list below — do not default every clip to the same style.`;
 }
@@ -144,9 +145,10 @@ Each maps to a caption/zoom/emoji treatment your editor (ffmpeg) applies — the
 // ---------------------------------------------------------------------------
 export function buildHighlightSystemPrompt(
   videoDurationSeconds: number,
+  maxHighlights = 9,
 ): string {
   return [
-    buildBasePrompt(),
+    buildBasePrompt(maxHighlights),
     buildDurationRules(videoDurationSeconds),
     buildAllStyleBlocks(),
     buildOutputFormatInstructions(),

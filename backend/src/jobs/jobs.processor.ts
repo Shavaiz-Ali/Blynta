@@ -549,7 +549,15 @@ export class JobsProcessor
       }
       const effectiveHighlightPreset = resolveStylePreset(effectivePresetKey);
 
-      const options: { customPrompt?: string; model?: string } = {};
+      const options: {
+        customPrompt?: string;
+        model?: string;
+        videoDuration: number;
+        maxHighlights: number;
+      } = {
+        videoDuration: job.videoDuration || 0,
+        maxHighlights: job.clipTargetMax || (isPaidPlan ? 9 : 6),
+      };
       if (effectiveHighlightPreset.highlightPrompt) {
         options.customPrompt = effectiveHighlightPreset.highlightPrompt;
       }
@@ -596,7 +604,8 @@ export class JobsProcessor
         });
 
         const presetMap = sourceVideo?.defaultHighlightsByPreset;
-        const cachedHighlights = presetMap?.get(effectivePresetKey);
+        const highlightCacheKey = `${effectivePresetKey}:v2:${options.maxHighlights}`;
+        const cachedHighlights = presetMap?.get(highlightCacheKey);
         let detectionResult: {
           videoTitle?: string;
           videoDescription?: string;
@@ -609,7 +618,7 @@ export class JobsProcessor
           sourceVideo &&
           !usingCustomOptions &&
           cachedHighlights &&
-          cachedHighlights.length > 0
+          (cachedHighlights.length >= 6 || (job.videoDuration || 0) < 600)
         ) {
           this.logger.log(
             `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id.toString()}`,
@@ -624,10 +633,14 @@ export class JobsProcessor
           highlights = detectionResult.highlights;
 
           // Save default highlights on the SourceVideo so future jobs with this video skip the LLM call
-          if (!usingCustomOptions && sourceVideo) {
+          if (
+            !usingCustomOptions &&
+            sourceVideo &&
+            (highlights.length >= 6 || (job.videoDuration || 0) < 600)
+          ) {
             await this.sourceVideoService.saveDefaultHighlights(
               sourceVideo._id.toString(),
-              effectivePresetKey,
+              highlightCacheKey,
               highlights,
             );
             this.logger.log(
@@ -667,6 +680,7 @@ export class JobsProcessor
       assertNotCancelled();
       await this.jobsService.enqueueRenders(jobId);
       await this.completion.finalize(jobId);
+      const persisted = await this.jobsService.findJob(jobId);
       this.logger.log(
         JSON.stringify({
           event: 'pipeline_fanout',
@@ -677,7 +691,8 @@ export class JobsProcessor
           retryCount: bullJob.attemptsMade,
           metadata,
           workload: estimateVideoWorkload(metadata),
-          clips: highlights.length,
+          acceptedHighlights: highlights.length,
+          persistedClips: persisted?.clips.length || 0,
         }),
       );
     } catch (err) {

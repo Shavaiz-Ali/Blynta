@@ -26,6 +26,12 @@ export class CreditsRecoveryService {
   ) {}
   @Cron(CronExpression.EVERY_MINUTE)
   async recover() {
+    await this.credits.recoverUsage().catch((error) =>
+      this.logger.error({
+        event: 'billing.usage.recovery.failed',
+        error: String(error),
+      }),
+    );
     if (this.credits.enabled) {
       const freeUsers = await this.users
         .find({
@@ -85,7 +91,11 @@ export class CreditsRecoveryService {
             Date.now() - (op.executionStartedAt || op.updatedAt).getTime() >
             5 * 60_000
           )
-            await this.credits.settle(op.operationId, 0); // Provider request has a 45-second timeout.
+            await this.credits.settle(op.operationId, 0, undefined, {
+              generation: op.generation,
+              executionToken: op.executionToken,
+              missingResult: true,
+            }); // Provider request has a 45-second timeout.
         } else if (op.kind === 'studio-transcription') {
           const assets = this.renders.db.model<StudioAsset>('StudioAsset');
           const a = await assets.findById(op.relatedId);

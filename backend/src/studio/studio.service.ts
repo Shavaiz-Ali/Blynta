@@ -656,9 +656,15 @@ export class StudioService {
         'AI operation ID is already used for different work',
       );
     if (existingAi?.result !== undefined)
-      return this.credits!.executeAi(
-        existingAi.operationId,
-        async () => existingAi.result,
+      return this.credits!.executeAi(existingAi.operationId, async () =>
+        parse(
+          proposalSchema.extend({
+            id: z.string(),
+            prompt: z.string(),
+            applied: z.boolean(),
+          }),
+          existingAi.result,
+        ),
       );
     const aiBudget = existingAi
       ? {

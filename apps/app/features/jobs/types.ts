@@ -96,6 +96,13 @@ export interface CreateJobInput {
 }
 
 export interface Job {
+  generationSummary?: {
+    targetMin: number;
+    targetMax: number;
+    accepted: number;
+    shortfall: number;
+    reason: string;
+  };
   billing?: {
     authorized: number;
     held: number;

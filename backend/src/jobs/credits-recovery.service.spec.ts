@@ -16,6 +16,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   const credits = {
+    recoverUsage: jest.fn().mockResolvedValue(undefined),
     enabled: false,
     operations: {
       find: jest

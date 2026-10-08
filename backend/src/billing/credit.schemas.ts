@@ -32,6 +32,7 @@ export interface CreditOperation {
   kind?: 'clips' | 'studio-export' | 'studio-ai' | 'studio-transcription';
   result?: unknown;
   executionStartedAt?: Date;
+  executionToken?: string;
   userId: string;
   operationId: string;
   product: CreditProduct;
@@ -48,18 +49,76 @@ export interface CreditOperation {
   createdAt: Date;
   updatedAt: Date;
 }
+const integer = (nonnegative = true) => ({
+  type: Number,
+  required: true,
+  validate: {
+    validator: (n: number) =>
+      Number.isSafeInteger(n) && (!nonnegative || n >= 0),
+    message: 'Credit quantity must be a safe integer in its permitted range',
+  },
+});
+const PricingSchema = new Schema<PricingSnapshot>(
+  {
+    version: { type: String, required: true, immutable: true, maxlength: 80 },
+    sourceSeconds: {
+      type: Number,
+      required: true,
+      immutable: true,
+      validate: (n: number) => Number.isFinite(n) && n > 0,
+    },
+    outputSeconds: {
+      type: Number,
+      required: true,
+      immutable: true,
+      validate: (n: number) => Number.isFinite(n) && n > 0,
+    },
+    studioSeconds: {
+      type: Number,
+      required: true,
+      immutable: true,
+      validate: (n: number) => Number.isFinite(n) && n > 0,
+    },
+    studioModifier: {
+      type: Number,
+      required: true,
+      immutable: true,
+      validate: (n: number) => Number.isFinite(n) && n > 0,
+    },
+    aiCredits: { ...integer(), immutable: true, min: 1 },
+  },
+  { _id: false },
+);
 export const CreditEntrySchema = new Schema<CreditEntry>(
   {
     userId: { type: String, required: true, immutable: true },
     key: { type: String, required: true, immutable: true },
     operationId: { type: String, required: true, immutable: true },
-    product: { type: String, required: true, immutable: true },
-    type: { type: String, required: true, immutable: true },
-    amount: { type: Number, required: true, immutable: true },
-    availableDelta: { type: Number, required: true, immutable: true },
-    reservedDelta: { type: Number, required: true, immutable: true },
-    availableAfter: { type: Number, required: true, immutable: true },
-    reservedAfter: { type: Number, required: true, immutable: true },
+    product: {
+      type: String,
+      required: true,
+      immutable: true,
+      enum: ['ai-clips', 'studio', 'account'],
+    },
+    type: {
+      type: String,
+      required: true,
+      immutable: true,
+      enum: [
+        'opening',
+        'grant',
+        'reserve',
+        'charge',
+        'release',
+        'refund',
+        'adjustment',
+      ],
+    },
+    amount: { ...integer(), immutable: true },
+    availableDelta: { ...integer(false), immutable: true },
+    reservedDelta: { ...integer(false), immutable: true },
+    availableAfter: { ...integer(), immutable: true },
+    reservedAfter: { ...integer(), immutable: true },
     pricingVersion: { type: String, immutable: true },
     relatedId: { type: String, immutable: true },
     description: { type: String, immutable: true },
@@ -89,22 +148,46 @@ for (const action of [
 export const CreditOperationSchema = new Schema<CreditOperation>(
   {
     deliveredOutputs: { type: [{ id: String, seconds: Number }], default: [] },
-    kind: String,
+    kind: {
+      type: String,
+      enum: ['clips', 'studio-export', 'studio-ai', 'studio-transcription'],
+    },
     result: Schema.Types.Mixed,
     executionStartedAt: Date,
+    executionToken: String,
     userId: { type: String, required: true, immutable: true },
     operationId: { type: String, required: true, immutable: true },
-    product: { type: String, immutable: true },
-    relatedId: { type: String, immutable: true },
-    status: { type: String, default: 'reserved' },
-    authorized: { type: Number, immutable: true },
-    held: Number,
-    charged: { type: Number, default: 0 },
-    pricing: { type: Schema.Types.Mixed, required: true, immutable: true },
-    sourceSeconds: { type: Number, immutable: true },
-    maxOutputSeconds: { type: Number, immutable: true },
-    fingerprint: { type: String, immutable: true },
-    generation: { type: Number, default: 0 },
+    product: {
+      type: String,
+      required: true,
+      immutable: true,
+      enum: ['ai-clips', 'studio'],
+    },
+    relatedId: { type: String, required: true, immutable: true },
+    status: {
+      type: String,
+      required: true,
+      enum: ['reserved', 'settled'],
+      default: 'reserved',
+    },
+    authorized: { ...integer(), immutable: true },
+    held: integer(),
+    charged: { ...integer(), default: 0 },
+    pricing: { type: PricingSchema, required: true, immutable: true },
+    sourceSeconds: {
+      type: Number,
+      required: true,
+      immutable: true,
+      validate: (n: number) => Number.isFinite(n) && n >= 0,
+    },
+    maxOutputSeconds: {
+      type: Number,
+      required: true,
+      immutable: true,
+      validate: (n: number) => Number.isFinite(n) && n >= 0,
+    },
+    fingerprint: { type: String, required: true, immutable: true },
+    generation: { ...integer(), default: 0 },
   },
   { timestamps: true },
 );
@@ -119,13 +202,50 @@ export interface ProcessingUsage {
   metrics: Record<string, unknown>;
 }
 export const ProcessingUsageSchema = new Schema<ProcessingUsage>({
-  operationId: String,
-  attemptId: String,
-  stage: String,
+  operationId: { type: String, required: true },
+  attemptId: { type: String, required: true },
+  stage: { type: String, required: true },
   recordedAt: { type: Date, default: Date.now },
-  metrics: Schema.Types.Mixed,
+  metrics: { type: Schema.Types.Mixed, required: true },
 });
 ProcessingUsageSchema.index(
   { operationId: 1, attemptId: 1, stage: 1 },
   { unique: true },
 );
+
+CreditEntrySchema.pre('save', function () {
+  if (!this.isNew && this.isModified())
+    throw new Error('Credit ledger is append-only');
+});
+CreditEntrySchema.pre(
+  'deleteOne',
+  { document: true, query: false },
+  function () {
+    throw new Error('Credit ledger is append-only');
+  },
+);
+CreditEntrySchema.pre('bulkWrite', function (operations) {
+  if (operations.some((operation) => !('insertOne' in operation)))
+    throw new Error('Credit ledger is append-only');
+});
+for (const action of [
+  'updateOne',
+  'updateMany',
+  'findOneAndUpdate',
+  'replaceOne',
+  'findOneAndReplace',
+] as const) {
+  CreditOperationSchema.pre(action, function () {
+    this.setOptions({ runValidators: true });
+  });
+}
+
+CreditOperationSchema.pre('validate', function () {
+  if (
+    this.charged > this.authorized ||
+    this.held + this.charged > this.authorized
+  )
+    this.invalidate('held', 'Operation exceeds its authorization');
+  if (this.status === 'settled' && this.held !== 0)
+    this.invalidate('held', 'Settled operation cannot retain a hold');
+});

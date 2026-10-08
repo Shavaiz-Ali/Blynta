@@ -146,7 +146,7 @@ export class VideoDownloadService {
     };
   }
 
-  private async fetchVideoMetadata(sourceUrl: string): Promise<{
+  async fetchVideoMetadata(sourceUrl: string): Promise<{
     title: string;
     uploader: string;
     thumbnailUrl: string;
@@ -154,6 +154,11 @@ export class VideoDownloadService {
   }> {
     return new Promise((resolve) => {
       const ytDlpArgs = [
+        '--no-playlist',
+        '--socket-timeout',
+        '15',
+        '--retries',
+        '1',
         '--js-runtimes',
         'deno',
         '--print',
@@ -170,13 +175,41 @@ export class VideoDownloadService {
 
       ytDlpArgs.push(sourceUrl);
 
-      const proc = spawn('yt-dlp', ytDlpArgs, { detached: true });
+      const proc = spawn('yt-dlp', ytDlpArgs, {
+        detached: true,
+        windowsHide: true,
+      });
+      const timeout = setTimeout(() => {
+        try {
+          if (process.platform !== 'win32' && proc.pid) {
+            process.kill(-proc.pid, 'SIGKILL');
+          } else {
+            proc.kill('SIGKILL');
+          }
+        } catch {
+          // The subprocess may already have exited.
+        }
+        resolve({
+          title: 'Untitled video',
+          uploader: '',
+          thumbnailUrl: '',
+          duration: 0,
+        });
+      }, 30000);
+      proc.once('close', () => clearTimeout(timeout));
+      proc.once('error', () => clearTimeout(timeout));
       this.processRegistry.register(proc);
 
       let output = '';
       let stderr = '';
-      proc.stdout?.on('data', (d) => (output += d.toString()));
-      proc.stderr?.on('data', (d) => (stderr += d.toString()));
+      proc.stdout?.on(
+        'data',
+        (d) => (output = (output + d.toString()).slice(-65536)),
+      );
+      proc.stderr?.on(
+        'data',
+        (d) => (stderr = (stderr + d.toString()).slice(-4096)),
+      );
       proc.on('close', (code) => {
         if (code !== 0) {
           this.logger.warn(

@@ -101,7 +101,9 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: profile } = useCurrentUser();
   const balance = useCreditBalance();
   const [sourceMinutes, setSourceMinutes] = React.useState("5");
-  const [outputMinutes, setOutputMinutes] = React.useState("1");
+  const [outputMinutesInput, setOutputMinutes] = React.useState<string | null>(
+    null,
+  );
   const [confirmation, setConfirmation] = React.useState<{
     body: Parameters<ReturnType<typeof useCreateJob>["mutate"]>[0];
     estimate: CreditEstimate;
@@ -113,6 +115,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: fetchedPresets } = useStylePresets();
   const router = useRouter();
   const isPaid = profile?.plan === "pro" || profile?.plan === "business";
+  const outputMinutes = outputMinutesInput ?? (isPaid ? "9" : "6");
 
   const presets = fetchedPresets?.length ? fetchedPresets : PRESETS_FALLBACK;
 
@@ -154,7 +157,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const platformError =
     failureReason instanceof Error ? failureReason.message : undefined;
   const submitDisabled =
-    !url.trim() || isPending || estimating || !balance.data;
+    !url.trim() || isPending || estimating || !balance.data?.enabled;
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -188,20 +191,24 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
     if (!balance.data) return;
     if (!balance.data.enabled) {
-      mutate(body);
+      setFieldError(
+        "Usage-based billing is not active. New processing is temporarily unavailable.",
+      );
       return;
     }
     setEstimating(true);
     try {
       const estimate = (
-        await axiosClient.post<CreditEstimate>("/billing/credits/estimate", {
-          sourceSeconds: Number(sourceMinutes) * 60,
-          maxOutputSeconds: Number(outputMinutes) * 60,
+        await axiosClient.post<CreditEstimate>("/jobs/estimate", {
+          sourceUrl,
+          maxOutputSeconds:
+            Math.max(Number(outputMinutes), isPaid ? 9 : 6) * 60,
         })
       ).data;
+      setSourceMinutes(String((estimate.sourceSeconds || 0) / 60));
       const signature = JSON.stringify([
         body,
-        sourceMinutes,
+        estimate.sourceSeconds,
         outputMinutes,
         estimate.pricingVersion,
       ]);
@@ -211,8 +218,8 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         body: {
           ...body,
           operationId: operationRef.current.id,
-          sourceSeconds: Number(sourceMinutes) * 60,
-          maxOutputSeconds: Number(outputMinutes) * 60,
+          sourceSeconds: estimate.sourceSeconds,
+          maxOutputSeconds: estimate.maxOutputSeconds,
           authorizedCredits: estimate.totalCredits,
           pricingVersion: estimate.pricingVersion,
         },
@@ -257,7 +264,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             <span>
               {balance.data?.enabled
                 ? "Duration-based credits"
-                : "1 credit per job"}
+                : "Usage-based billing unavailable"}
             </span>
           </span>
         </div>
@@ -289,7 +296,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
                     ? "border-destructive ring-1 ring-destructive/30"
                     : "border-border/80",
                 )}
-                disabled={isPending}
+                disabled={isPending || estimating}
               />
             </div>
 
@@ -318,24 +325,16 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         </form>
         {balance.data?.enabled && (
           <div className="grid gap-3 sm:grid-cols-2 text-sm">
-            <label className="space-y-1">
-              Source duration limit (minutes)
-              <input
-                className="w-full rounded-lg border bg-background p-2"
-                type="number"
-                min="0.1"
-                max="240"
-                step="0.1"
-                value={sourceMinutes}
-                onChange={(e) => setSourceMinutes(e.target.value)}
-              />
-            </label>
+            <p className="text-muted-foreground">
+              Source duration is checked from video metadata before you
+              authorize credits.
+            </p>
             <label className="space-y-1">
               Maximum total clip output (minutes)
               <input
                 className="w-full rounded-lg border bg-background p-2"
                 type="number"
-                min="0.1"
+                min={isPaid ? "9" : "6"}
                 max="60"
                 step="0.1"
                 value={outputMinutes}
@@ -349,6 +348,12 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
               confirmation.
             </p>
           </div>
+        )}
+        {balance.data && !balance.data.enabled && (
+          <p role="alert" className="text-sm text-muted-foreground">
+            Usage-based billing is not active. New processing is temporarily
+            unavailable.
+          </p>
         )}
         {balance.error && (
           <p role="alert" className="text-sm text-destructive">
@@ -457,8 +462,10 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         {confirmation && (
           <div className="space-y-3 text-sm">
             <p>
-              Source limit: {sourceMinutes} minutes. Output budget: up to{" "}
-              {outputMinutes} minutes of clips.
+              Verified source budget: {Number(sourceMinutes).toFixed(2)}{" "}
+              minutes. Output budget: up to{" "}
+              {(confirmation.estimate.maxOutputSeconds! / 60).toFixed(2)}{" "}
+              minutes of clips.
             </p>
             <p>
               <strong>
@@ -467,10 +474,15 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
               · {balance.data?.available ?? confirmation.estimate.available}{" "}
               available.
             </p>
+            <p>
+              Source processing: {confirmation.estimate.sourceCredits} credits ·
+              Output budget: {confirmation.estimate.renderCredits} credits.
+            </p>
             <p className="text-muted-foreground">
-              We reserve this budget now and charge only eligible delivered
-              work. Unused credits are released. Retrying uses the remaining
-              original budget.
+              We target {isPaid ? "6–9" : "6"} valid clips when the source
+              supports them. We reserve this budget now and charge only eligible
+              delivered work. Unused credits are released. Retrying uses the
+              remaining original budget.
             </p>
             {confirmation.estimate.totalCredits >
               (balance.data?.available ?? 0) && (

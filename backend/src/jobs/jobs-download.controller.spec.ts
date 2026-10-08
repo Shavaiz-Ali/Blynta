@@ -1,3 +1,6 @@
+import { CreditsService } from '../billing/credits.service';
+import { VideoDownloadService } from '../media/services/video-download.service';
+import { INITIAL_PRICING, clipPrice } from '../billing/credit-pricing';
 import { BillingRateLimitGuard } from '../billing/billing-rate-limit.guard';
 import { Test } from '@nestjs/testing';
 import { INestApplication, NotFoundException } from '@nestjs/common';
@@ -52,6 +55,26 @@ describe('clip download HTTP intent and read endpoints', () => {
         },
         { provide: R2Service, useValue: { getSignedDownloadUrl } },
         { provide: ActivitiesService, useValue: { queueCreate } },
+        {
+          provide: VideoDownloadService,
+          useValue: {
+            fetchVideoMetadata: jest.fn().mockResolvedValue({ duration: 3000 }),
+          },
+        },
+        {
+          provide: CreditsService,
+          useValue: {
+            enabled: true,
+            estimate: async (_: string, source: number, output: number) => ({
+              ...clipPrice(source, output),
+              sourceSeconds: source,
+              maxOutputSeconds: output,
+              enabled: true,
+              available: 20,
+              pricingVersion: INITIAL_PRICING.version,
+            }),
+          },
+        },
       ],
     })
       .overrideGuard(BillingRateLimitGuard)
@@ -141,5 +164,54 @@ describe('clip download HTTP intent and read endpoints', () => {
       .send({ actionId: randomUUID() })
       .expect(500);
     expect(queueCreate).not.toHaveBeenCalled();
+  });
+  it('preflights verified metadata without downloading and estimates a 50-minute source', async () => {
+    const response = await request(app.getHttpServer() as Server)
+      .post('/jobs/estimate')
+      .send({
+        sourceUrl: 'https://www.youtube.com/watch?v=example',
+        maxOutputSeconds: 360,
+      })
+      .expect(201);
+    expect(response.body.totalCredits).toBe(16);
+    expect(response.body.clipTargetMax).toBe(6);
+    expect(response.body.sourceSeconds).toBe(3000);
+    await request(app.getHttpServer() as Server)
+      .post('/jobs/estimate')
+      .send({
+        sourceUrl: 'https://www.youtube.com/watch?v=example',
+        maxOutputSeconds: 60,
+      })
+      .expect(400);
+    await request(app.getHttpServer() as Server)
+      .post('/jobs/estimate')
+      .send({ sourceUrl: 'http://127.0.0.1/private', maxOutputSeconds: 45 })
+      .expect(400);
+  });
+  it('authorizes the paid nine-clip budget and caps short-source output to source length', async () => {
+    jest
+      .spyOn(app.get(UsersService), 'findById')
+      .mockResolvedValue({ plan: UserPlan.PRO } as never);
+    const paid = await request(app.getHttpServer() as Server)
+      .post('/jobs/estimate')
+      .send({
+        sourceUrl: 'https://www.youtube.com/watch?v=example',
+        maxOutputSeconds: 540,
+      })
+      .expect(201);
+    expect(paid.body.clipTargetMax).toBe(9);
+    expect(paid.body.totalCredits).toBe(19);
+    jest
+      .spyOn(app.get(VideoDownloadService), 'fetchVideoMetadata')
+      .mockResolvedValue({ duration: 30 } as never);
+    const short = await request(app.getHttpServer() as Server)
+      .post('/jobs/estimate')
+      .send({
+        sourceUrl: 'https://www.youtube.com/watch?v=example',
+        maxOutputSeconds: 540,
+      })
+      .expect(201);
+    expect(short.body.maxOutputSeconds).toBe(30);
+    expect(short.body.totalCredits).toBe(2);
   });
 });

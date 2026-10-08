@@ -87,10 +87,16 @@ export function useJob(
     queryKey: jobsQueryKeys.detail(id),
     queryFn: async ({ signal }) => {
       const { data } = await axiosClient.get<Job>(`/jobs/${id}`, { signal });
-      return mergeJobProgress(
-        queryClient.getQueryData<Job>(jobsQueryKeys.detail(id)),
-        data,
-      );
+      const previous = queryClient.getQueryData<Job>(jobsQueryKeys.detail(id));
+      if (
+        previous?.status !== data.status &&
+        [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED].includes(
+          data.status,
+        )
+      ) {
+        invalidateCurrentUser(queryClient);
+      }
+      return mergeJobProgress(previous, data);
     },
     enabled: Boolean(id),
     staleTime: 1000 * 10,
@@ -137,6 +143,7 @@ export function useCreateJob(
       const { data } = await axiosClient.post<Job>("/jobs", body);
       return data;
     },
+    onSettled: () => invalidateCurrentUser(queryClient),
     onSuccess: (data, variables, context) => {
       invalidateCurrentUser(queryClient);
       queryClient.invalidateQueries({ queryKey: jobsQueryKeys.lists() });

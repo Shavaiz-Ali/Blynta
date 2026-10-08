@@ -82,7 +82,7 @@ export class TranscriptionService {
       const result = await (this.provider === 'groq'
         ? this.transcribeWithGroq(audioPath, onProgress, initialPrompt)
         : this.transcribeWithWhisperCpp(audioPath, onProgress, initialPrompt));
-      usageSample('transcription', {
+      await usageSample('transcription', {
         provider: this.provider,
         model: this.modelName || this.whisperModelPath,
         audioDurationSeconds:
@@ -95,7 +95,7 @@ export class TranscriptionService {
       });
       return result;
     } catch (error) {
-      usageSample('transcription', {
+      await usageSample('transcription', {
         provider: this.provider,
         model: this.modelName,
         failed: true,

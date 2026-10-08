@@ -7,7 +7,7 @@ export const meteredGenerateObject: typeof generateObject = (async (
   const model = args[0].model as { provider?: string; modelId?: string };
   try {
     const result = await generateObject(...args);
-    usageSample('llm', {
+    await usageSample('llm', {
       provider: model.provider,
       model: model.modelId,
       usage: result.usage,
@@ -15,7 +15,7 @@ export const meteredGenerateObject: typeof generateObject = (async (
     return result;
   } catch (error) {
     const measured = error as { usage?: unknown };
-    usageSample('llm', {
+    await usageSample('llm', {
       provider: model.provider,
       model: model.modelId,
       usage: measured.usage,

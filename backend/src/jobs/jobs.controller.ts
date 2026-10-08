@@ -1,3 +1,4 @@
+import { highlightPolicy } from '../media/highlight-policy';
 import {
   Body,
   Controller,
@@ -9,6 +10,8 @@ import {
   Request,
   UseGuards,
   Logger,
+  ServiceUnavailableException,
+  BadRequestException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DownloadClipDto } from './dto/download-clip.dto';
@@ -19,7 +22,8 @@ import { JobsService } from './jobs.service';
 import { BillingRateLimitGuard } from '../billing/billing-rate-limit.guard';
 import { CreditsService } from '../billing/credits.service';
 import { Optional } from '@nestjs/common';
-import { CreateJobDto } from './dto/create-job.dto';
+import { VideoDownloadService } from '../media/services/video-download.service';
+import { CreateJobDto, PreflightJobDto } from './dto/create-job.dto';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { R2Service } from '../storage/r2.service';
 import { UsersService } from '../users/users.service';
@@ -45,6 +49,7 @@ export class JobsController {
     private r2Service: R2Service,
     private activitiesService: ActivitiesService,
     @Optional() private credits?: CreditsService,
+    @Optional() private videoDownload?: VideoDownloadService,
   ) {}
 
   private async shapeJobResponse(job: JobDocument, userPlan: UserPlan) {
@@ -138,6 +143,46 @@ export class JobsController {
           ? 0
           : null,
       ...(render ? { render, progressPercent: render.progressPercent } : {}),
+    };
+  }
+
+  @Post('estimate')
+  @UseGuards(BillingRateLimitGuard)
+  async estimate(
+    @Request() req: { user: { userId: string } },
+    @Body() body: PreflightJobDto,
+  ) {
+    if (!this.credits?.enabled || !this.videoDownload)
+      throw new ServiceUnavailableException(
+        'Usage-based billing is not active',
+      );
+    const metadata = await this.videoDownload.fetchVideoMetadata(
+      body.sourceUrl,
+    );
+    if (
+      !Number.isFinite(metadata.duration) ||
+      metadata.duration <= 0 ||
+      metadata.duration > 14400
+    )
+      throw new BadRequestException(
+        'Verified source duration is unavailable or exceeds the four-hour limit',
+      );
+    const sourceSeconds = Math.ceil(metadata.duration);
+    const account = await this.usersService.findById(req.user.userId);
+    const policy = highlightPolicy(account?.plan, sourceSeconds);
+    if (body.maxOutputSeconds < policy.outputSeconds)
+      throw new BadRequestException(
+        `Authorize at least ${policy.outputSeconds} output seconds for the ${policy.min}–${policy.max} clip target`,
+      );
+    return {
+      ...(await this.credits.estimate(
+        req.user.userId,
+        sourceSeconds,
+        Math.min(body.maxOutputSeconds, sourceSeconds),
+      )),
+      metadataSourceSeconds: metadata.duration,
+      clipTargetMin: policy.min,
+      clipTargetMax: policy.max,
     };
   }
 

@@ -6,6 +6,8 @@ import {
   NotFoundException,
   ServiceUnavailableException,
   OnModuleInit,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +25,9 @@ import {
 } from './credit.schemas';
 import { INITIAL_PRICING, PricingSnapshot, clipPrice } from './credit-pricing';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
+import Redis from 'ioredis';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import { randomUUID } from 'node:crypto';
 import { usageExecution } from './usage-context';
 
 @Injectable()
@@ -36,6 +41,7 @@ export class CreditsService implements OnModuleInit {
     @InjectModel('ProcessingUsage') readonly usage: Model<ProcessingUsage>,
     private config: ConfigService,
     @InjectModel(Customer.name) private customers: Model<CustomerDocument>,
+    @Optional() @Inject(REDIS_CLIENT) private telemetryRedis?: Redis,
   ) {}
   get enabled() {
     return this.config.get('BILLING_CREDITS_V2', 'false') === 'true';
@@ -298,7 +304,10 @@ export class CreditsService implements OnModuleInit {
     if (!op) throw new NotFoundException('Credit operation not found');
     if (op.status === 'reserved') return op;
     op.generation += 1;
-    if (op.kind === 'studio-ai') op.executionStartedAt = undefined;
+    if (op.kind === 'studio-ai') {
+      op.executionStartedAt = undefined;
+      op.executionToken = undefined;
+    }
     op.held = op.authorized - op.charged;
     await this.entry(
       session,
@@ -318,6 +327,11 @@ export class CreditsService implements OnModuleInit {
     operationId: string,
     cumulativeCharge: number,
     deliveredOutputs?: { id: string; seconds: number }[],
+    fence?: {
+      generation: number;
+      executionToken?: string;
+      missingResult?: boolean;
+    },
   ) {
     this.amount(cumulativeCharge);
     return this.transaction(async (session) => {
@@ -326,6 +340,13 @@ export class CreditsService implements OnModuleInit {
         .session(session);
       if (!op) throw new NotFoundException('Credit operation not found');
       if (op.status === 'settled') return op;
+      if (
+        fence &&
+        (op.generation !== fence.generation ||
+          op.executionToken !== fence.executionToken ||
+          (fence.missingResult && op.result !== undefined))
+      )
+        return op;
       if (op.product === 'ai-clips') {
         const job = await this.connection
           .collection('jobs')
@@ -446,6 +467,7 @@ export class CreditsService implements OnModuleInit {
       // Paid upgrade tops up the cycle allocation. Downgrade never confiscates credits.
       const amount = Math.max(0, allocation - (cycle?.amount || 0));
       user.creditsBalance += amount;
+      this.amount(user.creditsBalance);
       await user.save({ session });
       await this.entries.create(
         [
@@ -585,6 +607,7 @@ export class CreditsService implements OnModuleInit {
       const exists = await this.entries.exists({ key }).session(session);
       if (!exists) {
         user.creditsBalance += PLAN_CREDITS.free;
+        this.amount(user.creditsBalance);
         await this.entries.create(
           [
             {
@@ -640,7 +663,11 @@ export class CreditsService implements OnModuleInit {
     const op = await this.operations.findOne({ operationId });
     if (!op || op.status !== 'reserved')
       throw new ConflictException('No active credit authorization');
-    if (duration > op.sourceSeconds)
+    if (
+      !Number.isFinite(duration) ||
+      duration <= 0 ||
+      duration > op.sourceSeconds
+    )
       throw new ConflictException(
         'Source exceeds approved duration. Increase your budget and submit again.',
       );
@@ -654,25 +681,40 @@ export class CreditsService implements OnModuleInit {
     }
     if (op.status === 'settled' && op.charged === 0)
       await this.reopen(operationId);
+    const executionToken = randomUUID();
     const claimed = await this.operations.findOneAndUpdate(
       { operationId, status: 'reserved', executionStartedAt: null },
-      { $set: { executionStartedAt: new Date() } },
+      { $set: { executionStartedAt: new Date(), executionToken } },
       { new: true },
     );
     if (!claimed)
       throw new ConflictException(
         'AI request already running or ended. Review a new request.',
       );
+    const fence = { generation: claimed.generation, executionToken };
     let result: T;
     try {
       result = await this.capture(operationId, `ai-${Date.now()}`, work);
     } catch (error) {
-      await this.settle(operationId, 0);
+      await this.settle(operationId, 0, undefined, fence);
       throw error;
     }
     // Durable result precedes charge. Reconciliation can finish settlement after API restart.
-    await this.operations.updateOne({ operationId }, { $set: { result } });
-    await this.settle(operationId, claimed.authorized);
+    const published = await this.operations.findOneAndUpdate(
+      {
+        operationId,
+        status: 'reserved',
+        generation: fence.generation,
+        executionToken,
+      },
+      { $set: { result } },
+      { new: true, runValidators: true },
+    );
+    if (!published)
+      throw new ConflictException(
+        'AI execution authorization expired. Review and retry.',
+      );
+    await this.settle(operationId, claimed.authorized, undefined, fence);
     return result;
   }
   async record(
@@ -688,11 +730,11 @@ export class CreditsService implements OnModuleInit {
           operationId,
           attemptId,
           stage,
-          metrics,
           recordedAt: new Date(),
         },
+        $set: { metrics },
       },
-      { upsert: true },
+      { upsert: true, runValidators: true },
     );
   }
   async capture<T>(
@@ -702,9 +744,51 @@ export class CreditsService implements OnModuleInit {
   ): Promise<T> {
     const samples: import('./usage-context').UsageSample[] = [];
     const start = Date.now();
+    const pending = new Set<Promise<void>>();
+    const persist = async (sample: import('./usage-context').UsageSample) => {
+      const id = `${operationId}:${attemptId}:${sample.id}`;
+      const payload = {
+        operationId,
+        attemptId: `${attemptId}-${sample.id}`,
+        stage: sample.stage,
+        metrics: sample.metrics,
+      };
+      try {
+        // Redis is a retry outbox, not a source of customer accounting truth.
+        if (this.telemetryRedis) {
+          try {
+            await this.telemetryRedis.hset(
+              'billing:usage:pending',
+              id,
+              JSON.stringify(payload),
+            );
+          } catch (error) {
+            this.logger.error({
+              event: 'billing.usage.outbox.failed',
+              operationId,
+              error: String(error),
+            });
+          }
+        }
+        await this.record(
+          payload.operationId,
+          payload.attemptId,
+          payload.stage,
+          payload.metrics,
+        );
+        // Keep the sample until the final enriched write; recovery can persist raw measurements after a hard kill.
+      } catch (error) {
+        this.logger.error({
+          event: 'billing.usage.persist.failed',
+          operationId,
+          error: String(error),
+        });
+      }
+    };
     try {
-      return await usageExecution.run(samples, work);
+      return await usageExecution.run({ samples, pending, persist }, work);
     } finally {
+      await Promise.allSettled([...pending]);
       try {
         const op = await this.operations.findOne({ operationId });
         const costs = JSON.parse(
@@ -768,6 +852,11 @@ export class CreditsService implements OnModuleInit {
                 estimatedCostUsd: cost,
               },
             );
+            if (this.telemetryRedis)
+              await this.telemetryRedis.hdel(
+                'billing:usage:pending',
+                `${operationId}:${attemptId}:${sample.id}`,
+              );
           } catch (error) {
             this.logger.error({
               event: 'billing.usage.persist.failed',
@@ -796,6 +885,43 @@ export class CreditsService implements OnModuleInit {
         this.logger.error({
           event: 'billing.usage.persist.failed',
           operationId,
+          error: String(error),
+        });
+      }
+    }
+  }
+  private telemetryCursor = '0';
+  async recoverUsage() {
+    if (!this.telemetryRedis) return;
+    const [cursor, pairs] = await this.telemetryRedis.hscan(
+      'billing:usage:pending',
+      this.telemetryCursor,
+      'COUNT',
+      100,
+    );
+    this.telemetryCursor = cursor;
+    for (let i = 0; i < pairs.length; i += 2) {
+      try {
+        const sample = JSON.parse(pairs[i + 1]) as {
+          operationId: string;
+          attemptId: string;
+          stage: string;
+          metrics: Record<string, unknown>;
+        };
+        // Insert-only replay preserves a concurrently enriched metrics record.
+        await this.usage.updateOne(
+          {
+            operationId: sample.operationId,
+            attemptId: sample.attemptId,
+            stage: sample.stage,
+          },
+          { $setOnInsert: { ...sample, recordedAt: new Date() } },
+          { upsert: true, runValidators: true },
+        );
+        await this.telemetryRedis.hdel('billing:usage:pending', pairs[i]);
+      } catch (error) {
+        this.logger.error({
+          event: 'billing.usage.recovery.failed',
           error: String(error),
         });
       }

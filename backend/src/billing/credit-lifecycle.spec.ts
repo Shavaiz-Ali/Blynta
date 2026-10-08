@@ -180,3 +180,16 @@ describe('real product billing admission and finalization', () => {
     expect(credits.settle).not.toHaveBeenCalled();
   });
 });
+
+test('new admission cannot fall back to a one-credit debit when billing is disabled', async () => {
+  const service = Object.create(JobsService.prototype) as JobsService;
+  const deductCredit = jest.fn();
+  Object.assign(service, {
+    credits: { enabled: false },
+    usersService: { deductCredit },
+  });
+  await expect(service.createJob('alice', {} as never)).rejects.toThrow(
+    'Usage-based billing is not active',
+  );
+  expect(deductCredit).not.toHaveBeenCalled();
+});

@@ -24,3 +24,31 @@ const CreateJobSchema = z.object({
 });
 
 export class CreateJobDto extends createZodDto(CreateJobSchema) {}
+
+const PreflightJobSchema = z
+  .object({
+    sourceUrl: z
+      .string()
+      .url()
+      .max(2048)
+      .refine((value) => {
+        const url = new URL(value);
+        return (
+          url.protocol === 'https:' &&
+          !url.username &&
+          !url.password &&
+          [
+            'youtube.com',
+            'www.youtube.com',
+            'm.youtube.com',
+            'youtu.be',
+            'vimeo.com',
+            'www.vimeo.com',
+            'player.vimeo.com',
+          ].includes(url.hostname)
+        );
+      }, 'Use a supported YouTube or Vimeo HTTPS video link'),
+    maxOutputSeconds: z.number().positive().max(3600),
+  })
+  .strict();
+export class PreflightJobDto extends createZodDto(PreflightJobSchema) {}

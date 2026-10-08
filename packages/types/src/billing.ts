@@ -19,6 +19,9 @@ export interface CreditEstimate {
   totalCredits: number;
   available: number;
   pricingVersion: string;
+  sourceCredits?: number;
+  renderCredits?: number;
+  metadataSourceSeconds?: number;
   sourceSeconds?: number;
   maxOutputSeconds?: number;
   duration?: number;

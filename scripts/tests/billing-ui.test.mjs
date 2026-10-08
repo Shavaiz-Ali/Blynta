@@ -39,3 +39,19 @@ test('history loading, failure, and empty states are accessible', () => {
   assert.match(history({error:new Error('Unavailable')}),/Could not load credit history/);
   assert.match(history({data:{rows:[],totalPages:0}}),/No transactions match/);
 });
+
+test('submission clearly reports inactive usage billing without advertising a flat rate', () => {
+  const component = ({children,disabled}) => React.createElement('div',{'data-disabled':disabled},children);
+  const icons = new Proxy({}, { get: () => () => null });
+  const { HeroInput } = load('apps/app/features/dashboard/components/HeroInput.tsx', {
+    '@/features/jobs': { SourcePlatform:{YOUTUBE:'youtube'}, useStylePresets:()=>({data:[]}),useCreateJob:()=>({mutate(){},reset(){},isPending:false}) },
+    '@/features/auth/queries':{useCurrentUser:()=>({data:{plan:'free'}})},
+    '@/features/billing/queries':{useCreditBalance:()=>({data:{enabled:false,available:20}})},
+    '@/config/axiosClient':{axiosClient:{}}, '@/lib/utils':{cn:(...args)=>args.join(' ')},
+    '../icons':icons, '@blynta/ui':new Proxy({}, {get:()=>component}),
+    'next/link':{default:component},'next/navigation':{useRouter:()=>({push(){}})},'sonner':{toast:{}}
+  });
+  const html = renderToStaticMarkup(React.createElement(HeroInput));
+  assert.doesNotMatch(html,/1 credit per job|1 credit per video/);
+  assert.match(html,/New processing is temporarily unavailable/);
+});

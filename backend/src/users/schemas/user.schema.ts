@@ -78,10 +78,14 @@ export class User {
   isWelcomed: boolean;
 
   // --- Credits system ---
-  @Prop({ default: PLAN_CREDITS[UserPlan.FREE] })
+  @Prop({
+    default: PLAN_CREDITS[UserPlan.FREE],
+    min: 0,
+    validate: Number.isSafeInteger,
+  })
   creditsBalance: number;
 
-  @Prop({ default: 0 })
+  @Prop({ default: 0, min: 0, validate: Number.isSafeInteger })
   creditsReserved: number;
 
   @Prop({ default: false })
@@ -90,7 +94,7 @@ export class User {
   @Prop()
   freeCreditGrantAt?: Date;
 
-  @Prop({ default: 0 })
+  @Prop({ default: 0, min: 0, validate: Number.isSafeInteger })
   totalCreditsUsed: number;
 
   @Prop({ default: () => new Date() })

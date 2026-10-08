@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { CreditsService } from './credits.service';
+import { usageSample } from './usage-context';
 import { INITIAL_PRICING } from './credit-pricing';
 
 /** Transactional adapter tests the real service, with rollback and serialized conflicting writes.
@@ -17,6 +18,7 @@ function fixture(balance = 20, initialized = true) {
     },
     operations: [],
     entries: [],
+    usage: [],
   };
   const query = (value: any): any => {
     const p: any = Promise.resolve(value);
@@ -58,13 +60,19 @@ function fixture(balance = 20, initialized = true) {
       return query(userDoc());
     },
   };
+  const matches = (o: any, f: any) =>
+    Object.entries(f).every(([k, v]) =>
+      v === null ? o[k] == null : o[k] === v,
+    );
   const operations: any = {
+    findOneAndUpdate: async (filter: any, update: any) => {
+      const op = state.operations.find((o: any) => matches(o, filter));
+      if (!op) return null;
+      Object.assign(op, update.$set);
+      return opDoc(op);
+    },
     findOne: (f: any) =>
-      query(
-        opDoc(
-          state.operations.find((o: any) => o.operationId === f.operationId),
-        ),
-      ),
+      query(opDoc(state.operations.find((o: any) => matches(o, f)))),
     create: async ([value]: any) => {
       if (
         state.operations.some((o: any) => o.operationId === value.operationId)
@@ -135,7 +143,13 @@ function fixture(balance = 20, initialized = true) {
     users,
     entries,
     operations,
-    {} as any,
+    {
+      updateOne: async (f: any, update: any) => {
+        const row = state.usage.find((u: any) => matches(u, f));
+        if (row) Object.assign(row, update.$set || {});
+        else state.usage.push({ ...f, ...update.$setOnInsert, ...update.$set });
+      },
+    } as any,
     { get: (_: string, fallback: any) => fallback } as ConfigService,
     { findOne: () => query(null) } as any,
   );
@@ -411,5 +425,147 @@ describe('subscription allocations and validated refunds', () => {
       ),
     ).rejects.toThrow();
     expect(f.state().user.creditsBalance).toBe(12);
+  });
+});
+
+describe('Studio AI execution fencing', () => {
+  async function ai() {
+    const f = fixture();
+    await f.service.reserve({
+      userId: f.userId,
+      operationId: 'ai',
+      kind: 'studio-ai',
+      product: 'studio',
+      relatedId: f.userId,
+      sourceSeconds: 0,
+      maxOutputSeconds: 0,
+      amount: 1,
+      fingerprint: 'ai',
+      pricing: INITIAL_PRICING,
+    });
+    return f;
+  }
+  test('released old execution cannot publish a result after a new retry starts', async () => {
+    const f = await ai();
+    let finish!: (value: object) => void;
+    const old = f.service.executeAi(
+      'ai',
+      () =>
+        new Promise<object>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const rejected = expect(old).rejects.toThrow('authorization expired');
+    while (!finish) await Promise.resolve();
+    const claimed = f.state().operations[0];
+    await f.service.settle('ai', 0, undefined, {
+      generation: claimed.generation,
+      executionToken: claimed.executionToken,
+      missingResult: true,
+    });
+    const newResult = await f.service.executeAi('ai', async () => ({
+      id: 'new',
+    }));
+    finish({ id: 'old' });
+    await rejected;
+    expect(newResult).toEqual({ id: 'new' });
+    expect(f.state().operations[0].result).toEqual({ id: 'new' });
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 19,
+      creditsReserved: 0,
+      totalCreditsUsed: 1,
+    });
+  });
+  test('old failure cannot release a newer attempt hold', async () => {
+    const f = await ai();
+    let fail!: (error: Error) => void;
+    const old = f.service.executeAi(
+      'ai',
+      () =>
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+    );
+    const rejected = expect(old).rejects.toThrow('old provider failure');
+    while (!fail) await Promise.resolve();
+    const first = f.state().operations[0];
+    await f.service.settle('ai', 0, undefined, {
+      generation: first.generation,
+      executionToken: first.executionToken,
+      missingResult: true,
+    });
+    await f.service.reopen('ai');
+    fail(new Error('old provider failure'));
+    await rejected;
+    expect(f.state().operations[0]).toMatchObject({
+      status: 'reserved',
+      held: 1,
+      generation: 1,
+    });
+  });
+  test('recovery snapshot cannot release a result published in the meantime', async () => {
+    const f = await ai();
+    const snapshot = structuredClone(f.state().operations[0]);
+    f.state().operations[0].result = { id: 'durable' };
+    await f.service.settle('ai', 0, undefined, {
+      generation: snapshot.generation,
+      executionToken: snapshot.executionToken,
+      missingResult: true,
+    });
+    expect(f.state().operations[0].status).toBe('reserved');
+    await f.service.executeAi('ai', async () => {
+      throw new Error('must replay');
+    });
+    expect(f.state().user.totalCreditsUsed).toBe(1);
+  });
+});
+
+describe('usage telemetry durability', () => {
+  test('multiple operations in one stage have distinct durable sample IDs', async () => {
+    const f = fixture();
+    await f.reserve();
+    await f.service.capture('one', 'attempt', async () => {
+      await usageSample('llm', { usage: { inputTokens: 1, outputTokens: 2 } });
+      expect(f.state().usage).toHaveLength(1); // Persisted before the processing function returns.
+      await usageSample('llm', { usage: { inputTokens: 3, outputTokens: 4 } });
+    });
+    const rows = f.state().usage.filter((u: any) => u.stage === 'llm');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].attemptId).not.toBe(rows[1].attemptId);
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 2,
+      creditsReserved: 18,
+    });
+  });
+  test('outbox replay retries failed telemetry with the same sample IDs and preserves enriched records', async () => {
+    const f = fixture();
+    const pending = new Map<string, string>();
+    const redis = {
+      hset: async (_: string, k: string, v: string) => {
+        pending.set(k, v);
+      },
+      hdel: async (_: string, k: string) => {
+        pending.delete(k);
+      },
+      hscan: async () => ['0', [...pending].flat()],
+    };
+    Object.assign(f.service, { telemetryRedis: redis });
+    const update = f.service.usage.updateOne.bind(f.service.usage);
+    f.service.usage.updateOne = jest
+      .fn()
+      .mockRejectedValue(new Error('Mongo down'));
+    await f.service.capture('one', 'attempt', async () => {
+      await usageSample('ffmpeg', { cpuSeconds: 1 });
+      return 'delivered';
+    });
+    expect(pending.size).toBe(1);
+    f.service.usage.updateOne = update;
+    await f.service.recoverUsage();
+    await f.service.recoverUsage();
+    expect(pending.size).toBe(0);
+    expect(
+      f.state().usage.filter((u: any) => u.stage === 'ffmpeg'),
+    ).toHaveLength(1);
+    expect(f.state().user.creditsBalance).toBe(20);
   });
 });
