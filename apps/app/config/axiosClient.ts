@@ -3,7 +3,7 @@ import {
   productSessionState,
   isProductLogoutInProgress,
 } from "@blynta/auth/client";
-import { getSession } from "next-auth/react";
+import { readProductSession as getSession } from "@blynta/auth/react";
 import { ApiError, createApiClient } from "@blynta/api-client";
 export { ApiError } from "@blynta/api-client";
 export type { BackendEnvelope } from "@blynta/api-client";
@@ -21,7 +21,7 @@ export const axiosClient = createApiClient(
   },
   {
     onExpired: expireProductSession,
-    requiresAuthentication: config => !/^\/auth\//.test(config.url || ""),
+    requiresAuthentication: (config) => !/^\/auth\//.test(config.url || ""),
     isBlocked: () =>
       isProductLogoutInProgress() ||
       productSessionState.getSnapshot() !== "active",

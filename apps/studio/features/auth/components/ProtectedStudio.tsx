@@ -1,12 +1,8 @@
 "use client";
-import { useSession } from "next-auth/react";
-import {
-  productFetch,
-  redirectProductSessionLoss,
-  productSessionState,
-} from "@blynta/auth/client";
+import { useSession } from "@blynta/auth/react";
+import { productFetch, productSessionState } from "@blynta/auth/client";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { AppButton } from "@blynta/ui";
 export function ProtectedStudio({ children }: { children: React.ReactNode }) {
@@ -36,9 +32,6 @@ export function ProtectedStudio({ children }: { children: React.ReactNode }) {
       return true;
     },
   });
-  useEffect(() => {
-    if (status === "unauthenticated") redirectProductSessionLoss();
-  }, [status]);
   if (phase !== "active") return children;
   if (status !== "authenticated" || check.isPending) return <LoadingSkeleton />;
   if (check.isError)

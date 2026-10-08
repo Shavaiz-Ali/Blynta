@@ -2,6 +2,28 @@ import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type { ApiEnvelope } from "@blynta/types";
 
 export type BackendEnvelope<T> = ApiEnvelope<T>;
+
+function backendFailure(data: unknown) {
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("success" in data) ||
+    data.success !== false
+  )
+    return undefined;
+  const error = "error" in data ? data.error : undefined;
+  if (!error || typeof error !== "object") return undefined;
+  return {
+    message:
+      "message" in error && typeof error.message === "string"
+        ? error.message
+        : "Request failed",
+    code:
+      "code" in error && typeof error.code === "string"
+        ? error.code
+        : "UNKNOWN",
+  };
+}
 export class ApiError extends Error {
   public readonly code: string;
   public readonly status?: number;
@@ -68,8 +90,8 @@ export function createApiClient(
       if (envelope && typeof envelope === "object" && "success" in envelope) {
         if (!envelope.success)
           throw new ApiError(
-            envelope.error.message || "Request failed",
-            envelope.error.code || "UNKNOWN",
+            backendFailure(envelope)?.message || "Request failed",
+            backendFailure(envelope)?.code || "UNKNOWN",
             response.status,
           );
         response.data = envelope.data;
@@ -78,7 +100,9 @@ export function createApiClient(
     },
     async (error: unknown) => {
       if (error instanceof ApiError) throw error;
-      const failure = error as AxiosError<ApiEnvelope<unknown>>;
+      const failure = (
+        error && typeof error === "object" ? error : {}
+      ) as AxiosError<unknown>;
       const original = failure.config as
         (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
       if (
@@ -102,15 +126,10 @@ export function createApiClient(
         requiresAuthentication(original)
       )
         session?.onExpired();
-      const envelope = failure.response?.data;
-      const message =
-        envelope && "success" in envelope && !envelope.success
-          ? envelope.error.message
-          : failure.message || "Network error";
+      const envelope = backendFailure(failure.response?.data);
+      const message = envelope?.message || failure.message || "Network error";
       const code =
-        envelope && "success" in envelope && !envelope.success
-          ? envelope.error.code
-          : "NETWORK";
+        envelope?.code || (failure.response ? "HTTP_ERROR" : "NETWORK");
       throw new ApiError(message, code, failure.response?.status);
     },
   );

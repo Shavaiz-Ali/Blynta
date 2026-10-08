@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, type CSSProperties } from "react";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { AppResizeHandle } from "@blynta/ui";
 import { useQuery } from "@tanstack/react-query";
 import { studioApi, studioKeys } from "../../api";

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppButton, AppCard, AppSkeleton } from "@blynta/ui";
 import { Film, ImageIcon, Music } from "lucide-react";

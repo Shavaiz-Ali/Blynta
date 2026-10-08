@@ -1,5 +1,5 @@
 "use client";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { logoutProduct } from "@blynta/auth/client";
 import { AppAccountMenu } from "@blynta/ui";
 import {

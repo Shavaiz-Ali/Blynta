@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { MediaLibrary, UsagePage, NotificationsPage } from "./WorkspacePages";
 import { Plus, Sparkles, Captions, Ratio, Download } from "lucide-react";
 import { AppButton, AppDialog, AppInput, AppSkeleton } from "@blynta/ui";

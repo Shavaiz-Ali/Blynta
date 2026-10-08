@@ -3,6 +3,66 @@ import { test } from "node:test";
 import { createSessionState } from "../../packages/auth/src/session-state.ts";
 import { createApiClient } from "../../packages/api-client/src/index.ts";
 
+test("network and malformed HTTP failures never expire a product session", async () => {
+  let expired = 0;
+  let lookups = 0;
+  const client = createApiClient(
+    "https://api.example.test",
+    async () => {
+      lookups++;
+      return "token";
+    },
+    {
+      onExpired: () => expired++,
+      isBlocked: () => false,
+    },
+  );
+  for (const failure of [
+    undefined,
+    new Error("ECONNREFUSED"),
+    ...[403, 429, 500, 502, 503].flatMap((status) => [
+      { response: { status, data: "<html>gateway failure</html>" } },
+      { response: { status, data: { success: false } } },
+    ]),
+  ]) {
+    client.defaults.adapter = async () => {
+      throw failure;
+    };
+    await assert.rejects(
+      client.get("/jobs"),
+      (error) => error.name === "ApiError",
+    );
+  }
+  assert.equal(expired, 0);
+  assert.equal(lookups, 12, "no authentication refresh for non-401 failures");
+});
+
+test("session service failure during initial lookup or 401 refresh retains authentication", async () => {
+  for (const failAt of [1, 2]) {
+    let lookups = 0;
+    let expired = 0;
+    const client = createApiClient(
+      "https://api.example.test",
+      async () => {
+        if (++lookups === failAt)
+          throw Object.assign(new Error("Session unavailable"), {
+            status: 503,
+          });
+        return "token";
+      },
+      { onExpired: () => expired++, isBlocked: () => false },
+    );
+    client.defaults.adapter = async (config) => {
+      throw { config, response: { status: 401, data: {} } };
+    };
+    await assert.rejects(
+      client.get("/jobs"),
+      (error) => error.status === 503 || error.code === "NETWORK",
+    );
+    assert.equal(expired, 0);
+  }
+});
+
 test("five simultaneous 401s produce one expiration and one fresh sign-in action", async () => {
   const state = createSessionState();
   let notifications = 0;

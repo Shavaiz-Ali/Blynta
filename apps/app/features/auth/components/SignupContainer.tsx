@@ -20,7 +20,7 @@ import {
 } from "@/features/auth/queries";
 
 import { toast } from "sonner";
-import { signIn } from "next-auth/react";
+import { signIn } from "@blynta/auth/react";
 
 export interface SignupContainerProps {
   /** Enabled provider strings from GET /auth/providers (e.g. ["local","google","facebook"]) */

@@ -1,6 +1,6 @@
 "use client";
 import { productFetch } from "@blynta/auth/client";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { useQuery } from "@tanstack/react-query";
 
 export interface AccountProfile {

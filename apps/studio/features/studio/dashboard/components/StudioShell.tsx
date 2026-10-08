@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AccountControls } from "./AccountControls";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { AppIdentityAvatar } from "@blynta/ui";
 import {
   AppButton,

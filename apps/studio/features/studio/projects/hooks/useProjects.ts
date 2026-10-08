@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSession } from "next-auth/react";
+import { useSession } from "@blynta/auth/react";
 import { toast } from "sonner";
 import { studioApi, studioKeys, studioRequest } from "../../api";
 import type { Project } from "../../types";

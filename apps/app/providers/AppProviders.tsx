@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SessionProvider } from "next-auth/react";
+import { SessionProvider } from "@blynta/auth/react";
 import { QueryProvider } from "./QueryProvider";
 import { Toaster } from "@/components/ui/sonner";
 

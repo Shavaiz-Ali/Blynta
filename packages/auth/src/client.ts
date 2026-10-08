@@ -1,6 +1,6 @@
 "use client";
 
-import { signOut } from "next-auth/react";
+import { signOut } from "./react";
 import { sessionFetch } from "./session-fetch";
 import { productSessionState, productLogoutState } from "./session-state";
 export { productSessionState } from "./session-state";

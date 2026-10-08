@@ -2,7 +2,7 @@
 
 import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import type { Session } from "next-auth";
-import { SessionContext, useSession } from "next-auth/react";
+import { SessionContext, useSession, readProductSession } from "./react";
 import { AppButton, AppDialog } from "@blynta/ui";
 import {
   expireProductSession,
@@ -18,8 +18,18 @@ export function SessionExpiredDialog() {
     () => "active",
   );
   useEffect(() => {
-    // Mounted only after the protected server layout validated a product session.
-    if (status === "unauthenticated") expireProductSession();
+    let cancelled = false;
+    // A failed Auth.js poll also reports unauthenticated. Confirm session loss
+    // before expiring; transport failures leave the product credential intact.
+    if (status === "unauthenticated")
+      void readProductSession()
+        .then((session) => {
+          if (!cancelled && session === null) expireProductSession();
+        })
+        .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [status]);
   return (
     <AppDialog

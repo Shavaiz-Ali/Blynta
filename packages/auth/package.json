@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./react": "./src/react.ts",
     "./server": "./src/server.ts",
     "./transport": "./src/session-fetch.ts",
     "./client": "./src/client.ts",
