@@ -110,12 +110,7 @@ export function FailedClipCard({
       <ClipCardLayout
         index={index}
         aria-label={`Clip ${index + 1}: failed`}
-        status={
-          <span className="inline-flex items-center gap-1.5 text-destructive">
-            <AlertTriangle aria-hidden="true" className="h-3 w-3" />
-            Failed
-          </span>
-        }
+        status={"Failed"}
         media={
           <ClipPendingMedia
             job={job}

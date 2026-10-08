@@ -125,12 +125,7 @@ export function GeneratedClipCard({
     <>
       <ClipCardLayout
         index={clipIndex}
-        status={
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            Ready
-          </span>
-        }
+        status={"Ready"}
         onClick={handleOpenClip}
         className={cn(
           "group relative overflow-hidden transition-all duration-200 text-left border border-border/70 bg-card/70",

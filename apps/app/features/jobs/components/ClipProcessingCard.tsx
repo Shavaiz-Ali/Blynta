@@ -112,20 +112,15 @@ export function ClipProcessingCard({
     <ClipCardLayout
       index={index}
       status={
-        <span
-          className={`inline-flex items-center gap-1.5 ${active ? "text-primary" : "text-muted-foreground"}`}
-        >
-          <Icon aria-hidden="true" className="h-3 w-3" />
-          {stopped
-            ? job.status === "cancelling"
-              ? "Cancelling…"
-              : "Cancelled"
-            : active
-              ? "Processing"
-              : status === "ready"
-                ? "Ready"
-                : "Waiting"}
-        </span>
+        stopped
+          ? job.status === "cancelling"
+            ? "Cancelling"
+            : "Cancelled"
+          : active
+            ? "Processing"
+            : status === "ready"
+              ? "Ready"
+              : "Waiting"
       }
       media={
         <ClipPendingMedia

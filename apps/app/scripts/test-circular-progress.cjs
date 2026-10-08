@@ -40,11 +40,10 @@ for (const value of [0, 30, 38, 99, 100]) {
   );
   assert.match(html, new RegExp('aria-valuenow="' + Math.min(value, 99) + '"'));
   assert.match(html, /transition-\[stroke-dashoffset\]/);
-  assert.match(html, /motion-reduce:animate-none/);
+  assert.match(html, /motion-reduce:transition-none/);
   const svgs = html.match(/<svg.*?<\/svg>/g);
-  assert.equal(svgs.length, 2);
+  assert.equal(svgs.length, 1);
   assert.doesNotMatch(svgs[0], /animate-spin/);
-  assert.match(svgs[1], /animate-spin/);
 }
 for (const value of [undefined, NaN, Infinity]) {
   const html = renderToStaticMarkup(

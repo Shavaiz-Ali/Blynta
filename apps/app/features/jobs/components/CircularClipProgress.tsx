@@ -27,7 +27,7 @@ export function CircularClipProgress({
           ? "Waiting for progress update"
           : `${percent}% complete`
       }
-      className="relative flex size-18 shrink-0 items-center justify-center rounded-full bg-card/90 text-foreground shadow-sm backdrop-blur-sm"
+      className="relative flex size-18 shrink-0 items-center justify-center text-foreground"
     >
       <svg
         aria-hidden="true"
@@ -39,7 +39,7 @@ export function CircularClipProgress({
           cy="36"
           r={radius}
           stroke="currentColor"
-          strokeWidth="3"
+          strokeWidth="2"
           className="text-muted-foreground/25"
         />
         <circle
@@ -47,26 +47,11 @@ export function CircularClipProgress({
           cy="36"
           r={radius}
           stroke="currentColor"
-          strokeWidth="3"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={circumference * (1 - (percent ?? 0) / 100)}
           className="text-primary transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none"
-        />
-      </svg>
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 72 72"
-        className="absolute inset-0 size-full animate-spin fill-none text-primary/40 [animation-duration:6s] motion-reduce:animate-none"
-      >
-        <circle
-          cx="36"
-          cy="36"
-          r="34"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeDasharray="12 202"
         />
       </svg>
       <span

@@ -16,28 +16,21 @@ export function ClipCardLayout({
   ...props
 }: {
   index: number;
-  status: ReactNode;
+  status: string;
   media: ReactNode;
   children: ReactNode;
   footer: ReactNode;
 } & ComponentProps<"div">) {
   return (
     <AppCardRoot
+      role="group"
+      aria-label={`Clip ${index + 1}: ${status}`}
       {...props}
       className={`min-w-0 self-start flex flex-col gap-0 rounded-xl border-border/70 bg-card/70 p-0 shadow-xs ${className}`}
     >
       <div
-        data-clip-section="header"
-        className="flex items-center justify-between gap-3 px-4 py-3 text-[10px] font-medium"
-      >
-        <span className="uppercase tracking-wider text-muted-foreground">
-          Clip {String(index + 1).padStart(2, "0")}
-        </span>
-        {status}
-      </div>
-      <div
         data-clip-section="media"
-        className="relative aspect-[16/10] w-full overflow-hidden bg-muted/40 select-none"
+        className="relative aspect-[16/10] w-full overflow-hidden rounded-t-[calc(var(--radius-xl)-1px)] bg-muted/40 select-none"
       >
         {media}
       </div>
