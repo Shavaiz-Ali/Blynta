@@ -26,6 +26,16 @@ async function handle(
   )
     return new Response(null, { status: 403 });
   const session = await auth();
+  if (session?.authError)
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          message: "Sign-in is temporarily unavailable. Please try again.",
+        },
+      },
+      { status: 503 },
+    );
   if (!session?.accessToken)
     return NextResponse.json(
       { success: false, error: { message: "Sign in to continue." } },

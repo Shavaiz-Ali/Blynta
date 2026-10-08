@@ -1,3 +1,4 @@
+import { productSignInDestination } from "@blynta/auth/server";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
@@ -8,5 +9,5 @@ export default async function Home() {
   if (session?.user) {
     redirect("/dashboard");
   }
-  redirect("/login");
+  redirect(await productSignInDestination());
 }

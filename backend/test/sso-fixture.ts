@@ -36,6 +36,7 @@ type FixtureUser = {
   passwordResetToken?: string;
   passwordResetExpiresAt?: number;
 };
+let identityOutage = false;
 const accounts = new Map<string, FixtureUser>();
 const resetMail = new Map<string, string>();
 const users = {
@@ -139,6 +140,10 @@ class FixtureController {
       accounts.get('admin@example.test')!.role = role;
     return { updated: true };
   }
+  @Get('test/identity-outage') outage(@Query('on') on: string) {
+    identityOutage = on === '1';
+    return { updated: true };
+  }
   @Get('test/otp') otp() {
     return { otp: accounts.get('signup@example.test')?.otp };
   }
@@ -219,6 +224,29 @@ async function start() {
       password: 'Test-password-123',
     });
   const app = await NestFactory.create(FixtureModule, { logger: false });
+  app.use(
+    (
+      request: { path: string },
+      response: {
+        status: (status: number) => { json: (body: unknown) => void };
+      },
+      next: () => void,
+    ) => {
+      if (identityOutage && request.path.startsWith('/auth/sso/')) {
+        response
+          .status(503)
+          .json({
+            success: false,
+            error: {
+              message: 'Synthetic identity outage',
+              code: 'UNAVAILABLE',
+            },
+          });
+        return;
+      }
+      next();
+    },
+  );
   app.useGlobalPipes(new ZodValidationPipe());
   app.useGlobalInterceptors(new ResponseInterceptor());
   await app.listen(5101, '127.0.0.1');

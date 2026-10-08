@@ -21,7 +21,14 @@ export default async function LoginPage({
   const logoutMode = params.mode === "product-logout" && product !== null;
   const landing = logoutMode
     ? `/login?mode=product-logout&from=${product}`
-    : "/continue";
+    : typeof params.transaction === "string" &&
+        /^[A-Za-z0-9_-]{43}$/.test(params.transaction)
+      ? "/continue?transaction=" +
+        params.transaction +
+        (["blynta-main", "blynta-studio"].includes(String(params.client))
+          ? "&client=" + params.client
+          : "")
+      : "/continue";
   const session = logoutMode ? await auth() : null;
   if (session?.user && params.account !== "other") {
     const label = product === "studio" ? "Studio" : "Blynta App";
@@ -88,7 +95,15 @@ export default async function LoginPage({
             href={
               logoutMode
                 ? `/signup?mode=product-logout&from=${product}`
-                : "/signup"
+                : typeof params.transaction === "string"
+                  ? "/signup?transaction=" +
+                    encodeURIComponent(params.transaction) +
+                    (["blynta-main", "blynta-studio"].includes(
+                      String(params.client),
+                    )
+                      ? "&client=" + params.client
+                      : "")
+                  : "/signup"
             }
             className="font-medium text-primary underline-offset-4 hover:underline"
           >

@@ -1,37 +1,16 @@
 import "./types";
-import { callIdentity } from "./identity-client";
+import { callIdentity, IdentityRequestError } from "./identity-client";
 import { authSecret } from "./backend";
 export { callIdentity, IdentityRequestError } from "./identity-client";
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth, { AuthError, type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { encode, decode } from "next-auth/jwt";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
-export function safeReturnTo(
-  candidate: unknown,
-  fallback = "/dashboard",
-): string {
-  if (
-    typeof candidate !== "string" ||
-    !candidate.startsWith("/") ||
-    candidate.startsWith("//") ||
-    /[\\\u0000-\u0020]/.test(candidate)
-  )
-    return fallback;
-  try {
-    const decoded = decodeURIComponent(candidate);
-    if (decoded.startsWith("//") || /[\\\u0000-\u0020]/.test(decoded))
-      return fallback;
-  } catch {
-    return fallback;
-  }
-  const url = new URL(candidate, "https://application.invalid");
-  return url.origin === "https://application.invalid"
-    ? url.pathname + url.search + url.hash
-    : fallback;
-}
+import { safeReturnTo } from "./return-to";
+export { safeReturnTo } from "./return-to";
 
 export function configuredUrl(name: string) {
   const value = process.env[name];
@@ -86,8 +65,8 @@ type Transaction = {
   clientId: string;
   redirectUri: string;
 };
-const cookieName = (clientId: string) =>
-  `${process.env.NODE_ENV === "production" ? "__Host-" : ""}blynta-${clientId}-transaction`;
+const cookieName = (clientId: string, state: string) =>
+  `${process.env.NODE_ENV === "production" ? "__Host-" : ""}blynta-${clientId}-transaction-${state}`;
 const options = () => ({
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
@@ -112,7 +91,20 @@ export function startAuthorization(
   return async function GET(request: Request) {
     const own = configuredUrl(appEnv);
     const central = configuredUrl("AUTH_APP_URL");
-    const params = new URL(request.url).searchParams;
+    const requestUrl = new URL(request.url);
+    const params = requestUrl.searchParams;
+    // Set the transaction on the callback host, never a preview/alias host.
+    if (requestUrl.origin !== own.origin) {
+      const canonical = new URL("/auth/start", own);
+      canonical.search = params.toString();
+      return NextResponse.redirect(canonical);
+    }
+    let restartReturnTo = fallback;
+    if (params.has("restart"))
+      restartReturnTo = await authorizationReturnTo(
+        clientId,
+        params.get("restart"),
+      );
     const state = randomBytes(32).toString("base64url");
     const verifier = randomBytes(32).toString("base64url");
     const transaction: Transaction = {
@@ -120,7 +112,7 @@ export function startAuthorization(
       verifier,
       returnTo: safeReturnTo(
         params.get("returnTo") || params.get("callbackUrl"),
-        fallback,
+        restartReturnTo,
       ),
       expiresAt: Date.now() + 600000,
       clientId,
@@ -140,12 +132,19 @@ export function startAuthorization(
     if (params.get("ref"))
       authorize.searchParams.set("ref", params.get("ref")!);
     const response = NextResponse.redirect(authorize);
+    const prefix = cookieName(clientId, "");
+    const existing = (await cookies())
+      .getAll()
+      .filter((cookie) => cookie.name.startsWith(prefix));
+    // Bound abandoned attempts without overwriting another active tab.
+    for (const cookie of existing.slice(0, Math.max(0, existing.length - 3)))
+      response.cookies.set(cookie.name, "", { ...options(), maxAge: 0 });
     response.cookies.set(
-      cookieName(clientId),
+      cookieName(clientId, state),
       await encode({
         token: { ...transaction },
         secret: transactionSecret(clientId),
-        salt: cookieName(clientId),
+        salt: cookieName(clientId, state),
         maxAge: 600,
       }),
       options(),
@@ -160,12 +159,14 @@ async function readTransaction(
   clientId: string,
   state: unknown,
 ): Promise<Transaction> {
-  const raw = (await cookies()).get(cookieName(clientId))?.value;
-  if (!raw || typeof state !== "string") throw new Error("Invalid transaction");
+  if (typeof state !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(state))
+    throw new Error("Invalid transaction");
+  const raw = (await cookies()).get(cookieName(clientId, state))?.value;
+  if (!raw) throw new Error("Invalid transaction");
   const decoded = await decode({
     token: raw,
     secret: transactionSecret(clientId),
-    salt: cookieName(clientId),
+    salt: cookieName(clientId, state),
   });
   if (
     !decoded ||
@@ -193,7 +194,7 @@ async function readTransaction(
 export function createProductAuth(clientId: string, appEnv: string) {
   const shared = sessionCallbacks("consumer", "product");
   return NextAuth({
-    pages: { signIn: "/login", error: "/login" },
+    pages: { signIn: "/auth/start", error: "/auth/recover" },
     secret: authSecret(clientId),
     session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
     cookies: {
@@ -230,7 +231,7 @@ export function createProductAuth(clientId: string, appEnv: string) {
               redirect_uri: transaction.redirectUri,
               code_verifier: transaction.verifier,
             });
-            (await cookies()).set(cookieName(clientId), "", {
+            (await cookies()).set(cookieName(clientId, transaction.state), "", {
               ...options(),
               maxAge: 0,
             });
@@ -319,7 +320,11 @@ export function sessionCallbacks(
             accessTokenExpires: identity.accessTokenExpires,
           });
         }
-        if (typeof token.sessionToken !== "string") return null;
+        if (
+          typeof token.sessionToken !== "string" ||
+          (typeof token.expiresAt === "number" && token.expiresAt <= Date.now())
+        )
+          return null;
         // Check revocation on every session read; token is also validated by the API guard.
         try {
           const fresh = await callIdentity<
@@ -334,12 +339,21 @@ export function sessionCallbacks(
             return null;
           Object.assign(token, fresh);
           token.email = fresh.email;
-        } catch {
-          return null;
+          delete token.authError;
+        } catch (error) {
+          if (
+            kind === "admin" ||
+            (error instanceof IdentityRequestError && error.status === 401)
+          )
+            return null;
+          // Keep the encrypted credential during outages, but never expose a stale API token.
+          token.authError = "service_unavailable";
+          delete token.accessToken;
         }
         return token;
       },
       async session({ session, token }) {
+        session.authError = token.authError;
         session.user.id = String(token.id || "");
         session.user.role = String(token.role || "user");
         // Existing API clients require bearer tokens; only a five-minute token is exposed.
@@ -376,27 +390,52 @@ export function finishAuthorization(
     try {
       transaction = await readTransaction(clientId, params.get("state"));
     } catch {
-      return new Response(
-        "Invalid or expired authentication request. Start sign-in again.",
-        {
-          status: 400,
-          headers: {
-            "Cache-Control": "no-store",
-            "Referrer-Policy": "no-referrer",
-          },
-        },
-      );
+      console.warn("[blynta-auth] callback recovery", {
+        client: clientId,
+        reason: "transaction_missing_or_invalid",
+      });
+      return authorizationRecovery(request);
     }
     if (!params.get("code") || params.get("error"))
-      return new Response("Authentication failed. Start sign-in again.", {
-        status: 400,
-      });
+      return authorizationRecovery(request, transaction.returnTo);
     // Auth.js throws its own redirect; deliberately allow that to propagate.
-    await signIn("blynta", {
-      code: params.get("code"),
-      state: params.get("state"),
-      redirectTo: safeReturnTo(transaction.returnTo),
-    });
+    try {
+      await signIn("blynta", {
+        code: params.get("code"),
+        state: params.get("state"),
+        redirectTo: safeReturnTo(transaction.returnTo),
+      });
+    } catch (error) {
+      if (error instanceof AuthError)
+        return authorizationRecovery(request, transaction.returnTo);
+      throw error; // Preserve the successful Auth.js NEXT_REDIRECT.
+    }
     return new Response(null, { status: 204 });
   };
+}
+
+function authorizationRecovery(request: Request, returnTo = "/dashboard") {
+  const url = new URL("/auth/recover", request.url);
+  url.searchParams.set("returnTo", safeReturnTo(returnTo));
+  const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("Referrer-Policy", "no-referrer");
+  return response;
+}
+
+export async function productSignInDestination() {
+  const returnTo = safeReturnTo((await headers()).get("x-blynta-return-to"));
+  const start =
+    process.env.CENTRAL_AUTH_ENABLED === "true"
+      ? "/auth/start?returnTo="
+      : "/login?callbackUrl=";
+  return start + encodeURIComponent(returnTo);
+}
+
+export async function authorizationReturnTo(clientId: string, state: unknown) {
+  try {
+    return safeReturnTo((await readTransaction(clientId, state)).returnTo);
+  } catch {
+    return "/dashboard";
+  }
 }

@@ -1,3 +1,4 @@
+import { productSignInDestination } from "@blynta/auth/server";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ClipDetailView } from "@/features/jobs";
@@ -11,7 +12,7 @@ export default async function ClipStudioPage({
 }) {
   const session = await auth();
   if (!session?.user) {
-    redirect("/login");
+    redirect(await productSignInDestination());
   }
 
   const { id, clipId } = await params;

@@ -1,22 +1,33 @@
 "use client";
 import { useSession } from "next-auth/react";
-import { logoutProduct, redirectProductSessionLoss } from "@blynta/auth/client";
+import {
+  productFetch,
+  redirectProductSessionLoss,
+  productSessionState,
+} from "@blynta/auth/client";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { AppButton } from "@blynta/ui";
 export function ProtectedStudio({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
+  const phase = useSyncExternalStore(
+    productSessionState.subscribe,
+    productSessionState.getSnapshot,
+    () => "active",
+  );
   const check = useQuery({
     queryKey: ["auth", "profile", session?.user.id],
     enabled: status === "authenticated",
     retry: false,
     refetchInterval: 60000,
     queryFn: async () => {
-      const response = await fetch("/api/session-check");
+      const response = await productFetch("/api/session-check");
       if (response.status === 401) {
-        await logoutProduct();
-        throw new Error("Your session expired. Please sign in again.");
+        throw Object.assign(
+          new Error("Your session expired. Please sign in again."),
+          { status: 401 },
+        );
       }
       if (!response.ok)
         throw new Error(
@@ -28,6 +39,7 @@ export function ProtectedStudio({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (status === "unauthenticated") redirectProductSessionLoss();
   }, [status]);
+  if (phase !== "active") return children;
   if (status !== "authenticated" || check.isPending) return <LoadingSkeleton />;
   if (check.isError)
     return (

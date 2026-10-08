@@ -6,7 +6,13 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { staleTime: 30000, retry: 1 },
+          queries: {
+            staleTime: 30000,
+            retry: (count, error) =>
+              !(
+                "status" in error && [401, 403].includes(Number(error.status))
+              ) && count < 1,
+          },
           mutations: { retry: false },
         },
       }),

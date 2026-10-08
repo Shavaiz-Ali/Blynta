@@ -37,8 +37,22 @@ function SignupContainerInner({ enabledProviders }: SignupContainerProps) {
     (source === "main" || source === "studio");
   const loginUrl = logoutMode
     ? `/login?mode=product-logout&from=${source}`
-    : "/login";
-  const redirectTo = logoutMode ? loginUrl : "/continue";
+    : "/login" +
+      (searchParams.get("transaction")
+        ? "?transaction=" + encodeURIComponent(searchParams.get("transaction")!)
+        : "");
+  const transaction = searchParams.get("transaction");
+  const continuation =
+    transaction && /^[A-Za-z0-9_-]{43}$/.test(transaction)
+      ? "?transaction=" +
+        transaction +
+        (["blynta-main", "blynta-studio"].includes(
+          searchParams.get("client") || "",
+        )
+          ? "&client=" + searchParams.get("client")
+          : "")
+      : "";
+  const redirectTo = logoutMode ? loginUrl : "/continue" + continuation;
 
   const { data: fetchedProviders, isLoading: providersLoading } =
     useEnabledProviders({

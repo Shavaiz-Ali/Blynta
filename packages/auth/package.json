@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     "./server": "./src/server.ts",
+    "./transport": "./src/session-fetch.ts",
     "./client": "./src/client.ts",
+    "./session-expired": "./src/session-expired.tsx",
     "./backend": "./src/backend.ts",
     "./proxy": "./src/proxy.ts"
   },
@@ -15,6 +17,7 @@
   },
   "dependencies": {
     "next-auth": "^5.0.0-beta.32",
+    "@blynta/ui": "workspace:*",
     "@blynta/types": "workspace:*"
   },
   "peerDependencies": {

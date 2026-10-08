@@ -11,7 +11,7 @@ export interface AppProvidersProps {
 
 export function AppProviders({ children }: AppProvidersProps) {
   return (
-    <SessionProvider>
+    <SessionProvider refetchInterval={60} refetchOnWindowFocus>
       <QueryProvider>
         {children}
         <Toaster position="top-right" closeButton richColors />

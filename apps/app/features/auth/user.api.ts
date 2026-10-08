@@ -26,6 +26,10 @@ export async function fetchUserProfile(
 ): Promise<UserProfile | null> {
   if (!BACKEND_URL) return null;
   try {
+    if (typeof window !== "undefined") {
+      const { axiosClient } = await import("@/config/axiosClient");
+      return (await axiosClient.get<UserProfile>("/users/me")).data;
+    }
     const res = await fetch(`${BACKEND_URL}/users/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
@@ -50,6 +54,11 @@ export async function fetchUserProfile(
 export async function markWelcomed(accessToken: string): Promise<boolean> {
   if (!BACKEND_URL) return false;
   try {
+    if (typeof window !== "undefined") {
+      const { axiosClient } = await import("@/config/axiosClient");
+      await axiosClient.patch("/users/me/welcomed");
+      return true;
+    }
     const res = await fetch(`${BACKEND_URL}/users/me/welcomed`, {
       method: "PATCH",
       headers: {

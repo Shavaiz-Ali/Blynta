@@ -3,6 +3,7 @@ import { backendUrl } from "@/config/env";
 import { NextResponse } from "next/server";
 export async function sessionCheck() {
   const session = await auth();
+  if (session?.authError) return NextResponse.json({}, { status: 503 });
   if (!session?.accessToken) return NextResponse.json({}, { status: 401 });
   try {
     const response = await fetch(`${backendUrl()}/users/me`, {

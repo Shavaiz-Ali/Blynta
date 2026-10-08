@@ -25,6 +25,7 @@ export {
 export type { AppButtonProps } from "./components/AppButton";
 
 export { AppDialog } from "./components/AppDialog";
+export { AuthRecovery } from "./components/AuthRecovery";
 export type { AppDialogProps } from "./components/AppDialog";
 
 export { AppSelect } from "./components/AppSelect";

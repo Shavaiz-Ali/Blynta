@@ -6,6 +6,8 @@ import { authSecret } from "./backend";
 export function productProxy(clientId: string) {
   return async function proxy(request: NextRequest) {
     const path = request.nextUrl.pathname;
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("x-blynta-return-to", path + request.nextUrl.search);
     // Old bundles/bookmarks must not render a removed page or restart consumer SSO.
     if (
       path === "/signed-out" &&
@@ -23,7 +25,7 @@ export function productProxy(clientId: string) {
         "/share/",
       ].some((prefix) => path.startsWith(prefix))
     ) {
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: requestHeaders } });
     }
     const admin = clientId === "blynta-admin";
     const central = admin || process.env.CENTRAL_AUTH_ENABLED === "true";
@@ -49,10 +51,14 @@ export function productProxy(clientId: string) {
           typeof token.expiresAt !== "number" ||
           token.expiresAt <= Date.now()))
     ) {
-      const url = new URL("/login", request.url);
+      const url = new URL(
+        central && !admin ? "/auth/start" : "/login",
+        request.url,
+      );
+      url.searchParams.set("returnTo", path + request.nextUrl.search);
       url.searchParams.set("callbackUrl", path + request.nextUrl.search);
       return NextResponse.redirect(url);
     }
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   };
 }

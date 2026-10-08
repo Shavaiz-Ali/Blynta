@@ -2,6 +2,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { createWriteStream, mkdirSync, existsSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import assert from "node:assert/strict";
+import { encode, decode } from "../apps/app/node_modules/next-auth/jwt.js";
 import { createHash } from "node:crypto";
 
 const root = resolve(import.meta.dirname, "..");
@@ -154,7 +155,7 @@ class Browser {
         pair.slice(split + 1) &&
         !attributes.some((a) => /max-age=0/i.test(a)) &&
         (name.endsWith("-session") ||
-          name.endsWith("-transaction") ||
+          name.includes("-transaction-") ||
           name === "blynta-authorization")
       ) {
         assert.ok(
@@ -396,7 +397,7 @@ try {
           protectedPage.headers.get("location"),
           `http://localhost:${port}`,
         ).pathname,
-        "/login",
+        port === 3101 ? "/login" : "/auth/start",
       );
       const loginEntry = await anonymous.follow(
         protectedPage,
@@ -411,7 +412,7 @@ try {
             loginEntry.headers.get("location"),
             "http://localhost:" + port,
           ).pathname,
-          "/auth/start",
+          "/authorize",
         );
       const configured = await (
         await anonymous.request(`http://localhost:${port}/api/auth/providers`)
@@ -424,6 +425,58 @@ try {
         `PASS: ${app} protects routes and exposes only central code exchange`,
       );
     }
+    // Two pre-login handoffs in one cookie jar must both survive the other tab.
+    const parallel = new Browser();
+    const starts = [];
+    for (const destination of [
+      "/my-clips/123?panel=clips",
+      "/billing?tab=plan",
+    ]) {
+      const start = await parallel.request(
+        origins.MAIN_APP_URL +
+          "/auth/start?returnTo=" +
+          encodeURIComponent(destination),
+      );
+      starts.push(new URL(start.headers.get("location")));
+      await parallel.request(start.headers.get("location"));
+    }
+    assert.notEqual(
+      starts[0].searchParams.get("state"),
+      starts[1].searchParams.get("state"),
+    );
+    assert.notEqual(
+      starts[0].searchParams.get("code_challenge"),
+      starts[1].searchParams.get("code_challenge"),
+    );
+    // Establish identity, but explicitly resume each tab's own pending request.
+    await parallel.login();
+    for (const [i, start] of starts.entries()) {
+      const resume = await parallel.request(
+        origins.AUTH_APP_URL +
+          "/continue?transaction=" +
+          start.searchParams.get("state"),
+      );
+      const authorization = await parallel.follow(resume, origins.AUTH_APP_URL);
+      const callback = await parallel.follow(
+        authorization,
+        origins.AUTH_APP_URL,
+      );
+      assert.equal(
+        new URL(callback.headers.get("location")).pathname +
+          new URL(callback.headers.get("location")).search,
+        ["/my-clips/123?panel=clips", "/billing?tab=plan"][i],
+      );
+    }
+    const expired = await parallel.request(
+      origins.AUTH_APP_URL + "/continue?transaction=" + "x".repeat(43),
+    );
+    const expiredPage = await parallel.follow(expired, origins.AUTH_APP_URL);
+    assert.ok(
+      (await expiredPage.text()).includes("Your sign-in session expired"),
+    );
+    console.log(
+      "PASS: parallel state/PKCE and central pending transactions retain each original nested destination; missing pending has branded recovery",
+    );
     const standalone = new Browser();
     const standaloneContinuation = await standalone.login();
     assert.equal(standaloneContinuation.status, 307);
@@ -477,11 +530,46 @@ try {
     console.log(
       "PASS: original Studio editor destination survives central SSO",
     );
+    await fetch(backend + "/test/identity-outage?on=1");
+    const unavailable = await (
+      await studio.request(origins.STUDIO_APP_URL + "/api/auth/session")
+    ).json();
+    assert.equal(unavailable.authError, "service_unavailable");
+    assert.equal(unavailable.accessToken, undefined);
+    assert.ok(
+      [...studio.cookies].some(
+        ([name]) => name === "blynta-blynta-studio-session",
+      ),
+    );
+    const outageStart = await studio.request(
+      origins.STUDIO_APP_URL + "/auth/start",
+    );
+    const outageAuth = await studio.follow(outageStart, origins.STUDIO_APP_URL);
+    const outagePage = await studio.follow(outageAuth, origins.AUTH_APP_URL);
+    assert.ok(
+      (await outagePage.text()).includes("Sign-in is temporarily unavailable"),
+    );
+    await fetch(backend + "/test/identity-outage?on=0");
+    assert.ok(
+      (
+        await (
+          await studio.request(origins.STUDIO_APP_URL + "/api/auth/session")
+        ).json()
+      ).accessToken,
+    );
+    console.log(
+      "PASS: identity 503 preserves the encrypted credential, withholds access tokens, and presents branded service recovery; session recovers when backend returns",
+    );
     const securityStart = await studio.request(
       `${origins.STUDIO_APP_URL}/auth/start`,
     );
     const transaction = [...studio.cookies].find(([name]) =>
-      name.endsWith("blynta-studio-transaction"),
+      name.endsWith(
+        "blynta-studio-transaction-" +
+          new URL(securityStart.headers.get("location")).searchParams.get(
+            "state",
+          ),
+      ),
     );
     assert.ok(
       transaction && transaction[1].value.split(".").length === 5,
@@ -498,11 +586,42 @@ try {
       const changed = new URL(securityCallback);
       if (state === null) changed.searchParams.delete("state");
       else changed.searchParams.set("state", state);
-      assert.equal((await studio.request(changed.href)).status, 400);
+      assert.equal(
+        new URL((await studio.request(changed.href)).headers.get("location"))
+          .pathname,
+        "/auth/recover",
+      );
     }
     const savedTransaction = transaction[1].value;
+    const decodedTransaction = await decode({
+      token: savedTransaction,
+      secret: env.BLYNTA_STUDIO_AUTH_SECRET,
+      salt: transaction[0],
+    });
+    transaction[1].value = await encode({
+      token: { ...decodedTransaction, expiresAt: Date.now() - 1000 },
+      secret: env.BLYNTA_STUDIO_AUTH_SECRET,
+      salt: transaction[0],
+      maxAge: 600,
+    });
+    const expiredCallback = await studio.request(securityCallback.href);
+    const expiredCallbackPage = await studio.follow(
+      expiredCallback,
+      origins.STUDIO_APP_URL,
+    );
+    assert.ok(
+      (await expiredCallbackPage.text()).includes(
+        "Your sign-in session expired",
+      ),
+    );
+    transaction[1].value = savedTransaction;
     transaction[1].value = "tampered-transaction";
-    assert.equal((await studio.request(securityCallback.href)).status, 400);
+    assert.equal(
+      new URL(
+        (await studio.request(securityCallback.href)).headers.get("location"),
+      ).pathname,
+      "/auth/recover",
+    );
     transaction[1].value = savedTransaction;
     await studio.request(securityCallback.href);
     console.log(
@@ -550,9 +669,15 @@ try {
       "PASS: consumer identity cannot establish Admin session or enter Admin UI/API",
     );
     const direct = await new Browser().request(first.callbackUrl);
-    assert.equal(direct.status, 400);
+    assert.equal(
+      new URL(direct.headers.get("location")).pathname,
+      "/auth/recover",
+    );
     const replay = await studio.request(first.callbackUrl);
-    assert.equal(replay.status, 400);
+    assert.equal(
+      new URL(replay.headers.get("location")).pathname,
+      "/auth/recover",
+    );
     console.log(
       "PASS: missing transaction, manipulated callback and consumed transaction rejected",
     );
@@ -747,13 +872,26 @@ try {
         "a".repeat(43) +
         "&code_challenge_method=S256",
     );
-    assert.equal(invalid.status, 400);
-    assert.equal(invalid.headers.get("location"), null);
+    assert.equal(
+      new URL(invalid.headers.get("location")).pathname,
+      "/auth/recover",
+    );
+    assert.ok(!invalid.headers.get("location").includes("evil.example"));
+    const recoveryPage = await mainBrowser.follow(
+      invalid,
+      origins.AUTH_APP_URL,
+    );
+    assert.ok(
+      (await recoveryPage.text()).includes("Your sign-in session expired"),
+    );
     const anonymousInvalid = await new Browser().request(
       new URL("/authorize" + new URL(invalid.url).search, origins.AUTH_APP_URL)
         .href,
     );
-    assert.equal(anonymousInvalid.status, 400);
+    assert.equal(
+      new URL(anonymousInvalid.headers.get("location")).pathname,
+      "/auth/recover",
+    );
     console.log(
       "PASS: authorization endpoint refuses an unregistered callback",
     );

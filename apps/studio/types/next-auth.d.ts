@@ -10,6 +10,7 @@ import type { JWT as DefaultJWT } from "next-auth/jwt";
 
 declare module "next-auth" {
   interface Session {
+    authError?: "service_unavailable";
     user: {
       id: string;
       role: string;
@@ -28,6 +29,7 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT extends DefaultJWT {
+    authError?: "service_unavailable";
     id?: string;
     role?: string;
     /** Signed JWT issued by the NestJS backend. */

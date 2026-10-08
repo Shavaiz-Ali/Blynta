@@ -1,4 +1,5 @@
 "use client";
+import { productFetch } from "@blynta/auth/client";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 
@@ -26,7 +27,7 @@ export async function workspaceRequest<T>(
   path: string,
   method = "GET",
 ): Promise<T> {
-  const response = await fetch(`/api/workspace/${path}`, { method });
+  const response = await productFetch(`/api/workspace/${path}`, { method });
   const json = await response.json();
   if (!response.ok || !json.success)
     throw new Error(json.error?.message || "Could not load account data.");

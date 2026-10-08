@@ -1,3 +1,4 @@
+import { productSignInDestination } from "@blynta/auth/server";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
@@ -10,7 +11,7 @@ export default async function LegacyJobClipDetailPage({
 }) {
   const session = await auth();
   if (!session?.user) {
-    redirect("/login");
+    redirect(await productSignInDestination());
   }
 
   const { id, clipId } = await params;
