@@ -5,6 +5,12 @@ import { VideoDownloadService } from './services/video-download.service';
 import { TranscriptionService } from './services/transcription.service';
 import { HighlightDetectionService } from './services/highlight-detection.service';
 import { SourceVideoService } from './services/source-video.service';
+import { PipelineCacheService } from './services/pipeline-cache.service';
+import {
+  PipelineArtifact,
+  PipelineArtifactSchema,
+} from '../jobs/schemas/pipeline-artifact.schema';
+import { RedisModule } from '../redis/redis.module';
 import {
   SourceVideo,
   SourceVideoSchema,
@@ -13,8 +19,10 @@ import {
 @Module({
   imports: [
     MediaRenderModule,
+    RedisModule,
     MongooseModule.forFeature([
       { name: SourceVideo.name, schema: SourceVideoSchema },
+      { name: PipelineArtifact.name, schema: PipelineArtifactSchema },
     ]),
   ],
   providers: [
@@ -22,6 +30,7 @@ import {
     TranscriptionService,
     HighlightDetectionService,
     SourceVideoService,
+    PipelineCacheService,
   ],
   exports: [
     MediaRenderModule,
@@ -29,6 +38,7 @@ import {
     TranscriptionService,
     HighlightDetectionService,
     SourceVideoService,
+    PipelineCacheService,
   ],
 })
 export class MediaModule {}

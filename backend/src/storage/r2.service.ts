@@ -21,9 +21,14 @@ export class R2Service {
   private readonly logger = new Logger(R2Service.name);
   private readonly client: S3Client;
   private readonly bucket: string;
+  private readonly sourceBucket: string;
 
   constructor(private configService: ConfigService) {
     this.bucket = this.configService.get<string>('R2_BUCKET_NAME', '');
+    this.sourceBucket = this.configService.get<string>(
+      'R2_SOURCE_BUCKET_NAME',
+      '',
+    );
     const endpoint = this.configService.get<string>('R2_ENDPOINT', '');
     const accessKeyId = this.configService.get<string>('R2_ACCESS_KEY_ID', '');
     const secretAccessKey = this.configService.get<string>(
@@ -43,6 +48,30 @@ export class R2Service {
     });
   }
 
+  private isSource(key: string): boolean {
+    return key.startsWith('source-videos/') || key.startsWith('job-sources/');
+  }
+
+  private bucketFor(key: string): string {
+    if (!this.isSource(key)) return this.bucket;
+    if (
+      this.configService.get<string>('R2_PUBLIC_DOMAIN') &&
+      !this.sourceBucket
+    )
+      throw new Error(
+        'Private source storage requires R2_SOURCE_BUCKET_NAME when R2_PUBLIC_DOMAIN is configured',
+      );
+    if (
+      this.sourceBucket &&
+      this.sourceBucket === this.bucket &&
+      this.configService.get<string>('R2_PUBLIC_DOMAIN')
+    )
+      throw new Error(
+        'R2_SOURCE_BUCKET_NAME must be a separate private bucket',
+      );
+    return this.sourceBucket || this.bucket;
+  }
+
   /**
    * Uploads an in-memory buffer directly to R2.
    */
@@ -53,7 +82,7 @@ export class R2Service {
   ): Promise<string> {
     await this.client.send(
       new PutObjectCommand({
-        Bucket: this.bucket,
+        Bucket: this.bucketFor(objectKey),
         Key: objectKey,
         Body: buffer,
         ContentType: contentType,
@@ -74,7 +103,7 @@ export class R2Service {
     expiresInSeconds = 7 * 24 * 3600,
   ): Promise<string> {
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
-    if (publicDomain) {
+    if (publicDomain && !this.isSource(objectKey)) {
       const cleanDomain = publicDomain.replace(/\/$/, '');
       return `${cleanDomain}/${objectKey}`;
     }
@@ -96,7 +125,7 @@ export class R2Service {
     try {
       await this.client.send(
         new PutObjectCommand({
-          Bucket: this.bucket,
+          Bucket: this.bucketFor(objectKey),
           Key: objectKey,
           Body: fileStream,
           ContentType: 'video/mp4',
@@ -114,7 +143,10 @@ export class R2Service {
   async fileExists(objectKey: string): Promise<boolean> {
     try {
       await this.client.send(
-        new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+        new HeadObjectCommand({
+          Bucket: this.bucketFor(objectKey),
+          Key: objectKey,
+        }),
       );
       return true;
     } catch (error) {
@@ -135,7 +167,10 @@ export class R2Service {
 
   async objectInfo(objectKey: string) {
     const result = await this.client.send(
-      new HeadObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      new HeadObjectCommand({
+        Bucket: this.bucketFor(objectKey),
+        Key: objectKey,
+      }),
     );
     return { size: result.ContentLength, contentType: result.ContentType };
   }
@@ -152,7 +187,10 @@ export class R2Service {
     localDestPath: string,
   ): Promise<void> {
     const result = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      new GetObjectCommand({
+        Bucket: this.bucketFor(objectKey),
+        Key: objectKey,
+      }),
       { abortSignal: cancellationSignal() },
     );
     const writeStream = fs.createWriteStream(localDestPath);
@@ -174,7 +212,7 @@ export class R2Service {
     expiresInSeconds = 3600,
   ): Promise<string> {
     const command = new GetObjectCommand({
-      Bucket: this.bucket,
+      Bucket: this.bucketFor(objectKey),
       Key: objectKey,
     });
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
@@ -182,7 +220,10 @@ export class R2Service {
 
   async deleteFile(objectKey: string): Promise<void> {
     await this.client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      new DeleteObjectCommand({
+        Bucket: this.bucketFor(objectKey),
+        Key: objectKey,
+      }),
     );
     this.logger.log(`Deleted R2 object: ${objectKey}`);
   }
@@ -193,7 +234,10 @@ export class R2Service {
    */
   async downloadToBuffer(objectKey: string): Promise<Buffer> {
     const result = await this.client.send(
-      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+      new GetObjectCommand({
+        Bucket: this.bucketFor(objectKey),
+        Key: objectKey,
+      }),
     );
     const stream = result.Body as Readable;
     const chunks: Buffer[] = [];
@@ -217,7 +261,7 @@ export class R2Service {
     expiresIn = 300,
   ): Promise<string> {
     const command = new PutObjectCommand({
-      Bucket: this.bucket,
+      Bucket: this.bucketFor(objectKey),
       Key: objectKey,
       ContentType: contentType,
     });

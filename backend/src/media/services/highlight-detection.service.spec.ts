@@ -79,6 +79,9 @@ describe('HighlightDetectionService & Schemas', () => {
         {
           startTime: 5,
           endTime: 25,
+          contextComplete: true,
+          presetRelevant: true,
+          groundedQuote: 'Hello world transcript',
           reason: 'Good hook',
           score: 0.9,
           clipTitle: 'A highlight',
@@ -148,7 +151,7 @@ describe('HighlightDetectionService & Schemas', () => {
     it('propagates API errors without a JSON retry', async () => {
       mockGenerateObject.mockRejectedValueOnce(new Error('Invalid API key'));
       await expect(service.detectHighlights(segments)).rejects.toThrow(
-        'Invalid API key',
+        'Highlight detection failed',
       );
       expect(mockGenerateObject).toHaveBeenCalledTimes(1);
     });
@@ -413,22 +416,33 @@ describe('HighlightDetectionService & Schemas', () => {
   });
 });
 
-describe('clip target enforcement and bounded recovery', () => {
-  const candidate = (index: number) => ({
+describe('quality discovery and independent authorized selection', () => {
+  const candidate = (index: number, seconds = 45) => ({
     startTime: index * 80,
-    endTime: index * 80 + 45,
-    reason: 'Complete moment',
-    score: 0.9 - index * 0.01,
-    clipTitle: `Clip ${index}`,
-    clipDescription: 'Distinct moment',
+    endTime: index * 80 + seconds,
+    score: 0.95 - index * 0.001,
+    reason: 'A complete distinct insight',
+    clipTitle: 'Clip ' + index,
+    clipDescription: 'Distinct complete moment',
     tags: [],
     style: 'curiosity-hook',
+    contextComplete: true,
+    presetRelevant: true,
+    groundedQuote: 'Specific ' + index + ' complete meaningful source moment',
   });
   const segments = Array.from({ length: 40 }, (_, index) => ({
     startTime: index * 80,
     endTime: index * 80 + 60,
-    text: `Distinct transcript moment ${index}`,
+    text: candidate(index).groundedQuote,
   }));
+  const response = (highlights: ReturnType<typeof candidate>[]) => ({
+    videoTitle: 'Video',
+    videoDescription: '',
+    keywords: '',
+    hashtags: [],
+    highlights,
+    cacheable: true,
+  });
   let service: HighlightDetectionService;
   beforeEach(() => {
     mockGenerateObject.mockReset();
@@ -436,70 +450,246 @@ describe('clip target enforcement and bounded recovery', () => {
       new ConfigService({ LLM_PROVIDER: 'google', LLM_API_KEY: 'test' }),
     );
   });
-  test.each([6, 9])(
-    'caps genuine candidates at %s and retains separate ranges',
-    async (max) => {
+  const requestAt = (index: number) =>
+    (
+      mockGenerateObject.mock.calls as unknown as Array<
+        [{ prompt: string; system: string; maxOutputTokens: number }]
+      >
+    )[index][0];
+  test.each([
+    ['free', 6],
+    ['pro', 9],
+    ['business', 9],
+  ] as const)(
+    '%s selects within its cap from the same spare pool',
+    async (plan, max) => {
       mockGenerateObject.mockResolvedValueOnce({
-        object: {
-          highlights: Array.from({ length: 12 }, (_, i) => candidate(i)),
+        object: response(Array.from({ length: 10 }, (_, i) => candidate(i))),
+      });
+      const result = await service.detectHighlightsWithMetadata(
+        segments.slice(0, 10),
+        {
+          plan,
+          videoDuration: 800,
+          maxHighlights: max,
+          maxOutputSeconds: max * 60,
         },
-      });
-      const result = await service.detectHighlightsWithMetadata(segments, {
-        videoDuration: 3200,
-        maxHighlights: max,
-      });
-      expect(result.highlights).toHaveLength(max);
-      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
-      expect(mockGenerateObject.mock.calls[0][0].system).toContain(
-        `Never exceed ${max}`,
       );
+      expect(result.highlights).toHaveLength(max);
+      expect(result.candidates).toHaveLength(10);
+      expect(requestAt(0).system).toContain('Never exceed 12');
+      expect(requestAt(0).system).toContain('NO minimum clip count');
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
     },
   );
-  test('one initial result recovers five genuine uncovered moments with one extra call', async () => {
-    mockGenerateObject
-      .mockResolvedValueOnce({ object: { highlights: [candidate(0)] } })
-      .mockResolvedValueOnce({
-        object: {
-          highlights: Array.from({ length: 5 }, (_, i) => candidate(i + 1)),
-        },
+  test('few genuine moments are valid and do not trigger a quota-filling loop', async () => {
+    mockGenerateObject.mockResolvedValueOnce({
+      object: response([candidate(0), candidate(1)]),
+    });
+    const result = await service.detectHighlightsWithMetadata(
+      segments.slice(0, 10),
+      { videoDuration: 800, maxHighlights: 9 },
+    );
+    expect(result.highlights).toHaveLength(2);
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+  });
+  test('long sources receive broad overlapping analysis windows and preserve a plan-independent pool', async () => {
+    mockGenerateObject.mockImplementation((request: { prompt: string }) => {
+      const ranges = [
+        ...request.prompt.matchAll(/\[(\d+\.\d+)s - (\d+\.\d+)s\]/g),
+      ];
+      const indices = ranges.map((r) => Math.round(Number(r[1]) / 80));
+      return Promise.resolve({
+        object: response(indices.slice(0, 3).map((i) => candidate(i))),
       });
+    });
     const result = await service.detectHighlightsWithMetadata(segments, {
       videoDuration: 3200,
-      maxHighlights: 6,
+      maxHighlights: 9,
+      maxOutputSeconds: 540,
+    });
+    expect(result.candidates!.length).toBeGreaterThan(9);
+    expect(result.highlights).toHaveLength(9);
+    expect(mockGenerateObject).toHaveBeenCalledTimes(4);
+    expect(requestAt(3).prompt).toContain('[3120.0s - 3180.0s]');
+  });
+  test('duration filtering invokes one bounded pass across later uncovered regions', async () => {
+    const internal = service as unknown as {
+      detectHighlightsAcrossWindows: (
+        s: typeof segments,
+        o: unknown,
+      ) => Promise<ReturnType<typeof response>>;
+    };
+    const detection = jest
+      .spyOn(internal, 'detectHighlightsAcrossWindows')
+      .mockResolvedValueOnce(
+        response([
+          ...Array.from({ length: 5 }, (_, i) => candidate(i)),
+          candidate(5, 5),
+        ]),
+      )
+      .mockResolvedValueOnce(response([candidate(35)]));
+    const result = await service.detectHighlightsWithMetadata(segments, {
+      videoDuration: 3200,
+      maxHighlights: 9,
+      maxOutputSeconds: 540,
     });
     expect(result.highlights).toHaveLength(6);
-    expect(mockGenerateObject).toHaveBeenCalledTimes(2);
-    expect(mockGenerateObject.mock.calls[1][0].prompt).toContain(
-      'uncovered excerpt',
-    );
-    expect(mockGenerateObject.mock.calls[1][0].prompt).not.toContain(
-      '[0.0s - 60.0s]',
-    );
+    expect(result.highlights.some((h) => h.startTime === 2800)).toBe(true);
+    expect(detection).toHaveBeenCalledTimes(2);
+    expect(detection.mock.calls[1][0]).toContainEqual(segments[35]);
+    expect(detection.mock.calls[1][0]).not.toContainEqual(segments[0]);
   });
-  test('does not fabricate extra moments when recovery returns the same moment', async () => {
-    mockGenerateObject.mockResolvedValue({
-      object: { highlights: [candidate(0)] },
-    });
+  test('retains quality across initial and recovery passes and returns fewer rather than filler', async () => {
+    const internal = service as unknown as {
+      detectHighlightsAcrossWindows: (
+        s: typeof segments,
+        o: unknown,
+      ) => Promise<ReturnType<typeof response>>;
+    };
+    const detection = jest
+      .spyOn(internal, 'detectHighlightsAcrossWindows')
+      .mockResolvedValueOnce(
+        response([
+          candidate(0),
+          { ...candidate(1), score: 0.2 },
+          candidate(2, 5),
+        ]),
+      )
+      .mockResolvedValueOnce(response([{ ...candidate(30), score: 0.2 }]));
     const result = await service.detectHighlightsWithMetadata(segments, {
       videoDuration: 3200,
+      maxHighlights: 9,
     });
     expect(result.highlights).toHaveLength(1);
-    expect(mockGenerateObject).toHaveBeenCalledTimes(2);
+    expect(detection).toHaveBeenCalledTimes(2);
   });
-  test('rejects out-of-source, short long-form, overlap, and silent gaps', () => {
-    const selection = (service as any).validateCandidates(
+  test('rejects invalid times, incomplete context, irrelevant presets, false quotes and repeated content', () => {
+    const result = service.selectCandidates(
       [
         candidate(0),
+        candidate(0),
         { ...candidate(1), startTime: -1 },
-        { ...candidate(2), endTime: 3300 },
-        { ...candidate(3), endTime: 245 },
-        { ...candidate(0), startTime: 5 },
-        { ...candidate(4), startTime: 3050, endTime: 3095 },
+        { ...candidate(2), contextComplete: false },
+        { ...candidate(3), presetRelevant: false },
+        {
+          ...candidate(4),
+          groundedQuote: 'This never appears in the transcript',
+        },
+        candidate(5, 61),
       ],
-      segments.slice(0, 5),
-      3200,
-      9,
+      segments,
+      { videoDuration: 3200, maxHighlights: 9 },
     );
-    expect(selection).toHaveLength(1);
+    expect(result).toHaveLength(1);
+  });
+  test('chooses the strongest non-overlapping combination rather than greedily blocking better clips', () => {
+    const a = {
+      ...candidate(0),
+      startTime: 0,
+      endTime: 60,
+      score: 0.95,
+      groundedQuote: undefined,
+    };
+    const b = { ...a, endTime: 45, score: 0.8 };
+    const c = { ...b, startTime: 45, endTime: 90 };
+    const selected = service.selectCandidates(
+      [a, b, c],
+      [{ startTime: 0, endTime: 90, text: 'A full complete transcript' }],
+      { videoDuration: 900, maxHighlights: 2, maxOutputSeconds: 90 },
+    );
+    expect(selected).toHaveLength(2);
+    expect(selected.map((h) => h.startTime)).toEqual([0, 45]);
+  });
+  test('deduplicates repeated content at distinct non-overlapping timestamps', () => {
+    const text =
+      'This complete useful moment contains the same repeated explanation';
+    const first = { ...candidate(0), groundedQuote: text };
+    const second = { ...candidate(1), groundedQuote: text };
+    expect(
+      service.selectCandidates(
+        [first, second],
+        [first, second].map((h) => ({
+          startTime: h.startTime,
+          endTime: h.endTime,
+          text,
+        })),
+        { videoDuration: 900, maxHighlights: 9, maxOutputSeconds: 540 },
+      ),
+    ).toHaveLength(1);
+  });
+  test('applies the current plan cap and exact budget to a larger cached candidate pool', () => {
+    const pool = Array.from({ length: 12 }, (_, i) => candidate(i));
+    expect(
+      service.selectCandidates(pool, segments, {
+        videoDuration: 3200,
+        maxHighlights: 6,
+        maxOutputSeconds: 360,
+      }),
+    ).toHaveLength(6);
+    expect(
+      service.selectCandidates(pool, segments, {
+        videoDuration: 3200,
+        maxHighlights: 9,
+        maxOutputSeconds: 540,
+      }),
+    ).toHaveLength(9);
+    expect(
+      service.selectCandidates(pool, segments, {
+        videoDuration: 3200,
+        maxHighlights: 9,
+        maxOutputSeconds: 100,
+      }),
+    ).toHaveLength(2);
+    expect(
+      service.selectCandidates(pool, segments, {
+        videoDuration: 3200,
+        maxHighlights: 9,
+        maxOutputSeconds: 0,
+      }),
+    ).toHaveLength(0);
+    expect(pool).toHaveLength(12);
+  });
+  test('engaging short videos are not subject to a duration-derived count cap', async () => {
+    const short = Array.from({ length: 9 }, (_, i) => ({
+      ...candidate(i),
+      startTime: i * 20,
+      endTime: i * 20 + 15,
+      groundedQuote: 'Moment ' + i,
+    }));
+    mockGenerateObject.mockResolvedValueOnce({ object: response(short) });
+    const result = await service.detectHighlightsWithMetadata(
+      short.map((h) => ({
+        startTime: h.startTime,
+        endTime: h.endTime,
+        text: h.groundedQuote,
+      })),
+      { videoDuration: 180, maxHighlights: 9, maxOutputSeconds: 180 },
+    );
+    expect(result.highlights).toHaveLength(9);
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+  });
+  test('exact 45 and 60-second fractional boundaries survive arithmetic noise', () => {
+    const clips = [
+      {
+        ...candidate(0),
+        startTime: 4.01,
+        endTime: 64.01,
+        groundedQuote: undefined,
+      },
+      {
+        ...candidate(1),
+        startTime: 84.01,
+        endTime: 129.01,
+        groundedQuote: undefined,
+      },
+    ];
+    expect(
+      service.selectCandidates(
+        clips,
+        [{ startTime: 0, endTime: 180, text: 'Complete transcript' }],
+        { videoDuration: 900, maxHighlights: 9, maxOutputSeconds: 105 },
+      ),
+    ).toHaveLength(2);
   });
 });

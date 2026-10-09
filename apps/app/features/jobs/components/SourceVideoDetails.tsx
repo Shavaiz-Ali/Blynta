@@ -407,20 +407,21 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
             </div>
           </div>
 
-          {job.generationSummary && job.generationSummary.shortfall > 0 && (
-            <p
-              role="status"
-              className="rounded-xl border bg-card p-4 text-sm text-muted-foreground"
-            >
-              We found {job.generationSummary.accepted} valid highlights toward
-              the target of {job.generationSummary.targetMin}–
-              {job.generationSummary.targetMax}.{" "}
-              {job.generationSummary.reason === "output_budget_or_clip_limit"
-                ? "The authorized output budget limited this result."
-                : "The analysis returned fewer distinct, complete moments than the target."}{" "}
-              Final credits reflect delivered clips.
-            </p>
-          )}
+          {job.generationSummary &&
+            job.generationSummary.accepted <
+              job.generationSummary.targetMax && (
+              <p
+                role="status"
+                className="rounded-xl border bg-card p-4 text-sm text-muted-foreground"
+              >
+                We selected {job.generationSummary.accepted} complete highlights
+                within your limit of {job.generationSummary.targetMax}.{" "}
+                {job.generationSummary.reason === "output_budget_or_clip_limit"
+                  ? "The authorized output budget limited this result."
+                  : "The count depends on the content and your selected style."}{" "}
+                Final credits reflect delivered clips.
+              </p>
+            )}
           <GeneratedClipsGrid job={job} />
         </div>
       )}

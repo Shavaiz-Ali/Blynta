@@ -154,6 +154,10 @@ export const ClipSchema = SchemaFactory.createForClass(Clip);
 
 @Schema({ timestamps: true })
 export class Job {
+  @Prop()
+  sourceContentHash?: string;
+  @Prop()
+  transcriptSignature?: string;
   @Prop({ type: Number, enum: [6, 9] })
   clipTargetMax?: number;
 

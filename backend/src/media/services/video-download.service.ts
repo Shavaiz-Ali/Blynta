@@ -41,6 +41,8 @@ export class VideoDownloadService {
     resolution: '720p' | '1080p' | '360p' | '240p',
     onProgress?: (percent: number) => void,
     maxDurationSeconds?: number,
+    requirePublicAccess = false,
+    deferAudioExtraction = false,
   ): Promise<{
     videoPath: string;
     audioPath: string;
@@ -54,12 +56,20 @@ export class VideoDownloadService {
     const audioPath = path.join(outputDir, 'audio.wav');
     const maxHeight = Number.parseInt(resolution, 10);
 
-    if (maxDurationSeconds) {
+    if (maxDurationSeconds || requirePublicAccess) {
       const preliminary = await this.fetchVideoMetadata(sourceUrl);
+      if (
+        requirePublicAccess &&
+        !['public', 'unlisted'].includes(preliminary.availability || '')
+      )
+        throw new UnrecoverableError(
+          'This source requires access that cannot be verified for your account. Use an accessible public video.',
+        );
       if (!Number.isFinite(preliminary.duration) || preliminary.duration <= 0)
         throw new UnrecoverableError('Verified source duration is unavailable');
       // Fractional metadata is checked against the immutable pricing snapshot after ffprobe.
       if (
+        maxDurationSeconds &&
         preliminary.duration > maxDurationSeconds &&
         (!Number.isInteger(maxDurationSeconds) ||
           preliminary.duration >= maxDurationSeconds + 1)
@@ -122,6 +132,21 @@ export class VideoDownloadService {
     }
 
     this.logger.log(`Extracting audio to ${audioPath}`);
+    if (!deferAudioExtraction) await this.extractAudio(videoPath, audioPath);
+
+    const metadata = await this.fetchVideoMetadata(sourceUrl);
+
+    return {
+      videoPath,
+      audioPath,
+      title: metadata.title,
+      uploader: metadata.uploader,
+      thumbnailUrl: metadata.thumbnailUrl,
+      duration: metadata.duration,
+    };
+  }
+
+  async extractAudio(videoPath: string, audioPath: string): Promise<void> {
     await runCommandWithProgress(
       'ffmpeg',
       [
@@ -139,24 +164,22 @@ export class VideoDownloadService {
       () => {},
       this.processRegistry,
     );
-
-    const metadata = await this.fetchVideoMetadata(sourceUrl);
-
-    return {
-      videoPath,
-      audioPath,
-      title: metadata.title,
-      uploader: metadata.uploader,
-      thumbnailUrl: metadata.thumbnailUrl,
-      duration: metadata.duration,
-    };
   }
 
-  async fetchVideoMetadata(sourceUrl: string): Promise<{
+  async canShareSource(sourceUrl: string): Promise<boolean> {
+    // A server's authentication cookies must never authorize shared access for another user.
+    return (await this.fetchVideoMetadata(sourceUrl, false)).duration > 0;
+  }
+
+  async fetchVideoMetadata(
+    sourceUrl: string,
+    useCookies = true,
+  ): Promise<{
     title: string;
     uploader: string;
     thumbnailUrl: string;
     duration: number;
+    availability?: string;
   }> {
     return new Promise((resolve) => {
       const ytDlpArgs = [
@@ -168,14 +191,15 @@ export class VideoDownloadService {
         '--js-runtimes',
         'deno',
         '--print',
-        '%(title)s|||%(uploader)s|||%(thumbnail)s|||%(duration)s',
+        '%(title)s|||%(uploader)s|||%(thumbnail)s|||%(duration)s|||%(availability)s',
         '--skip-download',
       ];
+      if (!useCookies) ytDlpArgs.unshift('--ignore-config');
 
       const cookiesPath = this.configService.get<string>(
         'YOUTUBE_COOKIES_PATH',
       );
-      if (cookiesPath && fs.existsSync(cookiesPath)) {
+      if (useCookies && cookiesPath && fs.existsSync(cookiesPath)) {
         ytDlpArgs.push('--cookies', cookiesPath);
       }
 
@@ -229,7 +253,7 @@ export class VideoDownloadService {
           });
           return;
         }
-        const [title, uploader, thumbnail, durationStr] = output
+        const [title, uploader, thumbnail, durationStr, availability] = output
           .trim()
           .split('|||');
         const duration = parseFloat(durationStr) || 0;
@@ -238,6 +262,7 @@ export class VideoDownloadService {
           uploader: uploader?.trim() || '',
           thumbnailUrl: thumbnail?.trim() || '',
           duration,
+          availability: availability?.trim(),
         });
       });
       proc.on('error', (err) => {

@@ -491,7 +491,8 @@ test("confirmation displays server-provided duration, authorization and plan tar
   assert.match(html, /11 credits/);
   assert.match(html, /9 credits/);
   assert.match(html, /Up to 20 credits/);
-  assert.match(html, /aiming for 6 clips/);
+  assert.match(html, /creating up to 6 strong clips/);
+  assert.doesNotMatch(html, /aiming for|minimum clip count/);
   assert.doesNotMatch(html, /6–9 clips/);
 });
 

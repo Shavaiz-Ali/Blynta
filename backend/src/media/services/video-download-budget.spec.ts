@@ -76,4 +76,27 @@ describe('download preflight authorization failure', () => {
       expect(runCommandWithProgress).not.toHaveBeenCalled();
     },
   );
+  it('cannot use server cookies to authorize private media for an unrelated account', async () => {
+    const downloader = service(3233);
+    jest
+      .mocked(downloader.fetchVideoMetadata)
+      .mockResolvedValue({
+        title: 'Private',
+        uploader: '',
+        thumbnailUrl: '',
+        duration: 3233,
+        availability: 'private',
+      });
+    await expect(
+      downloader.downloadVideo(
+        'https://youtu.be/video',
+        root,
+        '240p',
+        undefined,
+        3233,
+        true,
+      ),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(runCommandWithProgress).not.toHaveBeenCalled();
+  });
 });

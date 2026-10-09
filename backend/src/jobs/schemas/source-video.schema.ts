@@ -24,6 +24,14 @@ export type SourceVideoDocument = SourceVideo & Document;
  */
 @Schema({ timestamps: true })
 export class SourceVideo {
+  @Prop()
+  mediaPreparedAt?: Date;
+  @Prop()
+  contentHash?: string;
+  @Prop()
+  audioContentHash?: string;
+  @Prop()
+  transcriptSignature?: string;
   @Prop({ type: Object })
   mediaMetadata?: MediaMetadata;
   @Prop({ type: String, required: true, enum: SourcePlatform })

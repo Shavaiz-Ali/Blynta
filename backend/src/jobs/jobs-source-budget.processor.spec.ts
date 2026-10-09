@@ -20,11 +20,13 @@ describe('pipeline source validation before paid work', () => {
   let root: string;
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), 'blynta-budget-'));
+    await writeFile(join(root, 'source.mp4'), 'fixture');
+    await writeFile(join(root, 'audio.wav'), 'fixture');
   });
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
   });
-  function fixture(measured: number, cached = false) {
+  function fixture(measured: number, cached = false, plan = 'pro') {
     const op = {
       product: 'ai-clips' as const,
       sourceSeconds: 3233,
@@ -58,6 +60,10 @@ describe('pipeline source validation before paid work', () => {
     };
     const stop = new Error('test: stop after approved source');
     const download = {
+      canShareSource: jest.fn().mockResolvedValue(true),
+      extractAudio: jest.fn((_video: string, audio: string) =>
+        writeFile(audio, 'fixture'),
+      ),
       downloadVideo: jest.fn(() =>
         Promise.resolve({
           videoPath: join(root, 'source.mp4'),
@@ -86,9 +92,16 @@ describe('pipeline source validation before paid work', () => {
         ),
       recordReuse: jest.fn(),
       saveMediaMetadata: jest.fn(),
+      saveAudio: jest.fn(),
+      saveTranscript: jest.fn(),
+      createFromProcessing: jest.fn((params: object) =>
+        Promise.resolve({ _id: 'cache', ...params }),
+      ),
     };
     const r2 = {
-      downloadToLocal: jest.fn(),
+      downloadToLocal: jest.fn((_key: string, dest: string) =>
+        writeFile(dest, 'fixture'),
+      ),
       fileExists: () => Promise.resolve(false),
       uploadFile: jest.fn(),
     };
@@ -97,6 +110,7 @@ describe('pipeline source validation before paid work', () => {
         Promise.resolve({
           durationSeconds: measured,
           hasVideo: true,
+          hasAudio: true,
           width: 640,
           height: 360,
           fps: 30,
@@ -106,7 +120,7 @@ describe('pipeline source validation before paid work', () => {
     const completion = { publish: jest.fn() };
     const processor = new JobsProcessor(
       jobs as never,
-      { findById: () => Promise.resolve({ plan: 'pro' }) } as never,
+      { findById: () => Promise.resolve({ plan }) } as never,
       {
         get: (_key: string, fallback: unknown) =>
           _key === 'STORAGE_ROOT' ? root : fallback,
@@ -189,10 +203,7 @@ describe('pipeline source validation before paid work', () => {
     expect(f.inspection.inspect).toHaveBeenCalledTimes(2);
     expect(f.download.downloadVideo).not.toHaveBeenCalled();
     expect(f.parent.videoDuration).toBe(3233.461);
-    expect(f.highlight.detectHighlightsWithMetadata).toHaveBeenCalledWith(
-      expect.any(Array),
-      expect.objectContaining({ videoDuration: 3233.461 }),
-    );
+    expect(f.transcribe.transcribe).toHaveBeenCalledTimes(1);
   });
   it.each([false, true])(
     'partial/full resume (%s) cannot bypass validation using stored coarse metadata',
@@ -214,6 +225,74 @@ describe('pipeline source validation before paid work', () => {
       expect(f.download.downloadVideo).not.toHaveBeenCalled();
       expect(f.transcribe.transcribe).not.toHaveBeenCalled();
       expect(f.inspection.inspect).toHaveBeenCalledWith(localVideoPath);
+    },
+  );
+  it.each([
+    ['free', 6, 360],
+    ['pro', 9, 540],
+    ['business', 9, 540],
+  ])(
+    'passes %s policy and immutable authorization to detection, then resumes without another call',
+    async (plan, max, budget) => {
+      const f = fixture(3233.461, false, plan);
+      const localVideoPath = join(root, 'resume.mp4');
+      await writeFile(localVideoPath, 'fixture');
+      const highlights = Array.from({ length: max }, (_, i) => ({
+        startTime: i * 80,
+        endTime: i * 80 + 45,
+        score: 0.9,
+        reason: 'Complete moment',
+        clipTitle: 'Clip ' + i,
+        clipDescription: '',
+        tags: [],
+        style: 'curiosity-hook',
+      }));
+      Object.assign(f.parent, {
+        localVideoPath,
+        transcript: [
+          { startTime: 0, endTime: 3233, text: 'Complete saved transcript' },
+        ],
+        creditOperationId: 'operation',
+        creditOutputSeconds: budget,
+        clipTargetMax: max,
+        clips: [],
+      });
+      const prepareRenderManifest = jest.fn(() => {
+        Object.assign(f.parent, {
+          renderManifestReady: true,
+          clips: highlights,
+        });
+        return Promise.resolve();
+      });
+      Object.assign(f.jobs, {
+        prepareRenderManifest,
+        enqueueRenders: jest.fn().mockResolvedValue(undefined),
+      });
+      Object.assign(f.completion, {
+        finalize: jest.fn().mockResolvedValue(undefined),
+      });
+      f.highlight.detectHighlightsWithMetadata.mockResolvedValue({
+        highlights,
+      });
+      await f.processor.process(f.bull as never);
+      expect(f.highlight.detectHighlightsWithMetadata).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.objectContaining({
+          plan,
+          jobId: 'job',
+          maxHighlights: max,
+          minHighlights: 0,
+          maxOutputSeconds: budget,
+        }),
+      );
+      expect(prepareRenderManifest).toHaveBeenCalledWith('job', highlights);
+      await f.processor.process(f.bull as never);
+      expect(f.highlight.detectHighlightsWithMetadata).toHaveBeenCalledTimes(1);
+      expect(prepareRenderManifest).toHaveBeenCalledTimes(1);
+      expect(f.parent).toMatchObject({
+        creditOperationId: 'operation',
+        creditOutputSeconds: budget,
+      });
     },
   );
 });

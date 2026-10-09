@@ -1,4 +1,5 @@
 import { highlightPolicy } from '../media/highlight-policy';
+import { highlightDurationSeconds } from '../media/highlight-duration';
 import { requiresSourceApproval } from '../billing/source-authorization';
 import { hostname } from 'node:os';
 import { CreditsService } from '../billing/credits.service';
@@ -601,7 +602,7 @@ export class JobsService {
     if (job.creditOperationId) {
       let remaining = job.creditOutputSeconds || 0;
       highlights = highlights.flatMap((h) => {
-        const duration = h.endTime - h.startTime;
+        const duration = highlightDurationSeconds(h);
         if (
           !Number.isFinite(duration) ||
           duration <= 0 ||
@@ -622,16 +623,21 @@ export class JobsService {
       rejected: requestedCount - highlights.length,
     });
     const generationSummary = {
-      targetMin: 6,
+      targetMin: 0,
       targetMax: job.clipTargetMax || 9,
       accepted: highlights.length,
-      shortfall: Math.max(0, 6 - highlights.length),
+      shortfall: 0,
       reason:
-        highlights.length >= 6
-          ? 'target_met'
-          : highlights.length < requestedCount
-            ? 'output_budget_or_clip_limit'
-            : 'insufficient_valid_highlights',
+        highlights.length < requestedCount ||
+        (job.creditOperationId &&
+          (job.creditOutputSeconds || 0) -
+            highlights.reduce(
+              (sum, h) => sum + highlightDurationSeconds(h),
+              0,
+            ) <
+            (job.videoDuration >= 600 ? 45 : 0))
+          ? 'output_budget_or_clip_limit'
+          : 'quality_and_content_availability',
     };
     const baseUrl = this.configService.get<string>(
       'API_BASE_URL',
@@ -668,6 +674,7 @@ export class JobsService {
         {
           $set: {
             clips,
+            highlights,
             renderManifestReady: true,
             generationSummary,
             status: JobStatus.CUTTING_CLIPS,

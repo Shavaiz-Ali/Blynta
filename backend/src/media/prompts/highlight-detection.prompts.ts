@@ -6,8 +6,9 @@ import { EDITOR_STYLES, EditorStyleKey } from '../editor-styles';
 // and output-format instructions appended after it.
 // ---------------------------------------------------------------------------
 export function buildBasePrompt(maxHighlights = 9): string {
-  const minimum = Math.min(6, maxHighlights);
-  return `You are a professional video editor and virality expert. Given a complete timestamped transcript from a video, identify ${minimum}–${maxHighlights} of the most engaging, interesting, and self-contained moments suitable for short vertical clips. Return fewer only when the transcript cannot support ${minimum} genuine, complete, non-overlapping moments. Never invent content or timestamps. Never exceed ${maxHighlights} highlights.
+  return `You are a professional video editor and virality expert. Analyze all supplied timestamped transcript regions and identify up to ${maxHighlights} genuinely engaging, interesting, and self-contained candidate moments suitable for short vertical clips. There is NO minimum clip count. Return fewer, including zero, when strong complete moments are scarce. Never manufacture moments, stretch durations, or lower quality to fill a quota. Never invent content or timestamps. Never exceed ${maxHighlights} highlights.
+
+Only propose moments scoring at least 0.70. Honor the selected preset AND any custom instructions. Meme / Funny must contain a genuine joke, funny reaction, irony or punchline, rather than an unrelated generic insight. Context must include a complete setup and payoff or a complete insight without relying on a missing preceding explanation. Reject irrelevant or incomplete moments. Evaluate contextComplete and presetRelevant honestly. Provide a short groundedQuote copied VERBATIM from the supplied transcript within each proposed interval. Avoid repeated content even at different timestamps.
 
 For each moment, evaluate its specific conversational context, emotional delivery, pacing, and subject matter, then assign it the MOST FITTING editing style from the list below — do not default every clip to the same style.`;
 }
@@ -85,6 +86,8 @@ export function buildOutputFormatInstructions(): string {
 - **startTime / endTime** — must match the transcript timestamps and satisfy the duration rule above.
 - **reason** — 1–2 sentences explaining why this moment is engaging or viral.
 - **score** — engagement score strictly between 0 and 1 (e.g. 0.85, 0.95).
+- **contextComplete / presetRelevant** — booleans confirming a complete moment and relevance to the effective selected instructions. False candidates are rejected.
+- **groundedQuote** — a short exact quote from the supplied transcript inside this clip, proving its source grounding.
 - **clipTitle** — short, punchy title under 60 characters.
 - **clipDescription** — concise 1–2 sentence description, under 300 characters.
 - **tags** — 3–8 short, lowercase, hashtag-style keywords describing content, topic, mood, and people involved (e.g. \`comedy\`, \`celebrity\`, \`reaction\`). No \`#\` symbol; use hyphens for multi-word tags.
@@ -116,6 +119,9 @@ Return valid JSON with exactly this structure — no markdown, no preamble:
       "endTime": 58.0,
       "reason": "Captivating hook and punchline with complete thought",
       "score": 0.92,
+      "contextComplete": true,
+      "presetRelevant": true,
+      "groundedQuote": "exact words from this clip's transcript",
       "clipTitle": "The Secret Formula",
       "clipDescription": "Speaker reveals the core strategy that changed everything.",
       "tags": ["strategy", "business", "growth"],

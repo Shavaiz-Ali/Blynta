@@ -4,5 +4,5 @@ export function highlightPolicy(
   sourceSeconds: number,
 ) {
   const max = plan === 'pro' || plan === 'business' ? 9 : 6;
-  return { min: 6, max, outputSeconds: Math.min(sourceSeconds, max * 60) };
+  return { min: 0, max, outputSeconds: Math.min(sourceSeconds, max * 60) };
 }

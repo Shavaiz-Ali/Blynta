@@ -1,6 +1,17 @@
+import { createHash } from 'node:crypto';
+import { PipelineCacheService } from '../media/services/pipeline-cache.service';
+import {
+  artifactHash,
+  highlightIdentity,
+  normalizeInstructions,
+  transcriptIsValid,
+  DETECTION_VERSION,
+} from '../media/pipeline-cache-identity';
+import { buildHighlightSystemPrompt } from '../media/prompts/highlight-detection.prompts';
 import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
+import { highlightPolicy } from '../media/highlight-policy';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job as BullJob, UnrecoverableError } from 'bullmq';
 import { SourceAuthorizationError } from '../billing/source-authorization';
@@ -30,6 +41,8 @@ import {
 import {
   HighlightDetectionService,
   HighlightDto,
+  HighlightDetectionOptions,
+  HighlightDetectionResult,
 } from '../media/services/highlight-detection.service';
 import { SourceVideoService } from '../media/services/source-video.service';
 import { R2Service } from '../storage/r2.service';
@@ -71,6 +84,7 @@ export class JobsProcessor
     private inspection: MediaInspectionService,
     private completion: JobsCompletionService,
     private activitiesService: ActivitiesService,
+    @Optional() private cache?: PipelineCacheService,
   ) {
     super();
   }
@@ -239,11 +253,74 @@ export class JobsProcessor
       // fresh and then upload to R2 + create a SourceVideo entry.
       // =========================================================================
 
-      const externalId = this.sourceVideoService.extractExternalId(
+      const extractedId = this.sourceVideoService.extractExternalId(
         job.sourcePlatform,
         job.sourceUrl,
       );
+      const canonicalUrl = extractedId
+        ? `https://www.youtube.com/watch?v=${extractedId}`
+        : job.sourceUrl;
+      const externalId =
+        extractedId &&
+        (await this.videoDownloadService.canShareSource(canonicalUrl))
+          ? extractedId
+          : null;
       let sourceVideo: SourceVideoDocument | null = null;
+      const fileHash = async (file: string) => {
+        const hash = createHash('sha256');
+        for await (const chunk of fs.createReadStream(file)) {
+          assertNotCancelled();
+          hash.update(chunk as Buffer);
+        }
+        return hash.digest('hex');
+      };
+      let sourceVersion = '';
+      let rejectedCachedMedia = false;
+      const transcriptConfig = this.cache
+        ? await this.transcriptionService.cacheConfiguration()
+        : 'unit-test';
+      const obtainTranscript = async () => {
+        const create = () =>
+          this.transcriptionService.transcribe(
+            audioPath,
+            makeThrottledProgressUpdate(),
+          );
+        const key = artifactHash({
+          kind: 'transcript',
+          sourceVersion,
+          sourceIdentity: externalId
+            ? `${job.sourcePlatform}:${externalId}`
+            : null,
+          transcriptConfig,
+          scope: externalId ? 'public' : userId,
+        });
+        const actualDuration =
+          (await this.jobsService.findJob(jobId))?.videoDuration ??
+          job.videoDuration;
+        const result = this.cache
+          ? await this.cache.getOrCreate<TranscriptSegmentDto[]>({
+              key,
+              kind: 'transcript',
+              sourceVersion,
+              jobId,
+              metadata: {
+                configurationHash: transcriptConfig,
+                sourceIdentityHash: artifactHash({
+                  provider: job.sourcePlatform,
+                  id: externalId ?? userId,
+                }),
+              },
+              validate: (value): value is TranscriptSegmentDto[] =>
+                Array.isArray(value) &&
+                transcriptIsValid(
+                  value as TranscriptSegmentDto[],
+                  actualDuration,
+                ),
+              create,
+            })
+          : await create();
+        return result;
+      };
 
       let videoPath = '';
       let audioPath = '';
@@ -262,25 +339,32 @@ export class JobsProcessor
           metadata.durationSeconds <= 0
         )
           throw new UnrecoverableError('Invalid source video metadata');
+        const contentHash = await fileHash(input);
+        if (cached?.contentHash && cached.contentHash !== contentHash)
+          throw new Error('Cached source checksum mismatch');
         await this.jobsService.assertSourceBudget(
           jobId,
           metadata.durationSeconds,
         );
+        sourceVersion = contentHash;
         const key =
           latest?.sourceObjectKey ??
           cached?.videoObjectKey ??
           (externalId
-            ? `source-videos/${externalId}/video.mp4`
-            : `job-sources/${jobId}/video.mp4`);
+            ? `source-videos/${contentHash}/video.mp4`
+            : `job-sources/${jobId}/${contentHash}.mp4`);
         if (
           !latest?.sourceObjectKey &&
           !cached &&
-          !(await this.r2Service.fileExists(key))
-        )
+          (rejectedCachedMedia || !(await this.r2Service.fileExists(key)))
+        ) {
+          await this.cache?.assertLease();
           await this.r2Service.uploadFile(input, key);
+        }
         assertNotCancelled();
         await this.jobsService.updateJob(jobId, {
           sourceObjectKey: key,
+          sourceContentHash: contentHash,
           mediaMetadata: metadata,
           videoDuration: metadata.durationSeconds,
           workload: estimateVideoWorkload(metadata),
@@ -288,59 +372,32 @@ export class JobsProcessor
         return metadata;
       };
 
-      if (hasTranscript && (hasLocalVideo || job.sourceObjectKey)) {
-        // -----------------------------------------------------------------------
-        // RESUME (full) — both download AND transcription already completed on
-        // a prior attempt and local files are still on disk. Most valuable skip:
-        // transcription is the slowest/most resource-heavy local stage.
-        // -----------------------------------------------------------------------
-        this.logger.log(
-          `[${jobId}] Resuming: skipping download + transcription (already complete on disk)`,
-        );
+      if (hasLocalVideo || job.sourceObjectKey) {
         videoPath = hasLocalVideo
           ? job.localVideoPath
           : path.join(jobDir, 'source.mp4');
         if (!hasLocalVideo)
           await this.r2Service.downloadToLocal(job.sourceObjectKey!, videoPath);
-        audioPath = job.localAudioPath ?? '';
-        transcript = job.transcript;
         await prepareSource(videoPath);
-        assertNotCancelled();
-        await this.jobsService.updateJob(jobId, { progressPercent: 100 });
-      } else if (hasLocalVideo && hasLocalAudio) {
-        // -----------------------------------------------------------------------
-        // RESUME (partial) — download succeeded, transcription didn't (or its DB
-        // output is missing). Skip download only; re-run transcription.
-        // -----------------------------------------------------------------------
-        this.logger.log(
-          `[${jobId}] Resuming: skipping download, re-running transcription`,
-        );
-        videoPath = job.localVideoPath!;
-        audioPath = job.localAudioPath;
-        await prepareSource(videoPath);
-
-        this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio (resumed)`);
-        lastProgressUpdate = 0;
-        assertNotCancelled();
+        const compatible =
+          hasTranscript &&
+          (!this.cache || job.transcriptSignature === transcriptConfig) &&
+          transcriptIsValid(
+            job.transcript,
+            (await this.jobsService.findJob(jobId))!.videoDuration,
+          );
+        if (compatible) transcript = job.transcript;
+        else {
+          audioPath = hasLocalAudio
+            ? job.localAudioPath
+            : path.join(jobDir, 'audio.wav');
+          if (!hasLocalAudio)
+            await this.videoDownloadService.extractAudio(videoPath, audioPath);
+          transcript = await obtainTranscript();
+        }
         await this.jobsService.updateJob(jobId, {
-          status: JobStatus.TRANSCRIBING,
-          progressPercent: 0,
-        });
-
-        transcript = await this.transcriptionService.transcribe(
-          audioPath,
-          makeThrottledProgressUpdate(),
-        );
-        const transcriptDocsResumed: TranscriptSegment[] = transcript.map(
-          (t) => ({
-            startTime: t.startTime,
-            endTime: t.endTime,
-            text: t.text,
-          }),
-        );
-        assertNotCancelled();
-        await this.jobsService.updateJob(jobId, {
-          transcript: transcriptDocsResumed,
+          transcript,
+          transcriptSignature: transcriptConfig,
           progressPercent: 100,
         });
       } else {
@@ -350,172 +407,304 @@ export class JobsProcessor
         // unchanged. Genuinely new jobs and retries where the disk was wiped both
         // land here.
         // -----------------------------------------------------------------------
-        if (externalId) {
-          sourceVideo = await this.sourceVideoService.findCached(
-            job.sourcePlatform,
-            externalId,
-          );
-        }
+        const prepareMedia = async () => {
+          if (externalId) {
+            sourceVideo = await this.sourceVideoService.findCached(
+              job.sourcePlatform,
+              externalId,
+            );
+          }
+          if (
+            sourceVideo &&
+            job.creditSourceSeconds &&
+            sourceVideo.videoDuration &&
+            Math.abs(sourceVideo.videoDuration - job.creditSourceSeconds) >= 1
+          ) {
+            this.logger.log({
+              event: 'cache.miss',
+              layer: 'media',
+              jobId,
+              reason: 'source_duration_version_changed',
+            });
+            sourceVideo = null;
+          }
+          this.logger.log({
+            event: 'cache.lookup',
+            layer: 'media',
+            jobId,
+            found: !!sourceVideo,
+            reason: externalId
+              ? 'canonical_source'
+              : 'private_or_uncacheable_source',
+          });
 
-        if (sourceVideo) {
-          try {
+          if (sourceVideo) {
+            let cacheMediaValid = false;
+            try {
+              // -------------------------------------------------------------------
+              // CACHE HIT — pull from R2 into this job's local temp dir.
+              // Reuse the video; audio and transcript compatibility are checked separately.
+              // -------------------------------------------------------------------
+              this.logger.log(
+                `[${jobId}] Media cache hit for ${job.sourcePlatform}:${externalId} from SourceVideo ${sourceVideo._id.toString()}`,
+              );
+              await this.sourceVideoService.recordReuse(
+                sourceVideo._id.toString(),
+              );
+
+              videoPath = path.join(jobDir, 'source.mp4');
+              audioPath = path.join(jobDir, 'audio.wav');
+
+              this.logger.log(`[${jobId}] Downloading cached files from R2...`);
+              await this.r2Service.downloadToLocal(
+                sourceVideo.videoObjectKey,
+                videoPath,
+              );
+              await prepareSource(videoPath, sourceVideo);
+              cacheMediaValid = true;
+              this.logger.log({
+                event: 'cache.hit',
+                layer: 'media',
+                jobId,
+                sourceVersion,
+              });
+              let audioValid = false;
+              if (sourceVideo.audioObjectKey) {
+                try {
+                  await this.r2Service.downloadToLocal(
+                    sourceVideo.audioObjectKey,
+                    audioPath,
+                  );
+                  const audioMetadata =
+                    await this.inspection.inspect(audioPath);
+                  audioValid =
+                    !!sourceVideo.audioContentHash &&
+                    audioMetadata.hasAudio &&
+                    audioMetadata.durationSeconds > 0 &&
+                    Math.abs(
+                      audioMetadata.durationSeconds -
+                        (sourceVideo.videoDuration || 0),
+                    ) < 1 &&
+                    (!sourceVideo.audioContentHash ||
+                      (await fileHash(audioPath)) ===
+                        sourceVideo.audioContentHash);
+                } catch {
+                  assertNotCancelled();
+                }
+              }
+              this.logger.log({
+                event: audioValid ? 'cache.hit' : 'cache.miss',
+                layer: 'audio',
+                jobId,
+              });
+              if (!audioValid) {
+                await this.videoDownloadService.extractAudio(
+                  videoPath,
+                  audioPath,
+                );
+                const audioHash = await fileHash(audioPath);
+                const audioKey = `source-videos/${sourceVersion}/audio-${audioHash}.wav`;
+                await this.cache?.assertLease();
+                await this.r2Service.uploadFile(audioPath, audioKey);
+                await this.cache?.assertLease();
+                await this.sourceVideoService.saveAudio(
+                  sourceVideo._id.toString(),
+                  audioKey,
+                  audioHash,
+                  sourceVersion,
+                );
+              }
+              transcript = await obtainTranscript();
+              await this.cache?.assertLease();
+              await this.sourceVideoService.saveTranscript(
+                sourceVideo._id.toString(),
+                transcript,
+                transcriptConfig,
+                sourceVersion,
+              );
+
+              assertNotCancelled();
+              await this.jobsService.updateJob(jobId, {
+                sourceVideoId: sourceVideo._id,
+                localVideoPath: videoPath,
+                localAudioPath: audioPath,
+                videoTitle: sourceVideo.videoTitle,
+                videoUploader: sourceVideo.videoUploader,
+                thumbnailUrl: sourceVideo.thumbnailUrl,
+                transcript: transcript,
+                transcriptSignature: transcriptConfig,
+                resolutionUsed: resolution,
+                progressPercent: 100,
+              });
+            } catch (cacheErr) {
+              assertNotCancelled();
+              if (cacheErr instanceof SourceAuthorizationError) throw cacheErr;
+              if (cacheMediaValid) throw cacheErr;
+              rejectedCachedMedia = true;
+              this.logger.log({
+                event: 'cache.miss',
+                layer: 'media',
+                jobId,
+                reason: 'missing_or_invalid_artifact',
+              });
+              this.logger.warn(
+                `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id.toString()} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
+              );
+              sourceVideo = null;
+            }
+          }
+
+          if (!sourceVideo) {
+            this.logger.log({
+              event: 'cache.miss',
+              layer: 'media',
+              jobId,
+              reason: 'absent_expired_or_invalid',
+            });
+            this.logger.log({
+              event: 'cache.miss',
+              layer: 'audio',
+              jobId,
+              reason: 'fresh_source',
+            });
             // -------------------------------------------------------------------
-            // CACHE HIT — pull from R2 into this job's local temp dir.
-            // Stages 1 + 2 are skipped; progress jumps straight to 100 for both.
+            // CACHE MISS — process fresh, then upload to R2.
+            // Non-YouTube platforms (externalId === null) always land here.
             // -------------------------------------------------------------------
             this.logger.log(
-              `[${jobId}] Cache hit for ${job.sourcePlatform}:${externalId} — reusing video, audio, transcript from SourceVideo ${sourceVideo._id.toString()}`,
-            );
-            await this.sourceVideoService.recordReuse(
-              sourceVideo._id.toString(),
+              `[${jobId}] No cache for ${job.sourcePlatform}:${externalId ?? 'n/a'} — downloading fresh`,
             );
 
-            videoPath = path.join(jobDir, 'source.mp4');
-            audioPath = path.join(jobDir, 'audio.wav');
-
-            this.logger.log(`[${jobId}] Downloading cached files from R2...`);
-            await this.r2Service.downloadToLocal(
-              sourceVideo.videoObjectKey,
-              videoPath,
+            // --- Stage 1: Download ---
+            this.logger.log(
+              `[${jobId}] Stage 1/5: Downloading video (${resolution})`,
             );
-            await this.r2Service.downloadToLocal(
-              sourceVideo.audioObjectKey,
-              audioPath,
-            );
+            assertNotCancelled();
+            await this.jobsService.updateJob(jobId, {
+              status: JobStatus.PENDING,
+              progressPercent: 0,
+              resolutionUsed: resolution,
+            });
 
-            transcript = sourceVideo.transcript;
-            await prepareSource(videoPath, sourceVideo);
+            const {
+              videoPath: dlVideoPath,
+              audioPath: dlAudioPath,
+              title,
+              uploader,
+              thumbnailUrl,
+            } = await this.videoDownloadService.downloadVideo(
+              job.sourceUrl,
+              jobDir,
+              resolution,
+              makeThrottledProgressUpdate(),
+              job.creditSourceSeconds,
+              !!extractedId && !externalId,
+              true,
+            );
+            videoPath = dlVideoPath;
+            audioPath = dlAudioPath;
+            const measuredMetadata = await prepareSource(videoPath);
+            const duration = measuredMetadata.durationSeconds;
 
             assertNotCancelled();
             await this.jobsService.updateJob(jobId, {
-              sourceVideoId: sourceVideo._id,
               localVideoPath: videoPath,
               localAudioPath: audioPath,
-              videoTitle: sourceVideo.videoTitle,
-              videoUploader: sourceVideo.videoUploader,
-              thumbnailUrl: sourceVideo.thumbnailUrl,
-              transcript: transcript,
-              resolutionUsed: resolution,
+              videoTitle: title,
+              videoUploader: uploader,
+              thumbnailUrl,
+              videoDuration: duration,
               progressPercent: 100,
             });
-          } catch (cacheErr) {
-            assertNotCancelled();
-            if (cacheErr instanceof UnrecoverableError) throw cacheErr;
-            this.logger.warn(
-              `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id.toString()} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
-            );
-            sourceVideo = null;
-          }
-        }
 
-        if (!sourceVideo) {
-          // -------------------------------------------------------------------
-          // CACHE MISS — process fresh, then upload to R2.
-          // Non-YouTube platforms (externalId === null) always land here.
-          // -------------------------------------------------------------------
-          this.logger.log(
-            `[${jobId}] No cache for ${job.sourcePlatform}:${externalId ?? 'n/a'} — downloading fresh`,
-          );
-
-          // --- Stage 1: Download ---
-          this.logger.log(
-            `[${jobId}] Stage 1/5: Downloading video (${resolution})`,
-          );
-          assertNotCancelled();
-          await this.jobsService.updateJob(jobId, {
-            status: JobStatus.PENDING,
-            progressPercent: 0,
-            resolutionUsed: resolution,
-          });
-
-          const {
-            videoPath: dlVideoPath,
-            audioPath: dlAudioPath,
-            title,
-            uploader,
-            thumbnailUrl,
-          } = await this.videoDownloadService.downloadVideo(
-            job.sourceUrl,
-            jobDir,
-            resolution,
-            makeThrottledProgressUpdate(),
-            job.creditSourceSeconds,
-          );
-          videoPath = dlVideoPath;
-          audioPath = dlAudioPath;
-          const measuredMetadata = await prepareSource(videoPath);
-          const duration = measuredMetadata.durationSeconds;
-
-          assertNotCancelled();
-          await this.jobsService.updateJob(jobId, {
-            localVideoPath: videoPath,
-            localAudioPath: audioPath,
-            videoTitle: title,
-            videoUploader: uploader,
-            thumbnailUrl,
-            videoDuration: duration,
-            progressPercent: 100,
-          });
-
-          // --- Stage 2: Transcribe ---
-          this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio`);
-          lastProgressUpdate = 0;
-          assertNotCancelled();
-          await this.jobsService.updateJob(jobId, {
-            status: JobStatus.TRANSCRIBING,
-            progressPercent: 0,
-          });
-
-          transcript = hasTranscript
-            ? job.transcript
-            : await this.transcriptionService.transcribe(
-                audioPath,
-                makeThrottledProgressUpdate(),
-              );
-          const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
-            startTime: t.startTime,
-            endTime: t.endTime,
-            text: t.text,
-          }));
-          assertNotCancelled();
-          await this.jobsService.updateJob(jobId, {
-            transcript: transcriptDocs,
-            progressPercent: 100,
-          });
-
-          // ONLY cache if this platform actually supports it (YouTube — externalId is non-null)
-          if (externalId) {
-            this.logger.log(
-              `[${jobId}] Uploading source video + audio to R2 for caching`,
-            );
-            const videoObjectKey = `source-videos/${externalId}/video.mp4`;
-            const audioObjectKey = `source-videos/${externalId}/audio.wav`;
-
-            await this.r2Service.uploadFile(audioPath, audioObjectKey);
-
-            const newSourceVideo =
-              await this.sourceVideoService.createFromProcessing({
+            // Publish valid media independently: a failed ASR call must not lose the video cache.
+            if (externalId) {
+              await this.cache?.assertLease();
+              sourceVideo = await this.sourceVideoService.createFromProcessing({
                 platform: job.sourcePlatform,
                 externalId,
-                sourceUrl: job.sourceUrl,
-                videoObjectKey,
-                audioObjectKey,
-                transcript,
+                sourceUrl: canonicalUrl,
+                contentHash: sourceVersion,
+                videoObjectKey: `source-videos/${sourceVersion}/video.mp4`,
+                audioObjectKey: '',
+                transcript: [],
                 videoTitle: title,
                 videoUploader: uploader,
                 thumbnailUrl,
                 videoDuration: duration,
               });
+              await this.jobsService.updateJob(jobId, {
+                sourceVideoId: sourceVideo._id,
+              });
+            }
+            if (!fs.existsSync(audioPath))
+              await this.videoDownloadService.extractAudio(
+                videoPath,
+                audioPath,
+              );
+            const audioMetadata = await this.inspection.inspect(audioPath);
+            if (
+              !audioMetadata.hasAudio ||
+              Math.abs(audioMetadata.durationSeconds - duration) >= 1
+            )
+              throw new Error('Extracted audio is incomplete or invalid');
+            if (sourceVideo) {
+              const audioHash = await fileHash(audioPath),
+                audioKey = `source-videos/${sourceVersion}/audio-${audioHash}.wav`;
+              await this.cache?.assertLease();
+              await this.r2Service.uploadFile(audioPath, audioKey);
+              await this.cache?.assertLease();
+              await this.sourceVideoService.saveAudio(
+                sourceVideo._id.toString(),
+                audioKey,
+                audioHash,
+                sourceVersion,
+              );
+            }
+
+            // --- Stage 2: Transcribe ---
+            this.logger.log(`[${jobId}] Stage 2/5: Transcribing audio`);
+            lastProgressUpdate = 0;
             assertNotCancelled();
             await this.jobsService.updateJob(jobId, {
-              sourceVideoId: newSourceVideo._id,
+              status: JobStatus.TRANSCRIBING,
+              progressPercent: 0,
             });
-            sourceVideo = newSourceVideo;
-            this.logger.log(
-              `[${jobId}] SourceVideo created: ${newSourceVideo._id.toString()} (key: ${videoObjectKey})`,
-            );
+
+            transcript = hasTranscript
+              ? job.transcript
+              : await obtainTranscript();
+            const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
+              startTime: t.startTime,
+              endTime: t.endTime,
+              text: t.text,
+            }));
+            assertNotCancelled();
+            await this.jobsService.updateJob(jobId, {
+              transcript: transcriptDocs,
+              transcriptSignature: transcriptConfig,
+              progressPercent: 100,
+            });
+
+            if (sourceVideo) {
+              await this.cache?.assertLease();
+              await this.sourceVideoService.saveTranscript(
+                sourceVideo._id.toString(),
+                transcript,
+                transcriptConfig,
+                sourceVersion,
+              );
+            }
           }
-        }
+          return sourceVideo;
+        };
+        sourceVideo =
+          this.cache && externalId
+            ? await this.cache.withLock(
+                `media:${job.sourcePlatform}:${externalId}`,
+                prepareMedia,
+              )
+            : await prepareMedia();
       }
 
       const metadata = await prepareSource(videoPath, sourceVideo ?? undefined);
@@ -530,11 +719,10 @@ export class JobsProcessor
       //
       // Resume check: if the job already has highlights persisted from a prior
       // attempt, skip the LLM call entirely — this is the most expensive stage
-      // to repeat (costs an API call every time). Mirrors the SourceVideo
-      // defaultHighlights cache-hit pattern for consistency.
+      // to repeat (costs an API call every time).
       //
       // If highlights are missing (fresh job or failed before this stage),
-      // fall through to the normal detection + SourceVideo caching logic.
+      // use the versioned candidate pool and select against this job's authorization.
       // =========================================================================
       this.logger.log(`[${jobId}] Stage 3/5: Detecting highlights`);
 
@@ -551,22 +739,29 @@ export class JobsProcessor
       }
       const effectiveHighlightPreset = resolveStylePreset(effectivePresetKey);
 
-      const options: {
-        customPrompt?: string;
-        model?: string;
-        videoDuration: number;
-        maxHighlights: number;
-      } = {
+      const policy = highlightPolicy(user.plan, metadata.durationSeconds);
+      const options: HighlightDetectionOptions = {
         videoDuration: metadata.durationSeconds,
-        maxHighlights: job.clipTargetMax || (isPaidPlan ? 9 : 6),
+        maxHighlights: job.clipTargetMax || policy.max,
+        minHighlights: policy.min,
+        maxOutputSeconds: job.creditOperationId
+          ? job.creditOutputSeconds || 0
+          : policy.outputSeconds,
+        jobId,
+        plan: user.plan,
       };
       if (effectiveHighlightPreset.highlightPrompt) {
         options.customPrompt = effectiveHighlightPreset.highlightPrompt;
       }
-      if (isPaidPlan && job.customPrompt) {
-        // explicit freeform prompt still wins/appends over the preset for paid users
-        options.customPrompt = job.customPrompt;
-      }
+      const effectiveCustomPrompt = isPaidPlan
+        ? normalizeInstructions(job.customPrompt)
+        : '';
+      options.customPrompt = [
+        effectiveHighlightPreset.highlightPrompt,
+        effectiveCustomPrompt,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
       if (isPaidPlan && job.aiModel && job.aiModel !== 'default') {
         if (ALLOWED_PAID_AI_MODELS.includes(job.aiModel)) {
           options.model = job.aiModel;
@@ -576,13 +771,6 @@ export class JobsProcessor
           );
         }
       }
-
-      // usingCustomOptions must now also account for a Pro style preset, not just customPrompt/aiModel:
-      const usingCustomOptions =
-        isPaidPlan &&
-        (job.customPrompt ||
-          (job.aiModel && job.aiModel !== 'default') ||
-          requestedPreset.isPro);
 
       let highlights: HighlightDto[] = [];
 
@@ -605,50 +793,84 @@ export class JobsProcessor
           status: JobStatus.DETECTING_HIGHLIGHTS,
         });
 
-        const presetMap = sourceVideo?.defaultHighlightsByPreset;
-        const highlightCacheKey = `${effectivePresetKey}:v2:${options.maxHighlights}`;
-        const cachedHighlights = presetMap?.get(highlightCacheKey);
-        let detectionResult: {
-          videoTitle?: string;
-          videoDescription?: string;
-          keywords?: string;
-          hashtags?: string[];
-          highlights: HighlightDto[];
-        } | null = null;
-
-        if (
-          sourceVideo &&
-          !usingCustomOptions &&
-          cachedHighlights &&
-          (cachedHighlights.length >= 6 || metadata.durationSeconds < 600)
-        ) {
-          this.logger.log(
-            `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id.toString()}`,
+        let detectionResult: HighlightDetectionResult;
+        if (this.cache) {
+          const highlightCacheKey = highlightIdentity({
+            source: externalId
+              ? `${job.sourcePlatform}:${externalId}:${sourceVersion}`
+              : artifactHash({ sourceVersion, owner: userId }),
+            transcript: artifactHash({
+              segments: transcript,
+              configuration: transcriptConfig,
+            }),
+            preset: effectivePresetKey,
+            presetInstructions: effectiveHighlightPreset.highlightPrompt,
+            customPrompt: effectiveCustomPrompt,
+            owner: userId,
+            template: artifactHash(
+              buildHighlightSystemPrompt(metadata.durationSeconds, 24),
+            ),
+            configuration: this.highlightDetectionService.cacheConfiguration(
+              options.model,
+            ),
+          });
+          this.logger.log({
+            event: 'highlights.configuration',
+            jobId,
+            preset: effectivePresetKey,
+            algorithmVersion: DETECTION_VERSION,
+          });
+          detectionResult =
+            await this.cache.getOrCreate<HighlightDetectionResult>({
+              key: highlightCacheKey,
+              kind: 'highlights',
+              sourceVersion,
+              jobId,
+              metadata: {
+                preset: effectivePresetKey,
+                instructionsHash: artifactHash(
+                  effectiveHighlightPreset.highlightPrompt,
+                ),
+                customPromptHash: artifactHash(effectiveCustomPrompt || null),
+                algorithmVersion: DETECTION_VERSION,
+                configurationHash: artifactHash(
+                  this.highlightDetectionService.cacheConfiguration(
+                    options.model,
+                  ),
+                ),
+                templateHash: artifactHash(
+                  buildHighlightSystemPrompt(metadata.durationSeconds, 24),
+                ),
+                ...(effectiveCustomPrompt
+                  ? { ownerHash: artifactHash(userId) }
+                  : {}),
+              },
+              validate: (value): value is HighlightDetectionResult =>
+                this.highlightDetectionService.candidateArtifactIsValid(
+                  value,
+                  transcript,
+                  options,
+                ),
+              create: () =>
+                this.highlightDetectionService.discoverCandidatesWithMetadata(
+                  transcript,
+                  options,
+                ),
+              cacheable: (value) => value.cacheable !== false,
+            });
+          highlights = this.highlightDetectionService.selectCandidates(
+            detectionResult.candidates ?? [],
+            transcript,
+            options,
           );
-          highlights = cachedHighlights;
         } else {
+          // Directly constructed test workers retain the public detection entry point.
           detectionResult =
             await this.highlightDetectionService.detectHighlightsWithMetadata(
               transcript,
               options,
             );
           highlights = detectionResult.highlights;
-
-          // Save default highlights on the SourceVideo so future jobs with this video skip the LLM call
-          if (
-            !usingCustomOptions &&
-            sourceVideo &&
-            (highlights.length >= 6 || metadata.durationSeconds < 600)
-          ) {
-            await this.sourceVideoService.saveDefaultHighlights(
-              sourceVideo._id.toString(),
-              highlightCacheKey,
-              highlights,
-            );
-            this.logger.log(
-              `[${jobId}] Saved highlights for preset "${effectivePresetKey}" to SourceVideo ${sourceVideo._id.toString()}`,
-            );
-          }
         }
 
         assertNotCancelled();

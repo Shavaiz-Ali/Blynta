@@ -33,10 +33,7 @@ export function GenerationConfirmation({
 }) {
   const insufficient = !!estimate && estimate.totalCredits > available;
   const target = estimate?.clipTargetMax
-    ? estimate.clipTargetMin &&
-      estimate.clipTargetMin !== estimate.clipTargetMax
-      ? `${estimate.clipTargetMin}–${estimate.clipTargetMax}`
-      : String(estimate.clipTargetMax)
+    ? String(estimate.clipTargetMax)
     : undefined;
   return (
     <AppDialog
@@ -135,7 +132,7 @@ export function GenerationConfirmation({
           <p className="text-sm leading-relaxed text-muted-foreground">
             Blynta selects the best moments
             {target
-              ? `, aiming for ${target} clips when your video supports them`
+              ? `, creating up to ${target} strong clips based on the content and your selected style`
               : ""}
             .
           </p>

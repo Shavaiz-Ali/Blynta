@@ -1,4 +1,7 @@
 import { usageSample } from '../../billing/usage-context';
+import { artifactHash, TRANSCRIPT_VERSION } from '../pipeline-cache-identity';
+import { createReadStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import {
   cancellationSignal,
   assertNotCancelled,
@@ -29,6 +32,10 @@ export class TranscriptionService {
   private readonly modelName?: string;
   private readonly whisperBinaryPath?: string;
   private readonly whisperModelPath?: string;
+  private readonly fileVersions = new Map<
+    string,
+    { stamp: string; digest: Promise<string> }
+  >();
 
   constructor(
     private configService: ConfigService,
@@ -72,6 +79,64 @@ export class TranscriptionService {
    *   this to disambiguate phonetically-similar words — this is the single
    *   biggest lever for fixing misspelled names/titles beyond model size.
    */
+  async cacheConfiguration(): Promise<string> {
+    // Local model contents, rather than just a reusable filename, define compatibility.
+    let model: string | undefined = this.modelName;
+    let binary: string | undefined;
+    if (this.whisperModelPath) {
+      model = await this.fileVersion(this.whisperModelPath);
+    }
+    if (this.whisperBinaryPath) {
+      binary = await this.fileVersion(this.whisperBinaryPath);
+    }
+    return artifactHash({
+      version: TRANSCRIPT_VERSION,
+      provider: this.provider,
+      model,
+      binary,
+      decoder:
+        this.provider === 'whisper-cpp'
+          ? { bestOf: 5, beamSize: 5, output: 'json' }
+          : { output: 'verbose_json' },
+      language: 'auto',
+      timestamps: 'segment',
+      sampleRate: 16000,
+      channels: 1,
+      initialPrompt: null,
+      compressionBitrate: COMPRESSED_BITRATE_KBPS,
+    });
+  }
+
+  private async fileVersion(file: string): Promise<string> {
+    const stampOf = async () => {
+      const stat = await fs.promises.stat(file, { bigint: true });
+      return [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(
+        ':',
+      );
+    };
+    const stamp = await stampOf();
+    const cached = this.fileVersions.get(file);
+    if (cached?.stamp === stamp) return cached.digest;
+    const digest = (async () => {
+      const hash = createHash('sha256');
+      for await (const chunk of createReadStream(file))
+        hash.update(chunk as Buffer);
+      if ((await stampOf()) !== stamp)
+        throw new Error(
+          'Transcription model changed while fingerprinting; retry with a stable model',
+        );
+      return hash.digest('hex');
+    })();
+    this.fileVersions.set(file, { stamp, digest });
+    try {
+      return await digest;
+    } catch (error) {
+      if (this.fileVersions.get(file)?.digest === digest)
+        this.fileVersions.delete(file);
+      throw error;
+    }
+  }
+
   async transcribe(
     audioPath: string,
     onProgress?: (percent: number) => void,

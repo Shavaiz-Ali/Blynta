@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import {
@@ -16,6 +17,7 @@ export class SourceVideoService {
   constructor(
     @InjectModel(SourceVideo.name)
     private sourceVideoModel: Model<SourceVideoDocument>,
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   /**
@@ -40,7 +42,24 @@ export class SourceVideoService {
     platform: SourcePlatform,
     externalId: string,
   ): Promise<SourceVideoDocument | null> {
-    return this.sourceVideoModel.findOne({ platform, externalId }).exec();
+    const since = new Date(
+      Date.now() -
+        Math.max(
+          1,
+          this.config?.get<number>('PIPELINE_CACHE_TTL_DAYS', 30) ?? 30,
+        ) *
+          86400000,
+    );
+    return this.sourceVideoModel
+      .findOne({
+        platform,
+        externalId,
+        $or: [
+          { mediaPreparedAt: { $gt: since } },
+          { mediaPreparedAt: { $exists: false }, createdAt: { $gt: since } },
+        ],
+      })
+      .exec();
   }
 
   async createFromProcessing(params: {
@@ -54,6 +73,9 @@ export class SourceVideoService {
     videoUploader?: string;
     thumbnailUrl?: string;
     videoDuration?: number;
+    contentHash?: string;
+    audioContentHash?: string;
+    transcriptSignature?: string;
   }): Promise<SourceVideoDocument> {
     return this.sourceVideoModel
       .findOneAndUpdate(
@@ -61,6 +83,7 @@ export class SourceVideoService {
         {
           $set: {
             ...params,
+            mediaPreparedAt: new Date(),
             lastReferencedAt: new Date(),
           },
           $setOnInsert: {
@@ -88,6 +111,54 @@ export class SourceVideoService {
   async saveMediaMetadata(sourceVideoId: string, mediaMetadata: MediaMetadata) {
     await this.sourceVideoModel
       .updateOne({ _id: sourceVideoId }, { $set: { mediaMetadata } })
+      .exec();
+  }
+
+  async saveAudio(
+    sourceVideoId: string,
+    audioObjectKey: string,
+    audioContentHash: string,
+    sourceVersion: string,
+  ) {
+    await this.sourceVideoModel
+      .updateOne(
+        {
+          _id: sourceVideoId,
+          $or: [
+            { contentHash: sourceVersion },
+            { contentHash: { $exists: false } },
+          ],
+        },
+        {
+          $set: {
+            audioObjectKey,
+            audioContentHash,
+            contentHash: sourceVersion,
+          },
+        },
+      )
+      .exec();
+  }
+
+  async saveTranscript(
+    sourceVideoId: string,
+    transcript: unknown[],
+    transcriptSignature: string,
+    sourceVersion: string,
+  ) {
+    await this.sourceVideoModel
+      .updateOne(
+        {
+          _id: sourceVideoId,
+          $or: [
+            { contentHash: sourceVersion },
+            { contentHash: { $exists: false } },
+          ],
+        },
+        {
+          $set: { transcript, transcriptSignature, contentHash: sourceVersion },
+        },
+      )
       .exec();
   }
 
