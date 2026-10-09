@@ -173,6 +173,8 @@ export class Job {
 
   @Prop()
   creditSourceSeconds?: number;
+  @Prop()
+  measuredSourceSeconds?: number;
 
   @Prop()
   creditOutputSeconds?: number;

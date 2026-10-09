@@ -26,6 +26,11 @@ import {
 import { INITIAL_PRICING, PricingSnapshot, clipPrice } from './credit-pricing';
 import { Customer, CustomerDocument } from './schemas/customer.schema';
 import Redis from 'ioredis';
+import { UnrecoverableError } from 'bullmq';
+import {
+  SourceAuthorizationError,
+  sourceDurationAuthorized,
+} from './source-authorization';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { randomUUID } from 'node:crypto';
 import { usageExecution } from './usage-context';
@@ -664,15 +669,17 @@ export class CreditsService implements OnModuleInit {
   async assertSourceBudget(operationId: string, duration: number) {
     const op = await this.operations.findOne({ operationId });
     if (!op || op.status !== 'reserved')
-      throw new ConflictException('No active credit authorization');
-    if (
-      !Number.isFinite(duration) ||
-      duration <= 0 ||
-      duration > op.sourceSeconds
-    )
-      throw new ConflictException(
-        'Source exceeds approved duration. Increase your budget and submit again.',
+      throw new UnrecoverableError(
+        'No active credit authorization. Review a new estimate before starting again.',
       );
+    if (!Number.isFinite(duration) || duration <= 0)
+      throw new UnrecoverableError('Invalid downloaded source duration');
+    if (op.product === 'ai-clips' && duration > 14400)
+      throw new UnrecoverableError(
+        'Downloaded source exceeds the supported four-hour limit',
+      );
+    if (!sourceDurationAuthorized(op, duration))
+      throw new SourceAuthorizationError(op.sourceSeconds, duration);
   }
   async executeAi<T>(operationId: string, work: () => Promise<T>): Promise<T> {
     const op = await this.operations.findOne({ operationId });

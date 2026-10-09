@@ -5,7 +5,8 @@ import type { Job } from "../types";
 import { useRetryJob } from "../queries";
 import { getJobId } from "./helpers";
 import { AlertTriangle, RefreshCw } from "lucide-react";
-import { AppButton } from "@blynta/ui";
+import { AppButton, AppDialog } from "@blynta/ui";
+import { HeroInput } from "@/features/dashboard/components/HeroInput";
 import { toast } from "sonner";
 
 const stages: Record<string, string> = {
@@ -27,12 +28,22 @@ export function FailedStateCard({ job }: { job: Job }) {
   const retry = useRetryJob();
   const submitting = useRef(false);
   const [queued, setQueued] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const requiresApproval = !!job.processingFailure?.requiresApproval;
+  const retryUnavailable = job.processingFailure?.retryAvailable === false;
   const stage = stages[job.errorStage ?? ""];
   const unavailable = Boolean(
     job.deletionRequested || job.cancellationRequestedAt,
   );
   async function handleRetry() {
-    if (submitting.current || retry.isPending || queued || unavailable) return;
+    if (
+      submitting.current ||
+      retry.isPending ||
+      queued ||
+      unavailable ||
+      retryUnavailable
+    )
+      return;
     submitting.current = true;
     try {
       await retry.mutateAsync(getJobId(job));
@@ -73,20 +84,48 @@ export function FailedStateCard({ job }: { job: Job }) {
               size="sm"
               className="h-9 w-full shrink-0 sm:w-auto"
               icon={<RefreshCw aria-hidden="true" className="size-4" />}
-              onClick={handleRetry}
+              onClick={
+                requiresApproval ? () => setReviewOpen(true) : handleRetry
+              }
               isLoading={retry.isPending}
-              disabled={retry.isPending || queued || unavailable}
+              disabled={
+                retry.isPending ||
+                queued ||
+                unavailable ||
+                (retryUnavailable && !requiresApproval)
+              }
             >
-              {queued ? "Queued for retry" : "Retry processing"}
+              {requiresApproval
+                ? "Review new credit estimate"
+                : queued
+                  ? "Queued for retry"
+                  : "Retry processing"}
             </AppButton>
             <p className="text-xs text-muted-foreground">
               {unavailable
                 ? "Retry is unavailable while this video is being stopped or deleted."
-                : "Completed stages are kept."}
+                : requiresApproval
+                  ? "A new job starts only after you confirm its maximum credits."
+                  : "Completed stages are kept."}
             </p>
           </div>
         </div>
       </div>
+      <AppDialog
+        open={reviewOpen}
+        onOpenChange={setReviewOpen}
+        title="Review a new source budget"
+        description="Check the revised estimate and approve the maximum credits before starting a new job."
+        bodyClassName="max-h-[70vh] overflow-y-auto"
+      >
+        {reviewOpen && (
+          <HeroInput
+            initialSourceUrl={job.sourceUrl}
+            reviewJobId={getJobId(job)}
+            onSuccess={() => setReviewOpen(false)}
+          />
+        )}
+      </AppDialog>
     </section>
   );
 }

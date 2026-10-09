@@ -110,7 +110,12 @@ export interface Job {
     status: "reserved" | "settled";
     pricingVersion: string;
   };
-  processingFailure?: { code: string; message: string };
+  processingFailure?: {
+    code: string;
+    message: string;
+    retryAvailable?: boolean;
+    requiresApproval?: boolean;
+  };
   cancellationRequestedAt?: string;
   cancelledAt?: string;
   cancellationPendingReason?: "worker_confirmation_required";

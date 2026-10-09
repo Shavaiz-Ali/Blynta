@@ -1,4 +1,5 @@
 import { highlightPolicy } from '../media/highlight-policy';
+import { requiresSourceApproval } from '../billing/source-authorization';
 import {
   Body,
   Controller,
@@ -167,7 +168,34 @@ export class JobsController {
       throw new BadRequestException(
         'Verified source duration is unavailable or exceeds the four-hour limit',
       );
-    const sourceSeconds = Math.ceil(metadata.duration);
+    let verifiedDuration = metadata.duration;
+    if (body.reviewJobId) {
+      const failed = await this.jobsService.getJobById(
+        req.user.userId,
+        body.reviewJobId,
+      );
+      if (
+        failed.status !== JobStatus.FAILED ||
+        failed.sourceUrl !== body.sourceUrl ||
+        !requiresSourceApproval(failed.errorMessage)
+      )
+        throw new BadRequestException(
+          'Review the original failed video to request a revised authorization',
+        );
+      if (
+        Number.isFinite(failed.measuredSourceSeconds) &&
+        failed.measuredSourceSeconds! > 0
+      )
+        verifiedDuration = Math.max(
+          verifiedDuration,
+          failed.measuredSourceSeconds!,
+        );
+    }
+    if (verifiedDuration > 14400)
+      throw new BadRequestException(
+        'The downloaded source exceeds the supported four-hour limit',
+      );
+    const sourceSeconds = Math.ceil(verifiedDuration);
     const account = await this.usersService.findById(req.user.userId);
     const policy = highlightPolicy(account?.plan, sourceSeconds);
     const maxOutputSeconds = body.maxOutputSeconds ?? policy.outputSeconds;

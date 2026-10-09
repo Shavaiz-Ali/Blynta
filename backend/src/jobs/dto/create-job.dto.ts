@@ -49,6 +49,10 @@ const PreflightJobSchema = z
         );
       }, 'Use a supported YouTube or Vimeo HTTPS video link'),
     maxOutputSeconds: z.number().positive().max(3600).optional(),
+    reviewJobId: z
+      .string()
+      .regex(/^[a-f\d]{24}$/i)
+      .optional(),
   })
   .strict();
 export class PreflightJobDto extends createZodDto(PreflightJobSchema) {}

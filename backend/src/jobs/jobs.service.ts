@@ -1,4 +1,5 @@
 import { highlightPolicy } from '../media/highlight-policy';
+import { requiresSourceApproval } from '../billing/source-authorization';
 import { hostname } from 'node:os';
 import { CreditsService } from '../billing/credits.service';
 import { clipPrice, eligibleClipPrice } from '../billing/credit-pricing';
@@ -883,8 +884,18 @@ export class JobsService {
 
   async assertSourceBudget(jobId: string, duration: number) {
     const job = await this.findJob(jobId);
-    if (job?.creditOperationId)
+    if (job?.creditOperationId) {
+      // Retain the measured evidence even when validation fails before upload/AI.
+      if (Number.isFinite(duration) && duration > 0)
+        await this.updateJob(jobId, { measuredSourceSeconds: duration });
+      this.logger.log({
+        event: 'billing.source.validation',
+        jobId,
+        approvedSeconds: job.creditSourceSeconds,
+        measuredSeconds: duration,
+      });
       await this.credits!.assertSourceBudget(job.creditOperationId, duration);
+    }
   }
   async recoverExecutionLeases(jobId: string) {
     if ((await this.activeMediaJobIds()).has(jobId)) return;
@@ -1322,6 +1333,12 @@ export class JobsService {
     if (job.status !== JobStatus.FAILED) {
       throw new ConflictException('Only failed jobs can be retried');
     }
+    if (requiresSourceApproval(job.errorMessage))
+      throw new ConflictException({
+        code: 'SOURCE_DURATION_AUTHORIZATION_REQUIRED',
+        message:
+          'Retry cannot change this authorization. Review a new estimate and approve it before starting again.',
+      });
 
     // Claim the retry once; concurrent API calls cannot enqueue duplicate attempts.
     const claim = async (session: ClientSession | null = null) =>

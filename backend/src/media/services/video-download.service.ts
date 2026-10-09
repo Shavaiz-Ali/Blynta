@@ -5,6 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
+import { UnrecoverableError } from 'bullmq';
+import { SourceAuthorizationError } from '../../billing/source-authorization';
 
 /**
  * YOUTUBE_COOKIES_PATH (optional):
@@ -54,13 +56,17 @@ export class VideoDownloadService {
 
     if (maxDurationSeconds) {
       const preliminary = await this.fetchVideoMetadata(sourceUrl);
+      if (!Number.isFinite(preliminary.duration) || preliminary.duration <= 0)
+        throw new UnrecoverableError('Verified source duration is unavailable');
+      // Fractional metadata is checked against the immutable pricing snapshot after ffprobe.
       if (
-        !Number.isFinite(preliminary.duration) ||
-        preliminary.duration <= 0 ||
-        preliminary.duration > maxDurationSeconds
+        preliminary.duration > maxDurationSeconds &&
+        (!Number.isInteger(maxDurationSeconds) ||
+          preliminary.duration >= maxDurationSeconds + 1)
       )
-        throw new Error(
-          'Source duration is unavailable or exceeds the approved duration limit',
+        throw new SourceAuthorizationError(
+          maxDurationSeconds,
+          preliminary.duration,
         );
     }
     const ytDlpArgs = [

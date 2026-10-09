@@ -24,12 +24,25 @@ import { AppSelect } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
-import { InsufficientCredits } from "@blynta/ui";
 import { useCreditBalance } from "@/features/billing/queries";
 import { axiosClient } from "@/config/axiosClient";
 import type { CreditEstimate } from "@blynta/types";
 import { useRouter } from "next/navigation";
 import { HowCreditsWork } from "@/features/billing/components/HowCreditsWork";
+import { GenerationConfirmation } from "./GenerationConfirmation";
+
+function authorizationValues(estimate: CreditEstimate) {
+  return JSON.stringify([
+    estimate.sourceSeconds,
+    estimate.maxOutputSeconds,
+    estimate.totalCredits,
+    estimate.pricingVersion,
+    estimate.sourceCredits,
+    estimate.renderCredits,
+    estimate.clipTargetMin,
+    estimate.clipTargetMax,
+  ]);
+}
 
 /* -------------------------------------------------------------------------- */
 /*                      AI Model options (matches backend)                   */
@@ -96,9 +109,15 @@ const PRESET_META: Record<string, { icon: string; description: string }> = {
 
 interface HeroInputProps {
   onSuccess?: () => void;
+  initialSourceUrl?: string;
+  reviewJobId?: string;
 }
 
-export function HeroInput({ onSuccess }: HeroInputProps) {
+export function HeroInput({
+  onSuccess,
+  initialSourceUrl = "",
+  reviewJobId,
+}: HeroInputProps) {
   const { data: profile } = useCurrentUser();
   const balance = useCreditBalance();
   const [creditsHelpOpen, setCreditsHelpOpen] = React.useState(false);
@@ -107,6 +126,14 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
     estimate: CreditEstimate;
   } | null>(null);
   const [estimating, setEstimating] = React.useState(false);
+  const [checking, setChecking] = React.useState(false);
+  const [confirmationError, setConfirmationError] = React.useState<string>();
+  const [verifiedAvailable, setVerifiedAvailable] = React.useState<{
+    available: number;
+    prior: number;
+  }>();
+  const estimatingRef = React.useRef(false);
+  const submittingRef = React.useRef(false);
   const operationRef = React.useRef<
     { signature: string; id: string } | undefined
   >(undefined);
@@ -116,7 +143,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
   const presets = fetchedPresets?.length ? fetchedPresets : PRESETS_FALLBACK;
 
-  const [url, setUrl] = React.useState("");
+  const [url, setUrl] = React.useState(initialSourceUrl);
   const [stylePreset, setStylePreset] = React.useState<string>("default");
   const [fieldError, setFieldError] = React.useState<string | undefined>();
 
@@ -126,6 +153,9 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
   const { mutate, isPending, failureReason, reset } = useCreateJob({
     onSuccess: (data) => {
+      submittingRef.current = false;
+      setChecking(false);
+      setConfirmationError(undefined);
       setConfirmation(null);
       operationRef.current = undefined;
       setUrl("");
@@ -139,6 +169,11 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       onSuccess?.();
     },
     onError: (err) => {
+      submittingRef.current = false;
+      setChecking(false);
+      setConfirmationError(
+        "Couldn’t start generation. Try again to check the latest estimate.",
+      );
       toast.error(
         err instanceof Error
           ? err.message
@@ -158,6 +193,7 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
+    if (estimatingRef.current || submittingRef.current || isPending) return;
     if (!url.trim()) {
       setFieldError(
         "Paste a video link (YouTube, Vimeo, Podcast) to get started",
@@ -193,13 +229,19 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       );
       return;
     }
+    estimatingRef.current = true;
     setEstimating(true);
+    setConfirmationError(undefined);
     try {
       const estimate = (
         await axiosClient.post<CreditEstimate>("/jobs/estimate", {
           sourceUrl,
+          ...(reviewJobId && sourceUrl === initialSourceUrl
+            ? { reviewJobId }
+            : {}),
         })
       ).data;
+      setVerifiedAvailable(undefined);
       const signature = JSON.stringify([
         body,
         estimate.sourceSeconds,
@@ -220,12 +262,92 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         },
         estimate,
       });
-    } catch (error) {
+    } catch {
       setFieldError(
-        error instanceof Error ? error.message : "Could not estimate credits",
+        "Couldn’t fetch an estimate. Check your video link and try again.",
       );
     } finally {
+      estimatingRef.current = false;
       setEstimating(false);
+    }
+  }
+
+  async function approveGeneration() {
+    if (
+      !confirmation ||
+      submittingRef.current ||
+      isPending ||
+      !balance.data?.enabled ||
+      balance.error ||
+      confirmation.estimate.totalCredits > balance.data.available
+    )
+      return;
+    submittingRef.current = true;
+    setChecking(true);
+    setConfirmationError(undefined);
+    let submitted = false;
+    try {
+      const latest = (
+        await axiosClient.post<CreditEstimate>("/jobs/estimate", {
+          sourceUrl: confirmation.body.sourceUrl,
+          ...(reviewJobId && confirmation.body.sourceUrl === initialSourceUrl
+            ? { reviewJobId }
+            : {}),
+        })
+      ).data;
+      if (latest.enabled === false) {
+        setConfirmationError(
+          "Processing is temporarily unavailable. Please try again later.",
+        );
+        return;
+      }
+      if (
+        authorizationValues(latest) !==
+        authorizationValues(confirmation.estimate)
+      ) {
+        setVerifiedAvailable({
+          available: latest.available,
+          prior: balance.data.available,
+        });
+        const id = crypto.randomUUID();
+        operationRef.current = undefined;
+        setConfirmation({
+          estimate: latest,
+          body: {
+            ...confirmation.body,
+            operationId: id,
+            sourceSeconds: latest.sourceSeconds,
+            maxOutputSeconds: latest.maxOutputSeconds,
+            authorizedCredits: latest.totalCredits,
+            pricingVersion: latest.pricingVersion,
+          },
+        });
+        setConfirmationError(
+          "Your estimate changed. Review the updated maximum before confirming again.",
+        );
+        return;
+      }
+      if (latest.totalCredits > latest.available) {
+        setVerifiedAvailable({
+          available: latest.available,
+          prior: balance.data.available,
+        });
+        setConfirmation({ ...confirmation, estimate: latest });
+        setConfirmationError(
+          "Your balance changed. Refresh your balance or view plans to add credits.",
+        );
+        void balance.refetch();
+        return;
+      }
+      mutate(confirmation.body);
+      submitted = true;
+    } catch {
+      setConfirmationError(
+        "Couldn’t refresh the estimate. Try again before generating.",
+      );
+    } finally {
+      setChecking(false);
+      if (!submitted) submittingRef.current = false;
     }
   }
 
@@ -405,103 +527,26 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         </div>
       </AppCard>
 
-      <AppDialog
-        open={!!confirmation}
-        onOpenChange={(open) => {
-          if (!open && !isPending) setConfirmation(null);
-        }}
-        title="Ready to generate?"
-        description="Review your video and maximum credit cost."
-        dismissible={!isPending}
-        showCloseButton={!isPending}
-        bodyClassName="max-h-[60vh] overflow-y-auto"
-        footer={
-          <AppButton
-            className="h-11"
-            isLoading={isPending}
-            disabled={
-              !confirmation ||
-              !balance.data?.enabled ||
-              !!balance.error ||
-              confirmation.estimate.totalCredits >
-                (balance.data?.available ?? 0)
-            }
-            onClick={() => confirmation && mutate(confirmation.body)}
-          >
-            Authorize {confirmation?.estimate.totalCredits} credits and start
-          </AppButton>
+      <GenerationConfirmation
+        estimate={confirmation?.estimate}
+        available={
+          verifiedAvailable === undefined ||
+          balance.data?.available !== verifiedAvailable.prior
+            ? (balance.data?.available ?? confirmation?.estimate.available ?? 0)
+            : verifiedAvailable.available
         }
-      >
-        {confirmation && (
-          <div className="space-y-5 text-sm">
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-              <p className="text-xs text-muted-foreground">
-                Maximum approved cost
-              </p>
-              <p className="mt-1 text-3xl font-bold tracking-tight">
-                {confirmation.estimate.totalCredits}{" "}
-                <span className="text-base font-medium">credits</span>
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {balance.data?.available ?? confirmation.estimate.available}{" "}
-                available
-              </p>
-            </div>
-            <dl className="space-y-3">
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">
-                  Source video ·{" "}
-                  {(
-                    (confirmation.estimate.sourceSeconds ?? 0) / 60
-                  ).toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  min
-                </dt>
-                <dd className="shrink-0 font-medium">
-                  {confirmation.estimate.sourceCredits} credits
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted-foreground">
-                  Clips · up to{" "}
-                  {(
-                    (confirmation.estimate.maxOutputSeconds ?? 0) / 60
-                  ).toLocaleString(undefined, {
-                    maximumFractionDigits: 2,
-                  })}{" "}
-                  min total
-                </dt>
-                <dd className="shrink-0 font-medium">
-                  {confirmation.estimate.renderCredits} credits
-                </dd>
-              </div>
-            </dl>
-            <p className="text-muted-foreground leading-relaxed">
-              AI chooses the best highlights within this budget
-              {confirmation.estimate.clipTargetMax
-                ? `, aiming for ${confirmation.estimate.clipTargetMin === confirmation.estimate.clipTargetMax ? confirmation.estimate.clipTargetMax : `${confirmation.estimate.clipTargetMin}–${confirmation.estimate.clipTargetMax}`} clips when your video supports them`
-                : ""}
-              . Credits are reserved when you start. Unused credits return to
-              your balance, and the final charge never exceeds your approval.
-            </p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              This is a maximum reservation, not your final charge. Your actual
-              charge is calculated after processing from the source video and
-              total billable clips delivered, and may be lower.
-            </p>
-            {confirmation.estimate.totalCredits >
-              (balance.data?.available ?? 0) && (
-              <InsufficientCredits
-                required={confirmation.estimate.totalCredits}
-                available={balance.data?.available ?? 0}
-                billingUrl="/billing"
-                billingLabel="View plans & upgrade"
-              />
-            )}
-          </div>
-        )}
-      </AppDialog>
+        busy={isPending || checking}
+        checking={checking}
+        enabled={!!balance.data?.enabled && !balance.error}
+        error={confirmationError}
+        onCancel={() => {
+          if (!submittingRef.current && !isPending) {
+            setConfirmation(null);
+            setConfirmationError(undefined);
+          }
+        }}
+        onApprove={approveGeneration}
+      />
       <HowCreditsWork
         open={creditsHelpOpen}
         onOpenChange={setCreditsHelpOpen}

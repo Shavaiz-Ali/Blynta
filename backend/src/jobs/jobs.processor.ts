@@ -2,7 +2,8 @@ import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Job as BullJob } from 'bullmq';
+import { Job as BullJob, UnrecoverableError } from 'bullmq';
+import { SourceAuthorizationError } from '../billing/source-authorization';
 import {
   MediaInspectionService,
   estimateVideoWorkload,
@@ -254,12 +255,13 @@ export class JobsProcessor
         cached?: SourceVideoDocument,
       ) => {
         const latest = await this.jobsService.findJob(jobId);
-        const metadata =
-          latest?.mediaMetadata ??
-          cached?.mediaMetadata ??
-          (await this.inspection.inspect(input));
-        if (!metadata.hasVideo || metadata.durationSeconds <= 0)
-          throw new Error('Invalid source video metadata');
+        const metadata = await this.inspection.inspect(input);
+        if (
+          !metadata.hasVideo ||
+          !Number.isFinite(metadata.durationSeconds) ||
+          metadata.durationSeconds <= 0
+        )
+          throw new UnrecoverableError('Invalid source video metadata');
         await this.jobsService.assertSourceBudget(
           jobId,
           metadata.durationSeconds,
@@ -392,13 +394,13 @@ export class JobsProcessor
               videoTitle: sourceVideo.videoTitle,
               videoUploader: sourceVideo.videoUploader,
               thumbnailUrl: sourceVideo.thumbnailUrl,
-              videoDuration: sourceVideo.videoDuration,
               transcript: transcript,
               resolutionUsed: resolution,
               progressPercent: 100,
             });
           } catch (cacheErr) {
             assertNotCancelled();
+            if (cacheErr instanceof UnrecoverableError) throw cacheErr;
             this.logger.warn(
               `[${jobId}] Failed to download cached files from R2 for SourceVideo ${sourceVideo._id.toString()} (${cacheErr instanceof Error ? cacheErr.message : cacheErr}); falling back to fresh processing.`,
             );
@@ -432,7 +434,6 @@ export class JobsProcessor
             title,
             uploader,
             thumbnailUrl,
-            duration,
           } = await this.videoDownloadService.downloadVideo(
             job.sourceUrl,
             jobDir,
@@ -442,7 +443,8 @@ export class JobsProcessor
           );
           videoPath = dlVideoPath;
           audioPath = dlAudioPath;
-          await prepareSource(videoPath);
+          const measuredMetadata = await prepareSource(videoPath);
+          const duration = measuredMetadata.durationSeconds;
 
           assertNotCancelled();
           await this.jobsService.updateJob(jobId, {
@@ -555,7 +557,7 @@ export class JobsProcessor
         videoDuration: number;
         maxHighlights: number;
       } = {
-        videoDuration: job.videoDuration || 0,
+        videoDuration: metadata.durationSeconds,
         maxHighlights: job.clipTargetMax || (isPaidPlan ? 9 : 6),
       };
       if (effectiveHighlightPreset.highlightPrompt) {
@@ -618,7 +620,7 @@ export class JobsProcessor
           sourceVideo &&
           !usingCustomOptions &&
           cachedHighlights &&
-          (cachedHighlights.length >= 6 || (job.videoDuration || 0) < 600)
+          (cachedHighlights.length >= 6 || metadata.durationSeconds < 600)
         ) {
           this.logger.log(
             `[${jobId}] Reusing cached highlights for preset "${effectivePresetKey}" from SourceVideo ${sourceVideo._id.toString()}`,
@@ -636,7 +638,7 @@ export class JobsProcessor
           if (
             !usingCustomOptions &&
             sourceVideo &&
-            (highlights.length >= 6 || (job.videoDuration || 0) < 600)
+            (highlights.length >= 6 || metadata.durationSeconds < 600)
           ) {
             await this.sourceVideoService.saveDefaultHighlights(
               sourceVideo._id.toString(),
@@ -696,6 +698,10 @@ export class JobsProcessor
         }),
       );
     } catch (err) {
+      if (err instanceof SourceAuthorizationError)
+        await this.jobsService.updateJob(jobId, {
+          measuredSourceSeconds: err.measuredSeconds,
+        });
       assertNotCancelled();
       const latest = await this.jobsService.findJob(jobId);
       const message = err instanceof Error ? err.message : String(err);

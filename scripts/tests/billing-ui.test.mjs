@@ -109,6 +109,7 @@ test("submission clearly reports inactive usage billing without advertising a fl
       "@/config/axiosClient": { axiosClient: {} },
       "@/lib/utils": { cn: (...args) => args.join(" ") },
       "../icons": icons,
+      "./GenerationConfirmation": { GenerationConfirmation: () => null },
       "@blynta/ui": new Proxy({}, { get: () => component }),
       "@/features/billing/components/HowCreditsWork": {
         HowCreditsWork: () => null,
@@ -145,9 +146,9 @@ function hookHarness() {
         return state[i];
       },
     },
-    render(Component) {
+    render(Component, props = {}) {
       cursor = 0;
-      return Component({});
+      return Component(props);
     },
   };
 }
@@ -208,6 +209,8 @@ test("automatic budget is reviewed before approval and an insufficient balance b
   const hooks = hookHarness();
   const calls = [];
   const submissions = [];
+  let mutationOptions;
+  let estimateError = false;
   const component = () => null;
   const ui = {
     AppDialog: component,
@@ -228,6 +231,24 @@ test("automatic budget is reviewed before approval and an insufficient balance b
     clipTargetMin: 6,
     clipTargetMax: 9,
   };
+  const { GenerationConfirmation } = load(
+    "apps/app/features/dashboard/components/GenerationConfirmation.tsx",
+    { "@blynta/ui": ui },
+  );
+  const dialog = (tree) =>
+    GenerationConfirmation(
+      elements(tree, (e) => e.type === GenerationConfirmation)[0].props,
+    );
+  const approve = (tree) =>
+    elements(
+      tree,
+      (e) => e.type === GenerationConfirmation,
+    )[0].props.onApprove();
+  const primary = (dialog) =>
+    elements(
+      dialog.props.footer,
+      (e) => e.type === ui.AppButton && e.props.variant !== "outline",
+    )[0];
   const { HeroInput } = load(
     "apps/app/features/dashboard/components/HeroInput.tsx",
     {
@@ -235,35 +256,40 @@ test("automatic budget is reviewed before approval and an insufficient balance b
       "@/features/jobs": {
         SourcePlatform: { YOUTUBE: "youtube" },
         useStylePresets: () => ({ data: [] }),
-        useCreateJob: () => ({
-          mutate: (body) => submissions.push(body),
-          reset() {},
-          isPending: false,
-        }),
+        useCreateJob: (opts) => {
+          mutationOptions = opts;
+          return {
+            mutate: (body) => submissions.push(body),
+            reset() {},
+            isPending: false,
+          };
+        },
       },
       "@/features/auth/queries": {
         useCurrentUser: () => ({ data: { plan: "pro" } }),
       },
       "@/features/billing/queries": {
-        useCreditBalance: () => ({ data: balance }),
+        useCreditBalance: () => ({ data: balance, refetch() {} }),
       },
       "@/config/axiosClient": {
         axiosClient: {
           post: async (...args) => {
             calls.push(args);
-            return { data: estimate };
+            if (estimateError) throw new Error("network");
+            return { data: { ...estimate } };
           },
         },
       },
       "@/lib/utils": { cn: (...args) => args.join(" ") },
       "../icons": new Proxy({}, { get: () => component }),
       "@blynta/ui": ui,
+      "./GenerationConfirmation": { GenerationConfirmation },
       "@/features/billing/components/HowCreditsWork": {
         HowCreditsWork: function Help() {},
       },
       "next/link": { default: component },
       "next/navigation": { useRouter: () => ({ push() {} }) },
-      sonner: { toast: {} },
+      sonner: { toast: { error() {}, success() {} } },
     },
   );
   let tree = hooks.render(HeroInput);
@@ -279,37 +305,54 @@ test("automatic budget is reviewed before approval and an insufficient balance b
     target: { value: "https://youtube.com/watch?v=example" },
   });
   tree = hooks.render(HeroInput);
-  await elements(tree, (e) => e.type === "form")[0].props.onSubmit();
+  const initialRequest = elements(
+    tree,
+    (e) => e.type === "form",
+  )[0].props.onSubmit();
+  const duplicateRequest = elements(
+    tree,
+    (e) => e.type === "form",
+  )[0].props.onSubmit();
+  const estimatingTree = hooks.render(HeroInput);
+  assert.equal(
+    elements(
+      estimatingTree,
+      (e) => e.type === ui.AppButton && e.props.isLoading,
+    ).length,
+    1,
+  );
+  await Promise.all([initialRequest, duplicateRequest]);
   tree = hooks.render(HeroInput);
   assert.deepEqual(calls[0], [
     "/jobs/estimate",
     { sourceUrl: "https://youtube.com/watch?v=example" },
   ]);
   assert.equal(submissions.length, 0);
-  let confirmation = elements(
-    tree,
-    (e) => e.type === ui.AppDialog && e.props.title === "Ready to generate?",
-  )[0];
+  assert.equal(calls.length, 1);
+  let confirmation = dialog(tree);
   assert.equal(confirmation.props.open, true);
   const confirmationHtml = renderToStaticMarkup(confirmation.props.children);
-  assert.match(confirmationHtml, /Maximum approved cost/);
-  assert.match(confirmationHtml, /maximum reservation, not your final charge/);
-  assert.match(
-    confirmationHtml,
-    /actual charge is calculated after processing/,
-  );
-  assert.equal(confirmation.props.footer.props.disabled, false);
-  confirmation.props.footer.props.onClick();
+  assert.match(confirmationHtml, /Maximum credits reserved/);
+  assert.match(confirmationHtml, /maximum reservation of/);
+  assert.match(confirmationHtml, /final charge may be lower/);
+  assert.equal(primary(confirmation).props.disabled, false);
+  const firstApproval = approve(tree);
+  const duplicateApproval = approve(tree);
+  const loadingDialog = dialog(hooks.render(HeroInput));
+  assert.equal(loadingDialog.props.dismissible, false);
+  assert.equal(loadingDialog.props.showCloseButton, false);
+  assert.equal(primary(loadingDialog).props.disabled, true);
+  assert.equal(primary(loadingDialog).props.children, "Checking estimate…");
+  await Promise.all([firstApproval, duplicateApproval]);
   assert.equal(submissions[0].authorizedCredits, 15);
   assert.equal(submissions[0].maxOutputSeconds, 540);
   assert.equal(submissions[0].pricingVersion, "live-pricing");
+  assert.equal(submissions.length, 1);
+  mutationOptions.onError(new Error("failed"));
   balance.available = 5;
   tree = hooks.render(HeroInput);
-  confirmation = elements(
-    tree,
-    (e) => e.type === ui.AppDialog && e.props.title === "Ready to generate?",
-  )[0];
-  assert.equal(confirmation.props.footer.props.disabled, true);
+  confirmation = dialog(tree);
+  assert.equal(primary(confirmation).props.disabled, true);
   const upgrade = elements(
     confirmation,
     (e) => e.type === ui.InsufficientCredits && e.props.billingUrl,
@@ -328,6 +371,211 @@ test("automatic budget is reviewed before approval and an insufficient balance b
   elements(tree, (e) => e.type === Help)[0].props.onOpenChange(false);
   tree = hooks.render(HeroInput);
   assert.equal(elements(tree, (e) => e.type === Help)[0].props.open, false);
+  // Recovery uses server-held measured evidence, then requires the same explicit confirmation.
+  const recovery = {
+    initialSourceUrl: "https://youtube.com/watch?v=example",
+    reviewJobId: "6ac8c8e15feea2543bffc322",
+  };
+  tree = hooks.render(HeroInput, recovery);
+  await elements(tree, (e) => e.type === "form")[0].props.onSubmit();
+  assert.deepEqual(calls.at(-1), [
+    "/jobs/estimate",
+    { sourceUrl: recovery.initialSourceUrl, reviewJobId: recovery.reviewJobId },
+  ]);
+  assert.equal(submissions.length, 1);
+  balance.available = 20;
+  tree = hooks.render(HeroInput);
+  estimate.totalCredits = 16;
+  estimate.sourceCredits = 7;
+  await approve(tree);
+  tree = hooks.render(HeroInput);
+  assert.match(
+    elements(tree, (e) => e.type === GenerationConfirmation)[0].props.error,
+    /estimate changed/,
+  );
+  assert.equal(submissions.length, 1);
+  assert.equal(
+    elements(tree, (e) => e.type === GenerationConfirmation)[0].props.estimate
+      .totalCredits,
+    16,
+  );
+  estimateError = true;
+  await approve(tree);
+  tree = hooks.render(HeroInput);
+  assert.match(
+    elements(tree, (e) => e.type === GenerationConfirmation)[0].props.error,
+    /Couldn’t refresh/,
+  );
+  assert.equal(submissions.length, 1);
+  estimateError = false;
+  await approve(tree);
+  assert.equal(submissions.length, 2);
+  assert.equal(submissions[1].authorizedCredits, 16);
+  assert.notEqual(submissions[1].operationId, submissions[0].operationId);
+  mutationOptions.onError(new Error("failed"));
+  tree = hooks.render(HeroInput);
+  elements(tree, (e) => e.type === GenerationConfirmation)[0].props.onCancel();
+  tree = hooks.render(HeroInput);
+  assert.equal(dialog(tree).props.open, false);
+  estimateError = true;
+  await elements(tree, (e) => e.type === "form")[0].props.onSubmit();
+  tree = hooks.render(HeroInput);
+  assert.match(
+    renderToStaticMarkup(elements(tree, (e) => e.type === "form")[0]),
+    /Check your video link and try again/,
+  );
+  assert.equal(submissions.length, 2);
+  estimateError = false;
+  await elements(tree, (e) => e.type === "form")[0].props.onSubmit();
+  tree = hooks.render(HeroInput);
+  estimate.available = 5;
+  await approve(tree);
+  tree = hooks.render(HeroInput);
+  assert.equal(
+    elements(tree, (e) => e.type === GenerationConfirmation)[0].props.available,
+    5,
+  );
+  assert.equal(primary(dialog(tree)).props.disabled, true);
+  assert.equal(submissions.length, 2);
+  balance.available = 30;
+  estimate.available = 30;
+  tree = hooks.render(HeroInput);
+  assert.equal(
+    elements(tree, (e) => e.type === GenerationConfirmation)[0].props.available,
+    30,
+  );
+});
+
+test("confirmation displays server-provided duration, authorization and plan target with explicit CTA consent", () => {
+  const button = ({ children, isLoading, ...props }) =>
+    React.createElement("button", props, children);
+  const { GenerationConfirmation } = load(
+    "apps/app/features/dashboard/components/GenerationConfirmation.tsx",
+    {
+      "@blynta/ui": {
+        AppDialog: ({ title, children, footer }) =>
+          React.createElement(
+            "section",
+            null,
+            React.createElement("h2", null, title),
+            children,
+            footer,
+          ),
+        AppButton: button,
+        InsufficientCredits: () => null,
+      },
+    },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(GenerationConfirmation, {
+      estimate: {
+        totalCredits: 20,
+        sourceCredits: 11,
+        renderCredits: 9,
+        sourceSeconds: 3233,
+        maxOutputSeconds: 540,
+        clipTargetMin: 6,
+        clipTargetMax: 6,
+      },
+      available: 198,
+      busy: false,
+      checking: false,
+      enabled: true,
+      onCancel() {},
+      onApprove() {},
+    }),
+  );
+  assert.match(html, /Ready to create your clips/);
+  assert.match(html, /53m 53s/);
+  assert.match(html, /up to 9 min total/);
+  assert.match(html, /11 credits/);
+  assert.match(html, /9 credits/);
+  assert.match(html, /Up to 20 credits/);
+  assert.match(html, /aiming for 6 clips/);
+  assert.doesNotMatch(html, /6–9 clips/);
+});
+
+test("credit explanation presents the authoritative nine-credit example and omits duplicate billing sections", () => {
+  const { HowCreditsWork } = load(
+    "apps/app/features/billing/components/HowCreditsWork.tsx",
+    {
+      "@blynta/ui": {
+        AppDialog: ({ children }) => React.createElement("div", null, children),
+        AppButton: ({ children }) =>
+          React.createElement("button", null, children),
+      },
+    },
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(HowCreditsWork, {
+      open: true,
+      onOpenChange() {},
+      balance: {
+        pricing: { sourceSeconds: 300, outputSeconds: 60 },
+        clipExample: { sourceCredits: 6, renderCredits: 3, totalCredits: 9 },
+      },
+    }),
+  );
+  assert.match(html, /per 5 minutes/);
+  assert.match(html, /per minute/);
+  assert.match(html, /9 credits total/);
+  assert.match(html, /6 source \+ 3 output/);
+  assert.doesNotMatch(
+    html,
+    /Reserved before we start|You stay in control|Studio|Subscription/,
+  );
+});
+
+test("authorization failure offers a new estimate instead of retrying the old reservation", () => {
+  const hooks = hookHarness();
+  let retries = 0;
+  const ui = {
+    AppButton: function Button() {},
+    AppDialog: function Dialog() {},
+  };
+  const HeroInput = function Hero() {};
+  const { FailedStateCard } = load(
+    "apps/app/features/jobs/components/FailedStateCard.tsx",
+    {
+      react: hooks.react,
+      "../queries": {
+        useRetryJob: () => ({
+          mutateAsync: () => {
+            retries++;
+          },
+          isPending: false,
+        }),
+      },
+      "./helpers": { getJobId: (job) => job._id },
+      "@blynta/ui": ui,
+      "@/features/dashboard/components/HeroInput": { HeroInput },
+      "lucide-react": { AlertTriangle: () => null, RefreshCw: () => null },
+      sonner: { toast: {} },
+    },
+  );
+  const job = {
+    _id: "6ac8c8e15feea2543bffc322",
+    sourceUrl: "https://youtu.be/example",
+    processingFailure: {
+      message: "Review a new source budget.",
+      requiresApproval: true,
+      retryAvailable: false,
+    },
+  };
+  let tree = hooks.render(FailedStateCard, { job });
+  const button = elements(tree, (e) => e.type === ui.AppButton)[0];
+  assert.equal(button.props.children, "Review new credit estimate");
+  assert.equal(elements(tree, (e) => e.type === HeroInput).length, 0);
+  button.props.onClick();
+  tree = hooks.render(FailedStateCard, { job });
+  assert.equal(retries, 0);
+  assert.equal(
+    elements(tree, (e) => e.type === ui.AppDialog)[0].props.open,
+    true,
+  );
+  const form = elements(tree, (e) => e.type === HeroInput)[0];
+  assert.equal(form.props.initialSourceUrl, job.sourceUrl);
+  assert.equal(form.props.reviewJobId, job._id);
 });
 
 test("insufficient-credit upgrade action links to the actual billing page", () => {

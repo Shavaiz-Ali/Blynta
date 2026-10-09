@@ -1,4 +1,5 @@
 import { SourcePlatform } from './schemas/job.schema';
+import { requiresSourceApproval } from '../billing/source-authorization';
 
 /** Public explanations only. The original diagnostic remains in storage/logs. */
 export function jobFailure(job: {
@@ -8,6 +9,14 @@ export function jobFailure(job: {
 }) {
   if (!job.errorMessage) return undefined;
   const raw = job.errorMessage;
+  if (requiresSourceApproval(raw))
+    return {
+      code: 'source_authorization_required',
+      message:
+        'The downloaded video needs a revised source budget. Retrying cannot change your approval. Review a new estimate and explicitly approve it to start a new job.',
+      retryAvailable: false,
+      requiresApproval: true,
+    };
   const preparation = [
     'pending',
     'download',

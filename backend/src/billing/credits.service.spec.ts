@@ -2,6 +2,8 @@ import { ConfigService } from '@nestjs/config';
 import { CreditsService } from './credits.service';
 import { usageSample } from './usage-context';
 import { INITIAL_PRICING } from './credit-pricing';
+import { clipPrice } from './credit-pricing';
+import { SourceAuthorizationError } from './source-authorization';
 
 /** Transactional adapter tests the real service, with rollback and serialized conflicting writes.
  * A separate opt-in replica-set test exercises Mongo's actual transactions and unique indexes. */
@@ -173,15 +175,83 @@ function fixture(balance = 20, initialized = true) {
 }
 
 describe('authoritative credit operations', () => {
+  async function incidentReservation(sourceSeconds = 3233) {
+    const f = fixture();
+    const amount = clipPrice(sourceSeconds, 540).totalCredits;
+    await f.service.reserve({
+      userId: f.userId,
+      operationId: 'incident',
+      product: 'ai-clips',
+      relatedId: f.userId,
+      sourceSeconds,
+      maxOutputSeconds: 540,
+      amount,
+      fingerprint: 'incident',
+      pricing: INITIAL_PRICING,
+    });
+    return {
+      ...f,
+      state: () =>
+        f.state() as {
+          operations: Record<string, unknown>[];
+          entries: { type: string }[];
+          user: Record<string, unknown>;
+        },
+    };
+  }
+  test('measured fractional duration preserves authorization and settles exactly once within the approved maximum', async () => {
+    const f = await incidentReservation();
+    await f.service.assertSourceBudget('incident', 3233.461);
+    expect(f.state().operations[0]).toMatchObject({
+      sourceSeconds: 3233,
+      authorized: 20,
+      held: 20,
+      charged: 0,
+      pricing: INITIAL_PRICING,
+    });
+    const charge = clipPrice(3233.461, 540).totalCredits;
+    await f.service.settle('incident', charge);
+    await f.service.settle('incident', charge);
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 0,
+      creditsReserved: 0,
+      totalCreditsUsed: 20,
+    });
+    expect(
+      f.state().entries.filter((e: { type: string }) => e.type === 'charge'),
+    ).toHaveLength(1);
+  });
+  test.each([
+    [3233, 3234],
+    [300, 300.001],
+  ])(
+    'overage from %s to %s never charges and terminal failure releases the hold once',
+    async (approved, measured) => {
+      const f = await incidentReservation(approved);
+      await expect(
+        f.service.assertSourceBudget('incident', measured),
+      ).rejects.toBeInstanceOf(SourceAuthorizationError);
+      expect(f.state().entries).toHaveLength(1);
+      await f.service.settle('incident', 0);
+      await f.service.settle('incident', 0);
+      expect(f.state().user).toMatchObject({
+        creditsBalance: 20,
+        creditsReserved: 0,
+        totalCreditsUsed: 0,
+      });
+      expect(f.state().entries.map((e: { type: string }) => e.type)).toEqual([
+        'reserve',
+        'release',
+      ]);
+    },
+  );
   test('the displayed clip example uses the active backend pricing', async () => {
     const f = fixture();
-    jest
-      .spyOn(f.service, 'pricing')
-      .mockReturnValue({
-        ...INITIAL_PRICING,
-        sourceSeconds: 600,
-        outputSeconds: 90,
-      });
+    jest.spyOn(f.service, 'pricing').mockReturnValue({
+      ...INITIAL_PRICING,
+      sourceSeconds: 600,
+      outputSeconds: 90,
+    });
     const balance = await f.service.balance(f.userId);
     expect(balance.clipExample).toEqual({
       sourceCredits: 3,
