@@ -170,7 +170,8 @@ export class JobsController {
     const sourceSeconds = Math.ceil(metadata.duration);
     const account = await this.usersService.findById(req.user.userId);
     const policy = highlightPolicy(account?.plan, sourceSeconds);
-    if (body.maxOutputSeconds < policy.outputSeconds)
+    const maxOutputSeconds = body.maxOutputSeconds ?? policy.outputSeconds;
+    if (maxOutputSeconds < policy.outputSeconds)
       throw new BadRequestException(
         `Authorize at least ${policy.outputSeconds} output seconds for the ${policy.min}–${policy.max} clip target`,
       );
@@ -178,7 +179,7 @@ export class JobsController {
       ...(await this.credits.estimate(
         req.user.userId,
         sourceSeconds,
-        Math.min(body.maxOutputSeconds, sourceSeconds),
+        Math.min(maxOutputSeconds, sourceSeconds),
       )),
       metadataSourceSeconds: metadata.duration,
       clipTargetMin: policy.min,

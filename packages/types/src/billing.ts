@@ -5,6 +5,11 @@ export interface CreditBalance {
   plan: "free" | "pro" | "business";
   monthlyCredits: number;
   nextRenewal?: string | null;
+  clipExample?: {
+    sourceCredits: number;
+    renderCredits: number;
+    totalCredits: number;
+  };
   pricing: {
     version: string;
     sourceSeconds: number;
@@ -24,6 +29,8 @@ export interface CreditEstimate {
   metadataSourceSeconds?: number;
   sourceSeconds?: number;
   maxOutputSeconds?: number;
+  clipTargetMin?: number;
+  clipTargetMax?: number;
   duration?: number;
 }
 export interface CreditTransaction {

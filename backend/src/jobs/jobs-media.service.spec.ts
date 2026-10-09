@@ -283,9 +283,14 @@ describe('durable render fan-out and parent completion', () => {
   });
 });
 
-test.each([6, 9])(
-  'persists and dispatches %s authorized clips idempotently',
-  async (limit) => {
+test.each([
+  [6, 45],
+  [6, 60],
+  [9, 45],
+  [9, 60],
+])(
+  'persists and dispatches %s authorized %s-second clips idempotently',
+  async (limit, clipSeconds) => {
     const jobId = new Types.ObjectId().toString();
     const parent: any = {
       _id: new Types.ObjectId(jobId),
@@ -324,7 +329,7 @@ test.each([6, 9])(
     });
     const highlights = Array.from({ length: 12 }, (_, i) => ({
       startTime: i * 80,
-      endTime: i * 80 + 45,
+      endTime: i * 80 + clipSeconds,
       reason: 'Moment',
       score: 0.9,
       clipTitle: 'Moment',

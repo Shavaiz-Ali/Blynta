@@ -173,6 +173,23 @@ function fixture(balance = 20, initialized = true) {
 }
 
 describe('authoritative credit operations', () => {
+  test('the displayed clip example uses the active backend pricing', async () => {
+    const f = fixture();
+    jest
+      .spyOn(f.service, 'pricing')
+      .mockReturnValue({
+        ...INITIAL_PRICING,
+        sourceSeconds: 600,
+        outputSeconds: 90,
+      });
+    const balance = await f.service.balance(f.userId);
+    expect(balance.clipExample).toEqual({
+      sourceCredits: 3,
+      renderCredits: 2,
+      totalCredits: 5,
+    });
+    expect(f.state().entries).toHaveLength(0);
+  });
   test('opening migration is idempotent and preserves an existing balance', async () => {
     const f = fixture(27, false);
     await f.service.migrate(f.userId);

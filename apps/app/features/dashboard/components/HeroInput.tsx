@@ -29,6 +29,7 @@ import { useCreditBalance } from "@/features/billing/queries";
 import { axiosClient } from "@/config/axiosClient";
 import type { CreditEstimate } from "@blynta/types";
 import { useRouter } from "next/navigation";
+import { HowCreditsWork } from "@/features/billing/components/HowCreditsWork";
 
 /* -------------------------------------------------------------------------- */
 /*                      AI Model options (matches backend)                   */
@@ -100,10 +101,7 @@ interface HeroInputProps {
 export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: profile } = useCurrentUser();
   const balance = useCreditBalance();
-  const [sourceMinutes, setSourceMinutes] = React.useState("5");
-  const [outputMinutesInput, setOutputMinutes] = React.useState<string | null>(
-    null,
-  );
+  const [creditsHelpOpen, setCreditsHelpOpen] = React.useState(false);
   const [confirmation, setConfirmation] = React.useState<{
     body: Parameters<ReturnType<typeof useCreateJob>["mutate"]>[0];
     estimate: CreditEstimate;
@@ -115,7 +113,6 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
   const { data: fetchedPresets } = useStylePresets();
   const router = useRouter();
   const isPaid = profile?.plan === "pro" || profile?.plan === "business";
-  const outputMinutes = outputMinutesInput ?? (isPaid ? "9" : "6");
 
   const presets = fetchedPresets?.length ? fetchedPresets : PRESETS_FALLBACK;
 
@@ -201,15 +198,13 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
       const estimate = (
         await axiosClient.post<CreditEstimate>("/jobs/estimate", {
           sourceUrl,
-          maxOutputSeconds:
-            Math.max(Number(outputMinutes), isPaid ? 9 : 6) * 60,
         })
       ).data;
-      setSourceMinutes(String((estimate.sourceSeconds || 0) / 60));
       const signature = JSON.stringify([
         body,
         estimate.sourceSeconds,
-        outputMinutes,
+        estimate.maxOutputSeconds,
+        estimate.totalCredits,
         estimate.pricingVersion,
       ]);
       if (operationRef.current?.signature !== signature)
@@ -259,14 +254,14 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
               reframes them vertically, and adds captions.
             </p>
           </div>
-          <span className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => setCreditsHelpOpen(true)}
+            className="inline-flex w-fit shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-border/70 bg-background/70 px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
             <CoinsIcon className="h-3 w-3 text-amber-500" />
-            <span>
-              {balance.data?.enabled
-                ? "Duration-based credits"
-                : "Usage-based billing unavailable"}
-            </span>
-          </span>
+            How credits work
+          </button>
         </div>
 
         <form onSubmit={handleSubmit} className="relative space-y-2">
@@ -303,15 +298,13 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             <AppButton
               type="submit"
               disabled={submitDisabled}
-              isLoading={isPending}
+              isLoading={isPending || estimating}
               icon={<ArrowRightIcon className="h-3.5 w-3.5" />}
               iconPosition="right"
               size="sm"
               className="h-12 w-full shrink-0 cursor-pointer rounded-xl px-5 text-sm font-semibold shadow-sm sm:w-auto"
             >
-              {balance.data?.enabled
-                ? "Review credit budget"
-                : "Generate shorts"}
+              Review &amp; Generate
             </AppButton>
           </div>
 
@@ -323,32 +316,6 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
             </p>
           )}
         </form>
-        {balance.data?.enabled && (
-          <div className="grid gap-3 sm:grid-cols-2 text-sm">
-            <p className="text-muted-foreground">
-              Source duration is checked from video metadata before you
-              authorize credits.
-            </p>
-            <label className="space-y-1">
-              Maximum total clip output (minutes)
-              <input
-                className="w-full rounded-lg border bg-background p-2"
-                type="number"
-                min={isPaid ? "9" : "6"}
-                max="60"
-                step="0.1"
-                value={outputMinutes}
-                onChange={(e) => setOutputMinutes(e.target.value)}
-              />
-            </label>
-            <p className="sm:col-span-2 text-xs text-muted-foreground">
-              Source duration is verified before AI processing. Videos over your
-              limit stop without a charge. Blynta renders only highlights that
-              fit the approved output budget. Final charges cannot exceed your
-              confirmation.
-            </p>
-          </div>
-        )}
         {balance.data && !balance.data.enabled && (
           <p role="alert" className="text-sm text-muted-foreground">
             Usage-based billing is not active. New processing is temporarily
@@ -443,13 +410,19 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         onOpenChange={(open) => {
           if (!open && !isPending) setConfirmation(null);
         }}
-        title="Confirm credit budget"
-        description="One shared balance for AI Clips and Studio."
+        title="Ready to generate?"
+        description="Review your video and maximum credit cost."
+        dismissible={!isPending}
+        showCloseButton={!isPending}
+        bodyClassName="max-h-[60vh] overflow-y-auto"
         footer={
           <AppButton
+            className="h-11"
             isLoading={isPending}
             disabled={
               !confirmation ||
+              !balance.data?.enabled ||
+              !!balance.error ||
               confirmation.estimate.totalCredits >
                 (balance.data?.available ?? 0)
             }
@@ -460,29 +433,62 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
         }
       >
         {confirmation && (
-          <div className="space-y-3 text-sm">
-            <p>
-              Verified source budget: {Number(sourceMinutes).toFixed(2)}{" "}
-              minutes. Output budget: up to{" "}
-              {(confirmation.estimate.maxOutputSeconds! / 60).toFixed(2)}{" "}
-              minutes of clips.
+          <div className="space-y-5 text-sm">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <p className="text-xs text-muted-foreground">
+                Maximum approved cost
+              </p>
+              <p className="mt-1 text-3xl font-bold tracking-tight">
+                {confirmation.estimate.totalCredits}{" "}
+                <span className="text-base font-medium">credits</span>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {balance.data?.available ?? confirmation.estimate.available}{" "}
+                available
+              </p>
+            </div>
+            <dl className="space-y-3">
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">
+                  Source video ·{" "}
+                  {(
+                    (confirmation.estimate.sourceSeconds ?? 0) / 60
+                  ).toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  min
+                </dt>
+                <dd className="shrink-0 font-medium">
+                  {confirmation.estimate.sourceCredits} credits
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-muted-foreground">
+                  Clips · up to{" "}
+                  {(
+                    (confirmation.estimate.maxOutputSeconds ?? 0) / 60
+                  ).toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  min total
+                </dt>
+                <dd className="shrink-0 font-medium">
+                  {confirmation.estimate.renderCredits} credits
+                </dd>
+              </div>
+            </dl>
+            <p className="text-muted-foreground leading-relaxed">
+              AI chooses the best highlights within this budget
+              {confirmation.estimate.clipTargetMax
+                ? `, aiming for ${confirmation.estimate.clipTargetMin === confirmation.estimate.clipTargetMax ? confirmation.estimate.clipTargetMax : `${confirmation.estimate.clipTargetMin}–${confirmation.estimate.clipTargetMax}`} clips when your video supports them`
+                : ""}
+              . Credits are reserved when you start. Unused credits return to
+              your balance, and the final charge never exceeds your approval.
             </p>
-            <p>
-              <strong>
-                {confirmation.estimate.totalCredits} credits maximum
-              </strong>{" "}
-              · {balance.data?.available ?? confirmation.estimate.available}{" "}
-              available.
-            </p>
-            <p>
-              Source processing: {confirmation.estimate.sourceCredits} credits ·
-              Output budget: {confirmation.estimate.renderCredits} credits.
-            </p>
-            <p className="text-muted-foreground">
-              We target {isPaid ? "6–9" : "6"} valid clips when the source
-              supports them. We reserve this budget now and charge only eligible
-              delivered work. Unused credits are released. Retrying uses the
-              remaining original budget.
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              This is a maximum reservation, not your final charge. Your actual
+              charge is calculated after processing from the source video and
+              total billable clips delivered, and may be lower.
             </p>
             {confirmation.estimate.totalCredits >
               (balance.data?.available ?? 0) && (
@@ -490,11 +496,17 @@ export function HeroInput({ onSuccess }: HeroInputProps) {
                 required={confirmation.estimate.totalCredits}
                 available={balance.data?.available ?? 0}
                 billingUrl="/billing"
+                billingLabel="View plans & upgrade"
               />
             )}
           </div>
         )}
       </AppDialog>
+      <HowCreditsWork
+        open={creditsHelpOpen}
+        onOpenChange={setCreditsHelpOpen}
+        balance={balance.data}
+      />
       <AppDialog
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}

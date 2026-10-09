@@ -2,10 +2,12 @@ export function InsufficientCredits({
   required,
   available,
   billingUrl,
+  billingLabel = "View plans and manage billing",
 }: {
   required: number;
   available: number;
   billingUrl?: string;
+  billingLabel?: string;
 }) {
   return (
     <div
@@ -22,7 +24,7 @@ export function InsufficientCredits({
           href={billingUrl}
           className="mt-2 inline-block font-semibold underline underline-offset-4"
         >
-          View plans and manage billing
+          {billingLabel}
         </a>
       ) : (
         <p className="mt-2">

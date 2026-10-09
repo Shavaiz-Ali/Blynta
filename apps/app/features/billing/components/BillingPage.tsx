@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { CreditHistory } from "./CreditHistory";
+import { HowCreditsWork } from "./HowCreditsWork";
+import { Scissors, WandSparkles, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -452,6 +454,7 @@ function PlanCardSkeleton() {
 
 export function BillingPage() {
   const credits = useCreditBalance();
+  const [creditsHelpOpen, setCreditsHelpOpen] = React.useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const showSuccess = searchParams?.get("success") === "true";
@@ -631,37 +634,63 @@ export function BillingPage() {
             ))}
       </div>
 
-      {/* ── Footer note ── */}
-      <section className="rounded-2xl border border-border/60 bg-muted/20 p-5 space-y-3">
-        <h2 className="text-base font-bold">One balance across Blynta</h2>
-        <div className="grid gap-4 sm:grid-cols-2 text-sm text-muted-foreground">
-          <p>
-            <strong className="text-foreground">AI Clips</strong>
-            <br />1 credit per{" "}
-            {((credits.data?.pricing.sourceSeconds || 300) / 60).toFixed(
-              0,
-            )}{" "}
-            minutes of source video, plus 1 per{" "}
-            {credits.data?.pricing.outputSeconds || 60} seconds of delivered
-            clips, rounded up. A 60-minute source and eight 45-second clips cost
-            18 credits at the initial rates.
-          </p>
-          <p>
-            <strong className="text-foreground">Studio</strong>
-            <br />
-            Basic editing and local previews are included. Cloud exports use{" "}
-            {credits.data?.pricing.studioModifier || 1} credits per{" "}
-            {credits.data?.pricing.studioSeconds || 60} seconds, rounded up.
-            Review an estimate before confirming a billable operation.
-          </p>
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">
+              One balance across Blynta
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create clips and finish your edits with the same credits.
+            </p>
+          </div>
+          <AppButton
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => setCreditsHelpOpen(true)}
+          >
+            How credits work
+          </AppButton>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Credits are held while work runs. Failed operations with no delivered
-          output release the hold; partial jobs charge only eligible delivered
-          work. Subscription grants add to your balance and do not expire under
-          this policy.
-        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            {
+              Icon: Scissors,
+              title: "AI Clips",
+              copy: "Turn long videos into highlights. Credits cover source processing and delivered clips.",
+            },
+            {
+              Icon: WandSparkles,
+              title: "Studio",
+              copy: "Edit and preview for free. Use your shared credits when you export in the cloud.",
+            },
+            {
+              Icon: Wallet,
+              title: "Your credits, together",
+              copy: "Subscription credits join your balance. Review the maximum cost before starting paid work.",
+            },
+          ].map(({ Icon, title, copy }) => (
+            <div
+              key={title}
+              className="rounded-2xl border border-border/60 bg-card p-5"
+            >
+              <div className="mb-4 inline-flex rounded-xl bg-primary/10 p-2.5 text-primary">
+                <Icon className="size-5" aria-hidden="true" />
+              </div>
+              <h3 className="text-sm font-semibold">{title}</h3>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {copy}
+              </p>
+            </div>
+          ))}
+        </div>
       </section>
+      <HowCreditsWork
+        open={creditsHelpOpen}
+        onOpenChange={setCreditsHelpOpen}
+        balance={credits.data}
+      />
       <CreditHistory />
       <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p>

@@ -214,4 +214,40 @@ describe('clip download HTTP intent and read endpoints', () => {
     expect(short.body.maxOutputSeconds).toBe(30);
     expect(short.body.totalCredits).toBe(2);
   });
+  it('chooses the backend plan budget when output duration is omitted', async () => {
+    const free = await http()
+      .post('/jobs/estimate')
+      .send({ sourceUrl: 'https://www.youtube.com/watch?v=example' })
+      .expect(201);
+    expect(free.body.maxOutputSeconds).toBe(360);
+    expect(free.body.totalCredits).toBe(16);
+    jest
+      .spyOn(app.get(UsersService), 'findById')
+      .mockResolvedValue({ plan: UserPlan.PRO } as never);
+    const paid = await http()
+      .post('/jobs/estimate')
+      .send({ sourceUrl: 'https://www.youtube.com/watch?v=example' })
+      .expect(201);
+    expect(paid.body.maxOutputSeconds).toBe(540);
+    expect(paid.body.totalCredits).toBe(19);
+    jest
+      .spyOn(app.get(VideoDownloadService), 'fetchVideoMetadata')
+      .mockResolvedValue({ duration: 30 } as never);
+    const short = await http()
+      .post('/jobs/estimate')
+      .send({ sourceUrl: 'https://www.youtube.com/watch?v=example' })
+      .expect(201);
+    expect(short.body.maxOutputSeconds).toBe(30);
+  });
+  it('rejects unsupported duration before estimating or reserving credits', async () => {
+    jest
+      .spyOn(app.get(VideoDownloadService), 'fetchVideoMetadata')
+      .mockResolvedValue({ duration: 14401 } as never);
+    const estimate = jest.spyOn(app.get(CreditsService), 'estimate');
+    await http()
+      .post('/jobs/estimate')
+      .send({ sourceUrl: 'https://www.youtube.com/watch?v=example' })
+      .expect(400);
+    expect(estimate).not.toHaveBeenCalled();
+  });
 });

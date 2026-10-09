@@ -564,6 +564,7 @@ export class CreditsService implements OnModuleInit {
       user.plan === UserPlan.FREE
         ? user.freeCreditGrantAt
         : customer?.currentBillingPeriodEndsAt;
+    const pricing = this.pricing();
     return {
       enabled: this.enabled,
       available: user.creditsBalance,
@@ -572,7 +573,8 @@ export class CreditsService implements OnModuleInit {
       subscriptionStatus: customer?.paddleSubscriptionStatus || null,
       plan: user.plan,
       monthlyCredits: PLAN_CREDITS[user.plan],
-      pricing: this.pricing(),
+      pricing,
+      clipExample: clipPrice(30 * 60, 3 * 60, pricing),
       entitlements: {
         aiClips: true,
         studio: true,
