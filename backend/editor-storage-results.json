@@ -1,0 +1,37 @@
+{
+  "measurements": [
+    {
+      "duration": 3,
+      "width": 1280,
+      "height": 720,
+      "seconds": 28.62,
+      "nodeRssMiB": 104,
+      "outputBytes": 760980
+    },
+    {
+      "duration": 3,
+      "width": 1280,
+      "height": 720,
+      "seconds": 14.157,
+      "nodeRssMiB": 110,
+      "outputBytes": 760980
+    },
+    {
+      "duration": 30,
+      "width": 1280,
+      "height": 720,
+      "seconds": 68.534,
+      "nodeRssMiB": 118,
+      "outputBytes": 11254988
+    },
+    {
+      "duration": 30,
+      "width": 1920,
+      "height": 1080,
+      "seconds": 95.998,
+      "nodeRssMiB": 131,
+      "outputBytes": 16120544
+    }
+  ],
+  "nativePeakWorkingSetMiB": 322
+}

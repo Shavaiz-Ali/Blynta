@@ -158,7 +158,7 @@ describe('Studio persistence and ownership', () => {
         // Jest asymmetric matchers are intentionally untyped.
         // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         storageKey: expect.stringMatching(
-          new RegExp(`^studio/alice/${projectId}/assets/`),
+          new RegExp(`^job-sources/studio-assets/alice/${projectId}/`),
         ),
         userId: 'alice',
       }),

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSession } from "@blynta/auth/react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -48,10 +49,14 @@ function makeQueryClient(): QueryClient {
 }
 
 let browserQueryClient: QueryClient | undefined;
+let browserQueryOwner: string | undefined;
 
-function getQueryClient(): QueryClient {
+function getQueryClient(owner: string): QueryClient {
   if (isServer) return makeQueryClient();
-  if (!browserQueryClient) browserQueryClient = makeQueryClient();
+  if (!browserQueryClient || browserQueryOwner !== owner) {
+    browserQueryClient = makeQueryClient();
+    browserQueryOwner = owner;
+  }
   return browserQueryClient;
 }
 
@@ -60,10 +65,16 @@ export interface QueryProviderProps {
 }
 
 export function QueryProvider({ children }: QueryProviderProps) {
-  const queryClient = React.useMemo(() => getQueryClient(), []);
+  const { data: session, status } = useSession();
+  const owner =
+    status === "authenticated"
+      ? (session?.user?.id ?? "anonymous")
+      : "anonymous";
+  const queryClient = React.useMemo(() => getQueryClient(owner), [owner]);
+  React.useEffect(() => () => queryClient.clear(), [queryClient]);
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider key={owner} client={queryClient}>
       {children}
       {process.env.NODE_ENV !== "production" ? (
         <ReactQueryDevtools initialIsOpen={false} />

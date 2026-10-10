@@ -1,4 +1,5 @@
 import { CreditsModule } from '../billing/credits.module';
+import { AIRegistryModule } from '../ai-registry/ai-registry.module';
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
@@ -19,6 +20,7 @@ import { StudioAssetSchema } from '../studio/studio.schemas';
 @Module({
   imports: [
     CreditsModule,
+    AIRegistryModule,
     MongooseModule.forFeature([
       { name: Job.name, schema: JobSchema },
       { name: 'StudioAsset', schema: StudioAssetSchema },

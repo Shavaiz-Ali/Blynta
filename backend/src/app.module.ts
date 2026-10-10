@@ -20,6 +20,8 @@ import { SharesModule } from './share/shares.module';
 import { YouTubeModule } from './youtube/youtube.module';
 import { AdminModule } from './admin/admin.module';
 import { StudioModule } from './studio/studio.module';
+import { AiEditorModule } from './ai-editor/ai-editor.module';
+import { AIEditingAgentModule } from './ai-editor/agent/ai-editing-agent.module';
 
 const logger = new Logger('MongooseModule');
 
@@ -77,6 +79,8 @@ const logger = new Logger('MongooseModule');
     YouTubeModule,
     AdminModule,
     StudioModule,
+    AiEditorModule,
+    AIEditingAgentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

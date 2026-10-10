@@ -1,0 +1,37 @@
+{
+  "fullSuite": {
+    "passed": 489,
+    "failed": 0,
+    "skipped": 3,
+    "passedSuites": 62,
+    "skippedSuites": 1,
+    "totalSuites": 63,
+    "skippedNames": [
+      "MongoDB replica-set credit integration concurrent AI Clips and Studio reservations serialize; duplicate settle charges once",
+      "MongoDB replica-set credit integration duplicate billing cycles and upgrades preserve the non-subscription balance",
+      "MongoDB replica-set credit integration ledger updates and deletes are rejected"
+    ]
+  },
+  "editorSuites": [
+    {
+      "file": "ffmpeg-edit-renderer.integration.spec.ts",
+      "passed": 4,
+      "failed": 0
+    },
+    {
+      "file": "edit-services.spec.ts",
+      "passed": 16,
+      "failed": 0
+    },
+    {
+      "file": "edit-plan.spec.ts",
+      "passed": 9,
+      "failed": 0
+    }
+  ],
+  "fullLintSnapshot": {
+    "errors": 1080,
+    "warnings": 118,
+    "note": "Snapshot before final formatting; not a final clean lint gate."
+  }
+}

@@ -92,6 +92,7 @@ export interface CreateJobInput {
   sourcePlatform: SourcePlatform;
   customPrompt?: string;
   aiModel?: string;
+  modelId?: string;
   stylePreset?: string;
 }
 

@@ -1,10 +1,4 @@
-import { CapabilityView } from "@/features/admin-system/CapabilityView";
+import { AIManagement } from "@/features/admin-ai/AIManagement";
 export default function Page() {
-  return (
-    <CapabilityView
-      kind="aiUsage"
-      title="AI & usage"
-      description="Usage by provider, model, and feature."
-    />
-  );
+  return <AIManagement />;
 }

@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Sparkles } from "lucide-react";
 import { BlyntaLogo } from "@/components/logo";
 import {
   AppButton,
@@ -107,6 +108,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { label: "Home", href: "/dashboard", icon: Icon.LayoutDashboard },
       { label: "My Clips", href: "/my-clips", icon: FilmIcon },
+      { label: "AI Studio", href: "/studio", icon: Sparkles },
       { label: "Publications", href: "/publications", icon: UploadIcon },
     ],
   },

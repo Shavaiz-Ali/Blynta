@@ -154,6 +154,8 @@ export const ClipSchema = SchemaFactory.createForClass(Clip);
 
 @Schema({ timestamps: true })
 export class Job {
+  @Prop({ type: Object })
+  highlightModel?: import('../../ai-registry/highlight-routing.service').HighlightModelSelection;
   @Prop()
   sourceContentHash?: string;
   @Prop()

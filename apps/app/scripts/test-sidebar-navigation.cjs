@@ -128,7 +128,7 @@ const { DashboardLayout, navGroups } = load(
 const items = navGroups.flatMap((group) => group.items);
 
 test("every actual sidebar item uses segment-safe section matching", () => {
-  assert.equal(items.length, 9);
+  assert.equal(items.length, 10);
   for (const item of items) {
     assert.equal(isNavItemActive(item.href, item), !item.disabled, item.label);
     assert.equal(
@@ -143,6 +143,8 @@ test("every actual sidebar item uses segment-safe section matching", () => {
 });
 
 for (const pathname of [
+  "/studio",
+  "/studio/123",
   "/my-clips",
   "/my-clips/123",
   "/my-clips/123/clips/456",
@@ -160,9 +162,11 @@ for (const pathname of [
     const expectedHref =
       pathname.startsWith("/my-clips/") || pathname === "/my-clips"
         ? "/my-clips"
-        : ["/dashboard", "/billing"].includes(pathname)
-          ? pathname
-          : undefined;
+        : pathname === "/studio" || pathname.startsWith("/studio/")
+          ? "/studio"
+          : ["/dashboard", "/billing"].includes(pathname)
+            ? pathname
+            : undefined;
     for (const [, nav] of navs) {
       const active = [...nav.matchAll(/<a\b([^>]*)>/g)].filter(([, attrs]) =>
         attrs.includes('aria-current="page"'),

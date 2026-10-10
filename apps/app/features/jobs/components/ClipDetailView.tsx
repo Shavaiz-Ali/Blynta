@@ -372,11 +372,19 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         {/* Context + review utilities */}
         <ClipHeader
           studioAction={
-            <EditInStudioButton
-              jobId={jobId}
-              clipId={String(activeClip._id || activeClip.id)}
-              ready={!activeClip.status || activeClip.status === "completed"}
-            />
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/studio/${String(activeClip._id || activeClip.id)}?jobId=${jobId}`}
+                className="inline-flex h-9 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Edit with AI
+              </Link>
+              <EditInStudioButton
+                jobId={jobId}
+                clipId={String(activeClip._id || activeClip.id)}
+                ready={!activeClip.status || activeClip.status === "completed"}
+              />
+            </div>
           }
           backHref={`/my-clips/${jobId}`}
           title={clipTitle}

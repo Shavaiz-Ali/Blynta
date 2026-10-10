@@ -144,8 +144,9 @@ describe('NotificationsService', () => {
       userId: new Types.ObjectId(),
       status: NotificationStatus.UNREAD,
       readAt: undefined,
-      save: jest.fn().mockResolvedValue(true),
+      save: jest.fn(),
     };
+    notification.save.mockResolvedValue(notification);
     findOneExec.mockResolvedValue(notification);
 
     const result = await service.markAsRead(

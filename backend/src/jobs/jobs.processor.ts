@@ -772,6 +772,14 @@ export class JobsProcessor
         }
       }
 
+      if (job.highlightModel) {
+        options.model = undefined;
+        options.registeredModel = { userId, selection: job.highlightModel };
+        await this.highlightDetectionService.verifySelection(
+          userId,
+          job.highlightModel,
+        );
+      }
       let highlights: HighlightDto[] = [];
 
       if (hasHighlights) {
@@ -812,6 +820,7 @@ export class JobsProcessor
             ),
             configuration: this.highlightDetectionService.cacheConfiguration(
               options.model,
+              job.highlightModel,
             ),
           });
           this.logger.log({
@@ -836,6 +845,7 @@ export class JobsProcessor
                 configurationHash: artifactHash(
                   this.highlightDetectionService.cacheConfiguration(
                     options.model,
+                    job.highlightModel,
                   ),
                 ),
                 templateHash: artifactHash(

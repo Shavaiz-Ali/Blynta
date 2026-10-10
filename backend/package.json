@@ -37,7 +37,13 @@
     "lint:check": "eslint \"{src,apps,libs,test}/**/*.ts\"",
     "test:media:local": "npm run build && node scripts/media-load-test.cjs",
     "audit:activities": "node scripts/audit-activity-duplicates.cjs",
-    "test:activities:integration": "npm run build && node scripts/test-activity-flow.cjs"
+    "test:activities:integration": "npm run build && node scripts/test-activity-flow.cjs",
+    "test:editing": "jest --runInBand ai-editor",
+    "test:editing:storage": "npm run build && node scripts/test-editor-storage.cjs",
+    "test:editing:flow": "npm run build && node scripts/test-editor-flow.cjs",
+    "seed:ai-registry": "ts-node scripts/seed-ai-registry.ts",
+    "test:ai-provider:live": "ts-node scripts/test-ai-provider.ts",
+    "test:ai-agent": "jest --runInBand ai-registry ai-editor"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.42",
@@ -45,6 +51,9 @@
     "@ai-sdk/openai": "^4.0.47",
     "@aws-sdk/client-s3": "^3.1109.0",
     "@aws-sdk/s3-request-presigner": "^3.1109.0",
+    "@langchain/core": "1.2.17",
+    "@langchain/google": "0.2.10",
+    "@langchain/langgraph": "1.4.21",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
@@ -112,6 +121,16 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
+      "^.+\\.js$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true,
+            "module": "CommonJS",
+            "moduleResolution": "node"
+          }
+        }
+      ],
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
@@ -121,6 +140,9 @@
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/$1"
-    }
+    },
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@langchain/google/node_modules/eventsource-parser|eventsource-parser)/)"
+    ]
   }
 }

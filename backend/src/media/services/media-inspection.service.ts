@@ -62,7 +62,11 @@ export function normalizeMediaMetadata(raw: {
 @Injectable()
 export class MediaInspectionService {
   constructor(private registry: ProcessRegistryService) {}
-  async inspect(inputPath: string): Promise<MediaMetadata> {
+  async inspect(
+    inputPath: string,
+    localOnly = false,
+    format?: string,
+  ): Promise<MediaMetadata> {
     return new Promise((resolve, reject) => {
       const proc = execFile(
         'ffprobe',
@@ -73,6 +77,11 @@ export class MediaInspectionService {
           '-show_format',
           '-of',
           'json',
+          ...(localOnly ? ['-protocol_whitelist', 'file,pipe'] : []),
+          ...(format ? ['-f', format] : []),
+          ...(localOnly && format === 'mov'
+            ? ['-enable_drefs', '0', '-use_absolute_path', '0']
+            : []),
           inputPath,
         ],
         { timeout: 30000, maxBuffer: 2 * 1024 * 1024, windowsHide: true },

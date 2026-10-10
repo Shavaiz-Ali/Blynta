@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AIRegistryModule } from '../ai-registry/ai-registry.module';
 import { MediaRenderModule } from './media-render.module';
 import { MongooseModule } from '@nestjs/mongoose';
 import { VideoDownloadService } from './services/video-download.service';
@@ -19,6 +20,7 @@ import {
 @Module({
   imports: [
     MediaRenderModule,
+    AIRegistryModule,
     RedisModule,
     MongooseModule.forFeature([
       { name: SourceVideo.name, schema: SourceVideoSchema },

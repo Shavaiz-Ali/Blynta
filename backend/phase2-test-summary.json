@@ -1,0 +1,41 @@
+{
+  "passed": 566,
+  "failed": 0,
+  "skipped": 3,
+  "passedSuites": 70,
+  "totalSuites": 71,
+  "fullSuiteSeconds": 109.858,
+  "frontend": {
+    "passed": 38,
+    "failed": 0,
+    "command": "node --test scripts/test-ai-studio.cjs scripts/test-clip-sharing.cjs scripts/test-sidebar-navigation.cjs",
+    "uses": "Production UI SSR/query code with mocked transport and hook boundaries"
+  },
+  "builds": {
+    "backend": "passed",
+    "mainApp": "passed",
+    "adminApp": "passed"
+  },
+  "scopedBackendLint": {
+    "files": 32,
+    "errors": 0,
+    "warnings": 0
+  },
+  "skippedNames": [
+    "MongoDB replica-set credit integration concurrent AI Clips and Studio reservations serialize; duplicate settle charges once",
+    "MongoDB replica-set credit integration duplicate billing cycles and upgrades preserve the non-subscription balance",
+    "MongoDB replica-set credit integration ledger updates and deletes are rejected"
+  ],
+  "notRun": [
+    "live Mongo HTTP/race/E2E",
+    "live Gemini",
+    "seed/bootstrap",
+    "production R2/CORS",
+    "authenticated browser journeys"
+  ],
+  "approvalRecoveryFollowup": {
+    "passed": 8,
+    "failed": 0,
+    "seconds": 4.566
+  }
+}

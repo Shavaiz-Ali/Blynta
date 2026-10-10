@@ -1,4 +1,8 @@
 import { highlightPolicy } from '../media/highlight-policy';
+import {
+  HighlightRouting,
+  HighlightModelSelection,
+} from '../ai-registry/highlight-routing.service';
 import { highlightDurationSeconds } from '../media/highlight-duration';
 import { requiresSourceApproval } from '../billing/source-authorization';
 import { hostname } from 'node:os';
@@ -78,6 +82,7 @@ export class JobsService {
     @InjectModel('StudioAsset')
     private studioAssets?: Model<StudioAsset>,
     @Optional() private credits?: CreditsService,
+    @Optional() private highlightRouting?: HighlightRouting,
   ) {}
 
   async cancelJob(userId: string, jobId: string) {
@@ -277,6 +282,7 @@ export class JobsService {
     let operationId: string | undefined;
     let relatedId: string | undefined;
     let clipTargetMax: number | undefined;
+    let highlightModel: HighlightModelSelection | undefined;
     if (!this.credits?.enabled)
       throw new ServiceUnavailableException(
         'Usage-based billing is not active. New processing is temporarily unavailable.',
@@ -321,6 +327,17 @@ export class JobsService {
           `Output budget is too small for the ${policy.min}–${policy.max} clip target. Review a larger estimate.`,
         );
       clipTargetMax = policy.max;
+      if (dto.aiModel && dto.aiModel !== 'default')
+        throw new ConflictException(
+          'Use a registered model selection instead of an external model identifier',
+        );
+      if (this.highlightRouting)
+        highlightModel = await this.highlightRouting.select(
+          userId,
+          dto.modelId,
+        );
+      else if (dto.modelId)
+        throw new ServiceUnavailableException('AI registry is unavailable');
       operationId = `clips-${userId}-${dto.operationId}`;
       const op = await this.credits.reserve({
         userId,
@@ -337,6 +354,7 @@ export class JobsService {
           dto.maxOutputSeconds,
           dto.customPrompt,
           dto.aiModel,
+          dto.modelId,
           dto.stylePreset,
           pricing.version,
         ]),
@@ -362,6 +380,7 @@ export class JobsService {
       status: JobStatus.PENDING,
       customPrompt: dto.customPrompt,
       aiModel: dto.aiModel,
+      highlightModel,
       stylePreset: dto.stylePreset || 'default',
       resolutionUsed: dto.resolution,
       progressPercent: 0,

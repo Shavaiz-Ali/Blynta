@@ -68,7 +68,7 @@ export const navigation: NavigationGroup[] = [
     label: "Business",
     items: [
       {
-        title: "AI & usage",
+        title: "AI Management",
         href: "/ai",
         permission: "analytics.read",
         icon: Bot,

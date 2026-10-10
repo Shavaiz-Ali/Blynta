@@ -693,3 +693,111 @@ describe('quality discovery and independent authorized selection', () => {
     ).toHaveLength(2);
   });
 });
+
+describe('registry highlight adapter integration', () => {
+  const selection = {
+    registryId: '111111111111111111111111',
+    providerId: '222222222222222222222222',
+    modelId: 'gemini-registered',
+    configurationHash: 'synthetic-hash',
+    auto: false,
+  };
+  function registryFixture() {
+    const model = {
+      modelId: 'gemini-registered',
+      providerId: selection.providerId,
+      settings: {
+        timeoutMs: 1000,
+        maxOutputTokens: 512,
+        temperature: 0.2,
+        maxRetries: 0,
+      },
+      pricing: {
+        inputCostPerMillionTokens: 1,
+        outputCostPerMillionTokens: 2,
+        currency: 'USD',
+      },
+    };
+    const routing = {
+      resolve: jest
+        .fn()
+        .mockResolvedValue({ model, secret: 'synthetic-registry-key' }),
+    };
+    const registry = { recordUsage: jest.fn().mockResolvedValue(undefined) };
+    const service = new HighlightDetectionService(
+      new ConfigService({
+        LLM_PROVIDER: 'google',
+        LLM_MODEL_NAME: 'gemini-environment',
+        LLM_API_KEY: 'synthetic-env-key',
+      }),
+      routing as never,
+      registry as never,
+    );
+    return { service, routing, registry };
+  }
+  it('uses the database-selected adapter/settings and records measured tokens with existing metering', async () => {
+    const s = registryFixture();
+    mockGenerateObject
+      .mockReset()
+      .mockResolvedValue({
+        object: HighlightsResponseSchema.parse({ highlights: [] }),
+        usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+      });
+    await s.service.detectHighlightsWithMetadata(
+      [
+        {
+          startTime: 0,
+          endTime: 30,
+          text: 'A transcript excerpt about a surprising idea and a useful conclusion.',
+        },
+      ],
+      { videoDuration: 30, registeredModel: { userId: 'owner', selection } },
+    );
+    expect(s.routing.resolve).toHaveBeenCalledWith('owner', selection);
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'google-model:gemini-registered',
+        maxOutputTokens: 512,
+        maxRetries: 0,
+        temperature: 0.2,
+      }),
+    );
+    expect(s.registry.recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        modelId: selection.registryId,
+        providerModelId: 'gemini-registered',
+        status: 'success',
+        inputTokens: 100,
+        outputTokens: 20,
+        estimatedCostUsd: 0.00014,
+      }),
+    );
+  });
+  it('reports provider failures safely without an environment fallback or fabricated highlights', async () => {
+    const s = registryFixture();
+    mockGenerateObject
+      .mockReset()
+      .mockRejectedValue(
+        new Error('synthetic-registry-key RAW PROVIDER ERROR'),
+      );
+    await expect(
+      s.service.detectHighlightsWithMetadata(
+        [
+          {
+            startTime: 0,
+            endTime: 30,
+            text: 'A transcript excerpt about a surprising idea.',
+          },
+        ],
+        { videoDuration: 30, registeredModel: { userId: 'owner', selection } },
+      ),
+    ).rejects.toThrow('Selected AI model could not generate highlights');
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+    expect(s.registry.recordUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'failed',
+        errorCode: 'HIGHLIGHT_PROVIDER_FAILED',
+      }),
+    );
+  });
+});

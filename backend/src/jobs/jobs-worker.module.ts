@@ -1,4 +1,5 @@
 import { CreditsModule } from '../billing/credits.module';
+import { AIRegistryModule } from '../ai-registry/ai-registry.module';
 import { CreditsRecoveryService } from './credits-recovery.service';
 import { Module, Logger, DynamicModule } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -26,12 +27,15 @@ import { CommonModule } from '../common/common.module';
 import { Connection } from 'mongoose';
 import { StudioModule } from '../studio/studio.module';
 import { StudioProcessor } from '../studio/studio.processor';
+import { AiEditorModule } from '../ai-editor/ai-editor.module';
+import { EditRenderProcessor } from '../ai-editor/edit-render.processor';
 
 const logger = new Logger('JobsWorkerMongoose');
 
 @Module({
   imports: [
     CreditsModule,
+    AIRegistryModule,
     ConfigModule.forRoot({ isGlobal: true }),
     ScheduleModule.forRoot(),
     CommonModule,
@@ -69,6 +73,8 @@ const logger = new Logger('JobsWorkerMongoose');
     MailModule,
     ActivitiesModule,
     StudioModule,
+    AiEditorModule,
+    BullModule.registerQueue({ name: 'edit-render' }),
     BullModule.registerQueue({ name: 'studio' }),
   ],
   providers: [
@@ -83,17 +89,22 @@ const logger = new Logger('JobsWorkerMongoose');
 })
 export class JobsWorkerModule {
   static forRole(role = 'all'): DynamicModule {
-    if (!['all', 'pipeline', 'render', 'studio'].includes(role))
+    if (!['all', 'pipeline', 'render', 'studio', 'editing'].includes(role))
       throw new Error(
-        'MEDIA_WORKER_ROLE must be all, pipeline, render, or studio',
+        'MEDIA_WORKER_ROLE must be all, pipeline, render, studio, or editing',
       );
     return {
       module: JobsWorkerModule,
-      imports: [role === 'render' ? MediaRenderModule : MediaModule],
+      imports: [
+        role === 'render' || role === 'editing'
+          ? MediaRenderModule
+          : MediaModule,
+      ],
       providers: [
         ...(role === 'all' || role === 'pipeline' ? [JobsProcessor] : []),
         ...(role === 'all' || role === 'render' ? [RenderProcessor] : []),
         ...(role === 'all' || role === 'studio' ? [StudioProcessor] : []),
+        ...(role === 'all' || role === 'editing' ? [EditRenderProcessor] : []),
       ],
     };
   }

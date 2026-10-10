@@ -1,0 +1,21 @@
+{
+  "measurements": [
+    {
+      "duration": 3,
+      "width": 1280,
+      "height": 720,
+      "seconds": 9.5,
+      "nodeRssMiB": 135,
+      "outputBytes": 767437
+    },
+    {
+      "duration": 3,
+      "width": 1280,
+      "height": 720,
+      "seconds": 10.547,
+      "nodeRssMiB": 109,
+      "outputBytes": 767437
+    }
+  ],
+  "nativePeakWorkingSetMiB": 527
+}

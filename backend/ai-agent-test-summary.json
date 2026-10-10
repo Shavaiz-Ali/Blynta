@@ -1,0 +1,54 @@
+{
+  "passed": 546,
+  "failed": 0,
+  "skipped": 3,
+  "passedSuites": 67,
+  "totalSuites": 68,
+  "extensionSuites": [
+    {
+      "file": "edit-services.spec.ts",
+      "passed": 16,
+      "failed": 0
+    },
+    {
+      "file": "edit-plan.spec.ts",
+      "passed": 9,
+      "failed": 0
+    },
+    {
+      "file": "admin-ai.spec.ts",
+      "passed": 7,
+      "failed": 0
+    },
+    {
+      "file": "ffmpeg-edit-renderer.integration.spec.ts",
+      "passed": 5,
+      "failed": 0
+    },
+    {
+      "file": "registry.spec.ts",
+      "passed": 24,
+      "failed": 0
+    },
+    {
+      "file": "proposals.spec.ts",
+      "passed": 6,
+      "failed": 0
+    },
+    {
+      "file": "editing-graph.spec.ts",
+      "passed": 12,
+      "failed": 0
+    },
+    {
+      "file": "edit-patch.spec.ts",
+      "passed": 7,
+      "failed": 0
+    }
+  ],
+  "skippedNames": [
+    "MongoDB replica-set credit integration concurrent AI Clips and Studio reservations serialize; duplicate settle charges once",
+    "MongoDB replica-set credit integration duplicate billing cycles and upgrades preserve the non-subscription balance",
+    "MongoDB replica-set credit integration ledger updates and deletes are rejected"
+  ]
+}

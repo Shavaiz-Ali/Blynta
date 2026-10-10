@@ -63,6 +63,19 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message = message.join(', ');
         }
       }
+      // Preserve structured domain validation through the shared API envelope.
+      const structured = exception.getResponse();
+      if (
+        typeof structured === 'object' &&
+        structured !== null &&
+        'code' in structured &&
+        typeof structured.code === 'string' &&
+        'issues' in structured &&
+        Array.isArray(structured.issues)
+      ) {
+        code = structured.code;
+        details = structured.issues;
+      }
     }
     // 4. Mongoose/MongoDB errors
     else if (

@@ -4,7 +4,18 @@ import {
   cancellationSignal,
   assertNotCancelled,
 } from '../../jobs/cancellation-context';
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import {
+  HighlightRouting,
+  HighlightModelSelection,
+} from '../../ai-registry/highlight-routing.service';
+import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import { ConfigService } from '@nestjs/config';
 import { NoObjectGeneratedError, type LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -24,111 +35,11 @@ import {
 } from '../pipeline-cache-identity';
 import { strongestCombination } from '../highlight-selection';
 
-// Zod needs a literal tuple of string values for z.enum(), not a plain
-// string[] — this line derives that tuple from EDITOR_STYLES' actual keys
-// at runtime/compile-time, so the enum can NEVER drift from what
-// EDITOR_STYLES actually defines:
-const EDITOR_STYLE_KEYS = Object.keys(EDITOR_STYLES) as [
-  EditorStyleKey,
-  ...EditorStyleKey[],
-];
-
-export const HighlightSchema = z.object({
-  contextComplete: z.boolean().optional().default(false),
-  presetRelevant: z.boolean().optional().default(false),
-  groundedQuote: z.string().max(300).optional().default(''),
-  startTime: z.number().describe('Start time of the clip in seconds'),
-  endTime: z.number().describe('End time of the clip in seconds'),
-  reason: z
-    .string()
-    .max(300)
-    .describe(
-      'Short explanation of why this moment is engaging, 1-2 sentences',
-    ),
-  score: z
-    .number()
-    .describe(
-      'Engagement score strictly between 0 and 1, e.g. 0.5, 0.82, 0.95. NEVER use a 0-10 or 0-100 scale.',
-    )
-    .transform((val) => {
-      if (val > 1 && val <= 10) return val / 10;
-      if (val > 10 && val <= 100) return val / 100;
-      return val;
-    })
-    .pipe(z.number().min(0).max(1)),
-  clipTitle: z
-    .string()
-    .max(80)
-    .describe(
-      'Short, punchy title under 60 characters, like a social media caption',
-    ),
-  clipDescription: z
-    .string()
-    .max(400)
-    .describe(
-      '1-2 sentence description explaining what makes this moment worth watching',
-    ),
-  tags: z
-    .array(z.string().max(30))
-    .optional()
-    .default([])
-    .describe(
-      'List of 3-8 short, lowercase keywords or hashtag-style tags describing the clip content, topic, mood, and people involved (e.g. "comedy", "celebrity", "reaction"). No # symbol, use hyphens if a tag needs multiple words.',
-    ),
-  style: z
-    .enum(EDITOR_STYLE_KEYS)
-    .optional()
-    .default(DEFAULT_EDITOR_STYLE_KEY)
-    .describe(
-      "Editing style selected based on this specific clip's context — see system prompt for the full list and criteria.",
-    ),
-  hookText: z
-    .string()
-    .max(100)
-    .optional()
-    .default('')
-    .describe(
-      'Contextual top-banner hook / overlay text for ffmpeg (e.g. "Wait for the end 🤯", "Watch till the end 👇", "Step 1 of 3", "The truth about startups")',
-    ),
-  emojis: z
-    .array(z.string().max(10))
-    .optional()
-    .default([])
-    .describe(
-      '1-3 contextual emojis that match this moment and amplify reaction (e.g. ["🤯", "🔥"])',
-    ),
-});
-
-export const HighlightsResponseSchema = z.object({
-  videoTitle: z
-    .string()
-    .max(150)
-    .optional()
-    .default('')
-    .describe('Punchy, clickable title under 100 characters'),
-  videoDescription: z
-    .string()
-    .max(600)
-    .optional()
-    .default('')
-    .describe(
-      '2-4 sentences, max 500 characters, naturally weaving in relevant keywords and hashtags',
-    ),
-  keywords: z
-    .string()
-    .max(600)
-    .optional()
-    .default('')
-    .describe(
-      'Comma-separated SEO keywords/phrases for the whole video, max 500 characters total',
-    ),
-  hashtags: z
-    .array(z.string().max(50))
-    .optional()
-    .default([])
-    .describe('5-15 hashtags, each starting with #, lowercase, no spaces'),
-  highlights: z.array(HighlightSchema),
-});
+import { HighlightsResponseSchema } from '../highlight-result.contract';
+export {
+  HighlightSchema,
+  HighlightsResponseSchema,
+} from '../highlight-result.contract';
 
 export interface HighlightDto {
   contextComplete?: boolean;
@@ -155,6 +66,7 @@ export interface HighlightDetectionOptions {
   maxOutputSeconds?: number;
   jobId?: string;
   plan?: string;
+  registeredModel?: { userId: string; selection: HighlightModelSelection };
 }
 
 export interface HighlightDetectionResult {
@@ -228,7 +140,11 @@ export class HighlightDetectionService {
   private readonly resolvedModelName: string;
   private readonly usageLog: { timestamp: number; tokens: number }[] = [];
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @Optional() private routing?: HighlightRouting,
+    @Optional() private registry?: ModelRegistry,
+  ) {
     this.provider = this.configService
       .get<string>('LLM_PROVIDER', 'google')
       .toLowerCase();
@@ -332,8 +248,9 @@ export class HighlightDetectionService {
     };
   }
 
-  cacheConfiguration(model?: string) {
+  cacheConfiguration(model?: string, selection?: HighlightModelSelection) {
     return {
+      ...(selection ? { registeredModel: selection } : {}),
       version: DETECTION_VERSION,
       provider: this.provider,
       baseURL:
@@ -343,7 +260,7 @@ export class HighlightDetectionService {
               'https://api.groq.com/openai/v1',
             )
           : 'google',
-      model: model || this.resolvedModelName,
+      model: selection?.modelId || model || this.resolvedModelName,
       minScore: MIN_HIGHLIGHT_SCORE,
       temperature: 0.3,
       outputTokens: DIRECT_MAX_OUTPUT_TOKENS,
@@ -351,6 +268,11 @@ export class HighlightDetectionService {
       overlapSeconds: 45,
       windowChars: 18000,
     };
+  }
+  async verifySelection(userId: string, selection: HighlightModelSelection) {
+    if (!this.routing)
+      throw new ServiceUnavailableException('AI registry is unavailable');
+    await this.routing.resolve(userId, selection);
   }
 
   candidateArtifactIsValid(
@@ -395,6 +317,82 @@ export class HighlightDetectionService {
     );
   }
 
+  private generateFor(
+    options?: HighlightDetectionOptions,
+  ): typeof meteredGenerateObject {
+    if (!options?.registeredModel) return meteredGenerateObject;
+    const binding = options.registeredModel;
+    return (async (...args: Parameters<typeof meteredGenerateObject>) => {
+      if (!this.routing || !this.registry)
+        throw new ServiceUnavailableException('AI registry is unavailable');
+      const resolved = await this.routing.resolve(
+        binding.userId,
+        binding.selection,
+      );
+      const started = Date.now();
+      const usage = {
+        executionId: randomUUID(),
+        call: 1,
+        userId: binding.userId,
+        modelId: binding.selection.registryId,
+        providerModelId: resolved.model.modelId,
+        providerId: resolved.model.providerId,
+        taskType: 'highlight_detection',
+        pricing: resolved.model.pricing,
+        latencyMs: 0,
+        status: 'failed',
+      };
+      try {
+        const timeout = AbortSignal.timeout(resolved.model.settings.timeoutMs);
+        const signal = args[0].abortSignal
+          ? AbortSignal.any([args[0].abortSignal, timeout])
+          : timeout;
+        const result = await meteredGenerateObject({
+          ...args[0],
+          model: createGoogleGenerativeAI({ apiKey: resolved.secret })(
+            resolved.model.modelId,
+          ),
+          temperature:
+            resolved.model.settings.temperature ?? args[0].temperature,
+          maxOutputTokens: Math.min(
+            args[0].maxOutputTokens ?? 8192,
+            resolved.model.settings.maxOutputTokens,
+          ),
+          maxRetries: 0,
+          abortSignal: signal,
+        });
+        const inputTokens = result.usage.inputTokens,
+          outputTokens = result.usage.outputTokens;
+        const pricing = resolved.model.pricing;
+        await this.registry.recordUsage({
+          ...usage,
+          latencyMs: Date.now() - started,
+          status: 'success',
+          inputTokens,
+          outputTokens,
+          totalTokens: result.usage.totalTokens,
+          ...(pricing && inputTokens !== undefined && outputTokens !== undefined
+            ? {
+                estimatedCostUsd:
+                  (inputTokens * pricing.inputCostPerMillionTokens +
+                    outputTokens * pricing.outputCostPerMillionTokens) /
+                  1e6,
+              }
+            : {}),
+        });
+        return result;
+      } catch {
+        await this.registry.recordUsage({
+          ...usage,
+          latencyMs: Date.now() - started,
+          errorCode: 'HIGHLIGHT_PROVIDER_FAILED',
+        });
+        throw new ServiceUnavailableException(
+          'Selected AI model could not generate highlights',
+        );
+      }
+    }) as typeof meteredGenerateObject;
+  }
   private configuredModel(model?: string): LanguageModel {
     if (!model || model === this.resolvedModelName)
       return this.model as LanguageModel;
@@ -510,7 +508,7 @@ export class HighlightDetectionService {
       authorizedOutputSeconds: options?.maxOutputSeconds,
     });
     const result =
-      this.provider === 'groq'
+      this.provider === 'groq' && !options?.registeredModel
         ? await this.detectHighlightsGroqWithMetadata(
             usableSegments,
             requestOptions,
@@ -564,7 +562,7 @@ export class HighlightDetectionService {
         try {
           assertNotCancelled();
           const recovered =
-            this.provider === 'groq'
+            this.provider === 'groq' && !options?.registeredModel
               ? await this.detectHighlightsGroqWithMetadata(
                   uncovered,
                   recoveryOptions,
@@ -710,7 +708,7 @@ export class HighlightDetectionService {
         };
       } catch (error) {
         assertNotCancelled();
-        if (windows.length === 1) throw error;
+        if (options.registeredModel || windows.length === 1) throw error;
         result.cacheable = false;
       }
     }
@@ -771,7 +769,7 @@ export class HighlightDetectionService {
       let parsedObj: z.infer<typeof HighlightsResponseSchema>;
       try {
         llmCalls++;
-        parsedObj = (await meteredGenerateObject(request)).object;
+        parsedObj = (await this.generateFor(options)(request)).object;
       } catch (error) {
         assertNotCancelled();
         if (!NoObjectGeneratedError.isInstance(error)) throw error;
@@ -791,7 +789,7 @@ export class HighlightDetectionService {
           );
           llmCalls++;
           parsedObj = (
-            await meteredGenerateObject({
+            await this.generateFor(options)({
               ...request,
               temperature: 0.1,
               maxOutputTokens:
@@ -818,6 +816,7 @@ export class HighlightDetectionService {
       };
     } catch (e: any) {
       assertNotCancelled();
+      if (options?.registeredModel) throw e;
       if (NoObjectGeneratedError.isInstance(e)) {
         this.logger.error(
           `Invalid highlight output: finishReason=${e.finishReason}, outputChars=${e.text?.length ?? 0}`,
@@ -1090,7 +1089,7 @@ export class HighlightDetectionService {
     let llmCalls = 0;
     try {
       llmCalls++;
-      const result = await meteredGenerateObject(
+      const result = await this.generateFor(options)(
         this.buildGenerateObjectOptions(
           this.configuredModel(options?.model),
           systemPrompt,
@@ -1110,6 +1109,7 @@ export class HighlightDetectionService {
       };
     } catch (e: any) {
       assertNotCancelled();
+      if (options?.registeredModel) throw e;
       if (this.isRateLimitError(e)) {
         this.recordUsage(estimatedTokens);
         if (rateLimitRetryCount >= MAX_RATE_LIMIT_RETRIES) {
@@ -1156,7 +1156,7 @@ export class HighlightDetectionService {
 
         try {
           llmCalls++;
-          const retryResult = await meteredGenerateObject(
+          const retryResult = await this.generateFor(options)(
             this.buildGenerateObjectOptions(
               this.configuredModel(options?.model),
               systemPrompt,

@@ -8,6 +8,10 @@ const CreateJobSchema = z.object({
   sourcePlatform: z.nativeEnum(SourcePlatform),
   customPrompt: z.string().optional(),
   aiModel: z.string().optional(),
+  modelId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i)
+    .optional(),
   stylePreset: z
     .string()
     .refine((val) => Object.keys(STYLE_PRESETS).includes(val), {

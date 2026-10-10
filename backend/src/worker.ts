@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { JobsProcessor } from './jobs/jobs.processor';
 import { RenderProcessor } from './jobs/render.processor';
 import { StudioProcessor } from './studio/studio.processor';
+import { EditRenderProcessor } from './ai-editor/edit-render.processor';
 import { Worker } from 'bullmq';
 
 async function bootstrapWorker() {
@@ -20,7 +21,12 @@ async function bootstrapWorker() {
   );
   const processRegistry = app.get(ProcessRegistryService);
   const workers: Worker[] = [];
-  for (const processor of [JobsProcessor, RenderProcessor, StudioProcessor]) {
+  for (const processor of [
+    JobsProcessor,
+    RenderProcessor,
+    StudioProcessor,
+    EditRenderProcessor,
+  ]) {
     try {
       workers.push(app.get(processor).worker);
     } catch {

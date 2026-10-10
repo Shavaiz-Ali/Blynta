@@ -14,7 +14,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as fs from 'fs';
-import { Readable } from 'stream';
+import { Readable, Transform } from 'stream';
 
 @Injectable()
 export class R2Service {
@@ -45,6 +45,7 @@ export class R2Service {
       },
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
+      requestHandler: { connectionTimeout: 10000, socketTimeout: 120000 },
     });
   }
 
@@ -136,7 +137,7 @@ export class R2Service {
       fileStream.destroy();
       await closed;
     }
-    this.logger.log(`Uploaded ${localPath} to R2 as ${objectKey}`);
+    this.logger.log('Uploaded media file to R2');
     return objectKey;
   }
 
@@ -171,8 +172,13 @@ export class R2Service {
         Bucket: this.bucketFor(objectKey),
         Key: objectKey,
       }),
+      { abortSignal: cancellationSignal() },
     );
-    return { size: result.ContentLength, contentType: result.ContentType };
+    return {
+      size: result.ContentLength,
+      contentType: result.ContentType,
+      etag: result.ETag,
+    };
   }
 
   /**
@@ -185,16 +191,35 @@ export class R2Service {
   async downloadToLocal(
     objectKey: string,
     localDestPath: string,
+    options: { maxBytes?: number; etag?: string } = {},
   ): Promise<void> {
     const result = await this.client.send(
       new GetObjectCommand({
         Bucket: this.bucketFor(objectKey),
         Key: objectKey,
+        IfMatch: options.etag,
       }),
       { abortSignal: cancellationSignal() },
     );
+    const body = result.Body as Readable;
+    if (options.maxBytes && (result.ContentLength ?? 0) > options.maxBytes) {
+      body.destroy();
+      throw new Error('Media exceeds download budget');
+    }
+    let bytes = 0;
+    const limit = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        bytes += chunk.length;
+        callback(
+          options.maxBytes && bytes > options.maxBytes
+            ? new Error('Media exceeds download budget')
+            : null,
+          chunk,
+        );
+      },
+    });
     const writeStream = fs.createWriteStream(localDestPath);
-    await pipeline(result.Body as Readable, writeStream, {
+    await pipeline(body, limit, writeStream, {
       signal: cancellationSignal(),
     });
   }
@@ -210,10 +235,16 @@ export class R2Service {
   async getSignedDownloadUrl(
     objectKey: string,
     expiresInSeconds = 3600,
+    filename?: string,
   ): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucketFor(objectKey),
       Key: objectKey,
+      ...(filename
+        ? {
+            ResponseContentDisposition: `attachment; filename="${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}"`,
+          }
+        : {}),
     });
     return getSignedUrl(this.client, command, { expiresIn: expiresInSeconds });
   }

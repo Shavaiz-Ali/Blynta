@@ -1,6 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useAvailableEditingModels } from "@/features/ai-editor/models";
+import {
+  ModelSelector,
+  modelSelectionError,
+} from "@/features/ai-editor/ModelSelector";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -20,7 +25,6 @@ import {
   ArrowRightIcon,
   SlidersIcon,
 } from "../icons";
-import { AppSelect } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
@@ -47,35 +51,6 @@ function authorizationValues(estimate: CreditEstimate) {
 /* -------------------------------------------------------------------------- */
 /*                      AI Model options (matches backend)                   */
 /* -------------------------------------------------------------------------- */
-
-interface AiModelOption {
-  value: string;
-  label: string;
-  description: string;
-}
-
-const AI_MODEL_OPTIONS: AiModelOption[] = [
-  {
-    value: "default",
-    label: "Standard (Fast · GPT-4o Mini)",
-    description: "High quality, fast processing speed",
-  },
-  {
-    value: "gpt-4o",
-    label: "GPT-4o (Deep Reasoning)",
-    description: "Slower, sharper reasoning and hook detection",
-  },
-  {
-    value: "claude-3-5-sonnet",
-    label: "Claude 3.5 Sonnet",
-    description: "Top-tier creative hook detection and context depth",
-  },
-  {
-    value: "claude-3-opus",
-    label: "Claude 3 Opus",
-    description: "Maximum analytical depth for nuanced podcasts",
-  },
-];
 
 const PRESETS_FALLBACK: StylePresetInfo[] = [
   { key: "default", label: "Simple", isPro: false },
@@ -149,7 +124,8 @@ export function HeroInput({
 
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
   const [customPrompt, setCustomPrompt] = React.useState("");
-  const [aiModel, setAiModel] = React.useState<string>("default");
+  const [aiModel, setAiModel] = React.useState<string>("auto");
+  const models = useAvailableEditingModels("highlight_detection");
 
   const { mutate, isPending, failureReason, reset } = useCreateJob({
     onSuccess: (data) => {
@@ -162,7 +138,7 @@ export function HeroInput({
       setStylePreset("default");
       setFieldError(undefined);
       setCustomPrompt("");
-      setAiModel("default");
+      setAiModel("auto");
       setAdvancedOpen(false);
       toast.success("Video ingested! AI clip generation started.");
       router.push(`/my-clips/${data?._id}`);
@@ -184,16 +160,24 @@ export function HeroInput({
 
   const selectedPresetMeta = PRESET_META[stylePreset] || PRESET_META.default;
   const isCustomPromptSet = customPrompt.trim().length > 0;
-  const isCustomModelSet = aiModel !== "default";
+  const isCustomModelSet = aiModel !== "auto";
   const hasAdvancedOverrides = isCustomPromptSet || isCustomModelSet;
   const platformError =
     failureReason instanceof Error ? failureReason.message : undefined;
   const submitDisabled =
-    !url.trim() || isPending || estimating || !balance.data?.enabled;
+    !url.trim() ||
+    isPending ||
+    estimating ||
+    !balance.data?.enabled ||
+    !!modelSelectionError(models.data, aiModel);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
     if (estimatingRef.current || submittingRef.current || isPending) return;
+    if (modelSelectionError(models.data, aiModel)) {
+      setFieldError(modelSelectionError(models.data, aiModel));
+      return;
+    }
     if (!url.trim()) {
       setFieldError(
         "Paste a video link (YouTube, Vimeo, Podcast) to get started",
@@ -218,8 +202,8 @@ export function HeroInput({
     if (isPaid && customPrompt.trim().length > 0) {
       body.customPrompt = customPrompt.trim();
     }
-    if (isPaid && aiModel && aiModel !== "default") {
-      body.aiModel = aiModel;
+    if (isPaid && aiModel && aiModel !== "auto") {
+      body.modelId = aiModel;
     }
 
     if (!balance.data) return;
@@ -386,6 +370,16 @@ export function HeroInput({
           </button>
         </div>
 
+        <div className="relative max-w-sm">
+          <ModelSelector
+            data={models.data}
+            loading={models.isPending}
+            error={models.isError}
+            selected={aiModel}
+            onChange={setAiModel}
+            disabled={isPending || checking || !!confirmation}
+          />
+        </div>
         <form onSubmit={handleSubmit} className="relative space-y-2">
           <label
             htmlFor="video-url-input"
@@ -602,14 +596,9 @@ export function HeroInput({
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.15fr)_minmax(220px,0.85fr)]">
               <div className="rounded-xl border border-border/70 bg-card/50 p-4">
-                <AppSelect
-                  label="Analysis model"
-                  value={aiModel}
-                  onValueChange={setAiModel}
-                  options={AI_MODEL_OPTIONS}
-                  triggerClassName="h-10 rounded-lg bg-background text-xs"
-                  helperText="Standard is fastest. Deeper models can improve context and hook detection."
-                />
+                <p className="text-xs text-muted-foreground">
+                  Choose your AI model next to the video input.
+                </p>
               </div>
 
               <div className="rounded-xl border border-border/70 bg-card/50 p-4">

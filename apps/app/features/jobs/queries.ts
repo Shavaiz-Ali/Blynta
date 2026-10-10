@@ -137,6 +137,7 @@ export function useCreateJob(
       if (input.aiModel && input.aiModel !== "default") {
         body.aiModel = input.aiModel;
       }
+      if (input.modelId) body.modelId = input.modelId;
       if (input.stylePreset && input.stylePreset !== "default") {
         body.stylePreset = input.stylePreset;
       }

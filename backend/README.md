@@ -96,3 +96,11 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+## AI editing engine
+
+Phase 1 backend APIs, timeline semantics, supported effects, asset handling, worker configuration and test instructions are documented in [AI_EDITOR.md](./AI_EDITOR.md). Audit findings, verification results and remaining prerequisites are in [AI_EDITOR_AUDIT.md](./AI_EDITOR_AUDIT.md).
+
+The database model registry, encrypted credentials, admin management and LangGraph proposal workflow are documented in [AI_AGENT.md](./AI_AGENT.md).
+
+Main-app AI Studio, task-aware hero/highlight routing, UI integration and deployment prerequisites are documented in [AI_STUDIO.md](./AI_STUDIO.md).

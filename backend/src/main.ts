@@ -47,16 +47,41 @@ async function bootstrap() {
 
   // 2) For EVERYTHING ELSE — standard JSON body parser (the default Nest
   // behavior we disabled above).
-  instance.use('/', (req: any, res: any, next: any) => {
-    if (
-      req.path.startsWith('/billing/paddle/webhook') ||
-      req.path.startsWith('/billing/webhook')
-    ) {
-      return next();
-    }
-    return express.json({ limit: '10mb' })(req, res, next);
-  });
-  instance.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  instance.use(
+    '/',
+    (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      if (
+        req.path.startsWith('/billing/paddle/webhook') ||
+        req.path.startsWith('/billing/webhook')
+      ) {
+        return next();
+      }
+      return express.json({
+        limit:
+          req.path.startsWith('/ai-editor/') ||
+          req.path.startsWith('/admin/ai/') ||
+          /^\/clips\/[^/]+\/ai-edit\//.test(req.path)
+            ? '1mb'
+            : '10mb',
+      })(req, res, next);
+    },
+  );
+  instance.use(
+    (req: express.Request, res: express.Response, next: express.NextFunction) =>
+      express.urlencoded({
+        extended: true,
+        limit:
+          req.path.startsWith('/ai-editor/') ||
+          req.path.startsWith('/admin/ai/') ||
+          /^\/clips\/[^/]+\/ai-edit\//.test(req.path)
+            ? '1mb'
+            : '10mb',
+      })(req, res, next),
+  );
 
   const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') ?? [])
     .map((origin) => origin.trim())

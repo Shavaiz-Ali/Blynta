@@ -374,7 +374,7 @@ export class StudioService {
     if ((await this.media.countDocuments({ userId, projectId: id })) >= 200)
       throw new BadRequestException('Project media limit reached');
     const assetId = randomUUID();
-    const storageKey = `studio/${userId}/${id}/assets/${assetId}`;
+    const storageKey = `job-sources/studio-assets/${userId}/${id}/${assetId}`;
     await this.media.create({
       ...input,
       userId,
