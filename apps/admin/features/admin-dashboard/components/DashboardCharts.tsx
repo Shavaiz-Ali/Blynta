@@ -3,7 +3,7 @@ import { ArrowUpRight, CalendarDays } from "lucide-react";
 import type { DashboardRange, DashboardStats } from "../api";
 import { AppButton } from "@blynta/ui";
 import {
-  AppCard,
+  AppCardRoot,
   AppCardAction,
   AppCardContent,
   AppCardDescription,
@@ -45,15 +45,15 @@ export function DashboardActivityChart({
   }));
 
   return (
-    <AppCard>
-      <AppCardHeader className="gap-4 border-b sm:grid-cols-[1fr_auto]">
+    <AppCardRoot>
+      <AppCardHeader className="flex flex-col gap-4 border-b sm:flex-row sm:justify-between">
         <div>
           <AppCardTitle className="text-lg">Platform activity</AppCardTitle>
           <AppCardDescription>
             Daily processing demand and generated clip output
           </AppCardDescription>
         </div>
-        <AppCardAction className="static col-auto row-auto self-center justify-self-start sm:justify-self-end">
+        <AppCardAction className="min-w-0 self-start">
           <div
             className="flex flex-wrap items-center rounded-md border bg-background p-0.5"
             aria-label="Dashboard date range"
@@ -90,7 +90,7 @@ export function DashboardActivityChart({
         </div>
         <AppActivityAreaChart points={points} />
       </AppCardContent>
-    </AppCard>
+    </AppCardRoot>
   );
 }
 
@@ -110,12 +110,14 @@ export function DashboardBreakdowns({ data }: { data: DashboardStats }) {
       className="grid gap-4 xl:grid-cols-2"
       aria-label="Platform breakdowns"
     >
-      <AppCard>
-        <AppCardHeader>
-          <AppCardTitle className="text-lg">Jobs by status</AppCardTitle>
-          <AppCardDescription>
-            Current all-time processing distribution
-          </AppCardDescription>
+      <AppCardRoot>
+        <AppCardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <AppCardTitle className="text-lg">Jobs by status</AppCardTitle>
+            <AppCardDescription>
+              Current all-time processing distribution
+            </AppCardDescription>
+          </div>
           <AppCardAction>
             <Link
               href="/jobs"
@@ -143,14 +145,16 @@ export function DashboardBreakdowns({ data }: { data: DashboardStats }) {
             ))}
           </div>
         </AppCardContent>
-      </AppCard>
+      </AppCardRoot>
 
-      <AppCard>
-        <AppCardHeader>
-          <AppCardTitle className="text-lg">Customer plans</AppCardTitle>
-          <AppCardDescription>
-            Accounts grouped by their current plan
-          </AppCardDescription>
+      <AppCardRoot>
+        <AppCardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-1">
+            <AppCardTitle className="text-lg">Customer plans</AppCardTitle>
+            <AppCardDescription>
+              Accounts grouped by their current plan
+            </AppCardDescription>
+          </div>
           <AppCardAction>
             <Link
               href="/billing"
@@ -167,7 +171,7 @@ export function DashboardBreakdowns({ data }: { data: DashboardStats }) {
             Business plans.
           </p>
         </AppCardContent>
-      </AppCard>
+      </AppCardRoot>
     </section>
   );
 }

@@ -8,8 +8,7 @@ import {
 } from "lucide-react";
 import type { DashboardStats } from "../api";
 import {
-  AppCard,
-  AppCardAction,
+  AppCardRoot,
   AppCardContent,
   AppCardDescription,
   AppCardHeader,
@@ -99,34 +98,31 @@ export function OverviewMetrics({ data }: { data: DashboardStats }) {
       {metrics.map((metric) => {
         const Icon = metric.icon;
         return (
-          <AppCard
+          <AppCardRoot
             key={metric.label}
-            className={cn(
-              "relative min-h-52 overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-primary/50 before:to-transparent",
-              metric.gradient,
-            )}
+            className={cn("min-w-0", metric.gradient)}
           >
-            <AppCardHeader className="relative">
-              <AppCardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                <Icon className="size-4" />
-                {metric.label}
+            <AppCardHeader>
+              <AppCardTitle className="flex items-center justify-between gap-3 text-sm font-medium text-muted-foreground">
+                <span>{metric.label}</span>
+                <Icon aria-hidden="true" className="size-4 shrink-0" />
               </AppCardTitle>
-              {metric.change !== undefined && (
-                <AppCardAction>
-                  <TrendBadge value={metric.change} />
-                </AppCardAction>
-              )}
             </AppCardHeader>
-            <AppCardContent className="relative mt-auto">
-              <p className="text-3xl font-semibold tracking-tight tabular-nums sm:text-4xl">
-                {metric.value}
-              </p>
-              <div className="mt-5 space-y-1">
-                <p className="font-medium">{metric.detail}</p>
+            <AppCardContent className="space-y-4">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <p className="min-w-0 break-all text-3xl font-semibold tracking-tight tabular-nums">
+                  {metric.value}
+                </p>
+                {metric.change !== undefined && (
+                  <TrendBadge value={metric.change} />
+                )}
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">{metric.detail}</p>
                 <AppCardDescription>{metric.note}</AppCardDescription>
               </div>
             </AppCardContent>
-          </AppCard>
+          </AppCardRoot>
         );
       })}
     </section>

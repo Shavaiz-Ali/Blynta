@@ -1,4 +1,6 @@
 "use client";
+import { AppSelect } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useAnalytics } from "./queries";
@@ -28,17 +30,17 @@ export function AnalyticsView() {
       />
       <label className="flex items-center gap-3 text-sm">
         Metric
-        <select
-          className="rounded-md border bg-background p-2"
+        <AppSelect
+          aria-label="Metric"
           value={metric}
-          onChange={(e) => setMetric(e.target.value as Metric)}
+          onValueChange={(e) => setMetric(e as Metric)}
         >
           {Object.entries(analyticsMetrics).map(([key, label]) => (
-            <option key={key} value={key}>
+            <SelectItem key={key} value={key}>
               {label}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </AppSelect>
       </label>
       {query.isError ? (
         <QueryErrorState onRetry={() => void query.refetch()} />

@@ -14,13 +14,8 @@ import { AppInput as Input } from "@/components/common/primitives";
 import { AppLabel as Label } from "@/components/common/primitives";
 import { AppTextarea as Textarea } from "@/components/common/primitives";
 import { AppSwitch as Switch } from "@/components/common/primitives";
-import {
-  AppSelect as Select,
-  AppSelectContent as SelectContent,
-  AppSelectItem as SelectItem,
-  AppSelectTrigger as SelectTrigger,
-  AppSelectValue as SelectValue,
-} from "@/components/common/primitives";
+import { AppSelect as Select } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import { AppSeparator as Separator } from "@/components/common/primitives";
 import { AdminUserItem, UpdateUserPayload, UserRole } from "../types";
 import { useUpdateAdminUserMutation } from "../queries";
@@ -97,17 +92,15 @@ export function EditUserDialog({
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="edit-role">Role</Label>
             <Select
+              id="edit-role"
+              aria-label="Role"
+              size="sm"
               value={role}
               onValueChange={(val) => setRole(val as UserRole)}
               disabled={mutation.isPending}
             >
-              <SelectTrigger id="edit-role" className="w-full">
-                <SelectValue placeholder="Select role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="user">User</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
+              <SelectItem value="user">User</SelectItem>
+              <SelectItem value="admin">Admin</SelectItem>
             </Select>
           </div>
 

@@ -113,3 +113,8 @@ export { ThemeToggle } from "./components/ThemeToggle";
 export { AppThemeProvider } from "./components/AppThemeProvider";
 export { AppIdentityAvatar } from "./components/AppIdentityAvatar";
 export { InsufficientCredits } from "./components/InsufficientCredits";
+
+export * from "./primitives/table";
+export * from "./primitives/switch";
+export { AppPagination } from "./components/AppPagination";
+export { AppQueryState } from "./components/AppQueryState";

@@ -1,9 +1,17 @@
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@blynta/ui";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import type { DashboardStats } from "../api";
 import {
-  AppCard,
+  AppCardRoot,
   AppCardAction,
   AppCardContent,
   AppCardDescription,
@@ -18,12 +26,14 @@ export function QueueSnapshot({
   queues: DashboardStats["queueHealth"];
 }) {
   return (
-    <AppCard>
-      <AppCardHeader>
-        <AppCardTitle className="text-lg">Processing queues</AppCardTitle>
-        <AppCardDescription>
-          Live workload across Blynta workers
-        </AppCardDescription>
+    <AppCardRoot>
+      <AppCardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <AppCardTitle className="text-lg">Processing queues</AppCardTitle>
+          <AppCardDescription>
+            Live workload across Blynta workers
+          </AppCardDescription>
+        </div>
         <AppCardAction>
           <Link
             href="/queues"
@@ -35,22 +45,32 @@ export function QueueSnapshot({
       </AppCardHeader>
       <AppCardContent>
         <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full min-w-[620px] text-sm">
-            <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-medium">Worker</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Active</th>
-                <th className="px-4 py-3 text-right font-medium">Waiting</th>
-                <th className="px-4 py-3 text-right font-medium">Delayed</th>
-                <th className="px-4 py-3 text-right font-medium">Failed</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
+          <Table className="w-full min-w-[620px] text-sm">
+            <TableHeader className="bg-muted/40 text-left text-xs text-muted-foreground">
+              <TableRow>
+                <TableHead className="px-4 py-3 font-medium">Worker</TableHead>
+                <TableHead className="px-4 py-3 font-medium">Status</TableHead>
+                <TableHead className="px-4 py-3 text-right font-medium">
+                  Active
+                </TableHead>
+                <TableHead className="px-4 py-3 text-right font-medium">
+                  Waiting
+                </TableHead>
+                <TableHead className="px-4 py-3 text-right font-medium">
+                  Delayed
+                </TableHead>
+                <TableHead className="px-4 py-3 text-right font-medium">
+                  Failed
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y">
               {queues.map((queue) => (
-                <tr key={queue.name} className="hover:bg-muted/25">
-                  <td className="px-4 py-3 font-medium">{queue.label}</td>
-                  <td className="px-4 py-3">
+                <TableRow key={queue.name} className="hover:bg-muted/25">
+                  <TableCell className="px-4 py-3 font-medium">
+                    {queue.label}
+                  </TableCell>
+                  <TableCell className="px-4 py-3">
                     <AppStatusBadge
                       status={
                         !queue.isHealthy
@@ -60,26 +80,26 @@ export function QueueSnapshot({
                             : "active"
                       }
                     />
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right tabular-nums">
                     {queue.active}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right tabular-nums">
                     {queue.waiting}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right tabular-nums">
                     {queue.delayed}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  </TableCell>
+                  <TableCell className="px-4 py-3 text-right tabular-nums">
                     {queue.failed}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </AppCardContent>
-    </AppCard>
+    </AppCardRoot>
   );
 }
 
@@ -89,12 +109,14 @@ export function RecentActivity({
   events: DashboardStats["recentAudit"];
 }) {
   return (
-    <AppCard>
-      <AppCardHeader>
-        <AppCardTitle className="text-lg">Recent activity</AppCardTitle>
-        <AppCardDescription>
-          Latest administrative and system events
-        </AppCardDescription>
+    <AppCardRoot>
+      <AppCardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <AppCardTitle className="text-lg">Recent activity</AppCardTitle>
+          <AppCardDescription>
+            Latest administrative and system events
+          </AppCardDescription>
+        </div>
         <AppCardAction>
           <Link
             href="/audit"
@@ -110,10 +132,10 @@ export function RecentActivity({
             {events.slice(0, 6).map((event) => (
               <li
                 key={event._id}
-                className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0"
+                className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-medium">
+                  <p className="break-words font-medium">
                     {event.title || event.action}
                   </p>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -124,7 +146,7 @@ export function RecentActivity({
                   </p>
                 </div>
                 <time
-                  className="shrink-0 text-xs text-muted-foreground"
+                  className="shrink-0 text-xs text-muted-foreground sm:max-w-28 sm:text-right"
                   dateTime={event.createdAt}
                 >
                   {formatDistanceToNow(new Date(event.createdAt), {
@@ -140,6 +162,6 @@ export function RecentActivity({
           </p>
         )}
       </AppCardContent>
-    </AppCard>
+    </AppCardRoot>
   );
 }

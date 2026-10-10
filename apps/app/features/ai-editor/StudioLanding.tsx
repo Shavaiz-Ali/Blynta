@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Clapperboard, ArrowUpRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AppButton as Button } from "@blynta/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { useJobs, JobStatus } from "@/features/jobs";
@@ -55,12 +55,15 @@ export function StudioLanding() {
           ) : recent.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {studioError(recent.error)}{" "}
-              <button
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
                 onClick={() => void recent.refetch()}
                 className="underline"
               >
                 Retry
-              </button>
+              </Button>
             </p>
           ) : !recent.data?.items.length ? (
             <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
@@ -115,9 +118,15 @@ export function StudioLanding() {
           ) : jobs.isError ? (
             <p role="alert" className="text-sm text-destructive">
               {studioError(jobs.error)}{" "}
-              <button onClick={() => void jobs.refetch()} className="underline">
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                onClick={() => void jobs.refetch()}
+                className="underline"
+              >
                 Retry
-              </button>
+              </Button>
             </p>
           ) : !clips.length ? (
             <div className="rounded-xl border border-dashed p-10 text-center">

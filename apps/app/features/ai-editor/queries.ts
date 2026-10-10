@@ -32,7 +32,17 @@ export function studioError(error: unknown) {
       return "Request limit reached. Wait before trying again.";
     if (error.status === 403)
       return "This action is not available for your account. Check your subscription and clip access.";
+    if (error.status === 401) return "Sign in again to continue editing.";
+    if (!error.status || error.status === 404 || error.status >= 500)
+      return "The editing service is temporarily unavailable. Please try again shortly.";
   }
+  if (
+    error instanceof Error &&
+    /Cannot (GET|POST|PATCH|DELETE)|Network Error|Request failed with status|ECONN|fetch failed/i.test(
+      error.message,
+    )
+  )
+    return "The editing service is temporarily unavailable. Please try again shortly.";
   return error instanceof Error
     ? error.message
     : "The request failed. Please try again.";

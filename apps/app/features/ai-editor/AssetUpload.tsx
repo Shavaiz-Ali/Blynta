@@ -1,8 +1,10 @@
 "use client";
+import { AppSelect } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
-import { Button } from "@/components/ui/button";
+import { AppButton as Button } from "@blynta/ui";
 import { studioError } from "./queries";
 const formats: Record<string, string> = {
   png: "image/png",
@@ -86,19 +88,19 @@ export function AssetUpload() {
       </p>
       <label className="block text-xs">
         Asset workspace
-        <select
+        <AppSelect
+          aria-label="Asset workspace"
           value={destination}
-          onChange={(e) => setDestination(e.target.value)}
+          onValueChange={(e) => setDestination(e)}
           disabled={upload.isPending}
-          className="mt-1 h-9 w-full rounded-md border bg-background px-2 focus-visible:ring-2 focus-visible:ring-primary"
         >
-          <option value="">Choose a workspace</option>
+          <SelectItem value="">Choose a workspace</SelectItem>
           {folders.data?.map((p) => (
-            <option key={p.id} value={p.id}>
+            <SelectItem key={p.id} value={p.id}>
               {p.name}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </AppSelect>
       </label>
       <Button
         type="button"

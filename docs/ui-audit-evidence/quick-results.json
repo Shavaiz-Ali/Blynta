@@ -1,0 +1,98 @@
+[
+  {
+    "app": "admin",
+    "view": "overview",
+    "width": 375,
+    "scenario": "ready",
+    "viewport": 375,
+    "documentWidth": 375,
+    "bodyWidth": 375,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "admin-overview-ready-375.png"
+  },
+  {
+    "app": "admin",
+    "view": "overview",
+    "width": 1440,
+    "scenario": "ready",
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "bodyWidth": 1440,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "admin-overview-ready-1440.png"
+  },
+  {
+    "app": "admin",
+    "view": "models",
+    "width": 375,
+    "scenario": "ready",
+    "viewport": 375,
+    "documentWidth": 375,
+    "bodyWidth": 375,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "admin-models-ready-375.png"
+  },
+  {
+    "app": "admin",
+    "view": "models",
+    "width": 1440,
+    "scenario": "ready",
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "bodyWidth": 1440,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "admin-models-ready-1440.png"
+  },
+  {
+    "app": "app",
+    "view": "dashboard",
+    "width": 375,
+    "scenario": "ready",
+    "viewport": 375,
+    "documentWidth": 375,
+    "bodyWidth": 375,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "app-dashboard-ready-375.png"
+  },
+  {
+    "app": "app",
+    "view": "dashboard",
+    "width": 1440,
+    "scenario": "ready",
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "bodyWidth": 1440,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "app-dashboard-ready-1440.png"
+  },
+  {
+    "app": "app",
+    "view": "workspace",
+    "width": 375,
+    "scenario": "ready",
+    "viewport": 375,
+    "documentWidth": 375,
+    "bodyWidth": 375,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "app-workspace-ready-375.png"
+  },
+  {
+    "app": "app",
+    "view": "workspace",
+    "width": 1440,
+    "scenario": "ready",
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "bodyWidth": 1440,
+    "dialogs": [],
+    "pageErrors": [],
+    "screenshot": "app-workspace-ready-1440.png"
+  }
+]

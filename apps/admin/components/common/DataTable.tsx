@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AppButton } from "./AppButton";
+import { AppButton, AppPagination } from "@blynta/ui";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -135,8 +135,8 @@ export function DataTable<T extends { _id?: string; id?: string }>({
         </div>
       </details>
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <Table>
+      <div className="min-w-0 overflow-x-auto rounded-lg border bg-card">
+        <Table className="min-w-[640px]">
           <TableHeader>
             <TableRow>
               {visibleColumns.map((column) => (
@@ -230,46 +230,15 @@ export function DataTable<T extends { _id?: string; id?: string }>({
       </div>
 
       {pagination && (
-        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
-          <span>{pagination.total.toLocaleString()} records</span>
-          <div className="flex flex-wrap items-center gap-3">
-            {pagination.onLimitChange && (
-              <label className="flex items-center gap-2">
-                Rows
-                <select
-                  className="rounded-md border bg-background p-1"
-                  value={pagination.limit}
-                  onChange={(event) =>
-                    pagination.onLimitChange?.(Number(event.target.value))
-                  }
-                >
-                  {[10, 25, 50, 100].map((limit) => (
-                    <option key={limit}>{limit}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <AppButton
-              variant="outline"
-              size="sm"
-              disabled={loading || pagination.page <= 1}
-              onClick={() => pagination.onPageChange(pagination.page - 1)}
-            >
-              Previous
-            </AppButton>
-            <span>
-              Page {pagination.page} of {Math.max(1, pagination.totalPages)}
-            </span>
-            <AppButton
-              variant="outline"
-              size="sm"
-              disabled={loading || pagination.page >= pagination.totalPages}
-              onClick={() => pagination.onPageChange(pagination.page + 1)}
-            >
-              Next
-            </AppButton>
-          </div>
-        </div>
+        <AppPagination
+          page={pagination.page}
+          totalPages={pagination.totalPages}
+          total={pagination.total}
+          pageSize={pagination.limit}
+          onPageChange={pagination.onPageChange}
+          onPageSizeChange={pagination.onLimitChange}
+          disabled={loading}
+        />
       )}
     </div>
   );

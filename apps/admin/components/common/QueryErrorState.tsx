@@ -1,4 +1,4 @@
-import { AppButton } from "./AppButton";
+import { AppQueryState } from "@blynta/ui";
 export function QueryErrorState({
   title = "Unable to load data",
   description = "Check your connection and permissions, then try again.",
@@ -11,12 +11,11 @@ export function QueryErrorState({
   retrying?: boolean;
 }) {
   return (
-    <div role="alert" className="rounded-lg border p-6">
-      <h2 className="font-medium">{title}</h2>
-      <p className="my-2 text-sm text-muted-foreground">{description}</p>
-      <AppButton variant="outline" onClick={onRetry} isLoading={retrying}>
-        Try again
-      </AppButton>
-    </div>
+    <AppQueryState
+      title={title}
+      description={description}
+      onRetry={onRetry}
+      retrying={retrying}
+    />
   );
 }

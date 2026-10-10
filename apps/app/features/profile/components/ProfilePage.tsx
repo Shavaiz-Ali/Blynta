@@ -3,7 +3,7 @@
 import * as React from "react";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
-import { AppSpinner } from "@blynta/ui";
+import { AppQueryState, AppButton } from "@blynta/ui";
 import { useCurrentUser } from "@/features/auth";
 import { UserIcon } from "@/features/dashboard/icons";
 import { ProfileIdentityCard } from "./ProfileIdentityCard";
@@ -42,12 +42,14 @@ function DangerZone() {
           </p>
         </div>
         <div className="flex items-center gap-2 opacity-40 cursor-not-allowed select-none shrink-0">
-          <button
+          <AppButton
+            variant="destructive"
+            size="sm"
             disabled
             className="h-8 px-3 rounded-lg border border-destructive/40 bg-destructive/10 text-destructive text-xs font-semibold pointer-events-none"
           >
             Delete Account
-          </button>
+          </AppButton>
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground bg-muted rounded px-1.5 py-0.5">
             Soon
           </span>
@@ -76,7 +78,7 @@ function ProfileSkeleton() {
    Main page
 ─────────────────────────────────────────────────────────── */
 export function ProfilePage() {
-  const { data: profile, isLoading } = useCurrentUser();
+  const { data: profile, isLoading, refetch, isFetching } = useCurrentUser();
 
   const headerContent = (
     <div className="flex items-center justify-between w-full">
@@ -95,9 +97,12 @@ export function ProfilePage() {
       {isLoading ? (
         <ProfileSkeleton />
       ) : !profile ? (
-        <div className="flex items-center justify-center h-40">
-          <AppSpinner size="md" />
-        </div>
+        <AppQueryState
+          title="Your profile couldn’t be loaded"
+          description="The account service may be offline. Try again shortly to load your profile and settings."
+          onRetry={() => void refetch()}
+          retrying={isFetching}
+        />
       ) : (
         <div className="space-y-4 pb-16">
           {/* Page heading */}

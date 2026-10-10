@@ -1,4 +1,13 @@
 "use client";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@blynta/ui";
+
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppDialog, AppButton } from "@blynta/ui";
@@ -59,7 +68,7 @@ export function CreditDetails({
       {data.error && (
         <p role="alert">
           {data.error.message}{" "}
-          <button onClick={() => void data.refetch()}>Retry</button>
+          <AppButton onClick={() => void data.refetch()}>Retry</AppButton>
         </p>
       )}
       {data.data && (
@@ -88,28 +97,28 @@ export function CreditDetails({
             )}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Product</th>
-                  <th>Type</th>
-                  <th>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-left">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {data.data.history.rows.map((e) => (
-                  <tr className="border-t" key={e._id}>
-                    <td className="py-2">
+                  <TableRow className="border-t" key={e._id}>
+                    <TableCell className="py-2">
                       {new Date(e.createdAt).toLocaleString()}
-                    </td>
-                    <td>{e.product}</td>
-                    <td>{e.type}</td>
-                    <td>{e.amount}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>{e.product}</TableCell>
+                    <TableCell>{e.type}</TableCell>
+                    <TableCell>{e.amount}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
           <div className="flex justify-end gap-3 items-center">
             <AppButton

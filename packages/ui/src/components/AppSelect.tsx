@@ -22,6 +22,8 @@ export interface AppSelectOption {
 
 export interface AppSelectProps {
   id?: string;
+  name?: string;
+  "aria-label"?: string;
   label?: string;
   error?: string;
   helperText?: string;
@@ -49,6 +51,8 @@ const sizeTriggerClasses: Record<AppSelectSize, string> = {
 
 export function AppSelect({
   id: idProp,
+  name,
+  "aria-label": ariaLabel,
   label,
   error,
   helperText,
@@ -72,9 +76,29 @@ export function AppSelect({
   const errorId = `${selectId}-error`;
   const helperId = `${selectId}-helper`;
 
-  const selectedOption = options?.find(
-    (opt) => opt.value === (value ?? defaultValue),
-  );
+  const [uncontrolledValue, setUncontrolledValue] =
+    React.useState(defaultValue);
+  const selectedValue = value ?? uncontrolledValue;
+  const selectedOption = options?.find((opt) => opt.value === selectedValue);
+  function findChildLabel(nodes: React.ReactNode): React.ReactNode {
+    for (const child of React.Children.toArray(nodes)) {
+      if (
+        !React.isValidElement<{ value?: string; children?: React.ReactNode }>(
+          child,
+        )
+      )
+        continue;
+      if (
+        child.props.value === selectedValue &&
+        child.props.value !== undefined
+      )
+        return child.props.children;
+      const nested = findChildLabel(child.props.children);
+      if (nested !== undefined) return nested;
+    }
+    return undefined;
+  }
+  const selectedLabel = selectedOption?.label ?? findChildLabel(children);
 
   return (
     <div className={cn("flex w-full flex-col gap-1.5", wrapperClassName)}>
@@ -93,17 +117,23 @@ export function AppSelect({
       )}
 
       <Select
+        name={name}
+        required={required}
         value={value}
         defaultValue={defaultValue}
         onValueChange={(val: string | null) => {
-          if (val !== null) onValueChange?.(val);
+          if (val !== null) {
+            setUncontrolledValue(val);
+            onValueChange?.(val);
+          }
         }}
         disabled={disabled}
       >
         <SelectTrigger
           id={selectId}
+          aria-label={ariaLabel}
           aria-invalid={!!error}
-          aria-describedby={error ? errorId : helperId ? helperId : undefined}
+          aria-describedby={error ? errorId : helperText ? helperId : undefined}
           className={cn(
             sizeTriggerClasses[size],
             "border-input bg-background/50 dark:bg-muted/30 focus-visible:ring-1 focus-visible:ring-ring focus-visible:border-ring shadow-xs",
@@ -113,8 +143,8 @@ export function AppSelect({
           )}
         >
           <SelectValue placeholder={placeholder}>
-            {selectedOption ? (
-              <span className="truncate">{selectedOption.label}</span>
+            {selectedLabel !== undefined ? (
+              <span className="truncate">{selectedLabel}</span>
             ) : undefined}
           </SelectValue>
         </SelectTrigger>

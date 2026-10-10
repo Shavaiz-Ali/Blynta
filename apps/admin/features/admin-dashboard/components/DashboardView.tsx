@@ -6,7 +6,7 @@ import type { DashboardRange } from "../api";
 import { useDashboardStatsQuery } from "../queries";
 import { AppPageHeader } from "@/components/common/AppPageHeader";
 import { AppButton } from "@blynta/ui";
-import { AppCard } from "@blynta/ui";
+import { AppCardRoot } from "@blynta/ui";
 import { QueryErrorState } from "@/components/common/QueryErrorState";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OverviewMetrics } from "./OverviewMetrics";
@@ -18,17 +18,17 @@ function DashboardSkeleton() {
     <div className="space-y-5" aria-label="Loading dashboard">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <AppCard key={index} className="min-h-48 p-6">
+          <AppCardRoot key={index} className="min-h-48 p-6">
             <Skeleton className="h-4 w-28" />
             <Skeleton className="mt-7 h-10 w-32" />
             <Skeleton className="mt-auto h-4 w-44" />
-          </AppCard>
+          </AppCardRoot>
         ))}
       </div>
-      <AppCard className="p-6">
+      <AppCardRoot className="p-6">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="mt-5 h-80 w-full" />
-      </AppCard>
+      </AppCardRoot>
     </div>
   );
 }

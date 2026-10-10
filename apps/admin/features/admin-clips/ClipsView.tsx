@@ -104,7 +104,7 @@ export function ClipsView() {
               },
             ]}
           />
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             <AppButton
               variant="outline"
               disabled={page <= 1 || query.isFetching}

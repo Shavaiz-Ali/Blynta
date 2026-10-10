@@ -21,7 +21,7 @@ import { useAdminJobDetailQuery, useRetryJobMutation } from "../queries";
 import type { AdminJobItem, JobStatus, SourcePlatform } from "../types";
 import { AppButton, AppLinkButton } from "@blynta/ui";
 import {
-  AppCard,
+  AppCardRoot,
   AppCardAction,
   AppCardContent,
   AppCardDescription,
@@ -190,7 +190,7 @@ export function JobDetailPage({ id }: { id: string }) {
         }
       />
 
-      <AppCard className="bg-gradient-to-br from-card via-card to-primary/10">
+      <AppCardRoot className="bg-gradient-to-br from-card via-card to-primary/10">
         <AppCardContent className="grid gap-5 pt-1 sm:grid-cols-2 lg:grid-cols-4">
           <div className="min-w-0">
             <p className="text-xs text-muted-foreground">Job ID</p>
@@ -226,7 +226,7 @@ export function JobDetailPage({ id }: { id: string }) {
             </p>
           </div>
         </AppCardContent>
-      </AppCard>
+      </AppCardRoot>
 
       {job.sourceUrl && (
         <a
@@ -242,7 +242,7 @@ export function JobDetailPage({ id }: { id: string }) {
       )}
 
       {!["completed", "failed"].includes(job.status) && (
-        <AppCard size="sm">
+        <AppCardRoot size="sm">
           <AppCardContent>
             <div className="flex items-center justify-between gap-4 text-sm">
               <span className="flex items-center gap-2 font-medium">
@@ -255,7 +255,7 @@ export function JobDetailPage({ id }: { id: string }) {
             </div>
             <Progress value={job.progressPercent} className="h-2" />
           </AppCardContent>
-        </AppCard>
+        </AppCardRoot>
       )}
 
       {job.status === "failed" && (
@@ -274,7 +274,7 @@ export function JobDetailPage({ id }: { id: string }) {
       )}
 
       <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <AppCard className="min-w-0">
+        <AppCardRoot className="min-w-0">
           <AppCardContent className="min-w-0">
             <Tabs defaultValue="overview" className="min-w-0 w-full">
               <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
@@ -461,9 +461,9 @@ export function JobDetailPage({ id }: { id: string }) {
               </TabsContent>
             </Tabs>
           </AppCardContent>
-        </AppCard>
+        </AppCardRoot>
 
-        <AppCard className="xl:sticky xl:top-4">
+        <AppCardRoot className="xl:sticky xl:top-4">
           <AppCardHeader>
             <AppCardTitle>Processing lifecycle</AppCardTitle>
             <AppCardDescription>Worker stages for this job</AppCardDescription>
@@ -494,7 +494,7 @@ export function JobDetailPage({ id }: { id: string }) {
               ))}
             </ol>
           </AppCardContent>
-        </AppCard>
+        </AppCardRoot>
       </div>
     </div>
   );

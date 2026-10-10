@@ -1,6 +1,6 @@
 "use client";
 export { Badge as AppBadge } from "@/components/ui/badge";
-export { Button as AppButton } from "@/components/ui/button";
+export { AppButton } from "@blynta/ui";
 export { Card as AppCard } from "@/components/ui/card";
 export { CardContent as AppCardContent } from "@/components/ui/card";
 export { CardDescription as AppCardDescription } from "@/components/ui/card";
@@ -12,7 +12,7 @@ export { DialogDescription as AppDialogDescription } from "@/components/ui/dialo
 export { DialogFooter as AppDialogFooter } from "@/components/ui/dialog";
 export { DialogHeader as AppDialogHeader } from "@/components/ui/dialog";
 export { DialogTitle as AppDialogTitle } from "@/components/ui/dialog";
-export { Input as AppInput } from "@/components/ui/input";
+export { AppInput } from "@blynta/ui";
 export { Label as AppLabel } from "@/components/ui/label";
 export { Progress as AppProgress } from "@/components/ui/progress";
 export { Select as AppSelect } from "@/components/ui/select";
@@ -27,4 +27,4 @@ export { Tabs as AppTabs } from "@/components/ui/tabs";
 export { TabsContent as AppTabsContent } from "@/components/ui/tabs";
 export { TabsList as AppTabsList } from "@/components/ui/tabs";
 export { TabsTrigger as AppTabsTrigger } from "@/components/ui/tabs";
-export { Textarea as AppTextarea } from "@/components/ui/textarea";
+export { AppTextarea } from "@blynta/ui";

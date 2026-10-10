@@ -17,12 +17,8 @@ import {
   Server,
   RefreshCw,
   Zap,
-  CheckCircle2,
   AlertTriangle,
   Clock,
-  Radio,
-  Play,
-  Pause,
   Layers,
   ArrowUpRight,
 } from "lucide-react";
@@ -36,12 +32,11 @@ export function QueuesView() {
     isFetching,
     isError,
     refetch,
+    dataUpdatedAt,
   } = useAdminQueuesQuery();
-  const [lastRefreshed, setLastRefreshed] = React.useState<Date>(new Date());
 
   const handleRefresh = async () => {
     await refetch();
-    setLastRefreshed(new Date());
   };
 
   const totalActive = queues?.reduce((acc, q) => acc + q.active, 0) ?? 0;
@@ -94,7 +89,9 @@ export function QueuesView() {
               Auto-polls every 15s
             </p>
             <p className="text-xs font-medium text-foreground">
-              {format(lastRefreshed, "h:mm:ss a")}
+              {dataUpdatedAt
+                ? format(dataUpdatedAt, "h:mm:ss a")
+                : "Awaiting telemetry"}
             </p>
           </div>
           <AppButton

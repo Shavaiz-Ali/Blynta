@@ -1,4 +1,6 @@
 "use client";
+import { AppSelect } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 
 import * as React from "react";
 import { useAdminAuditQuery } from "../queries";
@@ -123,24 +125,24 @@ export function AuditView() {
         />
         <label className="space-y-2 text-sm">
           <span className="block">Category</span>
-          <select
-            className="h-9 w-full rounded-md border bg-background px-3"
+          <AppSelect
+            aria-label="Select an option"
             value={params.category || ""}
-            onChange={(event) =>
+            onValueChange={(event) =>
               setParams((current) => ({
                 ...current,
-                category: event.target.value || undefined,
+                category: event || undefined,
                 page: 1,
               }))
             }
           >
-            <option value="">All categories</option>
+            <SelectItem value="">All categories</SelectItem>
             {CATEGORIES.map((category) => (
-              <option key={category} value={category}>
+              <SelectItem key={category} value={category}>
                 {category}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </AppSelect>
         </label>
         <AppInput
           label="From"

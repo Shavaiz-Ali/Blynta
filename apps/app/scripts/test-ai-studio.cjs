@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Node test harness uses CommonJS and a TypeScript loader. */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -50,6 +51,13 @@ function load(relative, mocks = {}) {
   const original = mod.require.bind(mod);
   mod.require = (id) => {
     if (id in mocks) return mocks[id];
+    if (id === "@blynta/ui")
+      return load("../../packages/ui/src/index.ts", mocks);
+    if (id.startsWith("@blynta/ui/"))
+      return load(
+        "../../packages/ui/src/" + id.slice("@blynta/ui/".length) + ".tsx",
+        mocks,
+      );
     if (id.startsWith(".")) {
       const target = path.resolve(path.dirname(filename), id);
       for (const ext of [".ts", ".tsx"])
@@ -107,7 +115,16 @@ test("premium selector renders only registered selectable choices and Auto", () 
     }),
   );
   assert.match(html, /Auto \(Recommended\)/);
-  assert.match(html, /Registered model/);
+  const chosen = renderToStaticMarkup(
+    React.createElement(selector.ModelSelector, {
+      data: availability,
+      loading: false,
+      selected: "registered-1",
+      onChange: () => {},
+    }),
+  );
+  assert.match(chosen, /Registered model/);
+  assert.match(html, /role="combobox"/);
   assert.doesNotMatch(html, /Auto only/);
   assert.doesNotMatch(html, /gpt-4o|claude|credential/);
 });
@@ -121,7 +138,7 @@ test("free selector cannot override Auto and rejects forged explicit selections"
       onChange: () => {},
     }),
   );
-  assert.doesNotMatch(html, /<select/);
+  assert.doesNotMatch(html, /role="combobox"/);
   const downgraded = renderToStaticMarkup(
     React.createElement(selector.ModelSelector, {
       data,
@@ -130,7 +147,7 @@ test("free selector cannot override Auto and rejects forged explicit selections"
       onChange: () => {},
     }),
   );
-  assert.doesNotMatch(downgraded, /<select/);
+  assert.doesNotMatch(downgraded, /role="combobox"/);
   assert.match(downgraded, /Use Auto for your current plan/);
   assert.match(
     selector.modelSelectionError(data, "registered-1"),
@@ -345,7 +362,7 @@ test("proposal card escapes untrusted summaries and disables stale approval", ()
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /<script>/);
   assert.match(html, /older revision/);
-  assert.match(html, /<button disabled=""/);
+  assert.match(html, /<button\b[^>]*disabled=""/);
   assert.match(html, /1.3×/);
 });
 test("actual admin provider page renders safe metadata through its existing query boundary", () => {
@@ -445,4 +462,73 @@ test("actual admin layout rejects signed-in non-admin accounts", async () => {
     () => layout({ children: "Protected AI management" }),
     /ADMIN_ACCESS_DENIED/,
   );
+});
+
+// Shared composition regressions render the real package, not substitute controls.
+test("compound cards keep headers and body as separate block boundaries", () => {
+  const { AppCardRoot, AppCardHeader, AppCardContent } = load(
+    "../../packages/ui/src/index.ts",
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(
+      AppCardRoot,
+      {},
+      React.createElement(AppCardHeader, {}, "Metric"),
+      React.createElement(AppCardContent, {}, "3200"),
+    ),
+  );
+  assert.equal((html.match(/data-slot="card-content"/g) || []).length, 1);
+  assert.match(html, /min-w-0/);
+});
+test("horizontal tabs stack their list above the content", () => {
+  const { Tabs, TabsList, TabsTrigger, TabsContent } = load(
+    "../../packages/ui/src/primitives/tabs.tsx",
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(
+      Tabs,
+      { defaultValue: "history" },
+      React.createElement(
+        TabsList,
+        {},
+        React.createElement(TabsTrigger, { value: "history" }, "History"),
+      ),
+      React.createElement(TabsContent, { value: "history" }, "Versions"),
+    ),
+  );
+  assert.match(html, /data-orientation="horizontal"/);
+  assert.match(html, /flex-col/);
+});
+test("custom select children expose the selected label and preserve form names", () => {
+  const { AppSelect } = load("../../packages/ui/src/index.ts");
+  const { SelectItem: AppSelectItem } = load(
+    "../../packages/ui/src/primitives/select.tsx",
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(
+      AppSelect,
+      {
+        name: "providerId",
+        value: "provider-id",
+        onValueChange: () => {},
+        "aria-label": "Provider",
+      },
+      React.createElement(AppSelectItem, { value: "provider-id" }, "Google AI"),
+    ),
+  );
+  assert.match(html, /Google AI/);
+  assert.match(html, /name="providerId"/);
+  assert.match(html, /aria-label="Provider"/);
+});
+test("pagination prevents moving beyond the first and final page", () => {
+  const { AppPagination } = load("../../packages/ui/src/index.ts");
+  const html = renderToStaticMarkup(
+    React.createElement(AppPagination, {
+      page: 1,
+      totalPages: 1,
+      onPageChange: () => {},
+    }),
+  );
+  assert.equal((html.match(/<button\b[^>]* disabled=""/g) || []).length, 2);
+  assert.match(html, /Pagination/);
 });

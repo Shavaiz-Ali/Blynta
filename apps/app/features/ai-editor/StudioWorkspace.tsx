@@ -8,10 +8,19 @@ import {
   Send,
   Sparkles,
   Video,
-  Paperclip,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import {
+  AppButton as Button,
+  AppTextarea,
+  AppQueryState,
+  AppSpinner,
+} from "@blynta/ui";
+import {
+  StudioWorkflow,
+  StudioLibrary,
+  ConversationMessage,
+} from "./StudioPanels";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { useJob, useClipSignedUrl, JobStatus } from "@/features/jobs";
@@ -213,7 +222,13 @@ export function StudioWorkspace({
   if (job.isError)
     return (
       <DashboardLayout>
-        <EmptyWorkspace message={studioError(job.error)} />
+        <AppQueryState
+          className="mx-auto max-w-3xl"
+          title="Your clip couldn’t be loaded"
+          description="The service may be offline. Retry to load the clip and its editing workspace."
+          onRetry={() => void job.refetch()}
+          retrying={job.isFetching}
+        />
       </DashboardLayout>
     );
   if (job.isPending)
@@ -228,9 +243,48 @@ export function StudioWorkspace({
         <EmptyWorkspace message="This clip is not ready to edit. Wait for processing to finish." />
       </DashboardLayout>
     );
+  if (initialize.isError || plan.isError)
+    return (
+      <DashboardLayout>
+        <div className="mx-auto max-w-5xl space-y-4">
+          <AppQueryState
+            title="Your editing workspace couldn’t be loaded"
+            description="The editing service may be offline. Your original clip is still available; editing actions will return when the workspace loads."
+            onRetry={() =>
+              initialize.isError
+                ? initialize.mutate({ jobId, clipId })
+                : void plan.refetch()
+            }
+            retrying={initialize.isPending || plan.isFetching}
+          >
+            <Button
+              variant="ghost"
+              render={<Link href={`/my-clips/${jobId}/clips/${clipId}`} />}
+            >
+              Open original clip
+            </Button>
+          </AppQueryState>
+          {original.data && (
+            <section
+              aria-label="Original clip"
+              className="flex h-[min(60dvh,520px)] items-center justify-center rounded-lg border bg-muted/40 p-4"
+            >
+              <video
+                src={original.data}
+                controls
+                playsInline
+                preload="metadata"
+                className="h-full max-w-full rounded-md object-contain"
+                onError={recoverPlayback}
+              />
+            </section>
+          )}
+        </div>
+      </DashboardLayout>
+    );
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-[1500px] space-y-4 pb-10">
+      <div className="mx-auto min-w-0 w-full max-w-[1500px] space-y-4 pb-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <Link
@@ -264,35 +318,31 @@ export function StudioWorkspace({
             </Button>
           </div>
         </header>
-        {(initialize.isError || plan.isError) && (
-          <div
-            role="alert"
-            className="rounded-xl border border-destructive/30 p-4 text-sm"
-          >
-            <p>{studioError(initialize.error ?? plan.error)}</p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              onClick={() =>
-                initialize.isError
-                  ? initialize.mutate({ jobId, clipId })
-                  : void plan.refetch()
-              }
-            >
-              Retry loading plan
-            </Button>
-          </div>
-        )}
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,1fr)]">
+        <StudioWorkflow
+          stage={
+            allProposals.some(
+              (p) => p.status === "pending" || p.status === "applying",
+            )
+              ? "review"
+              : currentRevisionRendered
+                ? "refine"
+                : allProposals.some((p) => p.status === "applied")
+                  ? "render"
+                  : "prompt"
+          }
+        />
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div className="min-w-0 space-y-4">
             <section
-              className="overflow-hidden rounded-2xl border bg-card"
+              className="min-w-0 overflow-hidden rounded-lg border bg-card"
               aria-label="Video preview"
             >
-              <div className="flex items-center justify-between border-b px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
                 <div className="flex gap-1 rounded-lg bg-muted p-1">
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     aria-pressed={mode === "original"}
                     onClick={() => {
                       setMode("original");
@@ -301,8 +351,11 @@ export function StudioWorkspace({
                     className={`rounded-md px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:ring-primary ${mode === "original" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
                   >
                     Original
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     aria-pressed={mode === "preview"}
                     onClick={() => {
                       setMode("preview");
@@ -311,7 +364,7 @@ export function StudioWorkspace({
                     className={`rounded-md px-3 py-1.5 text-xs font-medium focus-visible:ring-2 focus-visible:ring-primary ${mode === "preview" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
                   >
                     Edited preview
-                  </button>
+                  </Button>
                 </div>
                 <span className="text-xs text-muted-foreground">
                   {mode === "preview" && version.data
@@ -319,7 +372,7 @@ export function StudioWorkspace({
                     : "Source clip"}
                 </span>
               </div>
-              <div className="flex min-h-72 items-center justify-center bg-zinc-950 p-4 sm:min-h-[440px]">
+              <div className="flex h-[min(60dvh,520px)] min-h-72 items-center justify-center bg-muted/40 p-3 sm:p-4">
                 {url && !playbackFailed ? (
                   <video
                     key={url}
@@ -332,14 +385,19 @@ export function StudioWorkspace({
                         ? "Original clip"
                         : `Edited preview revision ${version.data?.revision}`
                     }
-                    className="max-h-[520px] w-full rounded-lg object-contain"
+                    className="h-full max-w-full rounded-md object-contain"
                     onError={recoverPlayback}
                   />
                 ) : mode === "original" && original.isPending ? (
-                  <Skeleton className="h-72 w-full bg-white/10" />
+                  <div
+                    role="status"
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <AppSpinner /> Loading source video…
+                  </div>
                 ) : (
-                  <div className="max-w-sm space-y-3 text-center text-sm text-zinc-300">
-                    <Video className="mx-auto size-8 text-zinc-500" />
+                  <div className="max-w-sm space-y-3 px-4 text-center text-sm leading-6 text-muted-foreground">
+                    <Video className="mx-auto size-8 text-muted-foreground" />
                     <p>
                       {playbackFailed
                         ? "Playback failed. Refresh the authorized media link and try again."
@@ -358,7 +416,10 @@ export function StudioWorkspace({
                     {(playbackFailed ||
                       original.isError ||
                       version.isError) && (
-                      <button
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
                         className="underline focus-visible:ring-2"
                         onClick={() => {
                           setPlaybackFailed(false);
@@ -368,7 +429,7 @@ export function StudioWorkspace({
                         }}
                       >
                         Refresh playback link
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
@@ -471,75 +532,141 @@ export function StudioWorkspace({
                 )}
               </section>
             )}
-            <details className="rounded-xl border bg-card p-4" open>
-              <summary className="cursor-pointer text-sm font-semibold focus-visible:ring-2 focus-visible:ring-primary">
-                Version history
-              </summary>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Preview history is read-only. Selecting an older version does
-                not change your edit plan.
-              </p>
-              <div className="mt-3 space-y-2">
-                {versions.isPending ? (
-                  <>
-                    <Skeleton className="h-12 w-full" />
-                    <Skeleton className="h-12 w-full" />
-                  </>
-                ) : versions.isError ? (
-                  <p role="alert" className="text-sm text-destructive">
-                    {studioError(versions.error)}
+            <StudioLibrary
+              history={
+                <div className="min-w-0">
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Preview history is read-only. Selecting an older version
+                    does not change your edit plan.
                   </p>
-                ) : !versions.data?.items.length ? (
-                  <p className="py-4 text-sm text-muted-foreground">
-                    Your rendered previews will appear here.
-                  </p>
-                ) : (
-                  versions.data.items.map((v) => (
-                    <button
-                      key={v._id}
-                      onClick={() => {
-                        setVersionId(v._id);
-                        setMode("preview");
-                        setPlaybackFailed(false);
-                      }}
-                      aria-pressed={versionId === v._id}
-                      className={`flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left text-xs focus-visible:ring-2 focus-visible:ring-primary ${versionId === v._id ? "border-primary bg-primary/5" : "hover:bg-muted"}`}
+                  <div className="mt-3 space-y-2">
+                    {versions.isPending ? (
+                      <>
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                      </>
+                    ) : versions.isError ? (
+                      <p role="alert" className="text-sm text-destructive">
+                        {studioError(versions.error)}
+                      </p>
+                    ) : !versions.data?.items.length ? (
+                      <p className="py-4 text-sm text-muted-foreground">
+                        Your rendered previews will appear here.
+                      </p>
+                    ) : (
+                      versions.data.items.map((v) => (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          key={v._id}
+                          onClick={() => {
+                            setVersionId(v._id);
+                            setMode("preview");
+                            setPlaybackFailed(false);
+                          }}
+                          aria-pressed={versionId === v._id}
+                          contentClassName="w-full items-center justify-between whitespace-normal"
+                          className={`flex h-auto w-full items-center justify-between gap-3 rounded-lg border p-3 text-left text-xs focus-visible:ring-2 focus-visible:ring-primary ${versionId === v._id ? "border-primary bg-primary/5" : "hover:bg-muted"}`}
+                        >
+                          <div>
+                            <p className="font-medium">Revision {v.revision}</p>
+                            <p className="mt-1 text-muted-foreground">
+                              {new Date(v.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <span className="capitalize text-muted-foreground">
+                            {v.status}
+                          </span>
+                        </Button>
+                      ))
+                    )}
+                  </div>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={page === 1}
+                      onClick={() => setPage((p) => p - 1)}
                     >
-                      <div>
-                        <p className="font-medium">Revision {v.revision}</p>
-                        <p className="mt-1 text-muted-foreground">
-                          {new Date(v.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <span className="capitalize text-muted-foreground">
-                        {v.status}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-              <div className="mt-3 flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  Previous
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={(versions.data?.items.length ?? 0) < 25}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </details>
+                      Previous
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={(versions.data?.items.length ?? 0) < 25}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              }
+              assets={
+                <div className="min-w-0">
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Use an uploaded audio or PNG asset in your next instruction.
+                    This editor has no stock asset library.
+                  </p>
+                  {assets.isPending ? (
+                    <Skeleton className="mt-3 h-10 w-full" />
+                  ) : assets.isError ? (
+                    <p role="alert" className="mt-2 text-xs text-destructive">
+                      {studioError(assets.error)}
+                    </p>
+                  ) : !assets.data?.items.length ? (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      No compatible uploaded assets yet. Upload audio or PNG
+                      images through your existing Studio asset manager, then
+                      refresh this list.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+                      {assets.data.items.map((asset) => (
+                        <li key={asset._id}>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+
+                            disabled={generating || unresolvedSubmission}
+                            onClick={() =>
+                              setPrompt(
+                                (p) =>
+                                  `${p}${p ? "\n" : ""}Use my uploaded ${asset.kind} asset “${asset.name}”.`,
+                              )
+                            }
+                            className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
+                          >
+                            <span className="truncate">{asset.name}</span>
+                            <span className="ml-3 text-muted-foreground">
+                              {asset.kind}
+                              {asset.duration
+                                ? ` · ${editTime(asset.duration)}`
+                                : ""}
+                            </span>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+
+                    className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    onClick={() => void assets.refetch()}
+                  >
+                    <RefreshCw className="size-3" /> Refresh assets
+                  </Button>
+                  <AssetUpload />
+                </div>
+              }
+            />
           </div>
           <section
-            className="flex min-w-0 flex-col overflow-hidden rounded-2xl border bg-card"
+            className="flex h-[min(85dvh,760px)] min-h-[540px] min-w-0 flex-col overflow-hidden rounded-lg border bg-card xl:sticky xl:top-4"
             aria-label="AI editing assistant"
           >
             <header className="space-y-3 border-b p-4">
@@ -556,7 +683,7 @@ export function StudioWorkspace({
               />
             </header>
             <div
-              className="max-h-[640px] min-h-48 space-y-4 overflow-y-auto p-4"
+              className="themed-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-4"
               aria-live="polite"
               aria-busy={generating}
             >
@@ -581,24 +708,21 @@ export function StudioWorkspace({
                     </div>
                   )}
                   {history.data?.messages.map((m) => (
-                    <div
+                    <ConversationMessage
                       key={m._id}
-                      className={`rounded-xl px-4 py-3 text-sm leading-6 ${m.role === "user" ? "ml-6 bg-primary/10" : "mr-6 bg-muted/60"}`}
-                    >
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        {m.role === "user" ? "You" : "Blynta"}
-                      </p>
-                      <p className="whitespace-pre-wrap break-words">
-                        {m.content}
-                      </p>
-                    </div>
+                      role={m.role}
+                      content={m.content}
+                    />
                   ))}
                 </>
               )}
               {(state.isError || history.isError) && (
                 <p role="alert" className="text-sm text-destructive">
                   {studioError(state.error ?? history.error)}{" "}
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     className="underline"
                     onClick={() => {
                       void state.refetch();
@@ -606,7 +730,7 @@ export function StudioWorkspace({
                     }}
                   >
                     Reload history
-                  </button>
+                  </Button>
                 </p>
               )}
               {allProposals.map((p) => (
@@ -631,7 +755,10 @@ export function StudioWorkspace({
               {(apply.isError || reject.isError) && (
                 <p role="alert" className="text-sm text-destructive">
                   {studioError(apply.error ?? reject.error)}{" "}
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
                     className="underline"
                     onClick={() => {
                       void plan.refetch();
@@ -639,12 +766,12 @@ export function StudioWorkspace({
                     }}
                   >
                     Refresh editing plan
-                  </button>
+                  </Button>
                 </p>
               )}
             </div>
             <form
-              className="space-y-3 border-t bg-background/50 p-4"
+              className="shrink-0 space-y-3 border-t bg-card p-4"
               onSubmit={(e) => {
                 e.preventDefault();
                 void submit();
@@ -655,21 +782,25 @@ export function StudioWorkspace({
                   "Lower the original audio to 70%.",
                   `Add a smooth zoom from 00:00 to ${editTime(Math.min(plan.data?.outputDuration ?? 3, 3))}.`,
                 ].map((suggestion) => (
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
+
                     key={suggestion}
                     disabled={generating || unresolvedSubmission}
                     onClick={() => setPrompt(suggestion)}
-                    className="rounded-full border px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                    contentClassName="whitespace-normal"
+                    className="h-auto rounded-md border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                   >
                     {suggestion}
-                  </button>
+                  </Button>
                 ))}
               </div>
               <label htmlFor="studio-prompt" className="sr-only">
                 Describe your editing instructions
               </label>
-              <textarea
+              <AppTextarea
                 id="studio-prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -677,7 +808,7 @@ export function StudioWorkspace({
                 rows={3}
                 disabled={generating || unresolvedSubmission}
                 placeholder="Describe an edit, or mention a phrase from the clip…"
-                className="w-full resize-y rounded-xl border bg-background p-3 text-sm leading-6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                className="resize-none text-sm leading-6"
               />
               {propose.isError && (
                 <div
@@ -729,62 +860,6 @@ export function StudioWorkspace({
                   {generating ? "Working…" : "Send"}
                 </Button>
               </div>
-              <details className="border-t pt-3">
-                <summary className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground focus-visible:ring-2 focus-visible:ring-primary">
-                  <Paperclip className="size-3.5" /> Your editing assets
-                </summary>
-                <p className="mt-2 text-xs leading-5 text-muted-foreground">
-                  Use an uploaded audio or PNG asset in your next instruction.
-                  This editor has no stock asset library.
-                </p>
-                {assets.isPending ? (
-                  <Skeleton className="mt-3 h-10 w-full" />
-                ) : assets.isError ? (
-                  <p role="alert" className="mt-2 text-xs text-destructive">
-                    {studioError(assets.error)}
-                  </p>
-                ) : !assets.data?.items.length ? (
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    No compatible uploaded assets yet. Upload audio or PNG
-                    images through your existing Studio asset manager, then
-                    refresh this list.
-                  </p>
-                ) : (
-                  <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
-                    {assets.data.items.map((asset) => (
-                      <li key={asset._id}>
-                        <button
-                          type="button"
-                          disabled={generating || unresolvedSubmission}
-                          onClick={() =>
-                            setPrompt(
-                              (p) =>
-                                `${p}${p ? "\n" : ""}Use my uploaded ${asset.kind} asset “${asset.name}”.`,
-                            )
-                          }
-                          className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
-                        >
-                          <span className="truncate">{asset.name}</span>
-                          <span className="ml-3 text-muted-foreground">
-                            {asset.kind}
-                            {asset.duration
-                              ? ` · ${editTime(asset.duration)}`
-                              : ""}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <button
-                  type="button"
-                  className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                  onClick={() => void assets.refetch()}
-                >
-                  <RefreshCw className="size-3" /> Refresh assets
-                </button>
-                <AssetUpload />
-              </details>
             </form>
           </section>
         </div>
@@ -810,16 +885,11 @@ function EmptyWorkspace({ message }: { message: string }) {
 }
 function WorkspaceSkeleton() {
   return (
-    <div aria-label="Loading editing workspace" className="space-y-4">
-      <Skeleton className="h-10 w-1/2" />
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <Skeleton className="h-[440px] rounded-2xl" />
-        <div className="space-y-4">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-64 rounded-xl" />
-          <Skeleton className="h-28 rounded-xl" />
-        </div>
-      </div>
+    <div
+      role="status"
+      className="mx-auto flex min-h-64 max-w-xl items-center justify-center gap-3 rounded-lg border bg-card p-6 text-sm text-muted-foreground"
+    >
+      <AppSpinner /> Loading your editing workspace…
     </div>
   );
 }

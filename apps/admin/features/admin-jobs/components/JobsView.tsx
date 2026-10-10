@@ -18,13 +18,8 @@ import { QueryErrorState } from "@/components/common/QueryErrorState";
 import { AppBadge as Badge } from "@/components/common/primitives";
 import { AppButton, AppLinkButton } from "@blynta/ui";
 import { AppInput as Input } from "@/components/common/primitives";
-import {
-  AppSelect as Select,
-  AppSelectContent as SelectContent,
-  AppSelectItem as SelectItem,
-  AppSelectTrigger as SelectTrigger,
-  AppSelectValue as SelectValue,
-} from "@/components/common/primitives";
+import { AppSelect as Select } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import {
   Briefcase,
   Search,
@@ -340,26 +335,22 @@ export function JobsView() {
 
           {/* Status Select - using shadcn Select */}
           <Select
+            aria-label="Job status"
+            size="sm"
+            wrapperClassName="w-full sm:w-40"
             value={statusFilter || "all"}
             onValueChange={(val) => {
               setStatusFilter(val === "all" ? "" : (val as JobStatus));
               setParams((p) => ({ ...p, page: 1 }));
             }}
           >
-            <SelectTrigger size="sm" className="w-full sm:w-[180px]">
-              <SelectValue placeholder="All Statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="transcribing">Transcribing</SelectItem>
-              <SelectItem value="detecting_highlights">
-                AI Highlights
-              </SelectItem>
-              <SelectItem value="cutting_clips">FFmpeg Render</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="failed">Failed</SelectItem>
-            </SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="transcribing">Transcribing</SelectItem>
+            <SelectItem value="detecting_highlights">AI Highlights</SelectItem>
+            <SelectItem value="cutting_clips">FFmpeg Render</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+            <SelectItem value="failed">Failed</SelectItem>
           </Select>
         </div>
 
@@ -369,7 +360,7 @@ export function JobsView() {
             <Filter className="size-3" /> Quick Filter:
           </span>
           {QUICK_FILTERS.map((pill) => (
-            <button
+            <AppButton
               key={pill.label}
               onClick={() => {
                 setStatusFilter(pill.val as JobStatus | "");
@@ -383,7 +374,7 @@ export function JobsView() {
               )}
             >
               {pill.label}
-            </button>
+            </AppButton>
           ))}
         </div>
       </div>

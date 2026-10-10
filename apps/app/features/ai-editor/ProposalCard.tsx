@@ -1,5 +1,5 @@
 "use client";
-import { Button } from "@/components/ui/button";
+import { AppButton as Button } from "@blynta/ui";
 import { Check, Sparkles } from "lucide-react";
 import type { EditingPlan, Proposal } from "./contracts";
 import { describeChange } from "./presentation";

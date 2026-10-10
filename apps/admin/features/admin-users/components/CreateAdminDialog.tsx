@@ -1,4 +1,5 @@
 "use client";
+import { AppButton } from "@blynta/ui";
 
 import * as React from "react";
 import { adminUsersApi } from "../api";
@@ -149,7 +150,7 @@ export function CreateAdminDialog({
                 aria-invalid={!!errors.password}
                 className="pr-10"
               />
-              <button
+              <AppButton
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
@@ -160,7 +161,7 @@ export function CreateAdminDialog({
                 ) : (
                   <Eye className="size-4" />
                 )}
-              </button>
+              </AppButton>
             </div>
             {errors.password && (
               <p className="text-xs text-destructive">{errors.password}</p>

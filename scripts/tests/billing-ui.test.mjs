@@ -19,13 +19,36 @@ function load(relative, mocks = {}) {
       target: ts.ScriptTarget.ES2020,
     },
   }).outputText;
-  const module = { exports: {} };
+  const fixtureModule = { exports: {} };
   new Function("require", "module", "exports", source)(
-    (id) => mocks[id] || require(id),
-    module,
-    module.exports,
+    (id) => {
+      if (id === "@/features/ai-editor/models")
+        return {
+          useAvailableEditingModels: () => ({
+            data: {
+              plan: "pro",
+              selectionAllowed: true,
+              defaultModelId: "fixture-default",
+              models: [
+                {
+                  id: "fixture-default",
+                  displayName: "Fixture model",
+                  selectable: true,
+                },
+              ],
+            },
+            isPending: false,
+            isError: false,
+          }),
+        };
+      if (id === "@/features/ai-editor/ModelSelector")
+        return load("apps/app/features/ai-editor/ModelSelector.tsx", mocks);
+      return mocks[id] || require(id);
+    },
+    fixtureModule,
+    fixtureModule.exports,
   );
-  return module.exports;
+  return fixtureModule.exports;
 }
 function history(query) {
   const { CreditHistory } = load(
@@ -33,8 +56,10 @@ function history(query) {
     {
       "../queries": { useCreditHistory: () => ({ refetch() {}, ...query }) },
       "@blynta/ui": {
-        AppButton: ({ children, contentClassName, ...props }) =>
-          React.createElement("button", props, children),
+        AppButton: ({ children, contentClassName, ...props }) => {
+          void contentClassName;
+          return React.createElement("button", props, children);
+        },
         AppDropdown: ({ trigger }) => trigger,
       },
     },
@@ -216,6 +241,9 @@ test("automatic budget is reviewed before approval and an insufficient balance b
     AppDialog: component,
     AppButton: function Button() {},
     AppCard: component,
+    AppCardRoot: component,
+    AppInput: function Input() {},
+    AppTextarea: component,
     AppSelect: component,
     InsufficientCredits: component,
   };
@@ -300,7 +328,7 @@ test("automatic budget is reviewed before approval and an insufficient balance b
   );
   elements(
     tree,
-    (e) => e.type === "input" && e.props.id === "video-url-input",
+    (e) => e.type === ui.AppInput && e.props.id === "video-url-input",
   )[0].props.onChange({
     target: { value: "https://youtube.com/watch?v=example" },
   });
@@ -364,7 +392,8 @@ test("automatic budget is reviewed before approval and an insufficient balance b
   elements(
     tree,
     (e) =>
-      e.type === "button" && e.props.children?.includes?.("How credits work"),
+      e.type === ui.AppButton &&
+      e.props.children?.includes?.("How credits work"),
   )[0].props.onClick();
   tree = hooks.render(HeroInput);
   assert.equal(elements(tree, (e) => e.type === Help)[0].props.open, true);
@@ -447,8 +476,10 @@ test("automatic budget is reviewed before approval and an insufficient balance b
 });
 
 test("confirmation displays server-provided duration, authorization and plan target with explicit CTA consent", () => {
-  const button = ({ children, isLoading, ...props }) =>
-    React.createElement("button", props, children);
+  const button = ({ children, isLoading, ...props }) => {
+    void isLoading;
+    return React.createElement("button", props, children);
+  };
   const { GenerationConfirmation } = load(
     "apps/app/features/dashboard/components/GenerationConfirmation.tsx",
     {

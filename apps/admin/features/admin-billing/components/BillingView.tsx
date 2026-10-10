@@ -1,4 +1,6 @@
 "use client";
+import { AppSelect } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import { useState } from "react";
 import { CreditDetails } from "./CreditDetails";
 import {
@@ -97,27 +99,26 @@ export function BillingView() {
             </div>
             <label className="space-y-2 text-sm">
               <span className="block">Subscription status</span>
-              <select
-                className="h-9 rounded-md border bg-background px-3"
+              <AppSelect
+                aria-label="Select an option"
                 value={params.status || ""}
-                onChange={(e) =>
+                onValueChange={(e) =>
                   setParams({
                     ...params,
-                    status: (e.target.value || undefined) as
-                      SubStatus | undefined,
+                    status: (e || undefined) as SubStatus | undefined,
                     page: 1,
                   })
                 }
               >
-                <option value="">All statuses</option>
+                <SelectItem value="">All statuses</SelectItem>
                 {["active", "trialing", "past_due", "paused", "canceled"].map(
                   (s) => (
-                    <option key={s} value={s}>
+                    <SelectItem key={s} value={s}>
                       {s.replaceAll("_", " ")}
-                    </option>
+                    </SelectItem>
                   ),
                 )}
-              </select>
+              </AppSelect>
             </label>
           </div>
           {query.isError ? (

@@ -3,13 +3,8 @@
 import * as React from "react";
 import { AppInput as Input } from "@/components/common/primitives";
 import { AppButton as Button } from "@/components/common/primitives";
-import {
-  AppSelect as Select,
-  AppSelectContent as SelectContent,
-  AppSelectItem as SelectItem,
-  AppSelectTrigger as SelectTrigger,
-  AppSelectValue as SelectValue,
-} from "@/components/common/primitives";
+import { AppSelect as Select } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import { Search, X } from "lucide-react";
 import { ListUsersParams, UserPlan } from "../types";
 
@@ -61,6 +56,9 @@ export function UsersFilterBar({
       <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
         {/* Plan filter */}
         <Select
+          aria-label="Subscription plan"
+          size="sm"
+          wrapperClassName="w-full sm:w-40"
           value={filters.plan || "all"}
           onValueChange={(val) =>
             onFilterChange({
@@ -69,19 +67,17 @@ export function UsersFilterBar({
             })
           }
         >
-          <SelectTrigger size="sm" className="w-full sm:min-w-[110px]">
-            <SelectValue placeholder="All Plans" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Plans</SelectItem>
-            <SelectItem value="free">Free</SelectItem>
-            <SelectItem value="pro">Pro</SelectItem>
-            <SelectItem value="business">Business</SelectItem>
-          </SelectContent>
+          <SelectItem value="all">All Plans</SelectItem>
+          <SelectItem value="free">Free</SelectItem>
+          <SelectItem value="pro">Pro</SelectItem>
+          <SelectItem value="business">Business</SelectItem>
         </Select>
 
         {/* Status filter */}
         <Select
+          aria-label="Account status"
+          size="sm"
+          wrapperClassName="w-full sm:w-40"
           value={
             filters.isActive === undefined
               ? "all"
@@ -96,14 +92,9 @@ export function UsersFilterBar({
             })
           }
         >
-          <SelectTrigger size="sm" className="w-full sm:min-w-[120px]">
-            <SelectValue placeholder="All Statuses" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="inactive">Inactive</SelectItem>
-          </SelectContent>
+          <SelectItem value="all">All Statuses</SelectItem>
+          <SelectItem value="active">Active</SelectItem>
+          <SelectItem value="inactive">Inactive</SelectItem>
         </Select>
 
         {hasActiveFilters && (

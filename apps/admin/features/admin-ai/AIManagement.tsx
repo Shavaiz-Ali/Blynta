@@ -1,11 +1,12 @@
 "use client";
+import { AppSelect } from "@blynta/ui";
+import { SelectItem } from "@blynta/ui/primitives/select";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { AppButton as Button, AppInput as Input } from "@blynta/ui";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AppTabs as Tabs,
+  AppTabsContent as TabsContent,
+  AppTabsList as TabsList,
+  AppTabsTrigger as TabsTrigger,
+  AppQueryState,
+  AppPagination,
+} from "@blynta/ui";
 import { aiAdminApi } from "./api";
 import type { AIModel, Provider, Credential } from "./api";
 type Section = "providers" | "models" | "usage";
@@ -314,16 +322,17 @@ export function AIManagement({
   const current =
     section === "providers" ? providers : section === "models" ? models : usage;
   return (
-    <div className="space-y-6 p-6">
+    <div className="min-w-0 space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">AI management</h1>
         <p className="text-muted-foreground mt-1">
           Manage providers, model access and measured API usage.
         </p>
       </div>
-      {(error || current.error) && (
+      {error && (
         <p role="alert" className="text-destructive">
-          {error || current.error?.message}
+          {error ||
+            "AI management could not be loaded. The service may be offline."}
         </p>
       )}
       {notice && (
@@ -348,7 +357,7 @@ export function AIManagement({
         {section !== "usage" && (
           <div className="my-4 flex flex-wrap items-center gap-3">
             <Input
-              className="max-w-sm"
+              wrapperClassName="w-full sm:max-w-sm"
               aria-label="Search"
               placeholder="Search by name"
               value={search}
@@ -357,19 +366,19 @@ export function AIManagement({
                 setPage(1);
               }}
             />
-            <select
+            <AppSelect
               aria-label="Enabled filter"
-              className="rounded border bg-background p-2 text-sm"
+              wrapperClassName="w-full sm:w-40"
               value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
+              onValueChange={(e) => {
+                setFilter(e);
                 setPage(1);
               }}
             >
-              <option value="">All statuses</option>
-              <option value="true">Enabled</option>
-              <option value="false">Disabled</option>
-            </select>
+              <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value="true">Enabled</SelectItem>
+              <SelectItem value="false">Disabled</SelectItem>
+            </AppSelect>
             <Button
               onClick={() =>
                 section === "providers"
@@ -628,41 +637,36 @@ export function AIManagement({
           </Card>
         </TabsContent>
       </Tabs>
-      {current.isPending ? (
+      {current.isError ? (
+        <AppQueryState
+          title="AI management unavailable"
+          description="The AI service could not be reached. Your configuration has not changed."
+          onRetry={() => void current.refetch()}
+          retrying={current.isFetching}
+        />
+      ) : current.isPending ? (
         <div role="status" aria-label="Loading AI management">
           <Skeleton className="h-12 w-full" />
           <Skeleton className="mt-3 h-12 w-full" />
-          <Skeleton className="mt-3 h-12 w-full" />
         </div>
-      ) : (
-        !current.data?.items.length && (
-          <p className="text-muted-foreground">No records found.</p>
-        )
-      )}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          disabled={page === 1}
-          onClick={() => setPage((p) => p - 1)}
-        >
-          Previous
-        </Button>
-        <span className="text-sm">Page {page}</span>
-        <Button
-          variant="outline"
-          disabled={current.isPending || (current.data?.items.length ?? 0) < 25}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </Button>
-      </div>
+      ) : !current.data?.items.length ? (
+        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          No records match your filters.
+        </p>
+      ) : null}
+      <AppPagination
+        page={page}
+        hasNext={(current.data?.items.length ?? 0) >= 25}
+        onPageChange={setPage}
+        disabled={current.isPending || current.isError}
+      />
       <Dialog
         open={providerEdit !== undefined}
         onOpenChange={(open) => {
           if (!open) setProviderEdit(undefined);
         }}
       >
-        <DialogContent>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {providerEdit ? "Edit provider" : "Add provider"}
@@ -688,15 +692,17 @@ export function AIManagement({
             />
             <label className="grid gap-2 text-sm">
               Adapter
-              <select
+              <AppSelect
+                aria-label="Adapter"
                 name="adapter"
                 defaultValue={providerEdit?.adapter ?? "google"}
-                className="rounded border bg-background p-2"
               >
-                <option value="google">Google Gemini</option>
-                <option value="openai">OpenAI (adapter pending)</option>
-                <option value="anthropic">Anthropic (adapter pending)</option>
-              </select>
+                <SelectItem value="google">Google Gemini</SelectItem>
+                <SelectItem value="openai">OpenAI (adapter pending)</SelectItem>
+                <SelectItem value="anthropic">
+                  Anthropic (adapter pending)
+                </SelectItem>
+              </AppSelect>
             </label>
             <Field
               label="Description"
@@ -706,19 +712,19 @@ export function AIManagement({
             {providerEdit && (
               <label className="grid gap-2 text-sm">
                 Default credential
-                <select
+                <AppSelect
+                  aria-label="Default credential"
                   name="defaultCredentialId"
                   defaultValue={providerEdit.defaultCredentialId ?? ""}
-                  className="rounded border bg-background p-2"
                 >
-                  <option value="">No default credential</option>
+                  <SelectItem value="">No default credential</SelectItem>
                   {defaultCredentials.data?.items.map((c) => (
-                    <option key={c._id} value={c._id}>
+                    <SelectItem key={c._id} value={c._id}>
                       {c.label}
                       {c.enabled ? "" : " (disabled)"}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </AppSelect>
               </label>
             )}
             <Check
@@ -783,7 +789,7 @@ export function AIManagement({
       >
         <DialogContent
           key={credentialProvider?._id}
-          className="max-h-[85vh] overflow-y-auto"
+          className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
         >
           <DialogHeader>
             <DialogTitle>{credentialProvider?.name} credentials</DialogTitle>
@@ -913,34 +919,40 @@ export function AIManagement({
                 {error || modelCredentials.error?.message}
               </p>
             )}
+            <h3 className="border-b pb-2 text-sm font-semibold">
+              Provider and model identity
+            </h3>
             <label className="grid gap-2 text-sm">
               Provider
-              <select
+              <AppSelect
+                aria-label="Provider"
                 name="providerId"
                 value={modelProviderId}
-                onChange={(e) => setSelectedProvider(e.target.value)}
+                onValueChange={(e) => setSelectedProvider(e)}
                 required
-                className="rounded border bg-background p-2"
               >
-                <option value="">Select provider</option>
+                <SelectItem value="">Select provider</SelectItem>
                 {catalog.data?.items
                   .filter((p) => p.adapter === "google")
                   .map((p) => (
-                    <option key={p._id} value={p._id}>
+                    <SelectItem key={p._id} value={p._id}>
                       {p.name}
-                    </option>
+                    </SelectItem>
                   ))}
                 {modelProviderId &&
                   !catalog.data?.items.some(
                     (p) => p._id === modelProviderId,
                   ) && (
-                    <option value={modelProviderId}>Current provider</option>
+                    <SelectItem value={modelProviderId}>
+                      Current provider
+                    </SelectItem>
                   )}
-              </select>
+              </AppSelect>
             </label>
             <label className="grid gap-2 text-sm">
               Credential
-              <select
+              <AppSelect
+                aria-label="Credential"
                 key={modelProviderId}
                 name="credentialId"
                 defaultValue={
@@ -948,16 +960,15 @@ export function AIManagement({
                     ? (modelEdit.credentialId ?? "")
                     : ""
                 }
-                className="rounded border bg-background p-2"
               >
-                <option value="">Use provider default</option>
+                <SelectItem value="">Use provider default</SelectItem>
                 {modelCredentials.data?.items.map((c) => (
-                  <option key={c._id} value={c._id}>
+                  <SelectItem key={c._id} value={c._id}>
                     {c.label}
                     {c.enabled ? "" : " (disabled)"}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </AppSelect>
             </label>
             <Field
               label="Gemini model identifier"
@@ -976,7 +987,10 @@ export function AIManagement({
               name="description"
               value={modelEdit?.description ?? ""}
             />
-            <div className="grid grid-cols-2 gap-3">
+            <h3 className="mt-2 border-b pb-2 text-sm font-semibold">
+              Generation and pricing
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field
                 label="Temperature (optional)"
                 name="temperature"
@@ -1061,7 +1075,7 @@ export function AIManagement({
                 />
               ))}
             </fieldset>
-            <fieldset className="flex gap-4">
+            <fieldset className="flex flex-wrap gap-4">
               <legend className="mb-2 text-sm font-medium">
                 Allowed plans
               </legend>

@@ -65,7 +65,7 @@ function AppDialog({
       <DialogContent
         finalFocus={finalFocus}
         className={cn(
-          "gap-0 overflow-hidden p-0 rounded-xl",
+          "flex flex-col gap-0 overflow-hidden p-0 rounded-xl",
           sizeMap[size],
           contentClassName,
         )}
@@ -107,7 +107,9 @@ function AppDialog({
             )}
           </DialogHeader>
         )}
-        <div className={cn("px-6 py-6", bodyClassName)}>{children}</div>
+        <div className={cn("min-h-0 overflow-y-auto px-6 py-6", bodyClassName)}>
+          {children}
+        </div>
         {footer && (
           <div
             className={cn(

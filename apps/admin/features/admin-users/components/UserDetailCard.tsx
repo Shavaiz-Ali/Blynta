@@ -1,4 +1,5 @@
 "use client";
+import { AppButton } from "@blynta/ui";
 
 import * as React from "react";
 import { UserDetailResponse } from "../types";
@@ -11,7 +12,6 @@ import {
 } from "@/components/common/primitives";
 import { AppSeparator as Separator } from "@/components/common/primitives";
 import {
-  User,
   Mail,
   Shield,
   Coins,
@@ -27,7 +27,6 @@ import {
   BarChart3,
 } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "cn";
 
 interface InfoRowProps {
   icon: React.ReactNode;
@@ -180,13 +179,13 @@ export function UserDetailCard({
                     </span>
                   </span>
                   {onAdjustCredits && (
-                    <button
+                    <AppButton
                       type="button"
                       onClick={onAdjustCredits}
                       className="px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary dark:text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
                     >
                       Adjust Credits
-                    </button>
+                    </AppButton>
                   )}
                 </div>
               }
