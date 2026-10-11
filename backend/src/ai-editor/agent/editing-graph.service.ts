@@ -45,6 +45,7 @@ export class EditingGraph {
     clipId: string;
     planId: string;
     prompt: string;
+    selectedAssetIds?: string[];
     history: unknown[];
     priorEdits?: unknown[];
     modelId?: string;
@@ -71,6 +72,7 @@ export class EditingGraph {
         if (++toolCalls > 10)
           throw new BadRequestException('AI tool budget exceeded');
       },
+      input.selectedAssetIds,
     );
     const execute = async (name: string, fn: () => Promise<unknown>) => {
       const result = await fn();
@@ -176,6 +178,7 @@ export class EditingGraph {
           assets: await execute('get_available_assets', () =>
             tools.assets.invoke({}),
           ),
+          selectedAssetIds: input.selectedAssetIds ?? [],
           history: input.history,
           priorApprovedEdits: input.priorEdits ?? [],
         }),

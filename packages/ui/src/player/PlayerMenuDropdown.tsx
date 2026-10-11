@@ -52,6 +52,8 @@ export function PlayerMenuDropdown({
     });
   }
 
+  if (!items.length) return null;
+
   const trigger = (
     <button
       type="button"

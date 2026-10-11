@@ -12,6 +12,9 @@ const jobId = '111111111111111111111111',
 function query<T>(value: T) {
   return {
     sort: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    lean: jest.fn().mockResolvedValue(value),
     then: (resolve: (v: T) => unknown) => Promise.resolve(value).then(resolve),
   };
 }
@@ -23,6 +26,7 @@ function setup() {
     deletionRequested: false,
   };
   const plans = {
+    find: jest.fn(() => query<unknown[]>([])),
     findOne: jest.fn(() => query<unknown>(null)),
     create: jest.fn((data: object) =>
       Promise.resolve({ _id: planId, ...data }),
@@ -130,5 +134,44 @@ describe('main app AI Studio integration', () => {
     await expect(
       s.service.downloadVersion('owner', planId),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+describe('Recent editing project metadata', () => {
+  it('returns owned clip title, thumbnail and real preview state without source keys', async () => {
+    const s = setup();
+    s.plans.find.mockReturnValue(
+      query([
+        {
+          _id: planId,
+          sourceClipId: clipId,
+          sourceMedia: { jobId, storageKey: 'private/source' },
+          revision: 2,
+        },
+      ]),
+    );
+    Object.assign(s.job, {
+      videoTitle: 'Source title',
+      thumbnailUrl: 'https://example.test/thumb',
+      highlights: [{ startTime: 1, endTime: 4, clipTitle: 'Useful advice' }],
+    });
+    s.versions.findOne.mockReturnValue(
+      query({ status: 'completed', revision: 2 }),
+    );
+    s.jobs.findOne.mockReturnValueOnce(query(s.job));
+    const result = await s.service.recent('owner');
+    expect(result.items[0]).toMatchObject({
+      clipTitle: 'Useful advice',
+      sourceTitle: 'Source title',
+      thumbnailUrl: 'https://example.test/thumb',
+      latestPreview: { status: 'completed', revision: 2 },
+    });
+    expect(JSON.stringify(result)).not.toContain('private/source');
+    expect(s.jobs.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'owner',
+        deletionRequested: { $ne: true },
+      }),
+    );
   });
 });

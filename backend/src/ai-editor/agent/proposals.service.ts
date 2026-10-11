@@ -26,6 +26,20 @@ const proposeInput = z
     planId: objectId,
     sessionId: objectId.optional(),
     modelId: objectId.optional(),
+    selectedAssetIds: z
+      .array(
+        z
+          .string()
+          .min(1)
+          .max(80)
+          .regex(/^[\w-]+$/),
+      )
+      .max(8)
+      .refine(
+        (ids) => new Set(ids).size === ids.length,
+        'Duplicate attachment IDs',
+      )
+      .optional(),
     prompt: z.string().trim().min(1).max(4000),
     requestId: z.string().uuid(),
   })
@@ -62,6 +76,13 @@ export class ProposalsService {
       return existing;
     }
     const owned = await this.tools.owned(userId, clipId, input.planId);
+    if (input.selectedAssetIds?.length)
+      await this.tools.selectedAssets(
+        userId,
+        clipId,
+        input.planId,
+        input.selectedAssetIds,
+      );
     const resolved = await this.registry.resolveUserModel(
       userId,
       input.modelId,
@@ -159,6 +180,7 @@ export class ProposalsService {
         clipId,
         planId: input.planId,
         prompt: input.prompt,
+        selectedAssetIds: input.selectedAssetIds,
         modelId: input.modelId,
         task: input.sessionId ? 'edit_refinement' : 'edit_planning',
         executionId: proposal.executionId,

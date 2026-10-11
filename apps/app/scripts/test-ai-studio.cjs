@@ -532,3 +532,126 @@ test("pagination prevents moving beyond the first and final page", () => {
   assert.equal((html.match(/<button\b[^>]* disabled=""/g) || []).length, 2);
   assert.match(html, /Pagination/);
 });
+
+const attachmentsModule = load(
+  "features/ai-editor/attachments.ts",
+  transportHarness().mocks,
+);
+test("attachment formats and editing resource limits reject unsupported or oversized files", () => {
+  for (const [name, mime] of [
+    ["image.PNG", "image/png"],
+    ["track.mp3", "audio/mpeg"],
+    ["track.wav", "audio/wav"],
+    ["track.m4a", "audio/mp4"],
+    ["track.ogg", "audio/ogg"],
+  ])
+    assert.equal(
+      attachmentsModule.validateAttachment({ name, size: 100 }),
+      mime,
+    );
+  for (const file of [
+    { name: "image.jpg", size: 100 },
+    { name: "video.mp4", size: 100 },
+    { name: "audio.mp3", size: 0 },
+    { name: "image.png", size: 100 * 1024 * 1024 + 1 },
+  ])
+    assert.throws(
+      () => attachmentsModule.validateAttachment(file),
+      /Choose a PNG/,
+    );
+});
+test("proposal transport forwards selected IDs as structured context and retains retries", async () => {
+  const h = transportHarness(),
+    hooks = load("features/ai-editor/queries.ts", h.mocks),
+    options = hooks.useProposeEdit("clip", "plan");
+  const body = {
+    planId: "plan",
+    prompt: "Use my image",
+    requestId: "same-id",
+    selectedAssetIds: ["image-1"],
+  };
+  await options.mutationFn(body);
+  await options.mutationFn(body);
+  assert.deepEqual(h.calls[0][1].selectedAssetIds, ["image-1"]);
+  assert.equal(h.calls[0][1], h.calls[1][1]);
+  assert.equal(options.retry, false);
+});
+test("editing composer exposes attachment removal, counts, multiline input and validation blocking", () => {
+  const { StudioPromptComposer } = load(
+    "features/ai-editor/StudioPromptComposer.tsx",
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(StudioPromptComposer, {
+      prompt: "Use this image",
+      onChange: () => {},
+      onSubmit: () => {},
+      disabled: false,
+      sendDisabled: false,
+      busy: false,
+      assets: [],
+      attachments: {
+        items: [{ key: "a", name: "logo.png", status: "processing" }],
+        blocked: true,
+        error: "",
+        select: () => {},
+        addFiles: () => {},
+        remove: () => {},
+        retry: () => {},
+      },
+    }),
+  );
+  assert.match(html, /Remove logo.png from prompt/);
+  assert.match(html, /Validating/);
+  assert.match(html, /maxlength="4000"/i);
+  assert.match(html, /Wait for validation/);
+  assert.match(html, /disabled=""[^>]*>[\s\S]*?Send/);
+});
+test("shared player renders custom controls, accessible loading and keyboard seeking without native controls", () => {
+  const { StudioVideoPlayer } = load(
+    "../../packages/ui/src/player/StudioVideoPlayer.tsx",
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(StudioVideoPlayer, {
+      src: "/owned-preview.mp4",
+      ariaLabel: "Edited preview",
+      onError: () => {},
+    }),
+  );
+  assert.match(html, /aria-label="Edited preview"/);
+  assert.match(html, /aria-label="Video position"/);
+  assert.match(html, /aria-label="Loading video"/);
+  assert.doesNotMatch(html, /<video[^>]* controls/);
+  assert.doesNotMatch(html, /Player options menu/);
+});
+
+test("generation URLs match the supported HTTPS preflight hosts", () => {
+  const { generationSourceUrl } = load(
+    "features/dashboard/generation-input.ts",
+  );
+  assert.equal(
+    generationSourceUrl(" youtu.be/example "),
+    "https://youtu.be/example",
+  );
+  assert.equal(
+    generationSourceUrl("https://vimeo.com/123"),
+    "https://vimeo.com/123",
+  );
+  for (const value of [
+    "http://youtube.com/watch?v=example",
+    "https://youtube.com.evil.test/video",
+    "https://name:password@youtube.com/video",
+    "file:///video.mp4",
+    "invalid text",
+  ])
+    assert.throws(() => generationSourceUrl(value), /video link/);
+});
+
+test("existing clip media stage remains focusable for scoped playback shortcuts", () => {
+  const { ClipMediaStage } = load(
+    "../../packages/ui/src/player/ClipMediaStage.tsx",
+  );
+  const html = renderToStaticMarkup(
+    React.createElement(ClipMediaStage, { src: "/owned.mp4" }),
+  );
+  assert.match(html, /tabindex="0" role="region" aria-label="Clip player"/);
+});

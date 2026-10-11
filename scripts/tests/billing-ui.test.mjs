@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import path from "node:path";
 
 const require = createRequire(
   new URL("../../apps/app/package.json", import.meta.url),
@@ -43,6 +44,21 @@ function load(relative, mocks = {}) {
         };
       if (id === "@/features/ai-editor/ModelSelector")
         return load("apps/app/features/ai-editor/ModelSelector.tsx", mocks);
+      if (id.startsWith(".") && !mocks[id]) {
+        for (const ext of [".ts", ".tsx"]) {
+          const candidate = path.resolve(path.dirname(filename), id + ext);
+          if (existsSync(candidate))
+            return load(
+              path
+                .relative(
+                  fileURLToPath(new URL("../../", import.meta.url)),
+                  candidate,
+                )
+                .replaceAll("\\", "/"),
+              mocks,
+            );
+        }
+      }
       return mocks[id] || require(id);
     },
     fixtureModule,

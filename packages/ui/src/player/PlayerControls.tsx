@@ -58,7 +58,7 @@ export function PlayerControls({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-2",
+        "flex flex-wrap items-center justify-between gap-2",
         surface ? "text-foreground" : "text-white",
         className,
       )}
@@ -152,17 +152,18 @@ export function PlayerControls({
             value={isMuted ? 0 : volume}
             onChange={onVolumeChange}
             className={cn(
-              "hidden h-1 w-0 cursor-pointer rounded-full accent-primary opacity-0 transition-all duration-200 group-hover/vol:w-14 group-hover/vol:opacity-100 sm:block",
+              "hidden h-1 w-0 cursor-pointer rounded-full accent-primary opacity-0 transition-all duration-200 group-hover/vol:w-14 group-hover/vol:opacity-100 group-focus-within/vol:w-14 group-focus-within/vol:opacity-100 sm:block",
               surface ? "bg-muted" : "bg-white/20",
             )}
             title="Volume"
+            aria-label="Video volume"
           />
         </div>
 
         {/* Time Stamp Display */}
         <div
           className={cn(
-            "truncate font-mono text-[10px] tabular-nums sm:text-[11px]",
+            "shrink-0 whitespace-nowrap font-mono text-[10px] tabular-nums sm:text-[11px]",
             surface ? "text-foreground" : "text-white/90",
           )}
         >

@@ -277,8 +277,16 @@ export function useVideoPlayback(
     if (!keyboardShortcuts) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
+      const target = event.target as HTMLElement;
+      // Shortcuts belong to the focused player, never the chat or tab controls.
+      if (
+        event.defaultPrevented ||
+        !containerRef.current?.contains(target) ||
+        target.closest(
+          'input, textarea, button, [role="tab"], [role="slider"], [contenteditable="true"]',
+        )
+      )
+        return;
 
       if (event.code === "Space") {
         event.preventDefault();
@@ -305,6 +313,7 @@ export function useVideoPlayback(
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     keyboardShortcuts,
+    containerRef,
     seekStep,
     togglePlay,
     seekTo,

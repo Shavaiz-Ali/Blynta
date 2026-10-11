@@ -7,10 +7,13 @@ import { PlayerOverlay } from "./PlayerOverlay";
 import { PlayerScrubber } from "./PlayerScrubber";
 import { PlayerControls } from "./PlayerControls";
 import { useVideoPlayback } from "./useVideoPlayback";
+import { AppButton } from "../components/AppButton";
 import { cn } from "../lib/utils";
 
 export function StudioVideoPlayer({
   src,
+  onError,
+  ariaLabel = "Video preview",
   poster,
   autoPlay = false,
   className,
@@ -20,6 +23,8 @@ export function StudioVideoPlayer({
   onDeleteClip,
   hasTranscript = true,
 }: StudioVideoPlayerProps) {
+  const [loading, setLoading] = React.useState(true);
+  const [failed, setFailed] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const player = useVideoPlayback({ containerRef, videoRef });
@@ -27,6 +32,9 @@ export function StudioVideoPlayer({
   return (
     <div
       ref={containerRef}
+      tabIndex={0}
+      role="region"
+      aria-label={ariaLabel}
       onMouseMove={player.handleStageMouseMove}
       onMouseEnter={player.handleStageMouseEnter}
       onMouseLeave={player.handleStageMouseLeave}
@@ -41,6 +49,16 @@ export function StudioVideoPlayer({
       <video
         ref={videoRef}
         src={src}
+        onLoadStart={() => {
+          setLoading(true);
+          setFailed(false);
+        }}
+        onLoadedData={() => setLoading(false)}
+        onError={() => {
+          setLoading(false);
+          setFailed(true);
+          onError?.();
+        }}
         poster={poster}
         autoPlay={autoPlay}
         loop={player.isLooping}
@@ -55,12 +73,32 @@ export function StudioVideoPlayer({
       />
 
       {/* Buffering & Center Ripple / Play Overlay */}
-      <PlayerOverlay
-        isBuffering={player.isBuffering}
-        centerAnimation={player.centerAnimation}
-        isPlaying={player.isPlaying}
-        onTogglePlay={player.togglePlay}
-      />
+      {failed ? (
+        <div
+          role="alert"
+          className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-black/80 p-4 text-center text-sm text-white"
+        >
+          <p>Video couldn’t be played.</p>
+          <AppButton
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setFailed(false);
+              setLoading(true);
+              videoRef.current?.load();
+            }}
+          >
+            Retry playback
+          </AppButton>
+        </div>
+      ) : (
+        <PlayerOverlay
+          isBuffering={player.isBuffering || loading}
+          centerAnimation={player.centerAnimation}
+          isPlaying={player.isPlaying}
+          onTogglePlay={player.togglePlay}
+        />
+      )}
 
       {/* Top Bar with Badge, Loop indicator, and Top-Right Dropdown Menu */}
       <PlayerTopBar

@@ -19,7 +19,11 @@ export function PlayerOverlay({
     <>
       {/* Buffering Spinner */}
       {isBuffering && (
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/30 backdrop-blur-[1px]">
+        <div
+          role="status"
+          aria-label="Loading video"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 bg-black/30 backdrop-blur-[1px]"
+        >
           <div className="h-10 w-10 animate-spin rounded-full border-3 border-white/25 border-t-primary" />
         </div>
       )}

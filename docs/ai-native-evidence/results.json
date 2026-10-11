@@ -1,0 +1,411 @@
+[
+  {
+    "label": "dashboard",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard",
+    "width": 640,
+    "viewport": 640,
+    "documentWidth": 640,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard",
+    "width": 768,
+    "viewport": 768,
+    "documentWidth": 768,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard",
+    "width": 1024,
+    "viewport": 1024,
+    "documentWidth": 1024,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard",
+    "width": 1920,
+    "viewport": 1920,
+    "documentWidth": 1920,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 640,
+    "viewport": 640,
+    "documentWidth": 640,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 768,
+    "viewport": 768,
+    "documentWidth": 768,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 1024,
+    "viewport": 1024,
+    "documentWidth": 1024,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "studio",
+    "width": 1920,
+    "viewport": 1920,
+    "documentWidth": 1920,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": {
+      "x": 25,
+      "y": 1482,
+      "width": 325,
+      "height": 180
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 640,
+    "viewport": 640,
+    "documentWidth": 640,
+    "composer": {
+      "x": 33,
+      "y": 1430,
+      "width": 574,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 768,
+    "viewport": 768,
+    "documentWidth": 768,
+    "composer": {
+      "x": 253,
+      "y": 1446,
+      "width": 482,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 1024,
+    "viewport": 1024,
+    "documentWidth": 1024,
+    "composer": {
+      "x": 657.75,
+      "y": 747,
+      "width": 333.25,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "composer": {
+      "x": 791.84375,
+      "y": 747,
+      "width": 455.15625,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": {
+      "x": 875.65625,
+      "y": 747,
+      "width": 531.34375,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "workspace",
+    "width": 1920,
+    "viewport": 1920,
+    "documentWidth": 1920,
+    "composer": {
+      "x": 1117.5625,
+      "y": 747,
+      "width": 569.4375,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "customize",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "credit-review",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "generation custom prompt persistence and credit authorization",
+    "passed": true
+  },
+  {
+    "label": "free-composer",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "free style and model gating",
+    "passed": true
+  },
+  {
+    "label": "landing-page2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "landing scoped search clear filters pagination and real links",
+    "passed": true
+  },
+  {
+    "label": "attached-proposal",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": {
+      "x": 875.65625,
+      "y": 537,
+      "width": 531.34375,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "interaction": "selected library attachment structured context and removal",
+    "passed": true
+  },
+  {
+    "label": "upload-failed",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": {
+      "x": 25,
+      "y": 432,
+      "width": 325,
+      "height": 261
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "upload-validating",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": {
+      "x": 25,
+      "y": 456,
+      "width": 325,
+      "height": 237
+    },
+    "pageErrors": []
+  },
+  {
+    "interaction": "upload failure retry validation gate and structured IDs",
+    "passed": true
+  },
+  {
+    "label": "dropped-audio",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": {
+      "x": 875.65625,
+      "y": 705,
+      "width": 531.34375,
+      "height": 230
+    },
+    "pageErrors": []
+  },
+  {
+    "interaction": "drag and drop rejects JPEG and validates audio",
+    "passed": true
+  },
+  {
+    "label": "rendered-preview",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": {
+      "x": 875.65625,
+      "y": 699,
+      "width": 531.34375,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "interaction": "proposal apply explicit render playback history and download",
+    "passed": true
+  },
+  {
+    "interaction": "proposal rejection and follow-up prompt",
+    "passed": true
+  },
+  {
+    "label": "studio-empty",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "workspace-empty",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": {
+      "x": 25,
+      "y": 1418,
+      "width": 325,
+      "height": 180
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard-offline",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "dashboard-offline",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "workspace-offline",
+    "width": 375,
+    "viewport": 375,
+    "documentWidth": 375,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "workspace-offline",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": null,
+    "pageErrors": []
+  },
+  {
+    "label": "workspace-dark",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "composer": {
+      "x": 875.65625,
+      "y": 747,
+      "width": 531.34375,
+      "height": 188
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "existing-clip-player",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "pageErrors": []
+  },
+  {
+    "interaction": "existing clip media stage keyboard regression",
+    "passed": true
+  }
+]

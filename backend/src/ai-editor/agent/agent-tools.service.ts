@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { tool } from '@langchain/core/tools';
@@ -101,11 +105,66 @@ export class AgentTools {
       }));
     return { plan, job, clip, transcript };
   }
+  /** The editing context is the owned clip/plan and the owner's ready library. */
+  async selectedAssets(
+    userId: string,
+    clipId: string,
+    planId: string,
+    ids: string[],
+  ) {
+    await this.owned(userId, clipId, planId);
+    const records = await this.assets
+      .find({ userId, assetId: { $in: ids }, status: 'ready' })
+      .select(
+        'assetId name kind mimeType duration width height hasAudio size -_id',
+      )
+      .limit(16)
+      .maxTimeMS(5000)
+      .lean();
+    for (const id of ids) {
+      const matches = records.filter((a) => a.assetId === id);
+      const a = matches[0];
+      if (
+        matches.length !== 1 ||
+        !a ||
+        !a.size ||
+        a.size > 100 * 1024 * 1024 ||
+        !(
+          (a.kind === 'image' &&
+            a.mimeType === 'image/png' &&
+            a.width &&
+            a.width > 0 &&
+            Number.isFinite(a.width) &&
+            a.height &&
+            a.height > 0 &&
+            Number.isFinite(a.height) &&
+            a.width * a.height <= 4_000_000) ||
+          (a.kind === 'audio' &&
+            [
+              'audio/mpeg',
+              'audio/wav',
+              'audio/x-wav',
+              'audio/mp4',
+              'audio/ogg',
+            ].includes(a.mimeType) &&
+            a.hasAudio &&
+            a.duration &&
+            a.duration > 0 &&
+            Number.isFinite(a.duration))
+        )
+      )
+        throw new BadRequestException(
+          'Attachment is unavailable, unvalidated, or unsupported',
+        );
+    }
+    return records;
+  }
   scoped(
     userId: string,
     clipId: string,
     planId: string,
     checkBudget: () => void,
+    selectedAssetIds?: string[],
   ) {
     const load = async () => {
       checkBudget();
@@ -155,6 +214,13 @@ export class AgentTools {
       assets: tool(
         async () => {
           await load();
+          if (selectedAssetIds?.length)
+            return this.selectedAssets(
+              userId,
+              clipId,
+              planId,
+              selectedAssetIds,
+            );
           return this.assets
             .find({
               userId,
@@ -235,6 +301,30 @@ export class AgentTools {
         async (patch) => {
           const { plan } = await load();
           const merged = mergeEditPatch(plan.plan, plan.revision, patch);
+          if (selectedAssetIds?.length) {
+            await this.selectedAssets(userId, clipId, planId, selectedAssetIds);
+            const existing = [
+              ...plan.plan.audio.tracks.map((t) => t.assetId),
+              ...plan.plan.operations.flatMap((o) =>
+                o.type === 'image_overlay' || o.type === 'emoji_overlay'
+                  ? [o.params.assetId]
+                  : [],
+              ),
+            ];
+            const allowed = new Set([...selectedAssetIds, ...existing]);
+            const referenced = [
+              ...merged.plan.audio.tracks.map((t) => t.assetId),
+              ...merged.plan.operations.flatMap((o) =>
+                o.type === 'image_overlay' || o.type === 'emoji_overlay'
+                  ? [o.params.assetId]
+                  : [],
+              ),
+            ];
+            if (referenced.some((id) => !allowed.has(id)))
+              throw new BadRequestException(
+                'Patch references an asset outside the selected editing context',
+              );
+          }
           const checked = await this.validator.validate(
             userId,
             merged.plan,

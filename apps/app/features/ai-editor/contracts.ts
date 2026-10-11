@@ -47,6 +47,9 @@ export type PatchChange =
     }
   | { action: "update_original_audio"; controls: OriginalAudio };
 export interface EditingPlan {
+  clipTitle?: string;
+  sourceTitle?: string;
+  thumbnailUrl?: string;
   latestPreview?: { status: RenderStatus; revision: number } | null;
   _id: string;
   sourceClipId: string;
@@ -121,6 +124,7 @@ export interface StudioAsset {
   duration?: number;
 }
 export interface PromptSubmission {
+  selectedAssetIds?: string[];
   planId: string;
   prompt: string;
   requestId: string;

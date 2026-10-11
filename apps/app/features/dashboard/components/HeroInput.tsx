@@ -21,18 +21,18 @@ import {
   AlertTriangleIcon,
   CrownIcon,
   CheckIcon,
-  PaletteIcon,
   ArrowRightIcon,
   SlidersIcon,
 } from "../icons";
 import { AppButton } from "@blynta/ui";
-import { AppCardRoot, AppInput, AppTextarea } from "@blynta/ui";
+import { AppCardRoot, AppInput, AppTextarea, AppSelect } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
 import { useCreditBalance } from "@/features/billing/queries";
 import { axiosClient } from "@/config/axiosClient";
 import type { CreditEstimate } from "@blynta/types";
 import { useRouter } from "next/navigation";
 import { HowCreditsWork } from "@/features/billing/components/HowCreditsWork";
+import { generationSourceUrl } from "../generation-input";
 import { GenerationConfirmation } from "./GenerationConfirmation";
 
 function authorizationValues(estimate: CreditEstimate) {
@@ -158,7 +158,6 @@ export function HeroInput({
     },
   });
 
-  const selectedPresetMeta = PRESET_META[stylePreset] || PRESET_META.default;
   const isCustomPromptSet = customPrompt.trim().length > 0;
   const isCustomModelSet = aiModel !== "auto";
   const hasAdvancedOverrides = isCustomPromptSet || isCustomModelSet;
@@ -169,7 +168,8 @@ export function HeroInput({
     isPending ||
     estimating ||
     !balance.data?.enabled ||
-    !!modelSelectionError(models.data, aiModel);
+    !!modelSelectionError(models.data, aiModel) ||
+    !!presets.find((p) => p.key === stylePreset && p.isPro && !isPaid);
 
   async function handleSubmit(e?: React.FormEvent) {
     e?.preventDefault();
@@ -185,9 +185,16 @@ export function HeroInput({
       return;
     }
 
-    let sourceUrl = url.trim();
-    if (!sourceUrl.startsWith("http://") && !sourceUrl.startsWith("https://")) {
-      sourceUrl = `https://${sourceUrl}`;
+    if (presets.find((p) => p.key === stylePreset && p.isPro && !isPaid)) {
+      setFieldError("This highlight style requires a paid plan.");
+      return;
+    }
+    let sourceUrl: string;
+    try {
+      sourceUrl = generationSourceUrl(url);
+    } catch (error) {
+      setFieldError((error as Error).message);
+      return;
     }
 
     setFieldError(undefined);
@@ -350,7 +357,7 @@ export function HeroInput({
               New project
             </p>
             <h2 className="mt-2 text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-              Create shorts from any long video
+              Turn long videos into standout shorts
             </h2>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
               Paste a YouTube or Vimeo link. Blynta finds the strongest moments,
@@ -369,11 +376,11 @@ export function HeroInput({
           </AppButton>
         </div>
 
-        <form onSubmit={handleSubmit} className="relative space-y-4">
-          <label
-            htmlFor="video-url-input"
-            className="text-xs font-semibold text-foreground"
-          >
+        <form
+          onSubmit={handleSubmit}
+          className="relative space-y-3 rounded-xl border bg-background p-3 sm:p-4"
+        >
+          <label htmlFor="video-url-input" className="sr-only">
             Video URL
           </label>
 
@@ -388,76 +395,52 @@ export function HeroInput({
                   setUrl(e.target.value);
                   if (fieldError) setFieldError(undefined);
                 }}
-                placeholder="https://youtube.com/watch?v=..."
+                placeholder="Paste a YouTube or Vimeo link…"
                 className={cn(
-                  "h-12 w-full rounded-xl border bg-background px-4 text-sm text-foreground shadow-inner shadow-black/[0.02] transition-colors placeholder:text-muted-foreground/60",
+                  "h-16 w-full rounded-lg border-0 bg-transparent pl-3 pr-3 text-sm text-foreground shadow-inner shadow-black/[0.02] transition-colors placeholder:text-muted-foreground/60",
                   "focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/30",
+                  url && "pr-16",
                   fieldError
                     ? "border-destructive ring-1 ring-destructive/30"
                     : "border-border/80",
                 )}
                 disabled={isPending || estimating}
+                aria-invalid={!!fieldError}
+                aria-describedby={
+                  fieldError || platformError
+                    ? "generation-input-error"
+                    : undefined
+                }
               />
+              {url && (
+                <AppButton
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Clear video URL"
+                  disabled={isPending || estimating}
+                  onClick={() => setUrl("")}
+                  className="absolute right-1 top-4"
+                >
+                  Clear
+                </AppButton>
+              )}
             </div>
           </div>
 
           {/* Error */}
           {(fieldError || platformError) && (
-            <p className="flex items-center gap-1.5 text-xs text-destructive px-1 pt-1">
+            <p
+              id="generation-input-error"
+              role="alert"
+              className="flex items-center gap-1.5 text-xs text-destructive px-1 pt-1"
+            >
               <AlertTriangleIcon className="h-3.5 w-3.5 shrink-0" />
               {fieldError || platformError}
             </p>
           )}
-          {/* ── Highlight Style Presets ── */}
-          <div className="relative space-y-2.5 border-t border-border/60 pt-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-1.5">
-                <PaletteIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-xs font-semibold text-foreground">
-                  Highlight style
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {presets.map((preset) => {
-                const isSelected = stylePreset === preset.key;
-                const meta = PRESET_META[preset.key];
-                return (
-                  <AppButton
-                    key={preset.key}
-                    type="button"
-                    variant={isSelected ? "secondary" : "outline"}
-                    size="sm"
-                    aria-pressed={isSelected}
-                    onClick={() => setStylePreset(preset.key)}
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all cursor-pointer outline-none",
-                      isSelected
-                        ? "border-primary bg-primary/10 text-primary font-semibold shadow-2xs"
-                        : "border-border/70 bg-background text-muted-foreground hover:bg-muted hover:text-foreground hover:border-border",
-                    )}
-                  >
-                    <span>{meta?.icon || "✨"}</span>
-                    <span>{preset.label}</span>
-                    {preset.isPro && (
-                      <span className="text-[9px] font-extrabold uppercase tracking-wider px-1 py-px rounded bg-muted-foreground/15 text-muted-foreground">
-                        PRO
-                      </span>
-                    )}
-                  </AppButton>
-                );
-              })}
-            </div>
-
-            {selectedPresetMeta?.description && (
-              <p className="text-[11px] text-muted-foreground/70">
-                {selectedPresetMeta.description}
-              </p>
-            )}
-          </div>
-          <div className="flex flex-col gap-4 border-t border-border/60 pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t border-border/60 pt-3">
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
               <div className="min-w-0 w-full sm:w-auto">
                 <ModelSelector
                   data={models.data}
@@ -469,8 +452,29 @@ export function HeroInput({
                 />
               </div>
 
+              <AppSelect
+                aria-label="Highlight style"
+                size="sm"
+                value={stylePreset}
+                onValueChange={setStylePreset}
+                disabled={isPending || estimating || !!confirmation}
+                wrapperClassName="w-full sm:w-44"
+                options={presets.map((p) => ({
+                  value: p.key,
+                  label: (
+                    <span>
+                      {PRESET_META[p.key]?.icon} {p.label}
+                      {p.isPro ? " · Pro" : ""}
+                    </span>
+                  ),
+                  description: PRESET_META[p.key]?.description,
+                  disabled: p.isPro && !isPaid,
+                }))}
+              />
               <AppButton
                 type="button"
+                variant="ghost"
+                disabled={isPending || estimating || !!confirmation}
                 onClick={() => setAdvancedOpen(true)}
                 className={cn(
                   "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border px-2.5 text-[11px] font-semibold transition-colors",
@@ -554,11 +558,11 @@ export function HeroInput({
       <AppDialog
         open={advancedOpen}
         onOpenChange={setAdvancedOpen}
-        size="lg"
-        contentClassName="sm:max-w-2xl"
+        size="md"
+        contentClassName="sm:max-w-xl"
         bodyClassName="max-h-[70vh] overflow-y-auto"
-        title="Fine-tune your results"
-        description="Choose how Blynta analyzes this video. These settings are optional."
+        title="Guide your highlights"
+        description="Tell Blynta which moments to prioritize, what to avoid, or what kind of clips you want."
         footer={
           <AppButton
             type="button"
@@ -599,64 +603,50 @@ export function HeroInput({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.15fr)_minmax(220px,0.85fr)]">
-              <div className="rounded-xl border border-border/70 bg-card/50 p-4">
-                <p className="text-xs text-muted-foreground">
-                  Choose your AI model in the generation settings row.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border/70 bg-card/50 p-4">
-                <p className="text-xs font-semibold text-foreground">
-                  Included automatically
-                </p>
-                <div className="mt-3 space-y-2.5">
-                  <IncludedFeature label="9:16 smart reframing" />
-                  <IncludedFeature label="Animated captions" />
-                </div>
-              </div>
+            <label htmlFor="custom-focus-instructions" className="sr-only">
+              Focus instructions
+            </label>
+            <AppTextarea
+              id="custom-focus-instructions"
+              rows={6}
+              maxLength={2000}
+              value={customPrompt}
+              onChange={(e) => setCustomPrompt(e.target.value)}
+              placeholder="Focus on the funniest reactions and unexpected moments. Prefer clips that make sense without extra context. Avoid long introductions, repeated jokes, and quiet sections."
+              className="min-h-40 resize-y text-sm leading-6"
+            />
+            <div className="flex flex-wrap gap-2">
+              {[
+                "Find surprising opinions and strong reactions.",
+                "Prioritize educational moments with practical advice.",
+                "Avoid introductions and repetitive sections.",
+              ].map((example) => (
+                <AppButton
+                  key={example}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  contentClassName="whitespace-normal"
+                  className="h-auto py-2 text-left text-xs"
+                  onClick={() =>
+                    setCustomPrompt((p) =>
+                      (p.trim() ? p.trim() + "\n" + example : example).slice(
+                        0,
+                        2000,
+                      ),
+                    )
+                  }
+                >
+                  {example}
+                </AppButton>
+              ))}
             </div>
-
-            <div className="rounded-xl border border-border/70 bg-card/50 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <label
-                    htmlFor="custom-focus-instructions"
-                    className="text-xs font-semibold text-foreground"
-                  >
-                    Focus instructions
-                  </label>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Describe the moments your audience will care about most.
-                  </p>
-                </div>
-                <span className="rounded-md bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Optional
-                </span>
-              </div>
-              <AppTextarea
-                id="custom-focus-instructions"
-                rows={4}
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                placeholder="Example: Prioritize surprising opinions, practical advice, and moments that make sense without earlier context."
-                className="mt-3 min-h-24 w-full resize-none rounded-lg border border-border bg-background p-3 text-xs leading-5 text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:ring-1 focus:ring-primary/20"
-              />
-            </div>
+            <p className="text-right text-xs text-muted-foreground">
+              {customPrompt.length}/2000
+            </p>
           </div>
         )}
       </AppDialog>
-    </div>
-  );
-}
-
-function IncludedFeature({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs font-medium text-foreground">
-      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <CheckIcon className="h-3 w-3" />
-      </span>
-      <span>{label}</span>
     </div>
   );
 }

@@ -33,26 +33,22 @@ export function PlayerScrubber({
     [duration],
   );
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !duration) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     onScrubbingChange(true);
-    const time = calculateScrubTime(e.clientX);
-    onSeek(time);
-
-    const onMouseMove = (moveEvent: MouseEvent) => {
-      const scrubTime = calculateScrubTime(moveEvent.clientX);
-      onSeek(scrubTime);
-    };
-
-    const onMouseUp = () => {
-      onScrubbingChange(false);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
+    onSeek(calculateScrubTime(e.clientX));
   };
-
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      onSeek(calculateScrubTime(e.clientX));
+  };
+  const finishScrubbing = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId))
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    onScrubbingChange(false);
+  };
   const handleMouseMove = (e: React.MouseEvent) => {
     const bar = progressBarRef.current;
     if (!bar || duration === 0) return;
@@ -72,10 +68,39 @@ export function PlayerScrubber({
   return (
     <div
       ref={progressBarRef}
-      onMouseDown={handleMouseDown}
+      role="slider"
+      aria-label="Video position"
+      aria-valuemin={0}
+      aria-valuemax={duration}
+      aria-valuenow={Math.min(currentTime, duration)}
+      aria-valuetext={
+        formatTimestamp(currentTime) + " of " + formatTimestamp(duration)
+      }
+      tabIndex={duration > 0 ? 0 : -1}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishScrubbing}
+      onPointerCancel={finishScrubbing}
+      onKeyDown={(e) => {
+        const target =
+          e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? duration
+              : e.key === "ArrowLeft"
+                ? currentTime - 1
+                : e.key === "ArrowRight"
+                  ? currentTime + 1
+                  : undefined;
+        if (target !== undefined) {
+          e.preventDefault();
+          e.stopPropagation();
+          onSeek(Math.max(0, Math.min(target, duration)));
+        }
+      }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="group/progress relative flex h-3 cursor-pointer touch-none items-center"
+      className="group/progress relative flex h-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer touch-none items-center"
     >
       {/* Hover Time Tooltip */}
       {hoverTime !== null && (

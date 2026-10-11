@@ -64,7 +64,7 @@ export class EditPlansService {
           deletionRequested: { $ne: true },
           'clips._id': plan.sourceClipId,
         })
-        .select('_id')
+        .select('_id thumbnailUrl videoTitle clips highlights')
         .lean();
       if (job) {
         seenClips.add(plan.sourceClipId);
@@ -75,6 +75,18 @@ export class EditPlansService {
           .lean();
         available.push({
           ...editView(plan),
+          sourceTitle: job.videoTitle,
+          thumbnailUrl: job.thumbnailUrl,
+          clipTitle: job.highlights?.find((h) => {
+            const clip = job.clips?.find(
+              (c) => String(c._id) === plan.sourceClipId,
+            );
+            return (
+              clip &&
+              h.startTime === clip.startTime &&
+              h.endTime === clip.endTime
+            );
+          })?.clipTitle,
           latestPreview: latest
             ? { status: latest.status, revision: latest.revision }
             : null,

@@ -64,6 +64,9 @@ export function ClipMediaStage({
   return (
     <div
       ref={containerRef}
+      tabIndex={0}
+      role="region"
+      aria-label="Clip player"
       onMouseMove={player.handleStageMouseMove}
       onMouseEnter={player.handleStageMouseEnter}
       onMouseLeave={player.handleStageMouseLeave}
@@ -76,7 +79,7 @@ export function ClipMediaStage({
           : MEDIA_STAGE_STYLE
       }
       className={cn(
-        "relative isolate w-full overflow-hidden bg-[#020817]",
+        "relative isolate w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary bg-[#020817]",
         className,
       )}
     >

@@ -6,6 +6,9 @@ export interface PlayerMenuActions {
 }
 
 export interface StudioVideoPlayerProps extends PlayerMenuActions {
+  /** Called when a signed source fails; the owner may refresh it. */
+  onError?: () => void;
+  ariaLabel?: string;
   src: string;
   poster?: string;
   autoPlay?: boolean;

@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProposalsService } from './proposals.service';
 import { examplePlan } from '../edit-plan.fixture';
@@ -216,5 +220,44 @@ describe('Proposal approval delegates to existing optimistic updates', () => {
       userId: id,
       clipId,
     });
+  });
+});
+
+describe('Attachment request boundary', () => {
+  it.each([
+    ['image-1', 'image-1'],
+    ['https://example.test/object'],
+    Array.from({ length: 9 }, (_, i) => 'asset-' + i),
+  ])(
+    'rejects invalid selected asset IDs before database or provider access (%j)',
+    async (...ids) => {
+      const s = setup();
+      await expect(
+        s.service.propose(id, clipId, {
+          planId,
+          prompt: 'Use media',
+          requestId: '66666666-6666-4666-8666-666666666666',
+          selectedAssetIds: ids,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(s.proposals.findOne).not.toHaveBeenCalled();
+    },
+  );
+  it('validates selected assets before resolving a paid model or creating a session', async () => {
+    const s = setup();
+    s.proposals.findOne.mockResolvedValue(null);
+    const validate = jest
+      .fn()
+      .mockRejectedValue(new BadRequestException('Attachment unavailable'));
+    Object.assign(s.tools, { selectedAssets: validate });
+    await expect(
+      s.service.propose(id, clipId, {
+        planId,
+        prompt: 'Use media',
+        requestId: '66666666-6666-4666-8666-666666666666',
+        selectedAssetIds: ['image-1'],
+      }),
+    ).rejects.toThrow('Attachment unavailable');
+    expect(validate).toHaveBeenCalledWith(id, clipId, planId, ['image-1']);
   });
 });
