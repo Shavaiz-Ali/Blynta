@@ -1,0 +1,1420 @@
+[
+  {
+    "label": "welcome",
+    "width": 375,
+    "height": 844,
+    "documentWidth": 375,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 375,
+      "height": 1014.953125,
+      "bottom": 1070.953125
+    },
+    "composer": {
+      "x": 12,
+      "y": 570.953125,
+      "width": 351,
+      "height": 180,
+      "bottom": 750.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 375,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 111.296875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1014.953125,
+      "bottom": 1070.953125
+    },
+    "composer": {
+      "x": 12,
+      "y": 570.953125,
+      "width": 366,
+      "height": 180,
+      "bottom": 750.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 640,
+    "height": 844,
+    "documentWidth": 640,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 640,
+      "height": 1002.953125,
+      "bottom": 1058.953125
+    },
+    "composer": {
+      "x": 16,
+      "y": 578.953125,
+      "width": 608,
+      "height": 180,
+      "bottom": 758.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 179,
+      "width": 640,
+      "height": 286.953125,
+      "bottom": 465.953125
+    },
+    "video": {
+      "x": 243.796875,
+      "y": 187,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 457.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 768,
+    "height": 844,
+    "documentWidth": 768,
+    "workspace": {
+      "x": 220,
+      "y": 56,
+      "width": 548,
+      "height": 1002.953125,
+      "bottom": 1058.953125
+    },
+    "composer": {
+      "x": 236,
+      "y": 578.953125,
+      "width": 516,
+      "height": 180,
+      "bottom": 758.953125
+    },
+    "canvas": {
+      "x": 220,
+      "y": 179,
+      "width": 548,
+      "height": 286.953125,
+      "bottom": 465.953125
+    },
+    "video": {
+      "x": 417.796875,
+      "y": 187,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 457.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 1280,
+    "height": 900,
+    "documentWidth": 1280,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1040,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 881,
+      "y": 704,
+      "width": 383,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 624,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 375.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "welcome",
+    "width": 1920,
+    "height": 900,
+    "documentWidth": 1920,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1680,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 1457,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 1200,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 663.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "pending",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1187.578125,
+      "bottom": 1243.578125
+    },
+    "composer": {
+      "x": 12,
+      "y": 578.953125,
+      "width": 366,
+      "height": 180,
+      "bottom": 758.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "history",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1187.578125,
+      "bottom": 1243.578125
+    },
+    "composer": {
+      "x": 12,
+      "y": 578.953125,
+      "width": 366,
+      "height": 180,
+      "bottom": 758.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 1,
+    "dialog": {
+      "x": 0,
+      "y": 517,
+      "width": 390,
+      "height": 327,
+      "bottom": 844
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "active",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": -344,
+      "width": 390,
+      "height": 1187.578125,
+      "bottom": 843.578125
+    },
+    "composer": {
+      "x": 12,
+      "y": 178.953125,
+      "width": 366,
+      "height": 180,
+      "bottom": 358.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": -225,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 61.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": -217,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 53.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "rendering",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": -299,
+      "width": 390,
+      "height": 1227.953125,
+      "bottom": 928.953125
+    },
+    "composer": {
+      "x": 12,
+      "y": 328.953125,
+      "width": 366,
+      "height": 180,
+      "bottom": 508.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": -180,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 106.953125
+    },
+    "video": null,
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "completed",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1114.953125,
+      "bottom": 1170.953125
+    },
+    "composer": {
+      "x": 12,
+      "y": 570.953125,
+      "width": 366,
+      "height": 180,
+      "bottom": 750.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "uploading",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1176.953125,
+      "bottom": 1232.953125
+    },
+    "composer": {
+      "x": 12,
+      "y": 570.953125,
+      "width": 366,
+      "height": 242,
+      "bottom": 812.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "unavailable",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1170.953125,
+      "bottom": 1226.953125
+    },
+    "composer": {
+      "x": 12,
+      "y": 570.953125,
+      "width": 366,
+      "height": 236,
+      "bottom": 806.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "proposal apply render compare history upload download model-unavailable",
+    "width": 390,
+    "passed": true
+  },
+  {
+    "label": "pending",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "history",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 1,
+    "dialog": {
+      "x": 640,
+      "y": 0,
+      "width": 384,
+      "height": 900,
+      "bottom": 900
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "active",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "rendering",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 548,
+      "bottom": 727
+    },
+    "video": null,
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "completed",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "uploading",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 642,
+      "width": 327,
+      "height": 242,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "unavailable",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 648,
+      "width": 327,
+      "height": 236,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "proposal apply render compare history upload download model-unavailable",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "label": "pending",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "history",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 1,
+    "dialog": {
+      "x": 1056,
+      "y": 0,
+      "width": 384,
+      "height": 900,
+      "bottom": 900
+    },
+    "pageErrors": []
+  },
+  {
+    "label": "active",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "rendering",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 576,
+      "bottom": 755
+    },
+    "video": null,
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "completed",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "uploading",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 662,
+      "width": 447,
+      "height": 222,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "unavailable",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 648,
+      "width": 447,
+      "height": 236,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "proposal apply render compare history upload download model-unavailable",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "label": "submission-error",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 620,
+      "width": 447,
+      "height": 264,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "IME duplicate-send gate preserves prompt and idempotent error retry",
+    "passed": true
+  },
+  {
+    "label": "reading-history",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "older-message reading is preserved; explicit latest-message navigation",
+    "passed": true
+  },
+  {
+    "label": "free-auto",
+    "width": 1024,
+    "height": 900,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 681,
+      "y": 704,
+      "width": 327,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 275.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "free account has readonly automatic model routing",
+    "passed": true
+  },
+  {
+    "label": "upload-failed",
+    "width": 390,
+    "height": 844,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": 56,
+      "width": 390,
+      "height": 1265.578125,
+      "bottom": 1321.578125
+    },
+    "composer": {
+      "x": 12,
+      "y": 578.953125,
+      "width": 366,
+      "height": 258,
+      "bottom": 836.953125
+    },
+    "canvas": {
+      "x": 0,
+      "y": 175,
+      "width": 390,
+      "height": 286.953125,
+      "bottom": 461.953125
+    },
+    "video": {
+      "x": 118.796875,
+      "y": 183,
+      "width": 152.40625,
+      "height": 270.953125,
+      "bottom": 453.953125
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "upload failure retry validation gating remove and unsupported drop",
+    "passed": true
+  },
+  {
+    "label": "keyboard-height",
+    "width": 390,
+    "height": 500,
+    "documentWidth": 390,
+    "workspace": {
+      "x": 0,
+      "y": -222,
+      "width": 390,
+      "height": 956,
+      "bottom": 734
+    },
+    "composer": {
+      "x": 12,
+      "y": 222,
+      "width": 366,
+      "height": 220,
+      "bottom": 442
+    },
+    "canvas": {
+      "x": 0,
+      "y": -103,
+      "width": 390,
+      "height": 208,
+      "bottom": 105
+    },
+    "video": {
+      "x": 141,
+      "y": -95,
+      "width": 108,
+      "height": 192,
+      "bottom": 97
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "label": "stale-proposal",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "stale proposal blocks apply and remains rejectable",
+    "passed": true
+  },
+  {
+    "label": "short-viewport-reduced-motion",
+    "width": 1024,
+    "height": 600,
+    "documentWidth": 1024,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 784,
+      "height": 544,
+      "bottom": 600
+    },
+    "composer": {
+      "x": 681,
+      "y": 404,
+      "width": 327,
+      "height": 180,
+      "bottom": 584
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 424,
+      "height": 361,
+      "bottom": 540
+    },
+    "video": {
+      "x": 359.46875,
+      "y": 195,
+      "width": 185.0625,
+      "height": 329,
+      "bottom": 524
+    },
+    "dialogs": 0,
+    "dialog": null,
+    "pageErrors": []
+  },
+  {
+    "interaction": "short desktop viewport keeps composer available",
+    "passed": true
+  },
+  {
+    "label": "history-pagination",
+    "width": 1440,
+    "height": 900,
+    "documentWidth": 1440,
+    "workspace": {
+      "x": 240,
+      "y": 56,
+      "width": 1200,
+      "height": 844,
+      "bottom": 900
+    },
+    "composer": {
+      "x": 977,
+      "y": 704,
+      "width": 447,
+      "height": 180,
+      "bottom": 884
+    },
+    "canvas": {
+      "x": 240,
+      "y": 179,
+      "width": 720,
+      "height": 661,
+      "bottom": 840
+    },
+    "video": {
+      "x": 423.09375,
+      "y": 195,
+      "width": 353.8125,
+      "height": 629,
+      "bottom": 824
+    },
+    "dialogs": 1,
+    "dialog": {
+      "x": 1056,
+      "y": 0,
+      "width": 384,
+      "height": 900,
+      "bottom": 900
+    },
+    "pageErrors": []
+  },
+  {
+    "interaction": "history pagination does not select an unrelated preview",
+    "passed": true
+  }
+]

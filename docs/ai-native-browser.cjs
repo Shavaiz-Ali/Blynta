@@ -14,7 +14,7 @@ const { chromium } = require(
 const out = path.join(__dirname, "ai-native-evidence");
 fs.mkdirSync(out, { recursive: true });
 const results = [];
-async function open(browser, view, width, scenario = "ready") {
+async function open(browser, view, width, scenario = "ready", options = {}) {
   const state = {
     view,
     revision: 0,
@@ -153,6 +153,13 @@ async function open(browser, view, width, scenario = "ready") {
     }
     if (url.pathname === "/jobs" && response.data?.data?.jobs)
       response.data.data.totalPages = scenario === "empty" ? 1 : 2;
+    if (
+      options.assetId &&
+      url.pathname === "/ai-editor/assets" &&
+      response.data?.data?.items
+    )
+      for (const asset of response.data.data.items)
+        asset.assetId = options.assetId;
     return route.fulfill({
       status: response.status,
       contentType: "application/json",
@@ -342,7 +349,7 @@ if (require.main === module)
               await p.getByRole("list", { name: "Prompt attachments" }).count(),
               0,
             );
-            await p.getByRole("tab", { name: "Your assets" }).click();
+            await p.getByRole("button", { name: "Media", exact: true }).click();
             await p.getByRole("button", { name: /Opening brand mark/ }).click();
             await p
               .locator("#studio-prompt")
@@ -456,7 +463,10 @@ if (require.main === module)
             await p
               .getByRole("button", { name: "Render preview", exact: true })
               .click();
-            await p.getByText("Preview ready", { exact: true }).waitFor();
+            await p
+              .getByText("Preview ready", { exact: true })
+              .last()
+              .waitFor();
             await p.waitForFunction(
               () => document.querySelector("video")?.readyState >= 2,
             );
@@ -465,8 +475,9 @@ if (require.main === module)
               .getByRole("tab", { name: "Edited preview", exact: true })
               .click();
             await p
-              .getByRole("tab", { name: "Preview history", exact: true })
+              .getByRole("button", { name: "History", exact: true })
               .click();
+            await p.keyboard.press("Escape");
             const player = p.getByRole("region", {
               name: /Edited preview revision/,
             });
@@ -519,7 +530,9 @@ if (require.main === module)
             await c.page
               .getByRole("button", { name: "Reject", exact: true })
               .click();
-            await c.page.getByText("rejected", { exact: true }).waitFor();
+            await c.page
+              .getByText("Suggestion rejected", { exact: true })
+              .waitFor();
             assert.equal(c.state.revision, 0);
             await c.page
               .locator("#studio-prompt")

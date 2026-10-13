@@ -19,20 +19,32 @@ export function ProposalCard({
   const stale = !!plan && proposal.baseRevision !== plan.revision;
   return (
     <article
-      className="rounded-xl border border-primary/20 bg-primary/[0.03] p-4"
+      className="rounded-xl bg-primary/5 p-4 ring-1 ring-primary/20"
       aria-label="Editing proposal"
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles className="size-4 text-primary" />{" "}
           {proposal.status === "pending"
-            ? "Proposed changes"
+            ? "Suggested edit"
             : proposal.status === "applied"
               ? "Changes applied"
-              : proposal.status.replaceAll("_", " ")}
+              : proposal.status === "clarification"
+                ? "A quick question"
+                : proposal.status === "unsupported"
+                  ? "Edit unavailable"
+                  : proposal.status === "rejected"
+                    ? "Suggestion rejected"
+                    : proposal.status === "failed"
+                      ? "Suggestion failed"
+                      : proposal.status === "applying"
+                        ? "Saving changes"
+                        : "Preparing your suggestion"}
         </h3>
         <span className="text-[11px] text-muted-foreground">
-          Revision {proposal.baseRevision}
+          {proposal.patch
+            ? `${proposal.patch.changes.length} change${proposal.patch.changes.length === 1 ? "" : "s"}`
+            : ""}
         </span>
       </div>
       <p className="mb-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
@@ -43,10 +55,11 @@ export function ProposalCard({
           {proposal.patch.changes.map((change, index) => {
             const text = describeChange(change, plan);
             return (
-              <li key={index} className="rounded-lg border bg-background p-3">
-                <p className="text-sm font-medium capitalize">
-                  {index + 1}. {text.title}
-                </p>
+              <li
+                key={index}
+                className="border-l-2 border-primary/30 py-1 pl-3"
+              >
+                <p className="text-sm font-medium capitalize">{text.title}</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {text.detail}
                 </p>
@@ -59,7 +72,7 @@ export function ProposalCard({
         <>
           <p className="mt-3 text-xs text-muted-foreground">
             {stale
-              ? "This suggestion is based on an older revision. Generate a new suggestion from the latest plan."
+              ? "This suggestion uses an older revision. Reject it, then ask again to use your newer edits."
               : "Applying saves these changes. Rendering a preview is a separate action."}
           </p>
           <div className="mt-3 flex gap-2">

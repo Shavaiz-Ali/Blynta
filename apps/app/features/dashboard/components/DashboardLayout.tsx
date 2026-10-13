@@ -321,18 +321,26 @@ function SidebarContent({
 export interface DashboardLayoutProps {
   children: React.ReactNode;
   headerContent?: React.ReactNode;
+  /** Opt-in full viewport composition for the creative editor. */
+  workspace?: boolean;
 }
 
 export function DashboardLayout({
   children,
   headerContent,
+  workspace = false,
 }: DashboardLayoutProps) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [inviteOpen, setInviteOpen] = React.useState(false);
 
   return (
-    <div className="h-screen flex bg-background text-foreground overflow-hidden">
+    <div
+      className={cn(
+        workspace ? "h-dvh" : "h-screen",
+        "flex bg-background text-foreground overflow-hidden",
+      )}
+    >
       {/* ── Desktop Collapsible Sidebar ── */}
       <AppSidebar collapsed={isCollapsed}>
         <SidebarContent
@@ -360,7 +368,12 @@ export function DashboardLayout({
       </Sheet>
 
       {/* ── Main Content Viewport ── */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+      <div
+        className={cn(
+          workspace ? "h-dvh" : "h-screen",
+          "flex-1 flex flex-col min-w-0 overflow-y-auto",
+        )}
+      >
         {/* Topbar */}
         <AppProductHeader
           collapsed={isCollapsed}
@@ -370,7 +383,13 @@ export function DashboardLayout({
           {headerContent}
         </AppProductHeader>
 
-        <main className="flex-1 min-w-0 w-full px-6 sm:px-8 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto">
+        <main
+          className={
+            workspace
+              ? "flex-1 min-h-0 min-w-0 w-full lg:overflow-hidden"
+              : "flex-1 min-w-0 w-full px-6 sm:px-8 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto"
+          }
+        >
           {children}
         </main>
       </div>

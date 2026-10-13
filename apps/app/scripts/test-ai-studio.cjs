@@ -655,3 +655,40 @@ test("existing clip media stage remains focusable for scoped playback shortcuts"
   );
   assert.match(html, /tabindex="0" role="region" aria-label="Clip player"/);
 });
+
+test("conversation places linked proposals once and retains orphaned proposals", () => {
+  const { conversationItems } = load("features/ai-editor/conversation.ts");
+  const p1 = { _id: "p1", status: "pending" },
+    p2 = { _id: "p2", status: "clarification" };
+  const items = conversationItems(
+    [
+      { _id: "u", role: "user", content: "Edit" },
+      { _id: "a", role: "assistant", content: "Review", proposalId: "p1" },
+    ],
+    [p1, p2],
+  );
+  assert.deepEqual(
+    items.map((i) => i.key),
+    ["u", "a", "proposal:p2"],
+  );
+  assert.equal(items[1].proposal, p1);
+  assert.equal(items.filter((i) => i.proposal === p1).length, 1);
+});
+test("conversation follows only readers near the bottom", () => {
+  const { followsConversation } = load("features/ai-editor/conversation.ts");
+  assert.equal(followsConversation(0, 300, 1600), false);
+  assert.equal(followsConversation(1230, 300, 1600), true);
+});
+test("compact composer model state explains unavailable editing without claiming a model", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(selector.ModelSelector, {
+      data: { ...availability, selectionAllowed: false, defaultModelId: null },
+      selected: "auto",
+      compact: true,
+      loading: false,
+      onChange: () => {},
+    }),
+  );
+  assert.match(html, /AI unavailable/);
+  assert.doesNotMatch(html, /administrator must configure|role="combobox"/);
+});

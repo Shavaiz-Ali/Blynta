@@ -1,22 +1,28 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Download, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  Sparkles,
+  History,
+  Library,
+  ListChecks,
+  Check,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppButton as Button, AppQueryState, AppSpinner } from "@blynta/ui";
-import { ConversationMessage } from "./StudioPanels";
-import { Skeleton } from "@/components/ui/skeleton";
+import { StudioConversation } from "./StudioConversation";
+import { StudioRenderStatus } from "./StudioRenderStatus";
 import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
 import { useJob, useClipSignedUrl, JobStatus } from "@/features/jobs";
 import { useAvailableEditingModels } from "./models";
 import { ModelSelector, modelSelectionError } from "./ModelSelector";
-import { ProposalCard } from "./ProposalCard";
 import { StudioVideoPlayer } from "@blynta/ui/player";
 import { StudioPreviewPanel } from "./StudioPreviewPanel";
 import { StudioLibraryPanel } from "./StudioLibraryPanel";
 import { StudioPromptComposer } from "./StudioPromptComposer";
 import { useStudioAttachments } from "./attachments";
-import { renderPollInterval } from "./presentation";
 import type { PromptSubmission } from "./contracts";
 import {
   downloadEditingVersion,
@@ -73,7 +79,12 @@ export function StudioWorkspace({
   const [versionId, setVersionId] = useState("");
   const [page, setPage] = useState(1);
   const versions = useEditingVersions(planId, page);
-  const version = useEditingVersion(versionId);
+  const recentVersions = useEditingVersions(planId, 1);
+  const selectedVersionId =
+    versionId || recentVersions.data?.items[0]?._id || "";
+  const version = useEditingVersion(selectedVersionId);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsTab, setToolsTab] = useState("history");
   const render = useRenderAction(planId, "preview");
   const cancel = useRenderAction(planId, "cancel");
   const retry = useRenderAction(planId, "retry");
@@ -99,7 +110,7 @@ export function StudioWorkspace({
   const generating =
     propose.isPending || allProposals.some((p) => p.status === "generating");
   const selectionError = modelSelectionError(models.data, modelId);
-  const currentRevisionRendered = versions.data?.items.some(
+  const currentRevisionRendered = recentVersions.data?.items.some(
     (v) => v.revision === plan.data?.revision && v.status === "completed",
   );
   const url = mode === "original" ? original.data : version.data?.outputUrl;
@@ -198,7 +209,7 @@ export function StudioWorkspace({
     const identity =
       mode === "original"
         ? `original:${jobId}:${clipId}`
-        : `preview:${versionId}`;
+        : `preview:${selectedVersionId}`;
     if (!url || refreshedUrls.current.has(identity)) return;
     refreshedUrls.current.add(identity);
     void (mode === "original" ? original.refetch() : version.refetch()).then(
@@ -278,211 +289,179 @@ export function StudioWorkspace({
       </DashboardLayout>
     );
   return (
-    <DashboardLayout>
-      <div className="mx-auto min-w-0 w-full max-w-[1500px] space-y-4 pb-8">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <Link
-              href="/studio"
+    <DashboardLayout workspace>
+      <div
+        className="flex min-h-0 w-full flex-col motion-reduce:[&_*]:transition-none lg:h-full"
+        data-studio-workspace
+      >
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              nativeButton={false}
+              role="link"
+              render={<Link href="/studio" />}
               aria-label="Back to AI Studio"
-              className="rounded-lg border p-2 hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
             >
               <ArrowLeft className="size-4" />
-            </Link>
+            </Button>
             <div className="min-w-0">
-              <p className="text-xs text-primary">AI Studio</p>
-              <h1 className="max-w-xl truncate text-lg font-semibold sm:text-xl">
+              <h1
+                className="truncate text-sm font-semibold sm:text-base"
+                title={clipTitle}
+              >
                 {clipTitle}
               </h1>
+              <p
+                aria-live="polite"
+                className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
+              >
+                {plan.data ? (
+                  <>
+                    <Check className="size-3" />{" "}
+                    {apply.isPending ? "Saving…" : "Saved"}
+                  </>
+                ) : (
+                  "Loading edit"
+                )}
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <span aria-live="polite" className="text-xs text-muted-foreground">
-              {plan.data
-                ? `Revision ${plan.data.revision} · Changes saved`
-                : "Loading edit plan"}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={version.data?.status !== "completed" || downloading}
-              onClick={() => void download()}
-            >
-              <Download className="size-4" />
-              {downloading ? "Preparing…" : "Download preview"}
-            </Button>
-          </div>
-        </header>
-        {allProposals.some(
-          (p) => p.status === "pending" || p.status === "applying",
-        ) && (
-          <p
-            role="status"
-            className="rounded-lg bg-primary/5 px-4 py-2 text-xs text-primary"
-          >
-            Review your suggestion below. Applying saves changes; rendering is a
-            separate step.
-          </p>
-        )}
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-4">
-            <StudioPreviewPanel
-              mode={mode}
-              onModeChange={setMode}
-              setPlaybackFailed={setPlaybackFailed}
-              url={url}
-              version={version.data}
-              plan={plan.data}
-              playbackFailed={playbackFailed}
-              onPlaybackError={recoverPlayback}
-              sourcePending={original.isPending}
-              sourceError={original.isError}
-              previewError={version.isError}
-              refreshSource={original.refetch}
-              refreshPreview={version.refetch}
-              clipDuration={clip.endTime - clip.startTime}
-              currentRevisionRendered={currentRevisionRendered}
-              renderPending={render.isPending}
-              applying={apply.isPending}
-              onRender={() => void renderPreview()}
-            />
-            {versionId && (
-              <section
-                className="rounded-xl border bg-card p-4"
-                aria-live="polite"
+          <div className="flex items-center gap-1">
+            {[
+              ["history", "History", History],
+              ["media", "Media", Library],
+              ["changes", "Changes", ListChecks],
+            ].map(([value, label, Icon]) => {
+              const ToolIcon = Icon as typeof History;
+              return (
+                <Button
+                  key={String(value)}
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setToolsTab(String(value));
+                    setToolsOpen(true);
+                  }}
+                  aria-label={String(label)}
+                >
+                  <ToolIcon className="size-4" />
+                  <span className="hidden xl:inline">{String(label)}</span>
+                </Button>
+              );
+            })}
+            {version.data?.status === "completed" && (
+              <Button
+                size="sm"
+                disabled={downloading}
+                aria-label={
+                  downloading ? "Preparing download" : "Download preview"
+                }
+                onClick={() => void download()}
               >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-medium">
-                      {version.isPending
-                        ? "Loading preview status…"
-                        : version.data?.status === "completed"
-                          ? "Preview ready"
-                          : version.data?.status === "queued"
-                            ? "Preparing preview"
-                            : version.data?.status === "processing"
-                              ? "Rendering video"
-                              : version.data?.status === "cancelled"
-                                ? "Preview cancelled"
-                                : "Rendering failed"}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {version.data?.error ||
-                        (version.data?.status === "completed"
-                          ? "Choose this version to watch or download it."
-                          : "Rendering runs in the background. You can leave this page.")}
-                    </p>
-                  </div>
-                  {renderPollInterval(version.data?.status) && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={cancel.isPending}
-                      onClick={() =>
-                        void cancel
-                          .mutateAsync(versionId)
-                          .catch((e) => toast.error(studioError(e)))
-                      }
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                  {version.data?.status === "failed" &&
-                    version.data.retryable !== false && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={retry.isPending}
-                        onClick={() =>
-                          void retry
-                            .mutateAsync(versionId)
-                            .catch((e) => toast.error(studioError(e)))
-                        }
-                      >
-                        Retry render
-                      </Button>
-                    )}
-                </div>
-                {version.data?.status === "processing" &&
-                  typeof version.data.progress === "number" && (
-                    <div className="mt-3 space-y-1">
-                      <progress
-                        aria-label="Render progress"
-                        max={100}
-                        value={version.data.progress}
-                        className="h-2 w-full accent-primary"
-                      />
-                      <p className="text-right text-xs text-muted-foreground">
-                        {Math.round(version.data.progress)}%
-                      </p>
-                    </div>
-                  )}
-                {version.isError && (
-                  <p role="alert" className="mt-2 text-sm text-destructive">
-                    {studioError(version.error)}
-                  </p>
-                )}
-              </section>
+                <Download className="size-4" />
+                <span className="hidden sm:inline">
+                  {downloading ? "Preparing…" : "Download preview"}
+                </span>
+              </Button>
             )}
           </div>
+        </header>
+        <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_clamp(360px,40%,480px)]">
+          <StudioPreviewPanel
+            mode={mode}
+            onModeChange={setMode}
+            setPlaybackFailed={setPlaybackFailed}
+            url={url}
+            version={version.data}
+            plan={plan.data}
+            playbackFailed={playbackFailed}
+            onPlaybackError={recoverPlayback}
+            sourcePending={original.isPending}
+            sourceError={original.isError}
+            previewError={version.isError}
+            refreshSource={original.refetch}
+            refreshPreview={version.refetch}
+            clipDuration={clip.endTime - clip.startTime}
+            currentRevisionRendered={currentRevisionRendered}
+            renderPending={render.isPending}
+            renderRunning={recentVersions.data?.items.some(
+              (v) => v.status === "queued" || v.status === "processing",
+            )}
+            applying={apply.isPending}
+            onRender={() => void renderPreview()}
+            renderFeedback={
+              selectedVersionId &&
+              (version.data?.status !== "completed" || version.isError) ? (
+                <StudioRenderStatus
+                  version={version.data}
+                  loading={version.isPending}
+                  error={
+                    version.isError ? studioError(version.error) : undefined
+                  }
+                  busy={cancel.isPending || retry.isPending}
+                  onCancel={() =>
+                    void cancel
+                      .mutateAsync(selectedVersionId)
+                      .catch((e) => toast.error(studioError(e)))
+                  }
+                  onRetry={() =>
+                    void retry
+                      .mutateAsync(selectedVersionId)
+                      .catch((e) => toast.error(studioError(e)))
+                  }
+                />
+              ) : undefined
+            }
+          />
           <section
-            className="flex h-[min(82dvh,740px)] min-h-[520px] min-w-0 flex-col overflow-hidden rounded-lg border bg-card lg:sticky lg:top-4"
+            className="flex min-h-0 min-w-0 flex-col border-t border-border/50 bg-background lg:border-l lg:border-t-0"
             aria-label="AI editing assistant"
           >
-            <header className="space-y-3 border-b p-4">
+            <header className="order-1 flex shrink-0 items-center justify-between gap-2 px-5 pb-0 pt-4">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="size-4 text-primary" /> AI Assistant
+                <Sparkles className="size-4 text-primary" /> Edit with Blynta
               </h2>
-              <ModelSelector
-                data={models.data}
-                loading={models.isPending}
-                error={models.isError}
-                selected={modelId}
-                onChange={setModelId}
-                disabled={generating || unresolvedSubmission}
-              />
-            </header>
-            <div
-              className="themed-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-4"
-              aria-live="polite"
-              aria-busy={generating}
-            >
-              {state.isPending || (sessionId && history.isPending) ? (
-                <>
-                  <Skeleton className="ml-8 h-16 rounded-xl" />
-                  <Skeleton className="mr-8 h-20 rounded-xl" />
-                </>
-              ) : (
-                <>
-                  {!history.data?.messages.length && (
-                    <div className="space-y-3 py-4">
-                      <h3 className="text-sm font-medium">
-                        What would you like to change?
-                      </h3>
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        Describe an effect, mention a moment, or adjust the
-                        sound. Attach your own PNG image or audio to use in an
-                        edit.
-                      </p>
-                    </div>
-                  )}
-                  {history.data?.messages.map((m) => (
-                    <ConversationMessage
-                      key={m._id}
-                      role={m.role}
-                      content={m.content}
-                    />
-                  ))}
-                </>
+              <span className="hidden text-xs text-muted-foreground lg:inline">
+                Review before applying
+              </span>
+              {allProposals.some((p) => p.status === "pending") && (
+                <Button
+                  className="lg:hidden"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() =>
+                    document
+                      .getElementById("studio-conversation")
+                      ?.scrollIntoView({ block: "start" })
+                  }
+                >
+                  Review suggestion
+                </Button>
               )}
+            </header>
+            <StudioConversation
+              messages={history.data?.messages ?? []}
+              proposals={allProposals}
+              plan={plan.data}
+              loading={state.isPending || (!!sessionId && history.isPending)}
+              generating={generating}
+              busy={
+                apply.isPending ||
+                reject.isPending ||
+                generating ||
+                unresolvedSubmission
+              }
+              onApprove={(id, action) => void approve(id, action)}
+              onSuggest={setPrompt}
+            >
               {(state.isError || history.isError) && (
-                <p role="alert" className="text-sm text-destructive">
-                  {studioError(state.error ?? history.error)}{" "}
+                <div role="alert" className="text-sm text-destructive">
+                  {studioError(state.error ?? history.error)}
                   <Button
-                    type="button"
                     variant="ghost"
                     size="sm"
-                    className="underline"
                     onClick={() => {
                       void state.refetch();
                       if (sessionId) void history.refetch();
@@ -490,35 +469,14 @@ export function StudioWorkspace({
                   >
                     Reload history
                   </Button>
-                </p>
-              )}
-              {allProposals.map((p) => (
-                <ProposalCard
-                  key={p._id}
-                  proposal={p}
-                  plan={plan.data}
-                  busy={apply.isPending || reject.isPending || generating}
-                  onApply={() => void approve(p._id, "apply")}
-                  onReject={() => void approve(p._id, "reject")}
-                />
-              ))}
-              {generating && (
-                <div role="status" className="space-y-2 rounded-xl border p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Preparing your suggestion…
-                  </p>
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-3 w-1/2" />
                 </div>
               )}
               {(apply.isError || reject.isError) && (
-                <p role="alert" className="text-sm text-destructive">
-                  {studioError(apply.error ?? reject.error)}{" "}
+                <div role="alert" className="text-sm text-destructive">
+                  {studioError(apply.error ?? reject.error)}
                   <Button
-                    type="button"
                     variant="ghost"
                     size="sm"
-                    className="underline"
                     onClick={() => {
                       void plan.refetch();
                       void state.refetch();
@@ -526,9 +484,9 @@ export function StudioWorkspace({
                   >
                     Refresh editing plan
                   </Button>
-                </p>
+                </div>
               )}
-            </div>
+            </StudioConversation>
             <StudioPromptComposer
               prompt={prompt}
               onChange={setPrompt}
@@ -544,6 +502,38 @@ export function StudioWorkspace({
               }
               attachments={attachments}
               assets={assets.data?.items ?? []}
+              error={
+                !models.isPending && (selectionError || models.isError) ? (
+                  <div
+                    role="alert"
+                    className="text-xs leading-5 text-muted-foreground"
+                  >
+                    {models.isError ||
+                    (modelId === "auto" && !models.data?.defaultModelId)
+                      ? "AI editing is unavailable. Retry model settings or contact support."
+                      : selectionError}
+                    <Button
+                      size="sm"
+                      variant="link"
+                      disabled={models.isFetching}
+                      onClick={() => void models.refetch()}
+                    >
+                      Retry model settings
+                    </Button>
+                  </div>
+                ) : undefined
+              }
+              modelControl={
+                <ModelSelector
+                  compact
+                  data={models.data}
+                  loading={models.isPending}
+                  error={models.isError}
+                  selected={modelId}
+                  onChange={setModelId}
+                  disabled={generating || unresolvedSubmission}
+                />
+              }
               retry={
                 propose.isError ? (
                   <div
@@ -585,20 +575,38 @@ export function StudioWorkspace({
           assets={assets}
           page={page}
           setPage={setPage}
-          versionId={versionId}
+          versionId={selectedVersionId}
+          open={toolsOpen}
+          onOpenChange={setToolsOpen}
+          tab={toolsTab}
+          onTabChange={setToolsTab}
+          proposals={allProposals}
+          plan={plan.data}
+          onApprove={(id, action) => void approve(id, action)}
+          renderBusy={cancel.isPending || retry.isPending}
+          onCancel={(id) =>
+            void cancel
+              .mutateAsync(id)
+              .catch((e) => toast.error(studioError(e)))
+          }
+          onRetry={(id) =>
+            void retry.mutateAsync(id).catch((e) => toast.error(studioError(e)))
+          }
           onVersionSelect={(id) => {
             setVersionId(id);
             setMode("preview");
             setPlaybackFailed(false);
+            setToolsOpen(false);
           }}
           onAttach={attachments.select}
-          generating={generating}
+          generating={generating || apply.isPending || reject.isPending}
           unresolvedSubmission={unresolvedSubmission}
         />
       </div>
     </DashboardLayout>
   );
 }
+
 function EmptyWorkspace({ message }: { message: string }) {
   return (
     <div className="mx-auto max-w-xl rounded-2xl border p-8">

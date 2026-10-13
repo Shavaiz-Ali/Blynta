@@ -24,6 +24,7 @@ export function StudioPromptComposer({
   assets,
   error,
   retry,
+  modelControl,
 }: {
   prompt: string;
   onChange: (v: string) => void;
@@ -35,6 +36,7 @@ export function StudioPromptComposer({
   assets: StudioAsset[];
   error?: React.ReactNode;
   retry?: React.ReactNode;
+  modelControl?: React.ReactNode;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [picker, setPicker] = useState(false),
@@ -44,7 +46,7 @@ export function StudioPromptComposer({
   return (
     <form
       aria-label="Editing prompt composer"
-      className={`relative shrink-0 space-y-2 border-t bg-card p-3 sm:p-4 ${dragging ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
+      className={`relative order-2 m-3 shrink-0 space-y-2 rounded-xl bg-muted/50 p-3 ring-1 ring-border/60 focus-within:ring-primary/50 sm:m-4 lg:order-3 lg:mt-0 ${dragging ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
       onDragEnter={(e) => {
         if (!disabled && e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
@@ -128,11 +130,11 @@ export function StudioPromptComposer({
         id="studio-prompt"
         value={prompt}
         onChange={(e) => onChange(e.target.value)}
-        rows={3}
+        rows={2}
         maxLength={4000}
         disabled={disabled}
-        placeholder="Describe an edit, or mention a moment…"
-        className="max-h-40 min-h-24 resize-y border-0 bg-muted/30 text-sm leading-6 shadow-none"
+        placeholder="Try: Add a smooth zoom from 00:00 to 00:03, then lower the original audio to 70%."
+        className="max-h-32 min-h-20 resize-y border-0 bg-transparent p-1 text-sm leading-6 shadow-none focus-visible:ring-0"
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -155,21 +157,23 @@ export function StudioPromptComposer({
           )}
         </div>
       )}
-      {attachments.items
-        .filter((a) => a.error)
-        .map((a) => (
-          <p
-            key={a.key}
-            role="alert"
-            className="break-words text-xs text-destructive"
-          >
-            {a.name}: {a.error}
-          </p>
-        ))}
+      <div className="max-h-20 space-y-1 overflow-y-auto">
+        {attachments.items
+          .filter((a) => a.error)
+          .map((a) => (
+            <p
+              key={a.key}
+              role="alert"
+              className="break-words text-xs text-destructive"
+            >
+              {a.name}: {a.error}
+            </p>
+          ))}
+      </div>
       {error}
       {retry}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
           <AppPopover
             title={library ? "Choose ready media" : "Attach media"}
             open={picker}
@@ -188,7 +192,7 @@ export function StudioPromptComposer({
                 disabled={disabled}
               >
                 <Paperclip className="size-4" />
-                Attach
+                <span className="sr-only">Attach</span>
               </AppButton>
             }
           >
@@ -260,6 +264,7 @@ export function StudioPromptComposer({
               if (file) attachments.addFiles([file]);
             }}
           />
+          {modelControl}
           <AppPopover
             title="Try an edit"
             align="start"
@@ -305,9 +310,6 @@ export function StudioPromptComposer({
           </AppPopover>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground">
-            {prompt.length}/4000
-          </span>
           <AppButton
             type="submit"
             size="sm"
@@ -318,10 +320,13 @@ export function StudioPromptComposer({
           </AppButton>
         </div>
       </div>
-      <p className="text-[10px] text-muted-foreground">
-        {attachments.blocked
-          ? "Wait for validation, retry failed files, or remove them before sending."
-          : "Enter to send · Shift+Enter for a new line · Review before applying"}
+      <p className="flex items-start justify-between gap-2 text-xs leading-5 text-muted-foreground">
+        <span>
+          {attachments.blocked
+            ? "Wait for validation, retry failed files, or remove them before sending."
+            : "Enter to send · Shift+Enter for a new line"}
+        </span>
+        <span className="shrink-0 tabular-nums">{prompt.length}/4000</span>
       </p>
     </form>
   );

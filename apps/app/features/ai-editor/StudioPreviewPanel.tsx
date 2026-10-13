@@ -28,8 +28,10 @@ export function StudioPreviewPanel({
   clipDuration,
   currentRevisionRendered,
   renderPending,
+  renderRunning,
   applying,
   onRender,
+  renderFeedback,
 }: {
   mode: "original" | "preview";
   onModeChange: (v: "original" | "preview") => void;
@@ -47,28 +49,30 @@ export function StudioPreviewPanel({
   clipDuration: number;
   currentRevisionRendered?: boolean;
   renderPending: boolean;
+  renderRunning?: boolean;
   applying: boolean;
   onRender: () => void;
+  renderFeedback?: React.ReactNode;
 }) {
   return (
     <section
-      className="min-w-0 overflow-hidden rounded-lg border bg-card"
+      className="flex min-h-0 min-w-0 flex-col bg-muted/20 lg:h-full"
       aria-label="Video preview"
     >
       <AppTabs
         value={mode}
-        className="gap-0"
+        className="min-h-0 flex-1 gap-0"
         onValueChange={(v) => {
           onModeChange(v as "original" | "preview");
           setPlaybackFailed(false);
         }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 sm:px-6">
           <AppTabsList size="sm">
             <AppTabsTrigger size="sm" value="original">
               Original
             </AppTabsTrigger>
-            <AppTabsTrigger size="sm" value="preview">
+            <AppTabsTrigger size="sm" value="preview" disabled={!version}>
               Edited preview
             </AppTabsTrigger>
           </AppTabsList>
@@ -78,8 +82,8 @@ export function StudioPreviewPanel({
               : "Source clip"}
           </span>
         </div>
-        <AppTabsContent key={mode} value={mode} className="mt-0">
-          <div className="flex h-[min(56dvh,520px)] min-h-72 items-center justify-center bg-muted/40 p-3 sm:p-4">
+        <AppTabsContent key={mode} value={mode} className="mt-0 min-h-0 flex-1">
+          <div className="studio-canvas flex h-[min(34dvh,360px)] min-h-52 items-center justify-center px-4 py-2 lg:h-full lg:min-h-0 lg:px-8 lg:py-4">
             {url && !playbackFailed ? (
               <StudioVideoPlayer
                 key={url}
@@ -95,7 +99,7 @@ export function StudioPreviewPanel({
                     ? "Original"
                     : `Preview · r${version?.revision}`
                 }
-                className="h-full w-auto max-w-full"
+                className="h-full w-auto max-w-full rounded-md border-0 shadow-lg"
               />
             ) : mode === "original" && sourcePending ? (
               <div
@@ -143,26 +147,50 @@ export function StudioPreviewPanel({
           </div>
         </AppTabsContent>
       </AppTabs>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <p className="text-xs text-muted-foreground">
-          {editTime(clipDuration)} original ·{" "}
-          {plan ? `${editTime(plan.outputDuration)} edited` : "Loading plan"}
-          {plan && !currentRevisionRendered ? " · Preview needed" : ""}
+          <span role="status">
+            {mode === "original"
+              ? "Original clip"
+              : version?.status === "completed"
+                ? "Preview ready"
+                : version?.status === "failed"
+                  ? "Preview failed"
+                  : version?.status === "cancelled"
+                    ? "Preview cancelled"
+                    : "Preview rendering"}
+          </span>{" "}
+          ·{" "}
+          {editTime(
+            mode === "original"
+              ? clipDuration
+              : (plan?.outputDuration ?? clipDuration),
+          )}
+          {plan && plan.revision > 0 && !currentRevisionRendered
+            ? " · Changes pending"
+            : ""}
         </p>
         <Button
           size="sm"
+          variant="secondary"
           disabled={
             !plan ||
             renderPending ||
+            renderRunning ||
             applying ||
             !!renderPollInterval(version?.status)
           }
           onClick={() => void onRender()}
         >
           <Video className="size-4" />
-          {renderPending ? "Preparing preview…" : "Render preview"}
+          {renderPending
+            ? "Preparing preview…"
+            : renderRunning
+              ? "Rendering…"
+              : "Render preview"}
         </Button>
       </div>
+      {renderFeedback}
     </section>
   );
 }

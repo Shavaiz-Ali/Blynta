@@ -22,6 +22,7 @@ export function ModelSelector({
   selected,
   onChange,
   disabled = false,
+  compact = false,
 }: {
   data?: AvailableEditingModels;
   loading: boolean;
@@ -29,6 +30,7 @@ export function ModelSelector({
   selected: string;
   onChange: (id: string) => void;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   if (loading)
     return (
@@ -36,7 +38,8 @@ export function ModelSelector({
         role="status"
         className="flex min-h-9 items-center gap-2 text-xs text-muted-foreground"
       >
-        <AppSpinner size="xs" /> Checking model availability…
+        <AppSpinner size="xs" />{" "}
+        {compact ? "Checking models…" : "Checking model availability…"}
       </div>
     );
   if (error)
@@ -45,8 +48,9 @@ export function ModelSelector({
         role="status"
         className="max-w-sm text-xs leading-5 text-muted-foreground"
       >
-        Model settings couldn’t be loaded. Try again when the service is
-        available.
+        {compact
+          ? "Models unavailable"
+          : "Model settings couldn’t be loaded. Try again when the service is available."}
       </p>
     );
   const invalid = modelSelectionError(data, selected);
@@ -54,6 +58,20 @@ export function ModelSelector({
     (m) => m.id === (selected === "auto" ? data.defaultModelId : selected),
   );
   const eligible = data?.models.filter((m) => m.selectable) ?? [];
+  if (
+    compact &&
+    !data?.defaultModelId &&
+    !data?.compatibilityMode &&
+    (!data?.selectionAllowed || !eligible.length)
+  )
+    return (
+      <p
+        role="status"
+        className="flex min-h-8 items-center text-xs text-muted-foreground"
+      >
+        AI unavailable
+      </p>
+    );
   return (
     <div className="min-w-0 space-y-1.5">
       {data?.selectionAllowed ? (
@@ -63,11 +81,11 @@ export function ModelSelector({
           value={selected}
           onValueChange={onChange}
           disabled={disabled}
-          wrapperClassName="min-w-0 w-full sm:w-64"
+          wrapperClassName={compact ? "min-w-0 w-32" : "min-w-0 w-full sm:w-64"}
           options={[
             {
               value: "auto",
-              label: "Auto (Recommended)",
+              label: compact ? "Auto" : "Auto (Recommended)",
               description: "Automatic model routing",
             },
             ...(selected !== "auto" && !eligible.some((m) => m.id === selected)
@@ -89,8 +107,12 @@ export function ModelSelector({
         />
       ) : (
         <p className="flex min-h-8 items-center gap-2 text-xs text-muted-foreground">
-          <span className="size-1.5 shrink-0 rounded-full bg-primary" /> AI
-          model: {chosen?.displayName ?? "Auto"} · Automatic routing
+          <span className="size-1.5 shrink-0 rounded-full bg-primary" />
+          {compact ? (
+            "Auto"
+          ) : (
+            <>AI model: {chosen?.displayName ?? "Auto"} · Automatic routing</>
+          )}
         </p>
       )}
       {data && !data.selectionAllowed && selected !== "auto" && (
@@ -104,7 +126,7 @@ export function ModelSelector({
           Use Auto for your current plan
         </AppButton>
       )}
-      {invalid && (
+      {invalid && !compact && (
         <p role="alert" className="max-w-sm text-xs leading-5 text-destructive">
           {invalid}
         </p>
