@@ -1,3 +1,4 @@
+import { EDIT_RENDER_JOB, EDIT_JOB_OPTIONS } from './edit.constants';
 import {
   BadRequestException,
   ConflictException,
@@ -27,7 +28,8 @@ import {
   editJobId,
   editView,
 } from './edit-admission.service';
-export const EDIT_QUEUE = 'edit-render';
+export { EDIT_QUEUE } from './edit.constants';
+import { EDIT_QUEUE } from './edit.constants';
 
 @Injectable()
 export class EditPlansService {
@@ -326,14 +328,11 @@ export class EditPlansService {
         { $set: { status: 'queued' } },
       );
       await this.queue.add(
-        'EDIT_RENDER_PREVIEW',
+        EDIT_RENDER_JOB,
         { versionId: String(version._id), generation: version.generation ?? 0 },
         {
           jobId: editJobId(String(version._id), version.generation),
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 3000 },
-          removeOnComplete: { age: 86400, count: 1000 },
-          removeOnFail: { age: 604800, count: 1000 },
+          ...EDIT_JOB_OPTIONS,
         },
       );
     }
@@ -436,14 +435,11 @@ export class EditPlansService {
         'Version state changed; reload before retrying',
       );
     await this.queue.add(
-      'EDIT_RENDER_PREVIEW',
+      EDIT_RENDER_JOB,
       { versionId: id, generation: v.generation },
       {
         jobId: editJobId(id, v.generation),
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 3000 },
-        removeOnComplete: { age: 86400, count: 1000 },
-        removeOnFail: { age: 604800, count: 1000 },
+        ...EDIT_JOB_OPTIONS,
       },
     );
     return editView(v);

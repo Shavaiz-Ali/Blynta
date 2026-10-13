@@ -1,3 +1,4 @@
+import { ADAPTER_POLICY, AI_ROUTING } from '../src/ai-registry/provider-policy';
 import 'reflect-metadata';
 import { config } from 'dotenv';
 import { ConfigService } from '@nestjs/config';
@@ -54,6 +55,9 @@ async function main() {
         code: 'google',
         name: 'Google Gemini',
         adapter: 'google',
+        baseUrl: ADAPTER_POLICY.google.baseUrl,
+        apiVersion: ADAPTER_POLICY.google.apiVersion,
+        revision: 1,
         enabled: true,
       },
     },
@@ -133,7 +137,7 @@ async function main() {
     { upsert: true, new: true },
   );
   await routing.updateOne(
-    { _id: 'editing-default' },
+    { _id: AI_ROUTING.LEGACY_DEFAULT },
     { $setOnInsert: { modelId: String(model._id), revision: 1 } },
     { upsert: true },
   );

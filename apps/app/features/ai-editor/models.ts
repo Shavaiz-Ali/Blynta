@@ -1,4 +1,5 @@
 "use client";
+import { API_ENDPOINTS, AI_TASK, type AITask } from "@blynta/types/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
 export interface AvailableEditingModels {
@@ -16,19 +17,19 @@ export interface AvailableEditingModels {
   }[];
 }
 export function useAvailableEditingModels(
-  task:
-    | "highlight_detection"
-    | "edit_planning"
-    | "edit_refinement" = "edit_planning",
+  task: AITask = AI_TASK.EDIT_PLANNING,
 ) {
   return useQuery({
     queryKey: ["ai-editor", "available-models", task],
     queryFn: async ({ signal }) =>
       (
-        await axiosClient.get<AvailableEditingModels>("/ai/models/available", {
-          params: { task },
-          signal,
-        })
+        await axiosClient.get<AvailableEditingModels>(
+          API_ENDPOINTS.ai.availableModels,
+          {
+            params: { task },
+            signal,
+          },
+        )
       ).data,
     staleTime: 0,
     refetchOnWindowFocus: true,

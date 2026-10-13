@@ -1,12 +1,9 @@
-export type JobStatus =
-  | "pending"
-  | "transcribing"
-  | "detecting_highlights"
-  | "cutting_clips"
-  | "completed"
-  | "failed";
-
-export type SourcePlatform = "youtube" | "tiktok" | "instagram" | "upload";
+import type {
+  JobStatus as SharedJobStatus,
+  SourcePlatform as SharedSourcePlatform,
+} from "@blynta/types/contracts";
+export type JobStatus = `${SharedJobStatus}`;
+export type SourcePlatform = `${SharedSourcePlatform}`;
 
 export interface ClipHighlight {
   startTime: number;

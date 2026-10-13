@@ -1,7 +1,9 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
+import { AI_ROUTING } from './provider-policy';
+import { AI_TASK } from '@blynta/types/contracts';
 import { ModelRegistry } from './model-registry.service';
-import type { AIModel } from './registry.schemas';
+import type { AIModel, AIProvider } from './registry.schemas';
 export interface HighlightModelSelection {
   registryId: string;
   providerId: string;
@@ -9,7 +11,7 @@ export interface HighlightModelSelection {
   configurationHash: string;
   auto: boolean;
 }
-export function highlightModelHash(model: AIModel) {
+export function highlightModelHash(model: AIModel, provider?: AIProvider) {
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -18,6 +20,9 @@ export function highlightModelHash(model: AIModel) {
         settings: model.settings,
         capabilities: model.capabilities,
         tasks: model.tasks,
+        ...((provider?.revision ?? 1) > 1
+          ? { providerRevision: provider?.revision }
+          : {}),
       }),
     )
     .digest('hex');
@@ -33,19 +38,19 @@ export class HighlightRouting {
     // Explicit overrides always pass current entitlement checks and never fall back.
     if (
       !requested &&
-      !(await this.registry.routing.findById('editing-default'))
+      !(await this.registry.routing.findById(AI_ROUTING.LEGACY_DEFAULT))
     )
       return undefined;
     const result = await this.registry.resolveUserModel(
       userId,
       requested,
-      'highlight_detection',
+      AI_TASK.HIGHLIGHT_DETECTION,
     );
     return {
       registryId: String(result.model._id),
       providerId: result.model.providerId,
       modelId: result.model.modelId,
-      configurationHash: highlightModelHash(result.model),
+      configurationHash: highlightModelHash(result.model, result.provider),
       auto: !requested,
     };
   }
@@ -53,13 +58,14 @@ export class HighlightRouting {
     const result = await this.registry.resolveUserModel(
       userId,
       selection.auto ? undefined : selection.registryId,
-      'highlight_detection',
+      AI_TASK.HIGHLIGHT_DETECTION,
       selection.registryId,
     );
     if (
       result.model.providerId !== selection.providerId ||
       result.model.modelId !== selection.modelId ||
-      highlightModelHash(result.model) !== selection.configurationHash
+      highlightModelHash(result.model, result.provider) !==
+        selection.configurationHash
     )
       throw new ConflictException(
         'Selected highlight model configuration changed; start a new job',

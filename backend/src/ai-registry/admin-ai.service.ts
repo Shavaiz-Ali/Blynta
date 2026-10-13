@@ -18,8 +18,17 @@ import {
   ActivityStatus,
 } from '../activities/schemas/activity.schema';
 import { CredentialVault } from './credential-vault.service';
-import { ModelRegistry, secretSelection } from './model-registry.service';
-import { GoogleAdapter } from './google-adapter.service';
+import { ModelRegistry } from './model-registry.service';
+import { ProviderAdapterRegistry } from './provider-adapter.registry';
+import { ProviderValidationService } from './provider-validation.service';
+import {
+  AI_ROUTING,
+  AI_LIMITS,
+  providerEndpoint,
+  providerRevisionFilter,
+  providerConfigurationHash,
+} from './provider-policy';
+import { PAGINATION, AI_TASK } from '@blynta/types/contracts';
 import {
   credentialInput,
   credentialUpdate,
@@ -34,8 +43,9 @@ export class AdminAIService {
   constructor(
     private registry: ModelRegistry,
     private vault: CredentialVault,
-    private google: GoogleAdapter,
+    private adapters: ProviderAdapterRegistry,
     private activities: ActivitiesService,
+    private validation: ProviderValidationService,
   ) {}
   private async audit(actor: string, action: string, id?: string) {
     await this.activities.create({
@@ -55,6 +65,9 @@ export class AdminAIService {
   private id(id: string) {
     return parseEdit(objectId, id);
   }
+  adapterOptions() {
+    return { items: this.adapters.options() };
+  }
   async list(kind: 'providers' | 'models' | 'usage', query: unknown) {
     const q = parseEdit(listInput, query);
     const filter: Record<string, unknown> = {};
@@ -70,8 +83,8 @@ export class AdminAIService {
       const items = await this.registry.providers
         .find(filter)
         .sort({ _id: 1 })
-        .skip((q.page - 1) * 25)
-        .limit(25)
+        .skip((q.page - 1) * PAGINATION.DEFAULT_PAGE_SIZE)
+        .limit(PAGINATION.DEFAULT_PAGE_SIZE)
         .lean();
       return {
         items: await Promise.all(
@@ -86,20 +99,22 @@ export class AdminAIService {
               providerId: String(p._id),
               archived: false,
             }),
-            operationalAdapter: p.adapter === 'google',
+            operationalAdapter: this.adapters.supports(p.adapter),
           })),
         ),
         page: q.page,
-        pageSize: 25,
+        pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
       };
     }
     if (kind === 'models') {
-      const route = await this.registry.routing.findById('editing-default');
+      const route = await this.registry.routing.findById(
+        AI_ROUTING.LEGACY_DEFAULT,
+      );
       const items = await this.registry.models
         .find({ ...filter, archived: false })
         .sort({ priority: 1, _id: 1 })
-        .skip((q.page - 1) * 25)
-        .limit(25)
+        .skip((q.page - 1) * PAGINATION.DEFAULT_PAGE_SIZE)
+        .limit(PAGINATION.DEFAULT_PAGE_SIZE)
         .lean();
       return {
         items: items.map((m) => ({
@@ -107,14 +122,14 @@ export class AdminAIService {
           isDefault: String(m._id) === route?.modelId,
         })),
         page: q.page,
-        pageSize: 25,
+        pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
       };
     }
     const items = await this.registry.usage
       .find(filter)
       .sort({ createdAt: -1, _id: -1 })
-      .skip((q.page - 1) * 25)
-      .limit(25)
+      .skip((q.page - 1) * PAGINATION.DEFAULT_PAGE_SIZE)
+      .limit(PAGINATION.DEFAULT_PAGE_SIZE)
       .lean();
     const summary: unknown[] = await this.registry.usage.aggregate([
       { $match: filter },
@@ -136,21 +151,64 @@ export class AdminAIService {
         },
       },
     ]);
-    return { items, summary, page: q.page, pageSize: 25 };
+    return {
+      items,
+      summary,
+      page: q.page,
+      pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
+    };
   }
   async provider(actor: string, body: unknown, id?: string) {
     const input = id
       ? providedFields(parseEdit(providerInput.partial(), body), body)
       : parseEdit(providerInput, body);
-    if (input.enabled && input.adapter && input.adapter !== 'google')
+    if (
+      input.enabled &&
+      input.adapter &&
+      !this.adapters.supports(input.adapter)
+    )
       throw new BadRequestException('Adapter is not implemented');
+    let providerRevisionChanged = false;
+    let endpointFields: Record<string, unknown> = {};
+    if (!id && this.adapters.supports(input.adapter!))
+      endpointFields = providerEndpoint(
+        input as import('./registry.schemas').AIProvider,
+      );
+    if (
+      !id &&
+      !this.adapters.supports(input.adapter!) &&
+      (input.baseUrl || input.apiVersion)
+    )
+      throw new BadRequestException(
+        'Endpoint configuration requires an implemented adapter',
+      );
     if (id) {
       this.id(id);
       const current = await this.registry.providers.findById(id);
       if (!current) throw new NotFoundException('Provider not found');
+      if (this.adapters.supports(current.adapter)) {
+        endpointFields = providerEndpoint({
+          adapter: current.adapter,
+          baseUrl: input.baseUrl ?? current.baseUrl,
+          apiVersion: input.apiVersion ?? current.apiVersion,
+        });
+        providerRevisionChanged = [
+          'baseUrl',
+          'apiVersion',
+          'defaultCredentialId',
+          'settings',
+        ].some(
+          (key) =>
+            key in input &&
+            JSON.stringify(input[key]) !== JSON.stringify(current[key]),
+        );
+      } else if (input.baseUrl || input.apiVersion)
+        throw new BadRequestException(
+          'Endpoint configuration requires an implemented adapter',
+        );
       if (input.adapter && input.adapter !== current.adapter)
         throw new ConflictException('Provider adapter is immutable');
-      if (input.enabled && current.adapter !== 'google')
+      if (input.enabled && !this.adapters.supports(current.adapter))
         throw new BadRequestException('Adapter is not implemented');
       if (
         input.defaultCredentialId &&
@@ -168,13 +226,21 @@ export class AdminAIService {
         'Create provider before assigning its credential',
       );
     await this.audit(actor, id ? 'provider.update' : 'provider.create', id);
+    if (id && providerRevisionChanged)
+      await this.registry.providers.updateOne(
+        { _id: id, revision: { $exists: false } },
+        { $set: { revision: 1 } },
+      );
     return id
       ? this.registry.providers.findByIdAndUpdate(
           id,
-          { $set: input },
+          {
+            $set: { ...input, ...endpointFields },
+            ...(providerRevisionChanged ? { $inc: { revision: 1 } } : {}),
+          },
           { new: true },
         )
-      : this.registry.providers.create(input);
+      : this.registry.providers.create({ ...input, ...endpointFields });
   }
   async credentials(providerId: string) {
     this.id(providerId);
@@ -255,92 +321,8 @@ export class AdminAIService {
   }
   async validateCredential(actor: string, id: string) {
     this.id(id);
-    const c = await this.registry.credentials
-      .findOne({ _id: id, enabled: true })
-      .select(secretSelection);
-    if (
-      !c ||
-      !(await this.registry.providers.exists({
-        _id: c.providerId,
-        adapter: 'google',
-        enabled: true,
-      }))
-    )
-      throw new BadRequestException('Credential/provider is unavailable');
     await this.audit(actor, 'credential.validate', id);
-    const started = Date.now();
-    let valid = false;
-    let failure:
-      { code: string; message: string; upstreamStatus?: number } | undefined;
-    let stage: 'decrypt' | 'request' = 'decrypt';
-    try {
-      const secret = this.vault.decrypt(c, c.providerId + ':' + id);
-      stage = 'request';
-      const response = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',
-        {
-          headers: { 'x-goog-api-key': secret },
-          signal: AbortSignal.timeout(15000),
-        },
-      );
-      valid = response.ok;
-      if (!valid) {
-        const status = response.status;
-        failure = {
-          code:
-            status === 400 || status === 401 || status === 403
-              ? 'AI_AUTH_OR_ACCESS_FAILED'
-              : status === 429
-                ? 'AI_QUOTA_OR_RATE_LIMIT'
-                : 'AI_PROVIDER_FAILED',
-          message:
-            status === 400 || status === 401 || status === 403
-              ? 'Google rejected the credential check. Verify the API key, Generative Language API access, and key restrictions for this backend server.'
-              : status === 429
-                ? 'Google rate limited the credential check. Retry later and check project quota.'
-                : 'Google could not complete the credential check. Retry later or check the provider service.',
-          upstreamStatus: status,
-        };
-      }
-      await response.body?.cancel();
-    } catch (error) {
-      valid = false;
-      const timedOut =
-        error instanceof Error &&
-        ['AbortError', 'TimeoutError'].includes(error.name);
-      failure =
-        stage === 'decrypt'
-          ? {
-              code: 'AI_CREDENTIAL_DECRYPT_FAILED',
-              message:
-                'The backend could not decrypt this credential. Check AI_CREDENTIAL_KEYS and keep the encryption key version used when it was saved.',
-            }
-          : timedOut
-            ? {
-                code: 'AI_TIMEOUT',
-                message:
-                  'The Google credential check timed out. Check backend connectivity and retry.',
-              }
-            : {
-                code: 'AI_NETWORK_FAILED',
-                message:
-                  'The backend could not reach Google. Check DNS, TLS, proxy settings and outbound HTTPS access.',
-              };
-    }
-    await this.registry.credentials.updateOne(
-      { _id: id, revision: c.revision },
-      {
-        $set: {
-          lastValidatedAt: new Date(),
-          lastValidationStatus: valid ? 'valid' : 'invalid',
-        },
-      },
-    );
-    return {
-      valid,
-      latencyMs: Date.now() - started,
-      ...(!valid ? failure : {}),
-    };
+    return this.validation.validate(id);
   }
   async model(actor: string, body: unknown, id?: string) {
     const input = id
@@ -353,9 +335,8 @@ export class AdminAIService {
     const providerId = input.providerId ?? prior?.providerId;
     const provider = await this.registry.providers.findOne({
       _id: providerId,
-      adapter: 'google',
     });
-    if (!provider)
+    if (!provider || !this.adapters.supports(provider.adapter))
       throw new BadRequestException(
         'Only the implemented Google adapter supports models',
       );
@@ -420,16 +401,14 @@ export class AdminAIService {
     await this.audit(actor, 'model.default', id);
     // One routing document: concurrent admins cannot create two defaults.
     return this.registry.routing.findOneAndUpdate(
-      { _id: 'editing-default' },
+      { _id: AI_ROUTING.LEGACY_DEFAULT },
       { $set: { modelId: id }, $inc: { revision: 1 } },
       { upsert: true, new: true },
     );
   }
   async test(actor: string, id: string) {
-    const { model, credential, secret } = await this.registry.configured(
-      id,
-      false,
-    );
+    const { model, provider, credential, secret } =
+      await this.registry.configured(id, false);
     await this.audit(actor, 'model.test', id);
     const started = Date.now();
     const before = model.toObject();
@@ -448,15 +427,16 @@ export class AdminAIService {
     let valid = false;
     try {
       const signal = AbortSignal.timeout(model.settings.timeoutMs);
-      await this.google.verifyModel(model.modelId, secret, signal);
-      const result = model.tasks?.includes('highlight_detection')
-        ? await this.google.structured(
+      const adapter = this.adapters.get(provider.adapter);
+      await adapter.verifyModel(model.modelId, secret, signal, provider);
+      const result = model.tasks?.includes(AI_TASK.HIGHLIGHT_DETECTION)
+        ? await adapter.structured(
             {
               ...before,
               settings: {
                 ...before.settings,
                 maxOutputTokens: Math.min(
-                  1024,
+                  AI_LIMITS.HIGHLIGHT_TEST_OUTPUT_TOKENS,
                   before.settings.maxOutputTokens,
                 ),
               },
@@ -466,17 +446,22 @@ export class AdminAIService {
             'Return valid video metadata and an empty highlights array.',
             'Highlight schema connectivity test; do not invent a video or timestamps.',
             signal,
+            provider,
           )
-        : await this.google.structured(
+        : await adapter.structured(
             {
               ...before,
-              settings: { ...before.settings, maxOutputTokens: 128 },
+              settings: {
+                ...before.settings,
+                maxOutputTokens: AI_LIMITS.TEST_OUTPUT_TOKENS,
+              },
             },
             secret,
             z.object({ ok: z.boolean() }).strict(),
             'Return ok true.',
             'Connectivity test.',
             signal,
+            provider,
           );
       valid =
         !!result.parsed &&
@@ -503,7 +488,12 @@ export class AdminAIService {
       revision: credential.revision,
       enabled: true,
     });
-    valid = valid && !!fresh;
+    const providerFresh = await this.registry.providers.exists({
+      _id: provider._id,
+      enabled: true,
+      ...providerRevisionFilter(provider.revision),
+    });
+    valid = valid && !!fresh && !!providerFresh;
     usage.latencyMs = Date.now() - started;
     usage.status = valid ? 'success' : 'failed';
     await this.registry.recordUsage(usage);
@@ -523,6 +513,8 @@ export class AdminAIService {
           lastTestStatus: valid ? 'valid' : 'invalid',
           testedCredentialId: String(credential._id),
           testedCredentialRevision: credential.revision,
+          testedProviderRevision: provider.revision ?? 1,
+          testedProviderConfigurationHash: providerConfigurationHash(provider),
         },
       },
     );

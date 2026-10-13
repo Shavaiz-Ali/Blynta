@@ -1,3 +1,4 @@
+import { validateEnvironment } from '../common/configuration';
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -27,7 +28,10 @@ const logger = new Logger('YouTubeWorkerMongoose');
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (env) => validateEnvironment(env, false),
+    }),
     ScheduleModule.forRoot(),
     CommonModule,
     RedisModule,

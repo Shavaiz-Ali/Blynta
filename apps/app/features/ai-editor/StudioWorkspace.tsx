@@ -1,4 +1,5 @@
 "use client";
+import { APP_ROUTES } from "@blynta/types/contracts";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -265,7 +266,7 @@ export function StudioWorkspace({
               variant="ghost"
               nativeButton={false}
               role="link"
-              render={<Link href={`/my-clips/${jobId}/clips/${clipId}`} />}
+              render={<Link href={APP_ROUTES.clip(jobId, clipId)} />}
             >
               Open original clip
             </Button>

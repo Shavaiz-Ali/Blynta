@@ -1,4 +1,9 @@
 "use client";
+import {
+  JOB_STATUS_VARIANTS as STATUS_VARIANTS,
+  JOB_STATUS_LABELS as STATUS_LABELS,
+} from "../constants";
+import { PAGINATION } from "@blynta/types/contracts";
 import { AppPageHeader } from "@/components/common/AppPageHeader";
 
 import * as React from "react";
@@ -53,30 +58,9 @@ const PLATFORM_ICONS: Record<SourcePlatform, React.ReactNode> = {
   upload: <Upload className="size-3.5 text-muted-foreground" />,
 };
 
-const STATUS_VARIANTS: Record<
-  JobStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  completed: "default",
-  transcribing: "secondary",
-  detecting_highlights: "secondary",
-  cutting_clips: "secondary",
-  pending: "outline",
-  failed: "destructive",
-};
-
-const STATUS_LABELS: Record<JobStatus, string> = {
-  completed: "Completed",
-  transcribing: "Transcribing",
-  detecting_highlights: "AI Highlights",
-  cutting_clips: "FFmpeg Render",
-  pending: "Pending",
-  failed: "Failed",
-};
-
 const DEFAULT_PARAMS: ListJobsParams = {
-  page: 1,
-  limit: 25,
+  page: PAGINATION.DEFAULT_PAGE,
+  limit: PAGINATION.DEFAULT_PAGE_SIZE,
   sortBy: "createdAt",
   sortOrder: "desc",
 };

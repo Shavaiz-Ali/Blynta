@@ -1,3 +1,4 @@
+import { API_ENDPOINTS } from "@blynta/types/contracts";
 import { invalidateCurrentUser } from "@/features/billing/queries";
 import {
   useMutation,
@@ -60,9 +61,12 @@ export function useJobs(
   return useQuery({
     queryKey: jobsQueryKeys.list(params),
     queryFn: async () => {
-      const { data } = await axiosClient.get<JobsListResult>("/jobs", {
-        params,
-      });
+      const { data } = await axiosClient.get<JobsListResult>(
+        API_ENDPOINTS.jobs.list,
+        {
+          params,
+        },
+      );
       return data;
     },
     staleTime: 1000 * 10,
@@ -86,7 +90,10 @@ export function useJob(
   return useQuery({
     queryKey: jobsQueryKeys.detail(id),
     queryFn: async ({ signal }) => {
-      const { data } = await axiosClient.get<Job>(`/jobs/${id}`, { signal });
+      const { data } = await axiosClient.get<Job>(
+        API_ENDPOINTS.jobs.detail(id),
+        { signal },
+      );
       const previous = queryClient.getQueryData<Job>(jobsQueryKeys.detail(id));
       if (
         previous?.status !== data.status &&
@@ -141,7 +148,10 @@ export function useCreateJob(
       if (input.stylePreset && input.stylePreset !== "default") {
         body.stylePreset = input.stylePreset;
       }
-      const { data } = await axiosClient.post<Job>("/jobs", body);
+      const { data } = await axiosClient.post<Job>(
+        API_ENDPOINTS.jobs.list,
+        body,
+      );
       return data;
     },
     onSettled: () => invalidateCurrentUser(queryClient),

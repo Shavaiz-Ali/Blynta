@@ -1,3 +1,5 @@
+import { ProviderValidationService } from './provider-validation.service';
+import { ProviderAdapterRegistry } from './provider-adapter.registry';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
@@ -22,6 +24,8 @@ function setup() {
     providers: {
       exists: jest.fn().mockResolvedValue(true),
       findById: jest.fn().mockResolvedValue(provider),
+      findOne: jest.fn().mockResolvedValue(provider),
+      updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
       findByIdAndUpdate: jest.fn().mockResolvedValue(provider),
       create: jest.fn().mockResolvedValue(provider),
     },
@@ -46,13 +50,22 @@ function setup() {
       }),
     }),
   );
+  const transport = { fetch: jest.fn() };
+  const adapters = new ProviderAdapterRegistry(new GoogleAdapter(transport));
+  const validation = new ProviderValidationService(
+    registry as unknown as ModelRegistry,
+    vault,
+    adapters,
+    new ConfigService(),
+  );
   const service = new AdminAIService(
     registry as unknown as ModelRegistry,
     vault,
-    {} as GoogleAdapter,
+    adapters,
     activities as unknown as ActivitiesService,
+    validation,
   );
-  return { service, registry, activities, vault, credential };
+  return { service, registry, activities, vault, credential, transport };
 }
 describe('Administrator credential and provider boundaries', () => {
   it('encrypts before persistence and reads back only metadata', async () => {
@@ -147,7 +160,13 @@ describe('Administrator credential and provider boundaries', () => {
     await s.service.provider(id, { name: 'Renamed' }, providerId);
     expect(s.registry.providers.findByIdAndUpdate).toHaveBeenCalledWith(
       providerId,
-      { $set: { name: 'Renamed' } },
+      {
+        $set: {
+          name: 'Renamed',
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          apiVersion: 'v1beta',
+        },
+      },
       { new: true },
     );
     expect(s.activities.create).toHaveBeenCalledWith(
@@ -169,17 +188,37 @@ describe('Administrator credential and provider boundaries', () => {
     ).rejects.toThrow('Audit unavailable');
     expect(s.registry.providers.create).not.toHaveBeenCalled();
   });
+  it('persists approved endpoints and advances provider revision when the API version changes', async () => {
+    const s = setup();
+    await s.service.provider(id, { apiVersion: 'v1' }, providerId);
+    expect(s.registry.providers.findByIdAndUpdate).toHaveBeenCalledWith(
+      providerId,
+      {
+        $set: {
+          baseUrl: 'https://generativelanguage.googleapis.com',
+          apiVersion: 'v1',
+        },
+        $inc: { revision: 1 },
+      },
+      { new: true },
+    );
+    expect(s.registry.providers.updateOne).toHaveBeenCalledWith(
+      { _id: providerId, revision: { $exists: false } },
+      { $set: { revision: 1 } },
+    );
+  });
+  it('rejects unsafe URL updates before auditing or mutating the provider', async () => {
+    const s = setup();
+    await expect(
+      s.service.provider(id, { baseUrl: 'https://localhost' }, providerId),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(s.registry.providers.findByIdAndUpdate).not.toHaveBeenCalled();
+    expect(s.activities.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('Credential validation diagnostics', () => {
-  const originalFetch = global.fetch;
-  beforeEach(() => {
-    global.fetch = jest.fn() as typeof fetch;
-  });
-  afterEach(() => {
-    jest.restoreAllMocks();
-    global.fetch = originalFetch;
-  });
+  afterEach(() => jest.restoreAllMocks());
   function validationSetup() {
     const s = setup();
     const encrypted = s.vault.encrypt(
@@ -198,9 +237,9 @@ describe('Credential validation diagnostics', () => {
     async (status) => {
       const s = validationSetup();
       const body = 'synthetic-private-secret upstream-sensitive-body';
-      const request = jest
-        .spyOn(global, 'fetch')
-        .mockResolvedValue(new Response(body, { status }));
+      const request = s.transport.fetch.mockResolvedValue(
+        new Response(body, { status }),
+      );
       const result = await s.service.validateCredential(id, id);
       expect(result).toMatchObject({
         valid: false,
@@ -220,7 +259,12 @@ describe('Credential validation diagnostics', () => {
         unknown,
         { $set: { lastValidationStatus: string } },
       ][];
-      expect(updates[0][0]).toEqual({ _id: id, revision: 1 });
+      expect(updates[0][0]).toEqual({
+        _id: id,
+        revision: 1,
+        enabled: true,
+        archived: { $ne: true },
+      });
       expect(updates[0][1].$set.lastValidationStatus).toBe('invalid');
     },
   );
@@ -229,7 +273,7 @@ describe('Credential validation diagnostics', () => {
     jest.spyOn(s.vault, 'decrypt').mockImplementation(() => {
       throw new Error('private cryptographic details');
     });
-    const request = jest.spyOn(global, 'fetch');
+    const request = s.transport.fetch;
     const result = await s.service.validateCredential(id, id);
     expect(result).toMatchObject({
       valid: false,
@@ -246,7 +290,7 @@ describe('Credential validation diagnostics', () => {
       const s = validationSetup();
       const error = new Error('synthetic-private-secret transport details');
       error.name = name;
-      jest.spyOn(global, 'fetch').mockRejectedValue(error);
+      s.transport.fetch.mockRejectedValue(error);
       const result = await s.service.validateCredential(id, id);
       expect(result).toMatchObject({
         valid: false,
@@ -257,12 +301,28 @@ describe('Credential validation diagnostics', () => {
   );
   it('preserves the success response contract', async () => {
     const s = validationSetup();
-    jest
-      .spyOn(global, 'fetch')
-      .mockResolvedValue(new Response('{}', { status: 200 }));
+    s.transport.fetch.mockResolvedValue(new Response('{}', { status: 200 }));
     const result = await s.service.validateCredential(id, id);
     expect(result.valid).toBe(true);
     expect(typeof result.latencyMs).toBe('number');
     expect(Object.keys(result).sort()).toEqual(['latencyMs', 'valid']);
+  });
+  it('does not certify a credential replaced during validation', async () => {
+    const s = validationSetup();
+    s.transport.fetch.mockResolvedValue(new Response('{}', { status: 200 }));
+    s.registry.credentials.updateOne.mockResolvedValue({ matchedCount: 0 });
+    await expect(s.service.validateCredential(id, id)).resolves.toMatchObject({
+      valid: false,
+      code: 'AI_PROVIDER_FAILED',
+    });
+  });
+  it('does not certify a provider changed during validation', async () => {
+    const s = validationSetup();
+    s.transport.fetch.mockResolvedValue(new Response('{}', { status: 200 }));
+    s.registry.providers.exists.mockResolvedValue(false);
+    await expect(s.service.validateCredential(id, id)).resolves.toMatchObject({
+      valid: false,
+      code: 'AI_PROVIDER_FAILED',
+    });
   });
 });

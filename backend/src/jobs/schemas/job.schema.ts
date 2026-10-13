@@ -7,33 +7,12 @@ import type {
 
 export type JobDocument = Job & Document;
 
-export enum JobStatus {
-  PENDING = 'pending',
-  TRANSCRIBING = 'transcribing',
-  DETECTING_HIGHLIGHTS = 'detecting_highlights',
-  CUTTING_CLIPS = 'cutting_clips',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  CANCELLING = 'cancelling',
-  CANCELLED = 'cancelled',
-}
-
-export enum SourcePlatform {
-  YOUTUBE = 'youtube',
-  TIKTOK = 'tiktok',
-  INSTAGRAM = 'instagram',
-  UPLOAD = 'upload',
-}
-
-export enum ClipProcessingState {
-  QUEUED = 'queued',
-  CUTTING = 'cutting',
-  CAPTIONING = 'captioning',
-  UPLOADING = 'uploading',
-  READY = 'ready',
-  CANCELLED = 'cancelled',
-  FAILED = 'failed',
-}
+import {
+  JobStatus,
+  SourcePlatform,
+  ClipProcessingState,
+} from '@blynta/types/contracts';
+export { JobStatus, SourcePlatform, ClipProcessingState };
 
 // A transcript segment — one chunk of speech with timing, from Whisper
 @Schema({ _id: false })
@@ -112,7 +91,11 @@ export class Clip {
     totalSeconds: number;
   };
 
-  @Prop({ enum: ClipProcessingState, default: ClipProcessingState.QUEUED })
+  @Prop({
+    type: String,
+    enum: ClipProcessingState,
+    default: ClipProcessingState.QUEUED,
+  })
   processingState?: ClipProcessingState;
 
   @Prop()
@@ -147,7 +130,7 @@ export class Clip {
   @Prop({ default: false })
   hasCaptions: boolean;
 
-  @Prop({ enum: JobStatus, default: JobStatus.PENDING })
+  @Prop({ type: String, enum: JobStatus, default: JobStatus.PENDING })
   status: JobStatus; // a single clip can fail cutting even if others succeed
 }
 export const ClipSchema = SchemaFactory.createForClass(Clip);
@@ -224,10 +207,15 @@ export class Job {
   @Prop({ required: true })
   sourceUrl: string;
 
-  @Prop({ enum: SourcePlatform, required: true })
+  @Prop({ type: String, enum: SourcePlatform, required: true })
   sourcePlatform: SourcePlatform;
 
-  @Prop({ enum: JobStatus, default: JobStatus.PENDING, index: true })
+  @Prop({
+    type: String,
+    enum: JobStatus,
+    default: JobStatus.PENDING,
+    index: true,
+  })
   status: JobStatus;
 
   @Prop()

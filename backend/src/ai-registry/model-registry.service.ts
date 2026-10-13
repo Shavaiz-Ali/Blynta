@@ -17,6 +17,16 @@ import type {
 } from './registry.schemas';
 import { CredentialVault } from './credential-vault.service';
 import { AITask } from './registry.contract';
+import { ProviderAdapterRegistry } from './provider-adapter.registry';
+import { GoogleAdapter } from './google-adapter.service';
+import {
+  AI_ROUTING,
+  AI_LIMITS,
+  providerEndpoint,
+  providerConfigurationHash,
+  legacyProviderTestCompatible,
+} from './provider-policy';
+import { AI_TASK } from '@blynta/types/contracts';
 export const secretSelection = '+ciphertext +iv +tag +keyVersion';
 @Injectable()
 export class ModelRegistry {
@@ -28,6 +38,9 @@ export class ModelRegistry {
     @InjectModel('AIUsage') readonly usage: Model<AIUsage>,
     @InjectModel(User.name) private users: Model<User>,
     private vault: CredentialVault,
+    private adapters: ProviderAdapterRegistry = new ProviderAdapterRegistry(
+      new GoogleAdapter(),
+    ),
   ) {}
   async entitlement(userId: string) {
     const user = await this.users
@@ -44,12 +57,19 @@ export class ModelRegistry {
     const provider = await this.providers.findOne({
       _id: model.providerId,
       enabled: true,
-      adapter: 'google',
     });
     if (!provider)
       throw new ServiceUnavailableException(
         'AI provider is unavailable or unimplemented',
       );
+    this.adapters.get(provider.adapter);
+    try {
+      providerEndpoint(provider);
+    } catch {
+      throw new ServiceUnavailableException(
+        'AI provider endpoint is unavailable',
+      );
+    }
     const credentialId = model.credentialId || provider.defaultCredentialId;
     const credential =
       credentialId &&
@@ -70,7 +90,12 @@ export class ModelRegistry {
         !model.capabilities.structuredOutput ||
         model.lastTestStatus !== 'valid' ||
         model.testedCredentialId !== String(credential._id) ||
-        model.testedCredentialRevision !== credential.revision)
+        model.testedCredentialRevision !== credential.revision ||
+        (model.testedProviderRevision ?? 1) !== (provider.revision ?? 1) ||
+        (model.testedProviderConfigurationHash
+          ? model.testedProviderConfigurationHash !==
+            providerConfigurationHash(provider)
+          : !legacyProviderTestCompatible(provider)))
     )
       throw new ServiceUnavailableException(
         'AI model requires a successful test with its current credential',
@@ -82,12 +107,14 @@ export class ModelRegistry {
     return { model, provider, credential, secret };
   }
   supportsTask(model: AIModel, task: AITask) {
-    return (model.tasks ?? ['edit_planning', 'edit_refinement']).includes(task);
+    return (
+      model.tasks ?? [AI_TASK.EDIT_PLANNING, AI_TASK.EDIT_REFINEMENT]
+    ).includes(task);
   }
   async resolveUserModel(
     userId: string,
     requested?: string,
-    task: AITask = 'edit_planning',
+    task: AITask = AI_TASK.EDIT_PLANNING,
     pinnedId?: string,
   ) {
     const plan = await this.entitlement(userId);
@@ -95,7 +122,7 @@ export class ModelRegistry {
       throw new ForbiddenException('Free accounts use Auto model routing');
     const route = requested
       ? undefined
-      : await this.routing.findById('editing-default');
+      : await this.routing.findById(AI_ROUTING.LEGACY_DEFAULT);
     const id = pinnedId || requested || route?.modelId;
     if (!id)
       throw new ServiceUnavailableException(
@@ -111,15 +138,18 @@ export class ModelRegistry {
       (requested && !result.model.access.selectable)
     )
       throw new ForbiddenException('AI model is not available for your plan');
-    if (plan === UserPlan.FREE && result.provider.adapter !== 'google')
+    if (
+      plan === UserPlan.FREE &&
+      !this.adapters.supportsFreeAuto(result.provider.adapter)
+    )
       throw new ServiceUnavailableException(
         'Free Auto routing requires Gemini',
       );
     return { ...result, plan, auto: !requested };
   }
-  async available(userId: string, task: AITask = 'edit_planning') {
+  async available(userId: string, task: AITask = AI_TASK.EDIT_PLANNING) {
     const plan = await this.entitlement(userId);
-    const route = await this.routing.findById('editing-default');
+    const route = await this.routing.findById(AI_ROUTING.LEGACY_DEFAULT);
     const ids = await this.models
       .find({
         enabled: true,
@@ -135,7 +165,7 @@ export class ModelRegistry {
             }),
       })
       .sort({ priority: 1, _id: 1 })
-      .limit(100);
+      .limit(AI_LIMITS.MAX_MODEL_LIST);
     const models: {
       id: string;
       displayName: string;
@@ -167,7 +197,7 @@ export class ModelRegistry {
     return {
       plan,
       selectionAllowed: plan !== UserPlan.FREE,
-      compatibilityMode: task === 'highlight_detection' && !route,
+      compatibilityMode: task === AI_TASK.HIGHLIGHT_DETECTION && !route,
       defaultModelId: models.some((m) => m.id === route?.modelId)
         ? route?.modelId
         : null,

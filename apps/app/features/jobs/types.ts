@@ -1,24 +1,6 @@
-/* -------------------------------------------------------------------------- */
-/*                                Enums                                       */
-/* -------------------------------------------------------------------------- */
-
-export enum SourcePlatform {
-  YOUTUBE = "youtube",
-  TIKTOK = "tiktok",
-  INSTAGRAM = "instagram",
-  UPLOAD = "upload",
-}
-
-export enum JobStatus {
-  PENDING = "pending",
-  TRANSCRIBING = "transcribing",
-  DETECTING_HIGHLIGHTS = "detecting_highlights",
-  CUTTING_CLIPS = "cutting_clips",
-  COMPLETED = "completed",
-  FAILED = "failed",
-  CANCELLING = "cancelling",
-  CANCELLED = "cancelled",
-}
+import { JobStatus, SourcePlatform } from "@blynta/types/contracts";
+import type { ClipProcessingState } from "@blynta/types/contracts";
+export { JobStatus, SourcePlatform };
 
 /* -------------------------------------------------------------------------- */
 /*                                Interfaces                                  */
@@ -52,14 +34,7 @@ export interface Clip {
     attempt?: number;
     retryAvailable?: boolean;
   };
-  processingState?:
-    | "queued"
-    | "cutting"
-    | "captioning"
-    | "uploading"
-    | "ready"
-    | "failed"
-    | "cancelled";
+  processingState?: `${ClipProcessingState}`;
   errorMessage?: string;
   errorStage?: string;
   id: string;

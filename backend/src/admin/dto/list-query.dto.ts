@@ -1,3 +1,4 @@
+import { PAGINATION } from '@blynta/types/contracts';
 import { IsOptional, IsInt, Min, Max, IsString, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -6,14 +7,14 @@ export class ListQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page: number = 1;
+  page: number = PAGINATION.DEFAULT_PAGE;
 
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100)
-  limit: number = 25;
+  @Max(PAGINATION.MAX_PAGE_SIZE)
+  limit: number = PAGINATION.DEFAULT_PAGE_SIZE;
 
   @IsOptional()
   @IsString()

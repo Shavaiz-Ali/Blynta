@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
+import { LEGACY_STUDIO_QUEUE } from './jobs.constants';
 import { Model, Types } from 'mongoose';
 import { Queue } from 'bullmq';
 import { CreditsService } from '../billing/credits.service';
@@ -21,7 +22,7 @@ export class CreditsRecoveryService {
     private credits: CreditsService,
     private jobs: JobsService,
     @InjectModel('StudioRender') private renders: Model<StudioRender>,
-    @InjectQueue('studio') private studioQueue: Queue,
+    @InjectQueue(LEGACY_STUDIO_QUEUE) private studioQueue: Queue,
     @InjectModel(User.name) private users: Model<UserDocument>,
   ) {}
   @Cron(CronExpression.EVERY_MINUTE)

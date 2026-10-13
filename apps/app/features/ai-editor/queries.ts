@@ -1,4 +1,5 @@
 "use client";
+import { API_ENDPOINTS, HTTP_STATUS } from "@blynta/types/contracts";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { axiosClient, ApiError } from "@/config/axiosClient";
 import type {
@@ -26,14 +27,19 @@ const get = async <T>(path: string, signal?: AbortSignal) =>
   (await axiosClient.get<T>(path, { signal })).data;
 export function studioError(error: unknown) {
   if (error instanceof ApiError) {
-    if (error.status === 409)
+    if (error.status === HTTP_STATUS.CONFLICT)
       return "The clip or proposal changed. Refresh the editing plan before continuing.";
-    if (error.status === 429)
+    if (error.status === HTTP_STATUS.TOO_MANY_REQUESTS)
       return "Request limit reached. Wait before trying again.";
-    if (error.status === 403)
+    if (error.status === HTTP_STATUS.FORBIDDEN)
       return "This action is not available for your account. Check your subscription and clip access.";
-    if (error.status === 401) return "Sign in again to continue editing.";
-    if (!error.status || error.status === 404 || error.status >= 500)
+    if (error.status === HTTP_STATUS.UNAUTHORIZED)
+      return "Sign in again to continue editing.";
+    if (
+      !error.status ||
+      error.status === HTTP_STATUS.NOT_FOUND ||
+      error.status >= HTTP_STATUS.INTERNAL_SERVER_ERROR
+    )
       return "The editing service is temporarily unavailable. Please try again shortly.";
   }
   if (
@@ -51,14 +57,19 @@ export function useRecentPlans() {
   return useQuery({
     queryKey: studioKeys.recent,
     queryFn: ({ signal }) =>
-      get<{ items: EditingPlan[] }>("/ai-editor/plans", signal),
+      get<{ items: EditingPlan[] }>(API_ENDPOINTS.editor.plans, signal),
   });
 }
 export function useInitializePlan() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: async (body: { jobId: string; clipId: string }) =>
-      (await axiosClient.post<EditingPlan>("/ai-editor/initialize", body)).data,
+      (
+        await axiosClient.post<EditingPlan>(
+          API_ENDPOINTS.editor.initialize,
+          body,
+        )
+      ).data,
     retry: false,
     onSuccess: (plan) => {
       client.setQueryData(studioKeys.plan(plan._id), plan);
@@ -70,7 +81,8 @@ export function useEditingPlan(id: string) {
   return useQuery({
     queryKey: studioKeys.plan(id),
     enabled: !!id,
-    queryFn: ({ signal }) => get<EditingPlan>(`/ai-editor/plans/${id}`, signal),
+    queryFn: ({ signal }) =>
+      get<EditingPlan>(API_ENDPOINTS.editor.plan(id), signal),
     staleTime: 0,
   });
 }
@@ -79,7 +91,7 @@ export function useEditingState(clip: string, plan: string) {
     queryKey: studioKeys.state(clip, plan),
     enabled: !!plan,
     queryFn: ({ signal }) =>
-      get<StudioState>(`/clips/${clip}/ai-edit/state?planId=${plan}`, signal),
+      get<StudioState>(API_ENDPOINTS.editor.state(clip, plan), signal),
     refetchInterval: (q) =>
       q.state.data?.proposals.some((p) => proposalPollInterval(p.status))
         ? 2500
@@ -92,7 +104,7 @@ export function useEditingSession(clip: string, id: string) {
     enabled: !!id,
     queryFn: ({ signal }) =>
       get<{ messages: StudioMessage[] }>(
-        `/clips/${clip}/ai-edit/sessions/${id}`,
+        API_ENDPOINTS.editor.session(clip, id),
         signal,
       ),
   });
@@ -102,7 +114,7 @@ export function useProposal(clip: string, id: string) {
     queryKey: studioKeys.proposal(id),
     enabled: !!id,
     queryFn: ({ signal }) =>
-      get<Proposal>(`/clips/${clip}/ai-edit/proposals/${id}`, signal),
+      get<Proposal>(API_ENDPOINTS.editor.proposal(clip, id), signal),
     refetchInterval: (q) => proposalPollInterval(q.state.data?.status),
   });
 }
@@ -112,7 +124,7 @@ export function useProposeEdit(clip: string, plan: string) {
     mutationFn: async (body: PromptSubmission) =>
       (
         await axiosClient.post<Proposal>(
-          `/clips/${clip}/ai-edit/propose`,
+          API_ENDPOINTS.editor.propose(clip),
           body,
           { timeout: 100000 },
         )
@@ -137,7 +149,7 @@ export function useProposalAction(
     mutationFn: async (id: string) =>
       (
         await axiosClient.post<EditingPlan | Proposal>(
-          `/clips/${clip}/ai-edit/proposals/${id}/${action}`,
+          API_ENDPOINTS.editor.proposalAction(clip, id, action),
         )
       ).data,
     retry: false,
@@ -156,7 +168,7 @@ export function useEditingVersions(plan: string, page: number) {
     enabled: !!plan,
     queryFn: ({ signal }) =>
       get<{ items: EditingVersion[]; page: number; pageSize: number }>(
-        `/ai-editor/plans/${plan}/versions?page=${page}`,
+        `${API_ENDPOINTS.editor.versions(plan)}?page=${page}`,
         signal,
       ),
     refetchInterval: (q) =>
@@ -170,7 +182,7 @@ export function useEditingVersion(id: string) {
     queryKey: studioKeys.version(id),
     enabled: !!id,
     queryFn: ({ signal }) =>
-      get<EditingVersion>(`/ai-editor/versions/${id}`, signal),
+      get<EditingVersion>(API_ENDPOINTS.editor.version(id), signal),
     refetchInterval: (q) => renderPollInterval(q.state.data?.status),
     staleTime: 45 * 60000,
     refetchOnWindowFocus: "always",
@@ -186,8 +198,8 @@ export function useRenderAction(
       (
         await axiosClient.post<EditingVersion>(
           action === "preview"
-            ? `/ai-editor/plans/${plan}/preview`
-            : `/ai-editor/versions/${id}/${action}`,
+            ? API_ENDPOINTS.editor.preview(plan)
+            : API_ENDPOINTS.editor.versionAction(id, action),
         )
       ).data,
     retry: false,
@@ -205,16 +217,16 @@ export function useEditingAssets() {
   return useQuery({
     queryKey: ["ai-editor", "assets"],
     queryFn: ({ signal }) =>
-      get<{ items: StudioAsset[] }>("/ai-editor/assets", signal),
+      get<{ items: StudioAsset[] }>(API_ENDPOINTS.editor.assets, signal),
   });
 }
 export async function freshVersion(id: string) {
-  return get<EditingVersion>(`/ai-editor/versions/${id}`);
+  return get<EditingVersion>(API_ENDPOINTS.editor.version(id));
 }
 export async function downloadEditingVersion(id: string) {
   return (
     await axiosClient.post<{ signedUrl: string }>(
-      `/ai-editor/versions/${id}/download`,
+      API_ENDPOINTS.editor.versionAction(id, "download"),
     )
   ).data;
 }

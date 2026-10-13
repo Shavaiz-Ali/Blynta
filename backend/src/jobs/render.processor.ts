@@ -1,3 +1,4 @@
+import { MEDIA_WORKER_POLICY } from './jobs.constants';
 import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap } from '@nestjs/common';
@@ -28,13 +29,7 @@ interface RenderData {
   clipId: string;
 }
 
-@Processor(RENDER_QUEUE, {
-  concurrency: 1,
-  autorun: false,
-  lockDuration: 60000,
-  stalledInterval: 30000,
-  maxStalledCount: 1,
-})
+@Processor(RENDER_QUEUE, MEDIA_WORKER_POLICY)
 export class RenderProcessor
   extends WorkerHost
   implements OnApplicationBootstrap

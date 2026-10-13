@@ -719,9 +719,11 @@ describe('registry highlight adapter integration', () => {
       },
     };
     const routing = {
-      resolve: jest
-        .fn()
-        .mockResolvedValue({ model, secret: 'synthetic-registry-key' }),
+      resolve: jest.fn().mockResolvedValue({
+        model,
+        provider: { adapter: 'google' },
+        secret: 'synthetic-registry-key',
+      }),
     };
     const registry = { recordUsage: jest.fn().mockResolvedValue(undefined) };
     const service = new HighlightDetectionService(
@@ -732,17 +734,21 @@ describe('registry highlight adapter integration', () => {
       }),
       routing as never,
       registry as never,
+      {
+        get: () => ({
+          languageModel: async (selected: { modelId: string }) =>
+            `google-model:${selected.modelId}`,
+        }),
+      } as never,
     );
     return { service, routing, registry };
   }
   it('uses the database-selected adapter/settings and records measured tokens with existing metering', async () => {
     const s = registryFixture();
-    mockGenerateObject
-      .mockReset()
-      .mockResolvedValue({
-        object: HighlightsResponseSchema.parse({ highlights: [] }),
-        usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
-      });
+    mockGenerateObject.mockReset().mockResolvedValue({
+      object: HighlightsResponseSchema.parse({ highlights: [] }),
+      usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+    });
     await s.service.detectHighlightsWithMetadata(
       [
         {

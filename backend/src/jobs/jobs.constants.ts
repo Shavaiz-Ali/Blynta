@@ -1,6 +1,15 @@
 export const JOBS_QUEUE = 'clip-jobs';
 export const RENDER_QUEUE = 'clip-renders';
+/** External legacy queue contract; preserve its Redis name across deployments. */
+export const LEGACY_STUDIO_QUEUE = 'studio';
 export const RENDER_CLIP = 'render-clip';
+export const MEDIA_WORKER_POLICY = {
+  concurrency: 1,
+  autorun: false,
+  lockDuration: 60000,
+  stalledInterval: 30000,
+  maxStalledCount: 1,
+} as const;
 export const pipelineJobId = (jobId: string) => `pipeline-${jobId}`;
 export const renderJobId = (jobId: string, clipId: string) =>
   `render-${jobId}-${clipId}`;

@@ -1,0 +1,17 @@
+[
+  {
+    "file": "src/media/services/highlight-detection.service.ts",
+    "baselineErrors": 53,
+    "baselineWarnings": 0
+  },
+  {
+    "file": "src/youtube/youtube-api.service.ts",
+    "baselineErrors": 22,
+    "baselineWarnings": 1
+  },
+  {
+    "file": "src/activities/activities-worker.module.ts",
+    "baselineErrors": 4,
+    "baselineWarnings": 0
+  }
+]

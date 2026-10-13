@@ -1,4 +1,5 @@
 "use client";
+import { ADMIN_ROUTES } from "@blynta/types/contracts";
 
 import Link from "next/link";
 import { useState } from "react";
@@ -60,7 +61,7 @@ export function ClipsView() {
             data={clips}
             loading={query.isLoading}
             emptyMessage="No clips in this page of jobs. Try another page or search."
-            onRowClick={(clip) => router.push(`/jobs/${clip.jobId}`)}
+            onRowClick={(clip) => router.push(ADMIN_ROUTES.job(clip.jobId))}
             columns={[
               {
                 key: "title",
@@ -68,7 +69,7 @@ export function ClipsView() {
                 render: (clip) => (
                   <Link
                     className="font-medium text-primary hover:underline"
-                    href={`/jobs/${clip.jobId}`}
+                    href={ADMIN_ROUTES.job(clip.jobId)}
                   >
                     {clip.title}
                   </Link>

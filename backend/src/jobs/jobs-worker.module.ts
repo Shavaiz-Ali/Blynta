@@ -1,3 +1,5 @@
+import { EDIT_QUEUE } from '../ai-editor/edit.constants';
+import { validateEnvironment } from '../common/configuration';
 import { CreditsModule } from '../billing/credits.module';
 import { AIRegistryModule } from '../ai-registry/ai-registry.module';
 import { CreditsRecoveryService } from './credits-recovery.service';
@@ -15,7 +17,11 @@ import { RenderCapacityService } from './render-capacity.service';
 import { RenderEtaService } from './render-eta.service';
 import { JobsReconciliationService } from './jobs-reconciliation.service';
 import { Job, JobSchema } from './schemas/job.schema';
-import { JOBS_QUEUE, RENDER_QUEUE } from './jobs.constants';
+import {
+  JOBS_QUEUE,
+  RENDER_QUEUE,
+  LEGACY_STUDIO_QUEUE,
+} from './jobs.constants';
 import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
 import { MediaRenderModule } from '../media/media-render.module';
@@ -36,7 +42,10 @@ const logger = new Logger('JobsWorkerMongoose');
   imports: [
     CreditsModule,
     AIRegistryModule,
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (env) => validateEnvironment(env, false),
+    }),
     ScheduleModule.forRoot(),
     CommonModule,
     MongooseModule.forRootAsync({
@@ -74,8 +83,8 @@ const logger = new Logger('JobsWorkerMongoose');
     ActivitiesModule,
     StudioModule,
     AiEditorModule,
-    BullModule.registerQueue({ name: 'edit-render' }),
-    BullModule.registerQueue({ name: 'studio' }),
+    BullModule.registerQueue({ name: EDIT_QUEUE }),
+    BullModule.registerQueue({ name: LEGACY_STUDIO_QUEUE }),
   ],
   providers: [
     CreditsRecoveryService,

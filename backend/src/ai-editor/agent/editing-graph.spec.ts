@@ -1,3 +1,4 @@
+import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.registry';
 import {
   BadRequestException,
   ConflictException,
@@ -98,6 +99,7 @@ function setup(outputs: unknown[] = [intent, answer]) {
           currency: 'USD',
         },
       },
+      provider: { adapter: 'google' },
       secret: 'not-in-tools',
       plan: 'pro',
     }),
@@ -118,7 +120,7 @@ function setup(outputs: unknown[] = [intent, answer]) {
   const graph = new EditingGraph(
     tools,
     registry as unknown as ModelRegistry,
-    google as unknown as GoogleAdapter,
+    new ProviderAdapterRegistry(google as unknown as GoogleAdapter),
   );
   const onTool = jest.fn((_name: string, _result: unknown) => {
     void _name;

@@ -1,3 +1,4 @@
+import { HttpStatus as HTTP_STATUS } from '@nestjs/common';
 import { Injectable, Logger } from '@nestjs/common';
 import * as fs from 'fs';
 import * as fsp from 'fs/promises';
@@ -415,9 +416,9 @@ export class YouTubeApiService {
             // Retriable server errors.
             // ---------------------------------------------------------
             if (
-              response.statusCode === 500 ||
-              response.statusCode === 502 ||
-              response.statusCode === 503 ||
+              response.statusCode === HTTP_STATUS.INTERNAL_SERVER_ERROR ||
+              response.statusCode === HTTP_STATUS.BAD_GATEWAY ||
+              response.statusCode === HTTP_STATUS.SERVICE_UNAVAILABLE ||
               response.statusCode === 504
             ) {
               reject(
@@ -513,7 +514,7 @@ export class YouTubeApiService {
             }
 
             // Session expired.
-            if (response.statusCode === 404) {
+            if (response.statusCode === HTTP_STATUS.NOT_FOUND) {
               reject(new Error('YouTube resumable upload session expired'));
               return;
             }

@@ -1,9 +1,18 @@
+import {
+  API_ENDPOINTS,
+  type AIAdapterType,
+  type AITask,
+} from "@blynta/types/contracts";
 import { axiosClient } from "@/config/axiosClient";
 export interface Provider {
   _id: string;
   code: string;
   name: string;
-  adapter: "google" | "openai" | "anthropic";
+  adapter: AIAdapterType;
+  baseUrl?: string;
+  apiVersion?: string;
+  settings?: { timeoutMs?: number; maxRetries?: 0 };
+  operationalAdapter?: boolean;
   enabled: boolean;
   configured: boolean;
   modelCount: number;
@@ -26,7 +35,7 @@ export interface AIModel {
   description?: string;
   enabled: boolean;
   isDefault: boolean;
-  tasks?: ("highlight_detection" | "edit_planning" | "edit_refinement")[];
+  tasks?: AITask[];
   capabilities: {
     text: boolean;
     vision: boolean;
@@ -79,23 +88,42 @@ export interface UsageSummary {
   pricedRequests: number;
   averageLatencyMs: number;
 }
+export interface AdapterOption {
+  adapter: AIAdapterType;
+  implemented: boolean;
+  endpointDefaults?: { baseUrl: string; apiVersion: string };
+  apiVersions?: string[];
+}
 export const aiAdminApi = {
+  adapters: async () =>
+    (
+      await axiosClient.get<{ items: AdapterOption[] }>(
+        API_ENDPOINTS.aiAdmin.adapters,
+      )
+    ).data,
   providers: async (params?: Record<string, string | number>) =>
-    (await axiosClient.get<List<Provider>>("/admin/ai/providers", { params }))
-      .data,
+    (
+      await axiosClient.get<List<Provider>>(API_ENDPOINTS.aiAdmin.providers, {
+        params,
+      })
+    ).data,
   models: async (params?: Record<string, string | number>) =>
-    (await axiosClient.get<List<AIModel>>("/admin/ai/models", { params })).data,
+    (
+      await axiosClient.get<List<AIModel>>(API_ENDPOINTS.aiAdmin.models, {
+        params,
+      })
+    ).data,
   usage: async (params?: Record<string, string | number>) =>
     (
       await axiosClient.get<List<Usage> & { summary: UsageSummary[] }>(
-        "/admin/ai/usage",
+        API_ENDPOINTS.aiAdmin.usage,
         { params },
       )
     ).data,
   credentials: async (id: string) =>
     (
       await axiosClient.get<{ items: Credential[] }>(
-        "/admin/ai/providers/" + id + "/credentials",
+        API_ENDPOINTS.aiAdmin.credentials(id),
       )
     ).data,
   write: async (
@@ -106,7 +134,7 @@ export const aiAdminApi = {
     (
       await axiosClient.request({
         method,
-        url: "/admin/ai/" + path,
+        url: API_ENDPOINTS.aiAdmin.root + path,
         data: body,
       })
     ).data as unknown,

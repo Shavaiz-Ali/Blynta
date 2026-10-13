@@ -1,4 +1,5 @@
 "use client";
+import { JOB_STATUS_VARIANTS as statusVariants } from "../constants";
 
 import type { ReactNode } from "react";
 import Link from "next/link";
@@ -18,7 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAdminJobDetailQuery, useRetryJobMutation } from "../queries";
-import type { AdminJobItem, JobStatus, SourcePlatform } from "../types";
+import type { AdminJobItem, SourcePlatform } from "../types";
 import { AppButton, AppLinkButton } from "@blynta/ui";
 import {
   AppCardRoot,
@@ -58,18 +59,6 @@ const platformIcons: Record<SourcePlatform, ReactNode> = {
   tiktok: <Film className="size-4 text-primary" />,
   instagram: <Film className="size-4 text-primary" />,
   upload: <Upload className="size-4 text-muted-foreground" />,
-};
-
-const statusVariants: Record<
-  JobStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  completed: "default",
-  transcribing: "secondary",
-  detecting_highlights: "secondary",
-  cutting_clips: "secondary",
-  pending: "outline",
-  failed: "destructive",
 };
 
 function getUserEmail(job: AdminJobItem): string {

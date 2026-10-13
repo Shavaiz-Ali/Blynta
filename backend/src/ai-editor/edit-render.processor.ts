@@ -1,3 +1,5 @@
+import { EDIT_LIMITS } from './edit.constants';
+import { EDIT_RENDER_JOB, EDIT_JOB_OPTIONS } from './edit.constants';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Interval } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
@@ -100,14 +102,11 @@ export class EditRenderProcessor
               );
           } else if (!job)
             await this.queue.add(
-              'EDIT_RENDER_PREVIEW',
+              EDIT_RENDER_JOB,
               { versionId: String(v._id), generation: v.generation ?? 0 },
               {
                 jobId: editJobId(String(v._id), v.generation),
-                attempts: 3,
-                backoff: { type: 'exponential', delay: 3000 },
-                removeOnComplete: { age: 86400, count: 1000 },
-                removeOnFail: { age: 604800, count: 1000 },
+                ...EDIT_JOB_OPTIONS,
               },
             );
         } catch {
@@ -206,12 +205,15 @@ export class EditRenderProcessor
     job: Job<{ versionId: string; generation?: number }>,
     token?: string,
   ) {
-    if (job.name !== 'EDIT_RENDER_PREVIEW')
+    if (job.name !== EDIT_RENDER_JOB)
       throw new UnrecoverableError(
         'Only preview rendering is supported in Phase 1',
       );
     const timeout = Number(
-      this.config.get('EDIT_RENDER_TIMEOUT_SECONDS', 1800),
+      this.config.get(
+        'EDIT_RENDER_TIMEOUT_SECONDS',
+        EDIT_LIMITS.RENDER_TIMEOUT_SECONDS,
+      ),
     );
     if (!Number.isInteger(timeout) || timeout < 10 || timeout > 7200)
       throw new UnrecoverableError('Invalid editing render timeout');

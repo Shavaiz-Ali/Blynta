@@ -8,11 +8,8 @@ export enum UserRole {
   ADMIN = 'admin',
 }
 
-export enum UserPlan {
-  FREE = 'free',
-  PRO = 'pro',
-  BUSINESS = 'business',
-}
+import { UserPlan } from '@blynta/types/contracts';
+export { UserPlan };
 
 // Add new providers here ONLY — no other schema changes needed to support a new one
 export enum AuthProvider {
@@ -68,7 +65,7 @@ export class User {
   linkedAccounts: LinkedAccount[];
 
   // --- Plan (fast path for feature gating — no join needed) ---
-  @Prop({ enum: UserPlan, default: UserPlan.FREE })
+  @Prop({ type: String, enum: UserPlan, default: UserPlan.FREE })
   plan: UserPlan;
 
   @Prop({ default: true })

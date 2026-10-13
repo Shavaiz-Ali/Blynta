@@ -1,0 +1,2768 @@
+{
+  "filesInspected": 1085,
+  "summary": {
+    "provider-url": 15,
+    "http-status": 24,
+    "ai-task": 36,
+    "ai-error": 39,
+    "queue-identifier": 2,
+    "pagination": 8,
+    "operational-timeout": 24,
+    "pipeline-stage": 180,
+    "provider-model-id": 16
+  },
+  "findings": [
+    {
+      "file": "apps/admin/features/admin-ai/AIManagement.tsx",
+      "line": 330,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-ai/AIManagement.tsx",
+      "line": 331,
+      "value": "\"edit_planning\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-ai/AIManagement.tsx",
+      "line": 332,
+      "value": "\"edit_refinement\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-audit/components/AuditView.tsx",
+      "line": 24,
+      "value": "limit: 25",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-billing/components/BillingView.tsx",
+      "line": 50,
+      "value": "limit: 25",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-billing/components/CreditDetails.tsx",
+      "line": 49,
+      "value": "limit: 20",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-clips/ClipsView.tsx",
+      "line": 21,
+      "value": "limit: 25",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 115,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 116,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 124,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 124,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 127,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 135,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 136,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobDetailPage.tsx",
+      "line": 143,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 79,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 80,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 81,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 321,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 322,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 323,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-jobs/components/JobsView.tsx",
+      "line": 324,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/admin/features/admin-users/components/UsersView.tsx",
+      "line": 24,
+      "value": "limit: 25",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/activity/types.ts",
+      "line": 57,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/activity/types.ts",
+      "line": 58,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/ProposalCard.tsx",
+      "line": 28,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/ProposalCard.tsx",
+      "line": 71,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/ProposalCard.tsx",
+      "line": 89,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/StudioPreviewPanel.tsx",
+      "line": 122,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/StudioPreviewPanel.tsx",
+      "line": 159,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/StudioRenderStatus.tsx",
+      "line": 48,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/StudioWorkspace.tsx",
+      "line": 77,
+      "value": "\"edit_refinement\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/StudioWorkspace.tsx",
+      "line": 77,
+      "value": "\"edit_planning\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/StudioWorkspace.tsx",
+      "line": 429,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/contracts.ts",
+      "line": 2,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/ai-editor/contracts.ts",
+      "line": 92,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/billing/queries.ts",
+      "line": 30,
+      "value": "limit: 20",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/dashboard/components/HeroInput.tsx",
+      "line": 128,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/ClipProcessingCard.tsx",
+      "line": 70,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/ClipProcessingCard.tsx",
+      "line": 71,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/ClipProcessingCard.tsx",
+      "line": 72,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/ClipProcessingCard.tsx",
+      "line": 116,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/ClipProcessingCard.tsx",
+      "line": 164,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/FailedClipCard.tsx",
+      "line": 100,
+      "value": "status === 409",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/FailedClipCard.tsx",
+      "line": 38,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/FailedClipCard.tsx",
+      "line": 38,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/FailedClipCard.tsx",
+      "line": 42,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/FailedClipCard.tsx",
+      "line": 42,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/GeneratedClipCard.tsx",
+      "line": 59,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/JobProcessingView.tsx",
+      "line": 16,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/JobProcessingView.tsx",
+      "line": 16,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/JobProcessingView.tsx",
+      "line": 42,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/JobProcessingView.tsx",
+      "line": 53,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/components/JobProcessingView.tsx",
+      "line": 202,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/merge-job-progress.ts",
+      "line": 34,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/merge-job-progress.ts",
+      "line": 58,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 16,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 17,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 18,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 19,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 20,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 21,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 22,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 23,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 24,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 47,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 48,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 64,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 65,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 66,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 66,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/features/jobs/processing-state.ts",
+      "line": 66,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/providers/QueryProvider.tsx",
+      "line": 30,
+      "value": "status >= 400",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/providers/QueryProvider.tsx",
+      "line": 42,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/providers/QueryProvider.tsx",
+      "line": 44,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 92,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 93,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 101,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 160,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 161,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 207,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 211,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/preview-clip-layout.cjs",
+      "line": 211,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 276,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 282,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 284,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 402,
+      "value": "pageSize: 25",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 193,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 198,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 245,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 363,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-ai-studio.cjs",
+      "line": 673,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-circular-progress.cjs",
+      "line": 70,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-failed-clip.cjs",
+      "line": 232,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-failed-clip.cjs",
+      "line": 233,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-failed-video.cjs",
+      "line": 75,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 94,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 104,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 105,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 106,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 107,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 122,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 124,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 126,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 137,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 169,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 169,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 169,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 169,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 321,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 412,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 413,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 414,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 414,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 420,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 421,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 425,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/app/scripts/test-loading-processing.cjs",
+      "line": 428,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "apps/auth/features/auth/api.ts",
+      "line": 70,
+      "value": "timeout(15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/auth/providers/QueryProvider.tsx",
+      "line": 29,
+      "value": "status >= 400",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/auth/providers/QueryProvider.tsx",
+      "line": 41,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/auth/providers/QueryProvider.tsx",
+      "line": 43,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "apps/studio/app/api/workspace/[...path]/route.ts",
+      "line": 63,
+      "value": "timeout(15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "apps/studio/features/auth/api.ts",
+      "line": 51,
+      "value": "timeout(15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "apps/studio/features/auth/components/ProtectedStudio.tsx",
+      "line": 22,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "apps/studio/features/auth/session.ts",
+      "line": 19,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "apps/studio/legacy-auth.ts",
+      "line": 25,
+      "value": "timeout(15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/scripts/recover-cancellation.cjs",
+      "line": 43,
+      "value": "'cancelling'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/recover-cancellation.cjs",
+      "line": 71,
+      "value": "'cancelling'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/seed-ai-registry.ts",
+      "line": 122,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/seed-ai-registry.ts",
+      "line": 122,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/seed-ai-registry.ts",
+      "line": 122,
+      "value": "'edit_refinement'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/seed-ai-registry.ts",
+      "line": 130,
+      "value": "timeoutMs: 30000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/studio-r2-cors.cjs",
+      "line": 77,
+      "value": "httpStatusCode !== 404",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/scripts/test-ai-provider.ts",
+      "line": 24,
+      "value": "timeoutMs: 15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/scripts/test-editor-storage.cjs",
+      "line": 443,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/activities/activities.processor.ts",
+      "line": 13,
+      "value": "lockDuration: 30_000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/activities/schemas/activity.schema.ts",
+      "line": 68,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/activities/schemas/activity.schema.ts",
+      "line": 69,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/agent.schemas.ts",
+      "line": 79,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.service.ts",
+      "line": 54,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.service.ts",
+      "line": 54,
+      "value": "'edit_refinement'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.service.ts",
+      "line": 62,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.service.ts",
+      "line": 92,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.service.ts",
+      "line": 320,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.spec.ts",
+      "line": 267,
+      "value": "'AI_REQUEST_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/editing-graph.spec.ts",
+      "line": 159,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 91,
+      "value": "'edit_refinement'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 91,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 190,
+      "value": "'edit_refinement'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 190,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 141,
+      "value": "'AI_AGENT_DAILY_REQUEST_LIMIT'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 317,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 346,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 350,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 352,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 378,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 385,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 395,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.service.ts",
+      "line": 401,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.spec.ts",
+      "line": 41,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.spec.ts",
+      "line": 85,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.spec.ts",
+      "line": 94,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.spec.ts",
+      "line": 112,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.spec.ts",
+      "line": 155,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/agent/proposals.spec.ts",
+      "line": 172,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-plans.service.ts",
+      "line": 350,
+      "value": "pageSize: 25",
+      "category": "pagination",
+      "destination": "Domain pagination policy; different public API defaults must be preserved.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-plans.service.ts",
+      "line": 451,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-plans.service.ts",
+      "line": 456,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-plans.service.ts",
+      "line": 463,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 30,
+      "value": "lockDuration: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 155,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 444,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 445,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 455,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 457,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-render.processor.ts",
+      "line": 489,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-services.spec.ts",
+      "line": 258,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-services.spec.ts",
+      "line": 404,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-services.spec.ts",
+      "line": 421,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/edit-services.spec.ts",
+      "line": 427,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/edit.schemas.ts",
+      "line": 83,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/edit.schemas.ts",
+      "line": 110,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-editor/ffmpeg-edit-renderer.integration.spec.ts",
+      "line": 65,
+      "value": "timeout: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/ffmpeg-edit-renderer.integration.spec.ts",
+      "line": 136,
+      "value": "timeout: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/ffmpeg-edit-renderer.integration.spec.ts",
+      "line": 365,
+      "value": "timeout: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/ffmpeg-edit-renderer.integration.spec.ts",
+      "line": 423,
+      "value": "timeout: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-editor/ffmpeg-edit-renderer.integration.spec.ts",
+      "line": 532,
+      "value": "timeout: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 166,
+      "value": "https://generativelanguage.googleapis.com",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 198,
+      "value": "https://generativelanguage.googleapis.com",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 248,
+      "value": "status === 429",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 250,
+      "value": "status >= 500",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 249,
+      "value": "'AI_QUOTA_OR_RATE_LIMIT'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 251,
+      "value": "'AI_PROVIDER_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 252,
+      "value": "'AI_AUTH_OR_ACCESS_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 280,
+      "value": "'AI_CREDENTIAL_DECRYPT_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 297,
+      "value": "'AI_TIMEOUT'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 297,
+      "value": "'AI_NETWORK_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 316,
+      "value": "'AI_PROVIDER_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/admin-ai.spec.ts",
+      "line": 325,
+      "value": "'AI_PROVIDER_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/credential-vault.service.ts",
+      "line": 18,
+      "value": "'AI_CREDENTIAL_KEYS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-registry/credential-vault.service.ts",
+      "line": 37,
+      "value": "'AI_CREDENTIAL_KEY_VERSION'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-registry/highlight-routing.spec.ts",
+      "line": 21,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/highlight-routing.spec.ts",
+      "line": 53,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/highlight-routing.spec.ts",
+      "line": 96,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/highlight-routing.spec.ts",
+      "line": 18,
+      "value": "'gemini-test'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/highlight-routing.spec.ts",
+      "line": 58,
+      "value": "'gemini-test'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.controllers.ts",
+      "line": 112,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 208,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 210,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 212,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 215,
+      "value": "'edit_planning'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 374,
+      "value": "'AI_AUTH_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 376,
+      "value": "'AI_QUOTA_OR_RATE_LIMIT'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 378,
+      "value": "'AI_TIMEOUT'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 55,
+      "value": "'gemini-test'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/registry.spec.ts",
+      "line": 226,
+      "value": "'gemini-test'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/billing/credits.service.ts",
+      "line": 361,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.spec.ts",
+      "line": 7,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.spec.ts",
+      "line": 35,
+      "value": "'transcribing'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.spec.ts",
+      "line": 50,
+      "value": "'transcribing'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.spec.ts",
+      "line": 56,
+      "value": "'detecting_highlights'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.ts",
+      "line": 64,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.ts",
+      "line": 21,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.ts",
+      "line": 60,
+      "value": "'transcribing'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/job-failure.ts",
+      "line": 64,
+      "value": "'detecting_highlights'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/jobs-cancellation.spec.ts",
+      "line": 369,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/jobs-model-routing.spec.ts",
+      "line": 28,
+      "value": "'gemini-selected'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/jobs.constants.ts",
+      "line": 9,
+      "value": "lockDuration: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/jobs.constants.ts",
+      "line": 10,
+      "value": "stalledInterval: 30000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/jobs.constants.ts",
+      "line": 41,
+      "value": "'gpt-4o'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/jobs.constants.ts",
+      "line": 42,
+      "value": "'gpt-4o-mini'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/jobs.constants.ts",
+      "line": 43,
+      "value": "'claude-3-5-sonnet'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/jobs.constants.ts",
+      "line": 44,
+      "value": "'claude-3-opus'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 90,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 94,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 102,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 106,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 117,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 120,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.spec.ts",
+      "line": 138,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.service.ts",
+      "line": 46,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.spec.ts",
+      "line": 65,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.spec.ts",
+      "line": 120,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.spec.ts",
+      "line": 122,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.ts",
+      "line": 40,
+      "value": "'cancelled'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/render-eta.ts",
+      "line": 46,
+      "value": "'cutting_clips'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/jobs/source-authorization.spec.ts",
+      "line": 53,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/mail/mail.processor.ts",
+      "line": 21,
+      "value": "lockDuration: 30_000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/media/services/highlight-detection.service.spec.ts",
+      "line": 701,
+      "value": "'gemini-registered'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/media/services/highlight-detection.service.spec.ts",
+      "line": 707,
+      "value": "'gemini-registered'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/media/services/highlight-detection.service.spec.ts",
+      "line": 732,
+      "value": "'gemini-environment'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/media/services/highlight-detection.service.spec.ts",
+      "line": 774,
+      "value": "'gemini-registered'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/media/services/highlight-detection.service.ts",
+      "line": 341,
+      "value": "'highlight_detection'",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/media/services/highlight-detection.service.ts",
+      "line": 157,
+      "value": "'gemini-3.5-flash-lite'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/media/services/media-inspection.service.ts",
+      "line": 87,
+      "value": "timeout: 30000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/notifications/notifications.processor.ts",
+      "line": 15,
+      "value": "lockDuration: 30_000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/studio/studio-import.spec.ts",
+      "line": 236,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.processor.ts",
+      "line": 23,
+      "value": "Processor('studio'",
+      "category": "queue-identifier",
+      "destination": "Domain queue constants; legacy Studio references stay compatible.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.processor.ts",
+      "line": 26,
+      "value": "lockDuration: 60000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.processor.ts",
+      "line": 27,
+      "value": "stalledInterval: 30000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.schemas.ts",
+      "line": 76,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.service.spec.ts",
+      "line": 174,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.service.ts",
+      "line": 793,
+      "value": "https://api.groq.com/openai/v1",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.service.ts",
+      "line": 794,
+      "value": "https://api.openai.com/v1",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.service.ts",
+      "line": 52,
+      "value": "InjectQueue('studio'",
+      "category": "queue-identifier",
+      "destination": "Domain queue constants; legacy Studio references stay compatible.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.service.ts",
+      "line": 421,
+      "value": "'pending'",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/studio/studio.service.ts",
+      "line": 783,
+      "value": "'gemini-3.5-flash-lite'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "legacy-studio-read-only"
+    },
+    {
+      "file": "backend/src/youtube/youtube.processor.ts",
+      "line": 37,
+      "value": "stalledInterval: 60_000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/api-client/src/index.ts",
+      "line": 109,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/api-client/src/index.ts",
+      "line": 124,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/api-client/src/index.ts",
+      "line": 48,
+      "value": "timeout: 30000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/identity-client.ts",
+      "line": 78,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/identity-client.ts",
+      "line": 81,
+      "value": "status === 429",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/identity-client.ts",
+      "line": 84,
+      "value": "status === 404",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/identity-client.ts",
+      "line": 84,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/identity-client.ts",
+      "line": 87,
+      "value": "status >= 500",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/identity-client.ts",
+      "line": 67,
+      "value": "timeout(15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/server.ts",
+      "line": 346,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/session-fetch.ts",
+      "line": 17,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/auth/src/session-read.ts",
+      "line": 20,
+      "value": "timeout(15000",
+      "category": "operational-timeout",
+      "destination": "Named operational policy or validated environment configuration, not database reads.",
+      "scope": "production-source"
+    },
+    {
+      "file": "scripts/tests/product-session-read.test.mjs",
+      "line": 37,
+      "value": "status === 503",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/session-expiration.test.mjs",
+      "line": 60,
+      "value": "status === 503",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/session-expiration.test.mjs",
+      "line": 101,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/session-expiration.test.mjs",
+      "line": 107,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/session-expiration.test.mjs",
+      "line": 131,
+      "value": "status === 403",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/session-expiration.test.mjs",
+      "line": 180,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/session-expiration.test.mjs",
+      "line": 241,
+      "value": "status === 401",
+      "category": "http-status",
+      "destination": "Framework HttpStatus on backend; protocol constant or transport boundary on frontend.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/scripts/test-provider-adapters.cjs",
+      "line": 37,
+      "value": "https://generativelanguage.googleapis.com",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/scripts/test-provider-adapters.cjs",
+      "line": 64,
+      "value": "https://generativelanguage.googleapis.com/v1/models/gemini-synthetic:generateContent",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/scripts/test-provider-adapters.cjs",
+      "line": 42,
+      "value": "'gemini-synthetic'",
+      "category": "provider-model-id",
+      "destination": "Registry model records; named legacy compatibility defaults or deterministic test fixtures.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 30,
+      "value": "https://generativelanguage.googleapis.com.evil.test",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 32,
+      "value": "https://generativelanguage.googleapis.com/path",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 33,
+      "value": "https://generativelanguage.googleapis.com?key=secret",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 34,
+      "value": "https://generativelanguage.googleapis.com#secret",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 35,
+      "value": "https://generativelanguage.googleapis.com:8443",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 43,
+      "value": "https://api.openai.com",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 72,
+      "value": "'AI_AUTH_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 76,
+      "value": "'AI_AUTH_OR_ACCESS_FAILED'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.spec.ts",
+      "line": 79,
+      "value": "'AI_QUOTA_OR_RATE_LIMIT'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-policy.ts",
+      "line": 8,
+      "value": "https://generativelanguage.googleapis.com",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-transport.spec.ts",
+      "line": 10,
+      "value": "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/ai-registry/provider-validation.service.ts",
+      "line": 60,
+      "value": "'AI_CREDENTIAL_TIMEOUT_MS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/common/configuration.spec.ts",
+      "line": 43,
+      "value": "'AI_CREDENTIAL_KEYS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "backend/src/common/configuration.ts",
+      "line": 86,
+      "value": "'AI_CREDENTIAL_KEYS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/common/configuration.ts",
+      "line": 88,
+      "value": "'AI_CREDENTIAL_KEYS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/common/configuration.ts",
+      "line": 96,
+      "value": "'AI_CREDENTIAL_KEYS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/common/configuration.ts",
+      "line": 97,
+      "value": "'AI_CREDENTIAL_KEY_VERSION'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/common/configuration.ts",
+      "line": 98,
+      "value": "'AI_CREDENTIAL_KEY_VERSION'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/common/configuration.ts",
+      "line": 100,
+      "value": "'AI_CREDENTIAL_KEYS'",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "backend/src/media/legacy-provider-policy.ts",
+      "line": 2,
+      "value": "https://api.groq.com/openai/v1",
+      "category": "provider-url",
+      "destination": "Approved endpoint policy/adapter configuration; registered AI endpoints belong in existing provider records.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 28,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 29,
+      "value": "\"edit_planning\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 30,
+      "value": "\"edit_refinement\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 46,
+      "value": "\"AI_AUTH_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 47,
+      "value": "\"AI_AUTH_OR_ACCESS_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 48,
+      "value": "\"AI_MODEL_UNAVAILABLE\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 49,
+      "value": "\"AI_QUOTA_OR_RATE_LIMIT\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 50,
+      "value": "\"AI_PROVIDER_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 51,
+      "value": "\"AI_CREDENTIAL_DECRYPT_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 52,
+      "value": "\"AI_TIMEOUT\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 53,
+      "value": "\"AI_NETWORK_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 54,
+      "value": "\"AI_UNSUPPORTED_ADAPTER\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 55,
+      "value": "\"AI_UNSAFE_ENDPOINT\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 56,
+      "value": "\"AI_REQUEST_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 57,
+      "value": "\"AI_PROPOSAL_FAILED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 58,
+      "value": "\"AI_EXECUTION_INTERRUPTED\"",
+      "category": "ai-error",
+      "destination": "Shared error codes; fixtures and third-party SDK error class names are intentional.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 3,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 4,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 5,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 6,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 9,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 10,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "packages/types/src/contracts.ts",
+      "line": 24,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "production-source"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 29,
+      "value": "\"highlight_detection\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 30,
+      "value": "\"edit_planning\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 31,
+      "value": "\"edit_refinement\"",
+      "category": "ai-task",
+      "destination": "Shared public contracts; fixtures and persisted baseline assertions remain literal intentionally.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 10,
+      "value": "\"pending\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 11,
+      "value": "\"transcribing\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 12,
+      "value": "\"detecting_highlights\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 13,
+      "value": "\"cutting_clips\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 16,
+      "value": "\"cancelling\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 17,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    },
+    {
+      "file": "scripts/tests/shared-contracts.test.cjs",
+      "line": 25,
+      "value": "\"cancelled\"",
+      "category": "pipeline-stage",
+      "destination": "Shared persisted stage contract; UI copy and test expectations may remain explicit.",
+      "scope": "intentional-test-fixture"
+    }
+  ]
+}

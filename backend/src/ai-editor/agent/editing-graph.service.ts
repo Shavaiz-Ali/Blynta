@@ -1,7 +1,9 @@
+import { AGENT_NODE, AGENT_LIMITS } from './agent.constants';
 import { BadRequestException, HttpException, Injectable } from '@nestjs/common';
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import { z } from 'zod';
-import { GoogleAdapter } from '../../ai-registry/google-adapter.service';
+import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.registry';
+import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import { AgentTools } from './agent-tools.service';
 import { editPatchSchema } from './edit-patch';
@@ -38,7 +40,7 @@ export class EditingGraph {
   constructor(
     private tools: AgentTools,
     private registry: ModelRegistry,
-    private google: GoogleAdapter,
+    private adapters: ProviderAdapterRegistry,
   ) {}
   async run(input: {
     userId: string;
@@ -109,14 +111,17 @@ export class EditingGraph {
           input.signal,
           AbortSignal.timeout(fresh.model.settings.timeoutMs),
         ]);
-        const result = await this.google.structured(
-          fresh.model,
-          fresh.secret,
-          schema,
-          SYSTEM,
-          encoded,
-          signal,
-        );
+        const result = await this.adapters
+          .get(fresh.provider.adapter)
+          .structured(
+            fresh.model,
+            fresh.secret,
+            schema,
+            SYSTEM,
+            encoded,
+            signal,
+            fresh.provider,
+          );
         const usage = result.usage;
         const pricing = fresh.model.pricing;
         const inputTokens = usage?.input_tokens,
@@ -161,13 +166,15 @@ export class EditingGraph {
           taskType: 'edit_proposal',
           latencyMs: Date.now() - started,
           status: 'failed',
-          errorCode: input.signal.aborted ? 'AI_TIMEOUT' : 'AI_REQUEST_FAILED',
+          errorCode: input.signal.aborted
+            ? AI_ERROR_CODES.TIMEOUT
+            : AI_ERROR_CODES.REQUEST_FAILED,
         });
         throw error;
       }
     };
     const graph = new StateGraph(State)
-      .addNode('load_context', async () => ({
+      .addNode(AGENT_NODE.LOAD_CONTEXT, async () => ({
         context: JSON.stringify({
           clip: await execute('get_clip_context', () =>
             tools.context.invoke({}),
@@ -186,14 +193,14 @@ export class EditingGraph {
         corrections: 0,
         issues: '',
       }))
-      .addNode('interpret', async (s) => ({
+      .addNode(AGENT_NODE.INTERPRET, async (s) => ({
         intent: await modelCall(intentSchema, {
           task: 'Find required transcript phrases, or explain missing/unsupported information. Empty clarification/unsupported means continue.',
           prompt: input.prompt,
           context: s.context,
         }),
       }))
-      .addNode('resolve_information', async (s) => {
+      .addNode(AGENT_NODE.RESOLVE_INFORMATION, async (s) => {
         const results = await Promise.all(
           s.intent.phrases.map((phrase) =>
             execute('search_transcript', () => tools.search.invoke({ phrase })),
@@ -221,7 +228,7 @@ export class EditingGraph {
           },
         };
       })
-      .addNode('generate_patch', async (s) => ({
+      .addNode(AGENT_NODE.GENERATE_PATCH, async (s) => ({
         answer: await modelCall(answerSchema, {
           task: 'Generate patchJson as JSON with baseRevision and changes; update includes operationId and complete operation of same id/type. No full replacement plans. Return clarification or unsupported with empty patchJson when appropriate.',
           patchContract: z.toJSONSchema(editPatchSchema, { io: 'input' }),
@@ -231,7 +238,7 @@ export class EditingGraph {
           issues: s.issues,
         }),
       }))
-      .addNode('validate', async (s) => {
+      .addNode(AGENT_NODE.VALIDATE, async (s) => {
         if (s.answer.outcome !== 'proposal')
           return { patch: undefined, issues: '' };
         try {
@@ -257,7 +264,7 @@ export class EditingGraph {
           return { patch: undefined, issues: issues.slice(0, 2000) };
         }
       })
-      .addNode('correct', async (s) => ({
+      .addNode(AGENT_NODE.CORRECT, async (s) => ({
         corrections: s.corrections + 1,
         answer: await modelCall(answerSchema, {
           task: 'Correct the invalid patch once; otherwise ask for clarification. Return the same envelope.',
@@ -269,14 +276,14 @@ export class EditingGraph {
           patchContract: z.toJSONSchema(editPatchSchema, { io: 'input' }),
         }),
       }))
-      .addEdge(START, 'load_context')
-      .addEdge('load_context', 'interpret')
-      .addConditionalEdges('interpret', (s) =>
+      .addEdge(START, AGENT_NODE.LOAD_CONTEXT)
+      .addEdge(AGENT_NODE.LOAD_CONTEXT, AGENT_NODE.INTERPRET)
+      .addConditionalEdges(AGENT_NODE.INTERPRET, (s) =>
         s.intent.clarification || s.intent.unsupported
-          ? 'finish_intent'
-          : 'resolve_information',
+          ? AGENT_NODE.FINISH_INTENT
+          : AGENT_NODE.RESOLVE_INFORMATION,
       )
-      .addNode('finish_intent', (s) => ({
+      .addNode(AGENT_NODE.FINISH_INTENT, (s) => ({
         answer: {
           outcome: s.intent.unsupported
             ? ('unsupported' as const)
@@ -285,19 +292,21 @@ export class EditingGraph {
           patchJson: '',
         },
       }))
-      .addEdge('finish_intent', END)
-      .addConditionalEdges('resolve_information', (s) =>
-        s.intent.clarification ? 'finish_intent' : 'generate_patch',
+      .addEdge(AGENT_NODE.FINISH_INTENT, END)
+      .addConditionalEdges(AGENT_NODE.RESOLVE_INFORMATION, (s) =>
+        s.intent.clarification
+          ? AGENT_NODE.FINISH_INTENT
+          : AGENT_NODE.GENERATE_PATCH,
       )
-      .addEdge('generate_patch', 'validate')
-      .addConditionalEdges('validate', (s) =>
-        s.issues && s.corrections === 0 ? 'correct' : END,
+      .addEdge(AGENT_NODE.GENERATE_PATCH, AGENT_NODE.VALIDATE)
+      .addConditionalEdges(AGENT_NODE.VALIDATE, (s) =>
+        s.issues && s.corrections === 0 ? AGENT_NODE.CORRECT : END,
       )
-      .addEdge('correct', 'validate')
+      .addEdge(AGENT_NODE.CORRECT, AGENT_NODE.VALIDATE)
       .compile();
     const result = await graph.invoke(
       {},
-      { recursionLimit: 12, signal: input.signal },
+      { recursionLimit: AGENT_LIMITS.GRAPH_RECURSION, signal: input.signal },
     );
     if (result.issues)
       throw new BadRequestException(

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger } from '@nestjs/common';
+import { Logger, HttpStatus } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ZodValidationPipe } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import { ResponseInterceptor } from './common/interceptors/response.interceptor';
@@ -22,6 +23,7 @@ async function bootstrap() {
     rawBody: true,
   });
   app.enableShutdownHooks();
+  const runtimeConfig = app.get(ConfigService);
 
   const processRegistry = app.get(ProcessRegistryService);
 
@@ -83,7 +85,9 @@ async function bootstrap() {
       })(req, res, next),
   );
 
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') ?? [])
+  const allowedOrigins = (
+    runtimeConfig.get<string>('ALLOWED_ORIGINS')?.split(',') ?? []
+  )
     .map((origin) => origin.trim())
     .filter(Boolean);
 
@@ -95,7 +99,7 @@ async function bootstrap() {
         url.origin !== origin ||
         (url.protocol !== 'https:' &&
           !(
-            process.env.NODE_ENV !== 'production' &&
+            runtimeConfig.get<string>('NODE_ENV') !== 'production' &&
             url.protocol === 'http:' &&
             ['localhost', '127.0.0.1'].includes(url.hostname)
           ))
@@ -112,7 +116,7 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
     exposedHeaders: ['Content-Length', 'Content-Type'],
     preflightContinue: false,
-    optionsSuccessStatus: 204,
+    optionsSuccessStatus: HttpStatus.NO_CONTENT,
   });
 
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -121,7 +125,7 @@ async function bootstrap() {
 
   app.useGlobalInterceptors(new ResponseInterceptor());
 
-  const port = process.env.PORT ?? 5001;
+  const port = runtimeConfig.getOrThrow<number>('PORT');
   await app.listen(port);
 }
 bootstrap();

@@ -21,6 +21,9 @@ type AIRequest = { user: { userId: string } };
 @Controller('admin/ai')
 @UseGuards(AuthGuard('jwt'), AdminGuard, AIRateLimitGuard)
 export class AdminAIController {
+  @Get('adapters') adapters() {
+    return this.service.adapterOptions();
+  }
   constructor(private service: AdminAIService) {}
   @Get('providers') providers(@Query() q: unknown) {
     return this.service.list('providers', q);

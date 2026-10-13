@@ -7,6 +7,19 @@ export function backendUrl(): string {
     process.env.NEXT_PUBLIC_API_URL;
   if (!url)
     throw new Error("Configure the backend service binding or BACKEND_URL.");
+  try {
+    const parsed = new URL(url);
+    if (
+      !["http:", "https:"].includes(parsed.protocol) ||
+      parsed.username ||
+      parsed.password
+    )
+      throw new Error();
+  } catch {
+    throw new Error(
+      "Configure a valid HTTP(S) backend service URL without embedded credentials.",
+    );
+  }
   return url.replace(/\/$/, "");
 }
 

@@ -1,9 +1,10 @@
+import { STORAGE_POLICY } from './storage.constants';
 import {
   cancellationSignal,
   assertNotCancelled,
 } from '../jobs/cancellation-context';
 import { pipeline } from 'node:stream/promises';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   S3Client,
@@ -50,7 +51,9 @@ export class R2Service {
   }
 
   private isSource(key: string): boolean {
-    return key.startsWith('source-videos/') || key.startsWith('job-sources/');
+    return STORAGE_POLICY.SOURCE_PREFIXES.some((prefix) =>
+      key.startsWith(prefix),
+    );
   }
 
   private bucketFor(key: string): string {
@@ -101,7 +104,7 @@ export class R2Service {
    */
   async getPublicOrSignedUrl(
     objectKey: string,
-    expiresInSeconds = 7 * 24 * 3600,
+    expiresInSeconds: number = STORAGE_POLICY.PUBLIC_FALLBACK_TTL_SECONDS,
   ): Promise<string> {
     const publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN');
     if (publicDomain && !this.isSource(objectKey)) {
@@ -129,7 +132,7 @@ export class R2Service {
           Bucket: this.bucketFor(objectKey),
           Key: objectKey,
           Body: fileStream,
-          ContentType: 'video/mp4',
+          ContentType: STORAGE_POLICY.VIDEO_MIME,
         }),
         { abortSignal: cancellationSignal() },
       );
@@ -156,7 +159,7 @@ export class R2Service {
         $metadata?: { httpStatusCode?: number };
       };
       if (
-        failure.$metadata?.httpStatusCode === 404 ||
+        failure.$metadata?.httpStatusCode === HttpStatus.NOT_FOUND ||
         failure.name === 'NotFound' ||
         failure.name === 'NoSuchKey'
       )
@@ -234,7 +237,7 @@ export class R2Service {
    */
   async getSignedDownloadUrl(
     objectKey: string,
-    expiresInSeconds = 3600,
+    expiresInSeconds: number = STORAGE_POLICY.DOWNLOAD_TTL_SECONDS,
     filename?: string,
   ): Promise<string> {
     const command = new GetObjectCommand({
@@ -289,7 +292,7 @@ export class R2Service {
   async getPresignedUploadUrl(
     objectKey: string,
     contentType: string,
-    expiresIn = 300,
+    expiresIn: number = STORAGE_POLICY.UPLOAD_TTL_SECONDS,
   ): Promise<string> {
     const command = new PutObjectCommand({
       Bucket: this.bucketFor(objectKey),

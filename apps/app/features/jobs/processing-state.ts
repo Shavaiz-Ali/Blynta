@@ -1,10 +1,11 @@
+import { JobStatus } from "@blynta/types/contracts";
 import type { Job, Clip } from "./types";
 
 export const processingSteps = [
-  { status: "pending", label: "Preparing video" },
-  { status: "transcribing", label: "Generating transcript" },
-  { status: "detecting_highlights", label: "Finding the best moments" },
-  { status: "cutting_clips", label: "Creating your clips" },
+  { status: JobStatus.PENDING, label: "Preparing video" },
+  { status: JobStatus.TRANSCRIBING, label: "Generating transcript" },
+  { status: JobStatus.DETECTING_HIGHLIGHTS, label: "Finding the best moments" },
+  { status: JobStatus.CUTTING_CLIPS, label: "Creating your clips" },
 ] as const;
 
 export function pipelineIndex(job: Job) {

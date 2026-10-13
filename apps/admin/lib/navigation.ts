@@ -1,3 +1,4 @@
+import { ADMIN_ROUTES } from "@blynta/types/contracts";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
@@ -34,11 +35,16 @@ export const navigation: NavigationGroup[] = [
     items: [
       {
         title: "Overview",
-        href: "/",
+        href: ADMIN_ROUTES.home,
         permission: "analytics.read",
         icon: Gauge,
       },
-      { title: "Users", href: "/users", permission: "users.read", icon: Users },
+      {
+        title: "Users",
+        href: ADMIN_ROUTES.users,
+        permission: "users.read",
+        icon: Users,
+      },
     ],
   },
   {
@@ -46,7 +52,7 @@ export const navigation: NavigationGroup[] = [
     items: [
       {
         title: "Jobs",
-        href: "/jobs",
+        href: ADMIN_ROUTES.jobs,
         permission: "jobs.read",
         icon: BriefcaseBusiness,
       },
@@ -69,7 +75,7 @@ export const navigation: NavigationGroup[] = [
     items: [
       {
         title: "AI Management",
-        href: "/ai",
+        href: ADMIN_ROUTES.ai,
         permission: "analytics.read",
         icon: Bot,
       },

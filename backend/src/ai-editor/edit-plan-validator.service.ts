@@ -1,3 +1,4 @@
+import { HttpStatus as HTTP_STATUS } from '@nestjs/common';
 import {
   BadRequestException,
   Injectable,
@@ -65,7 +66,7 @@ export class EditPlanValidatorService {
             $metadata?: { httpStatusCode?: number };
           };
           if (
-            missing.$metadata?.httpStatusCode === 404 ||
+            missing.$metadata?.httpStatusCode === HTTP_STATUS.NOT_FOUND ||
             missing.name === 'NotFound' ||
             missing.name === 'NoSuchKey'
           )

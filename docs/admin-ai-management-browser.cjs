@@ -3,7 +3,9 @@ const path = require("path");
 const assert = require("node:assert/strict");
 const { open, chromium } = require("./ui-audit-browser.cjs");
 const { ids, fixture } = require("./ui-audit-data.cjs");
-const out = path.join(__dirname, "admin-ai-management-evidence");
+const out = process.env.ADMIN_AI_EVIDENCE_DIR
+  ? path.resolve(process.env.ADMIN_AI_EVIDENCE_DIR)
+  : path.join(__dirname, "admin-ai-management-evidence");
 fs.mkdirSync(out, { recursive: true });
 const results = [];
 async function capture(c, name, width) {
@@ -102,6 +104,8 @@ async function setup(b, width) {
           name: "New provider",
           code: "new-provider",
           adapter: "google",
+          baseUrl: "https://generativelanguage.googleapis.com",
+          apiVersion: "v1beta",
           description: "",
           enabled: true,
         });
@@ -242,7 +246,7 @@ async function setup(b, width) {
       await d
         .getByLabel("Input USD / million tokens", { exact: true })
         .fill("");
-      for (const name of ["edit planning", "edit refinement"])
+      for (const name of ["Edit planning", "Edit refinement"])
         await d.getByRole("checkbox", { name, exact: true }).uncheck();
       await d.getByRole("button", { name: "Save model", exact: true }).click();
       await d

@@ -1,3 +1,5 @@
+import { ADAPTER_POLICY } from '../src/ai-registry/provider-policy';
+import type { AIProvider } from '../src/ai-registry/registry.schemas';
 import 'reflect-metadata';
 import { z } from 'zod';
 import { GoogleAdapter } from '../src/ai-registry/google-adapter.service';
@@ -26,7 +28,17 @@ async function main() {
   };
   const google = new GoogleAdapter(),
     signal = AbortSignal.timeout(20000);
-  await google.verifyModel(modelId, secret, signal);
+  const provider: AIProvider = {
+    code: 'google-smoke-test',
+    name: 'Google smoke test',
+    adapter: 'google',
+    enabled: true,
+    baseUrl: ADAPTER_POLICY.google.baseUrl,
+    apiVersion: ADAPTER_POLICY.google.apiVersion,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  await google.verifyModel(modelId, secret, signal, provider);
   const result = await google.structured(
     model,
     secret,
@@ -34,6 +46,7 @@ async function main() {
     'Return ok true.',
     'Connectivity test.',
     signal,
+    provider,
   );
   if (result.parsed?.ok !== true) throw new Error();
   console.log(

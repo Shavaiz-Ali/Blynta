@@ -43,7 +43,8 @@
     "test:editing:flow": "npm run build && node scripts/test-editor-flow.cjs",
     "seed:ai-registry": "ts-node scripts/seed-ai-registry.ts",
     "test:ai-provider:live": "ts-node scripts/test-ai-provider.ts",
-    "test:ai-agent": "jest --runInBand ai-registry ai-editor"
+    "test:ai-agent": "jest --runInBand ai-registry ai-editor",
+    "migrate:ai-endpoints": "ts-node scripts/backfill-ai-provider-endpoints.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.42",
@@ -81,7 +82,8 @@
     "reflect-metadata": "^0.2.2",
     "resend": "^6.18.1",
     "rxjs": "^7.8.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@blynta/types": "file:../packages/types"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",

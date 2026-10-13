@@ -1,5 +1,14 @@
 "use client";
 import styles from "./ai-management.module.css";
+import {
+  AI_ADAPTERS,
+  AI_TASKS,
+  AI_TASK,
+  AI_TASK_LABELS,
+  SUBSCRIPTION_PLANS,
+  PAGINATION,
+  AI_MODEL_POLICY,
+} from "@blynta/types/contracts";
 import { AppSelect, AppCheckbox, AppRadioGroup } from "@blynta/ui";
 import { AppDataTable as AppTable } from "@/components/common/DataTable";
 import { AppPageHeader } from "@/components/common/AppPageHeader";
@@ -40,7 +49,20 @@ const providerForm = z.object({
     .string()
     .trim()
     .regex(/^[a-z][a-z0-9-]{1,39}$/),
-  adapter: z.enum(["google", "openai", "anthropic"]),
+  adapter: z.enum(AI_ADAPTERS),
+  baseUrl: z.string().url().max(512).optional(),
+  apiVersion: z.string().max(30).optional(),
+  settings: z
+    .object({
+      timeoutMs: z
+        .number()
+        .int()
+        .min(AI_MODEL_POLICY.TIMEOUT_MS.MIN)
+        .max(AI_MODEL_POLICY.TIMEOUT_MS.MAX)
+        .optional(),
+      maxRetries: z.literal(AI_MODEL_POLICY.MAX_RETRIES),
+    })
+    .optional(),
   enabled: z.boolean(),
   description: z.string().max(500),
 });
@@ -49,10 +71,26 @@ const modelForm = z.object({
   modelId: z.string().regex(/^gemini-[a-zA-Z0-9.-]{1,100}$/),
   displayName: name,
   description: z.string().max(500),
-  temperature: z.number().min(0).max(2).optional(),
-  maxOutputTokens: z.number().int().min(128).max(8192),
-  timeoutMs: z.number().int().min(1000).max(60000),
-  priority: z.number().int().min(0).max(1000),
+  temperature: z
+    .number()
+    .min(AI_MODEL_POLICY.TEMPERATURE.MIN)
+    .max(AI_MODEL_POLICY.TEMPERATURE.MAX)
+    .optional(),
+  maxOutputTokens: z
+    .number()
+    .int()
+    .min(AI_MODEL_POLICY.OUTPUT_TOKENS.MIN)
+    .max(AI_MODEL_POLICY.OUTPUT_TOKENS.MAX),
+  timeoutMs: z
+    .number()
+    .int()
+    .min(AI_MODEL_POLICY.TIMEOUT_MS.MIN)
+    .max(AI_MODEL_POLICY.TIMEOUT_MS.MAX),
+  priority: z
+    .number()
+    .int()
+    .min(AI_MODEL_POLICY.PRIORITY.MIN)
+    .max(AI_MODEL_POLICY.PRIORITY.MAX),
 });
 function Field({
   label,
@@ -70,7 +108,7 @@ function Field({
   hint?: string;
 }) {
   return (
-    <div className="grid gap-2 text-sm">
+    <div className="grid content-start gap-2 text-sm">
       <Label htmlFor={`ai-field-${name}`}>{label}</Label>
       <Input
         id={`ai-field-${name}`}
@@ -114,6 +152,14 @@ export function AIManagement({
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
+  const [selectedAdapter, setSelectedAdapter] = useState<string>(
+    AI_ADAPTERS[0],
+  );
+  const adapterOptions = useQuery({
+    queryKey: ["admin-ai", "adapters"],
+    queryFn: aiAdminApi.adapters,
+  });
+
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [confirmDeletion, setConfirmDeletion] = useState<string>();
@@ -122,6 +168,9 @@ export function AIManagement({
     Provider | null | undefined
   >();
   const [modelEdit, setModelEdit] = useState<AIModel | null | undefined>();
+  const activeAdapter = adapterOptions.data?.items.find(
+    (option) => option.adapter === (providerEdit?.adapter ?? selectedAdapter),
+  );
   const [selectedProvider, setSelectedProvider] = useState("");
   const [credentialProvider, setCredentialProvider] = useState<Provider>();
   const [credentialEdit, setCredentialEdit] = useState<Credential>();
@@ -220,6 +269,11 @@ export function AIManagement({
       adapter: providerEdit?.adapter ?? form.get("adapter"),
       description: form.get("description"),
       enabled: form.has("enabled"),
+      baseUrl: form.get("baseUrl") || undefined,
+      apiVersion: form.get("apiVersion") || undefined,
+      settings: form.get("providerTimeoutMs")
+        ? { timeoutMs: Number(form.get("providerTimeoutMs")), maxRetries: 0 }
+        : undefined,
     });
     if (!parsed.success) {
       setError(
@@ -227,7 +281,12 @@ export function AIManagement({
       );
       return;
     }
-    if (parsed.data.enabled && parsed.data.adapter !== "google") {
+    if (
+      parsed.data.enabled &&
+      !adapterOptions.data?.items.find(
+        (option) => option.adapter === parsed.data.adapter,
+      )?.implemented
+    ) {
       setError(
         "This adapter is not available yet. Uncheck Enabled to save its configuration.",
       );
@@ -264,7 +323,7 @@ export function AIManagement({
       timeoutMs: Number(form.get("timeoutMs")),
       priority: Number(form.get("priority")),
     });
-    const allowedPlans = ["free", "pro", "business"].filter((p) =>
+    const allowedPlans = SUBSCRIPTION_PLANS.filter((p) =>
       form.has("plan-" + p),
     );
     const tasks = [
@@ -294,7 +353,10 @@ export function AIManagement({
           pricing.inputCostPerMillionTokens,
           pricing.outputCostPerMillionTokens,
         ].every(
-          (price) => Number.isFinite(price) && price >= 0 && price <= 10000,
+          (price) =>
+            Number.isFinite(price) &&
+            price >= 0 &&
+            price <= AI_MODEL_POLICY.MAX_TOKEN_PRICE_USD,
         ))
     ) {
       setError(
@@ -384,8 +446,10 @@ export function AIManagement({
                 toast.dismiss();
                 setError("");
                 setNotice("");
-                if (section === "providers") setProviderEdit(null);
-                else {
+                if (section === "providers") {
+                  setSelectedAdapter(AI_ADAPTERS[0]);
+                  setProviderEdit(null);
+                } else {
                   setSelectedProvider("");
                   setModelEdit(null);
                 }
@@ -809,7 +873,9 @@ export function AIManagement({
       {(page > 1 || !!current.data?.items.length) && (
         <AppPagination
           page={page}
-          hasNext={(current.data?.items.length ?? 0) >= 25}
+          hasNext={
+            (current.data?.items.length ?? 0) >= PAGINATION.DEFAULT_PAGE_SIZE
+          }
           onPageChange={setPage}
           disabled={current.isPending || current.isError}
         />
@@ -820,10 +886,8 @@ export function AIManagement({
           if (!open) setProviderEdit(undefined);
         }}
       >
-        <DialogContent
-          className={`${styles.scrollbar} max-h-[90dvh] overflow-y-auto sm:max-w-2xl`}
-        >
-          <DialogHeader>
+        <DialogContent className="flex h-[min(860px,90dvh)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 border-b px-6 py-5">
             <DialogTitle>
               {providerEdit ? "Edit provider" : "Add provider"}
             </DialogTitle>
@@ -831,88 +895,123 @@ export function AIManagement({
           <form
             key={providerEdit?._id ?? "new-provider"}
             onSubmit={saveProvider}
-            className="grid gap-4"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            {error && (
-              <p role="alert" className="text-destructive text-sm">
-                {error}
-              </p>
-            )}
-            <Field
-              label="Name"
-              name="name"
-              value={providerEdit?.name}
-              required
-            />
-            <Field
-              label="Code"
-              name="code"
-              value={providerEdit?.code}
-              hint="A unique lowercase code, for example google-gemini."
-              required
-            />
-            <fieldset className="space-y-2" disabled={!!providerEdit}>
-              <legend className="text-sm font-medium">Adapter</legend>
-              <AppRadioGroup
-                name="adapter"
-                disabled={!!providerEdit}
-                aria-label="Adapter"
-                defaultValue={providerEdit?.adapter ?? "google"}
-                options={[
-                  {
-                    value: "google",
-                    label: "Google Gemini",
-                    description: "Available for registered Gemini models.",
-                  },
-                  {
-                    value: "openai",
-                    label: "OpenAI",
-                    description: "Adapter pending. Save as disabled.",
-                  },
-                  {
-                    value: "anthropic",
-                    label: "Anthropic",
-                    description: "Adapter pending. Save as disabled.",
-                  },
-                ]}
-              />
-              {providerEdit && (
-                <p className="text-xs text-muted-foreground">
-                  The adapter cannot be changed after creation.
+            <div
+              className={`${styles.scrollbar} grid min-h-0 flex-1 content-start gap-4 overflow-y-auto overscroll-contain px-6 py-5`}
+            >
+              {error && (
+                <p role="alert" className="text-destructive text-sm">
+                  {error}
                 </p>
               )}
-            </fieldset>
-            <Field
-              label="Description"
-              name="description"
-              value={providerEdit?.description ?? ""}
-            />
-            {providerEdit && (
-              <label className="grid gap-2 text-sm">
-                Default credential
-                <AppSelect
-                  aria-label="Default credential"
-                  name="defaultCredentialId"
-                  defaultValue={providerEdit.defaultCredentialId ?? ""}
+              <Field
+                label="Name"
+                name="name"
+                value={providerEdit?.name}
+                required
+              />
+              <Field
+                label="Code"
+                name="code"
+                value={providerEdit?.code}
+                hint="A unique lowercase code, for example google-gemini."
+                required
+              />
+              <fieldset className="space-y-2" disabled={!!providerEdit}>
+                <legend className="text-sm font-medium">Adapter</legend>
+                <AppRadioGroup
+                  name="adapter"
+                  disabled={!!providerEdit}
+                  aria-label="Adapter"
+                  defaultValue={providerEdit?.adapter ?? selectedAdapter}
+                  onValueChange={setSelectedAdapter}
+                  options={
+                    adapterOptions.data?.items.map((option) => ({
+                      value: option.adapter,
+                      label: {
+                        google: "Google Gemini",
+                        openai: "OpenAI",
+                        anthropic: "Anthropic",
+                      }[option.adapter],
+                      description: option.implemented
+                        ? "Available for registered models."
+                        : "Adapter pending. Save as disabled.",
+                    })) ?? []
+                  }
+                />
+                {providerEdit && (
+                  <p className="text-xs text-muted-foreground">
+                    The adapter cannot be changed after creation.
+                  </p>
+                )}
+              </fieldset>
+              {activeAdapter?.implemented && (
+                <div
+                  key={providerEdit?.adapter ?? selectedAdapter}
+                  className="grid gap-4 sm:grid-cols-2"
                 >
-                  <SelectItem value="">No default credential</SelectItem>
-                  {defaultCredentials.data?.items.map((c) => (
-                    <SelectItem key={c._id} value={c._id}>
-                      {c.label}
-                      {c.enabled ? "" : " (disabled)"}
-                    </SelectItem>
-                  ))}
-                </AppSelect>
-              </label>
-            )}
-            <Check
-              name="enabled"
-              label="Enabled"
-              checked={providerEdit?.enabled ?? true}
-            />
-            <Button type="submit" disabled={busy}>
-              {busy ? "Saving…" : "Save provider"}
-            </Button>
+                  <Field
+                    label="Approved API base URL"
+                    name="baseUrl"
+                    value={
+                      providerEdit?.baseUrl ??
+                      activeAdapter.endpointDefaults?.baseUrl ??
+                      ""
+                    }
+                    hint="Only origins approved by this adapter are accepted. Endpoint changes require a new model test."
+                  />
+                  <Field
+                    label="API version"
+                    name="apiVersion"
+                    value={
+                      providerEdit?.apiVersion ??
+                      activeAdapter.endpointDefaults?.apiVersion ??
+                      ""
+                    }
+                  />
+                  <Field
+                    label="Credential check timeout (ms, optional)"
+                    name="providerTimeoutMs"
+                    type="number"
+                    value={providerEdit?.settings?.timeoutMs}
+                  />
+                </div>
+              )}
+              <Field
+                label="Description"
+                name="description"
+                value={providerEdit?.description ?? ""}
+              />
+              {providerEdit && (
+                <label className="grid gap-2 text-sm">
+                  Default credential
+                  <AppSelect
+                    aria-label="Default credential"
+                    name="defaultCredentialId"
+                    defaultValue={providerEdit.defaultCredentialId ?? ""}
+                  >
+                    <SelectItem value="">No default credential</SelectItem>
+                    {defaultCredentials.data?.items.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        {c.label}
+                        {c.enabled ? "" : " (disabled)"}
+                      </SelectItem>
+                    ))}
+                  </AppSelect>
+                </label>
+              )}
+              <Check
+                name="enabled"
+                label="Enabled"
+                checked={providerEdit?.enabled ?? true}
+              />
+            </div>
+            <div className="flex shrink-0 justify-end border-t px-6 py-4">
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save provider"}
+              </Button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
@@ -1123,7 +1222,7 @@ export function AIManagement({
                   >
                     <SelectItem value="">Select provider</SelectItem>
                     {catalog.data?.items
-                      .filter((p) => p.adapter === "google")
+                      .filter((p) => p.operationalAdapter)
                       .map((p) => (
                         <SelectItem key={p._id} value={p._id}>
                           {p.name}
@@ -1192,19 +1291,27 @@ export function AIManagement({
                   label="Output token limit"
                   name="maxOutputTokens"
                   type="number"
-                  value={modelEdit?.settings.maxOutputTokens ?? 4096}
+                  value={
+                    modelEdit?.settings.maxOutputTokens ??
+                    AI_MODEL_POLICY.OUTPUT_TOKENS.DEFAULT
+                  }
                 />
                 <Field
                   label="Timeout (ms)"
                   name="timeoutMs"
                   type="number"
-                  value={modelEdit?.settings.timeoutMs ?? 30000}
+                  value={
+                    modelEdit?.settings.timeoutMs ??
+                    AI_MODEL_POLICY.TIMEOUT_MS.DEFAULT
+                  }
                 />
                 <Field
                   label="Priority"
                   name="priority"
                   type="number"
-                  value={modelEdit?.priority ?? 100}
+                  value={
+                    modelEdit?.priority ?? AI_MODEL_POLICY.PRIORITY.DEFAULT
+                  }
                 />
                 <Field
                   label="Input USD / million tokens"
@@ -1228,19 +1335,16 @@ export function AIManagement({
                   <legend className="mb-2 text-sm font-medium">
                     Supported tasks
                   </legend>
-                  {(
-                    [
-                      "highlight_detection",
-                      "edit_planning",
-                      "edit_refinement",
-                    ] as const
-                  ).map((task) => (
+                  {AI_TASKS.map((task) => (
                     <Check
                       key={task}
                       name={"task-" + task}
-                      label={task.replaceAll("_", " ")}
+                      label={AI_TASK_LABELS[task]}
                       checked={(
-                        modelEdit?.tasks ?? ["edit_planning", "edit_refinement"]
+                        modelEdit?.tasks ?? [
+                          AI_TASK.EDIT_PLANNING,
+                          AI_TASK.EDIT_REFINEMENT,
+                        ]
                       ).includes(task)}
                     />
                   ))}
@@ -1282,7 +1386,7 @@ export function AIManagement({
                 <legend className="mb-2 text-sm font-medium">
                   Allowed plans
                 </legend>
-                {(["free", "pro", "business"] as const).map((p) => (
+                {SUBSCRIPTION_PLANS.map((p) => (
                   <Check
                     key={p}
                     name={"plan-" + p}

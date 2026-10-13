@@ -1,3 +1,4 @@
+import { MEDIA_WORKER_POLICY } from './jobs.constants';
 import { createHash } from 'node:crypto';
 import { PipelineCacheService } from '../media/services/pipeline-cache.service';
 import {
@@ -59,13 +60,7 @@ import {
   ActivityType,
 } from '../activities/schemas/activity.schema';
 
-@Processor(JOBS_QUEUE, {
-  concurrency: 1,
-  autorun: false,
-  lockDuration: 60_000, // ms a job can be "locked" by a worker before considered stalled
-  stalledInterval: 30_000, // how often BullMQ checks for stalled jobs
-  maxStalledCount: 1, // after this many stall-detections, job is marked FAILED
-})
+@Processor(JOBS_QUEUE, MEDIA_WORKER_POLICY)
 export class JobsProcessor
   extends WorkerHost
   implements OnApplicationBootstrap

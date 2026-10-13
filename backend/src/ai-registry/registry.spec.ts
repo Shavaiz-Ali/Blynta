@@ -29,6 +29,7 @@ import { AdminGuard } from '../admin/guards/admin.guard';
 import { AdminAIController } from './registry.controllers';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { GoogleAdapter, providerError } from './google-adapter.service';
+import { providerConfigurationHash } from './provider-policy';
 const id = '111111111111111111111111';
 const providerId = '222222222222222222222222';
 const credentialId = '333333333333333333333333';
@@ -217,7 +218,11 @@ describe('AI registry routing and policies', () => {
   it('initializes the implemented LangChain Google adapter from resolved encrypted credentials', async () => {
     const s = setup();
     const resolved = await s.registry.resolveUserModel(id, id);
-    const client = new GoogleAdapter().create(resolved.model, resolved.secret);
+    const client = new GoogleAdapter().create(
+      resolved.model,
+      resolved.secret,
+      resolved.provider,
+    );
     expect(client.model).toBe('gemini-test');
     expect(JSON.stringify(client.toJSON())).not.toContain(
       'test-secret-do-not-expose',
@@ -277,9 +282,42 @@ describe('AI registry routing and policies', () => {
     expect(s.providers.findOne).toHaveBeenCalledWith({
       _id: providerId,
       enabled: true,
-      adapter: 'google',
     });
     s.credentials.findOne.mockImplementation(() => q(null) as never);
+    await expect(s.registry.configured(id)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+  it('rejects a model tested before its provider configuration changed', async () => {
+    const s = setup();
+    Object.assign(s.provider, { revision: 2 });
+    await expect(s.registry.configured(id)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    Object.assign(s.model, {
+      testedProviderRevision: 2,
+      testedProviderConfigurationHash: providerConfigurationHash(
+        s.provider as unknown as AIProvider,
+      ),
+    });
+    await expect(s.registry.configured(id)).resolves.toHaveProperty(
+      'model',
+      s.model,
+    );
+  });
+  it('rejects an unsafe persisted endpoint even if a prior model test is valid', async () => {
+    const s = setup();
+    Object.assign(s.provider, {
+      baseUrl: 'https://169.254.169.254',
+      apiVersion: 'v1beta',
+    });
+    await expect(s.registry.configured(id)).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+  it('requires a fresh test when a legacy provider has a different API version without a recorded fingerprint', async () => {
+    const s = setup();
+    Object.assign(s.provider, { apiVersion: 'v1' });
     await expect(s.registry.configured(id)).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );

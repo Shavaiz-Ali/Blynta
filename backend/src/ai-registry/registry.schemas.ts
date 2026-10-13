@@ -2,6 +2,7 @@ import { Schema } from 'mongoose';
 import type { ModelInput, ProviderInput } from './registry.contract';
 import type { SealedSecret } from './credential-vault.service';
 export interface AIProvider extends ProviderInput {
+  revision?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +22,8 @@ export interface AIModel extends ModelInput {
   lastTestStatus?: string;
   testedCredentialId?: string;
   testedCredentialRevision?: number;
+  testedProviderRevision?: number;
+  testedProviderConfigurationHash?: string;
 }
 export interface AIRouting {
   _id: string;
@@ -56,6 +59,15 @@ export const ProviderSchema = new Schema<AIProvider>(
     enabled: { type: Boolean, default: false },
     description: String,
     defaultCredentialId: String,
+    baseUrl: String,
+    apiVersion: String,
+    settings: {
+      type: new Schema(
+        { timeoutMs: Number, maxRetries: Number },
+        { _id: false },
+      ),
+    },
+    revision: { type: Number, default: 1 },
   },
   { timestamps: true, collection: 'ai_providers' },
 );
@@ -127,6 +139,8 @@ export const ModelSchema = new Schema<AIModel>(
     lastTestStatus: String,
     testedCredentialId: String,
     testedCredentialRevision: Number,
+    testedProviderRevision: Number,
+    testedProviderConfigurationHash: String,
   },
   { timestamps: true, collection: 'ai_models' },
 );

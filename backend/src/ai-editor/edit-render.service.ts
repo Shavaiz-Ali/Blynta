@@ -1,3 +1,4 @@
+import { EDIT_LIMITS } from './edit.constants';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { writeFile, stat, copyFile } from 'node:fs/promises';
@@ -44,7 +45,7 @@ export class EditRenderService {
     );
     const sourceInfo = await this.r2.objectInfo(version.sourceMedia.storageKey);
     const maxBytes = Number(
-      this.config.get('EDIT_SOURCE_MAX_BYTES', 500 * 1024 * 1024),
+      this.config.get('EDIT_SOURCE_MAX_BYTES', EDIT_LIMITS.SOURCE_MAX_BYTES),
     );
     if (
       !Number.isFinite(maxBytes) ||
@@ -213,7 +214,7 @@ export class EditRenderService {
       );
     }
     const outputMaxBytes = Number(
-      this.config.get('EDIT_OUTPUT_MAX_BYTES', 200 * 1024 * 1024),
+      this.config.get('EDIT_OUTPUT_MAX_BYTES', EDIT_LIMITS.OUTPUT_MAX_BYTES),
     );
     if (
       !Number.isSafeInteger(outputMaxBytes) ||

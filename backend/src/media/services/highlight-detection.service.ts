@@ -1,3 +1,5 @@
+import { LEGACY_GROQ_ENDPOINT } from '../legacy-provider-policy';
+import { HttpStatus as HTTP_STATUS } from '@nestjs/common';
 import { meteredGenerateObject } from '../../billing/metered-ai';
 import { setTimeout as abortableDelay } from 'node:timers/promises';
 import {
@@ -15,6 +17,7 @@ import {
   HighlightRouting,
   HighlightModelSelection,
 } from '../../ai-registry/highlight-routing.service';
+import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.registry';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import { ConfigService } from '@nestjs/config';
 import { NoObjectGeneratedError, type LanguageModel } from 'ai';
@@ -144,6 +147,7 @@ export class HighlightDetectionService {
     private configService: ConfigService,
     @Optional() private routing?: HighlightRouting,
     @Optional() private registry?: ModelRegistry,
+    @Optional() private adapters?: ProviderAdapterRegistry,
   ) {
     this.provider = this.configService
       .get<string>('LLM_PROVIDER', 'google')
@@ -166,7 +170,7 @@ export class HighlightDetectionService {
     if (this.provider === 'groq') {
       const baseURL = this.configService.get<string>(
         'LLM_BASE_URL',
-        'https://api.groq.com/openai/v1',
+        LEGACY_GROQ_ENDPOINT,
       );
       const openai = createOpenAI({ apiKey, baseURL });
       this.model = openai.chat(this.resolvedModelName);
@@ -255,10 +259,7 @@ export class HighlightDetectionService {
       provider: this.provider,
       baseURL:
         this.provider === 'groq'
-          ? this.configService.get<string>(
-              'LLM_BASE_URL',
-              'https://api.groq.com/openai/v1',
-            )
+          ? this.configService.get<string>('LLM_BASE_URL', LEGACY_GROQ_ENDPOINT)
           : 'google',
       model: selection?.modelId || model || this.resolvedModelName,
       minScore: MIN_HIGHLIGHT_SCORE,
@@ -323,7 +324,7 @@ export class HighlightDetectionService {
     if (!options?.registeredModel) return meteredGenerateObject;
     const binding = options.registeredModel;
     return (async (...args: Parameters<typeof meteredGenerateObject>) => {
-      if (!this.routing || !this.registry)
+      if (!this.routing || !this.registry || !this.adapters)
         throw new ServiceUnavailableException('AI registry is unavailable');
       const resolved = await this.routing.resolve(
         binding.userId,
@@ -349,9 +350,9 @@ export class HighlightDetectionService {
           : timeout;
         const result = await meteredGenerateObject({
           ...args[0],
-          model: createGoogleGenerativeAI({ apiKey: resolved.secret })(
-            resolved.model.modelId,
-          ),
+          model: await this.adapters
+            .get(resolved.provider.adapter)
+            .languageModel(resolved.model, resolved.provider, resolved.secret),
           temperature:
             resolved.model.settings.temperature ?? args[0].temperature,
           maxOutputTokens: Math.min(
@@ -404,7 +405,7 @@ export class HighlightDetectionService {
           apiKey,
           baseURL: this.configService.get<string>(
             'LLM_BASE_URL',
-            'https://api.groq.com/openai/v1',
+            LEGACY_GROQ_ENDPOINT,
           ),
         }).chat(model)
       : createGoogleGenerativeAI({ apiKey })(model);
@@ -974,7 +975,7 @@ export class HighlightDetectionService {
       if (!isApiError) return false;
       return (
         err?.statusCode === 413 ||
-        err?.statusCode === 429 ||
+        err?.statusCode === HTTP_STATUS.TOO_MANY_REQUESTS ||
         (typeof err?.responseBody === 'string' &&
           err.responseBody.includes('rate_limit_exceeded'))
       );

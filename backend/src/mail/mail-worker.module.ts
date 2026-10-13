@@ -1,3 +1,4 @@
+import { validateEnvironment } from '../common/configuration';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
@@ -8,7 +9,10 @@ import { CommonModule } from '../common/common.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validate: (env) => validateEnvironment(env, false),
+    }),
     CommonModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],

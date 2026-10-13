@@ -98,6 +98,7 @@ const provider = {
   adapter: "google",
   enabled: true,
   configured: true,
+  operationalAdapter: true,
   modelCount: 1,
   description: "Configured editing provider",
   defaultCredentialId: ids.credential,
@@ -458,6 +459,22 @@ function fixture(path, method, body, scenario, state, port) {
   else if (path === "/admin/audit") data = paginated(audit);
   else if (path.includes("/analytics"))
     data = { points: days.map((d) => ({ date: d.date, value: d.total })) };
+  else if (path === "/admin/ai/adapters")
+    data = {
+      items: [
+        {
+          adapter: "google",
+          implemented: true,
+          endpointDefaults: {
+            baseUrl: "https://generativelanguage.googleapis.com",
+            apiVersion: "v1beta",
+          },
+          apiVersions: ["v1", "v1beta"],
+        },
+        { adapter: "openai", implemented: false },
+        { adapter: "anthropic", implemented: false },
+      ],
+    };
   else if (path === "/admin/ai/providers") data = listed([provider]);
   else if (path.endsWith("/credentials"))
     data = {

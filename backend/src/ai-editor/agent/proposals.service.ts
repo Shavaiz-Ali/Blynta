@@ -1,3 +1,5 @@
+import { AGENT_LIMITS } from './agent.constants';
+import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import {
   BadRequestException,
   ConflictException,
@@ -135,7 +137,10 @@ export class ProposalsService {
     }
     try {
       const configured = Number(
-        this.config.get('AI_AGENT_DAILY_REQUEST_LIMIT', 50),
+        this.config.get(
+          'AI_AGENT_DAILY_REQUEST_LIMIT',
+          AGENT_LIMITS.DAILY_REQUESTS,
+        ),
       );
       if (!Number.isInteger(configured) || configured < 1 || configured > 10000)
         throw new BadRequestException('Invalid AI usage budget configuration');
@@ -230,7 +235,7 @@ export class ProposalsService {
             status: 'failed',
             summary:
               'AI proposal could not be generated; retry with a new request ID',
-            errorCode: 'AI_PROPOSAL_FAILED',
+            errorCode: AI_ERROR_CODES.PROPOSAL_FAILED,
           },
         },
       );
@@ -271,7 +276,7 @@ export class ProposalsService {
         {
           $set: {
             status: 'failed',
-            errorCode: 'AI_EXECUTION_INTERRUPTED',
+            errorCode: AI_ERROR_CODES.EXECUTION_INTERRUPTED,
             summary: 'Generation was interrupted; submit a new request ID',
           },
         },
@@ -296,13 +301,13 @@ export class ProposalsService {
         {
           $set: {
             status: 'failed',
-            errorCode: 'AI_EXECUTION_INTERRUPTED',
+            errorCode: AI_ERROR_CODES.EXECUTION_INTERRUPTED,
             summary: 'Generation was interrupted; submit a new request ID',
           },
         },
       );
       proposal.status = 'failed';
-      proposal.errorCode = 'AI_EXECUTION_INTERRUPTED';
+      proposal.errorCode = AI_ERROR_CODES.EXECUTION_INTERRUPTED;
     }
     return proposal;
   }
