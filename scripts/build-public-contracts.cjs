@@ -32,3 +32,21 @@ fs.writeFileSync(
   path.join(outDir, "package.json"),
   JSON.stringify({ type: "commonjs" }) + "\n",
 );
+// Backend deployments may contain only backend/. Ship generated output there;
+// packages/types/src/contracts.ts remains the only editable contract source.
+const backendPackage = path.join(root, "backend/vendor/blynta-types");
+fs.mkdirSync(backendPackage, { recursive: true });
+for (const file of ["contracts.js", "contracts.d.ts"])
+  fs.copyFileSync(path.join(outDir, file), path.join(backendPackage, file));
+fs.writeFileSync(
+  path.join(backendPackage, "package.json"),
+  JSON.stringify({
+    name: "@blynta/types",
+    version: "0.1.0",
+    private: true,
+    type: "commonjs",
+    exports: {
+      "./contracts": { types: "./contracts.d.ts", default: "./contracts.js" },
+    },
+  }, null, 2) + "\n",
+);

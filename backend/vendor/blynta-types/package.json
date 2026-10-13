@@ -1,0 +1,12 @@
+{
+  "name": "@blynta/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "exports": {
+    "./contracts": {
+      "types": "./contracts.d.ts",
+      "default": "./contracts.js"
+    }
+  }
+}

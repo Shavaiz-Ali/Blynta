@@ -80,3 +80,17 @@ test("checked-in runtime is generated from its single TypeScript source", () => 
     emitted.replace(/\r\n/g, "\n"),
   );
 });
+test("standalone backend ships identical generated contracts without a parent workspace", () => {
+  const backend = JSON.parse(fs.readFileSync(path.join(root, "backend/package.json"), "utf8"));
+  assert.equal(backend.dependencies["@blynta/types"], "file:vendor/blynta-types");
+  const vendor = path.join(root, "backend/vendor/blynta-types");
+  for (const file of ["contracts.js", "contracts.d.ts"])
+    assert.equal(
+      fs.readFileSync(path.join(vendor, file), "utf8").replace(/\r\n/g, "\n"),
+      fs.readFileSync(path.join(root, "packages/types/src/generated", file), "utf8").replace(/\r\n/g, "\n"),
+    );
+  const lock = JSON.parse(fs.readFileSync(path.join(root, "backend/package-lock.json"), "utf8"));
+  assert.equal(lock.packages["node_modules/@blynta/types"].resolved, "file:vendor/blynta-types");
+  assert.equal(lock.packages["node_modules/@blynta/types"].link, undefined);
+  assert.deepEqual(createRequire(path.join(vendor, "package.json"))("@blynta/types/contracts").AI_TASKS, contracts.AI_TASKS);
+});
