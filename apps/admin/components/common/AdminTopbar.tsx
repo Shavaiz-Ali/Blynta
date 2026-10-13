@@ -15,7 +15,14 @@ export function AdminTopbar() {
   const { data: session } = useSession();
   const page = navigation
     .flatMap((group) => group.items)
-    .find((item) => item.href === pathname);
+    .find(
+      (item) =>
+        item.href === pathname ||
+        (item.href === "/ai" && pathname.startsWith("/ai/")),
+    );
+  const aiSection = /^\/ai\/(providers|models|usage)(?:\/|$)/.exec(
+    pathname,
+  )?.[1];
 
   return (
     <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-background px-4 py-3 sm:px-6">
@@ -33,6 +40,12 @@ export function AdminTopbar() {
           <span className="font-medium text-foreground">
             {page?.title || "Details"}
           </span>
+          {aiSection && (
+            <>
+              <span aria-hidden="true">/</span>
+              <span className="capitalize text-foreground">{aiSection}</span>
+            </>
+          )}
         </nav>
       </div>
 

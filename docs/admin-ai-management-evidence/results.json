@@ -1,0 +1,79 @@
+[
+  {
+    "capture": "provider-dialog",
+    "width": 390,
+    "passed": true
+  },
+  {
+    "capture": "model-dialog",
+    "width": 390,
+    "passed": true
+  },
+  {
+    "capture": "usage-table",
+    "width": 390,
+    "passed": true
+  },
+  {
+    "interaction": "provider model credential submit with shared form controls",
+    "width": 390,
+    "passed": true
+  },
+  {
+    "capture": "provider-dialog",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "capture": "model-dialog",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "capture": "usage-table",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "interaction": "provider model credential submit with shared form controls",
+    "width": 1024,
+    "passed": true
+  },
+  {
+    "capture": "provider-dialog",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "capture": "model-dialog",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "capture": "usage-table",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "interaction": "provider model credential submit with shared form controls",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "interaction": "request error preserves form and pending adapter requires disabled save",
+    "passed": true
+  },
+  {
+    "interaction": "invalid pricing and missing tasks block API writes",
+    "passed": true
+  },
+  {
+    "capture": "usage-empty",
+    "width": 1440,
+    "passed": true
+  },
+  {
+    "interaction": "empty state stays within shared table with no redundant pagination",
+    "passed": true
+  }
+]

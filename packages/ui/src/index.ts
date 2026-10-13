@@ -1,4 +1,6 @@
 export { AppInput } from "./components/AppInput";
+export { AppCheckbox } from "./components/AppCheckbox";
+export { AppRadioGroup } from "./components/AppRadioGroup";
 export {
   AppProductHeader,
   AppHeaderActions,

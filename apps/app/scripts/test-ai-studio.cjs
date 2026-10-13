@@ -51,6 +51,18 @@ function load(relative, mocks = {}) {
   const original = mod.require.bind(mod);
   mod.require = (id) => {
     if (id in mocks) return mocks[id];
+    if (id.endsWith(".module.css"))
+      return { default: new Proxy({}, { get: (_, key) => String(key) }) };
+    if (id.startsWith("@/")) {
+      const adminRoot = path.resolve(root, "../admin");
+      const appRoot = filename.startsWith(adminRoot + path.sep)
+        ? adminRoot
+        : root;
+      const target = path.join(appRoot, id.slice(2));
+      for (const ext of [".ts", ".tsx"])
+        if (fs.existsSync(target + ext))
+          return load(path.relative(root, target + ext), mocks);
+    }
     if (id === "@blynta/ui")
       return load("../../packages/ui/src/index.ts", mocks);
     if (id.startsWith("@blynta/ui/"))
@@ -438,7 +450,7 @@ test("actual admin provider page renders safe metadata through its existing quer
   );
   const html = renderToStaticMarkup(React.createElement(AIManagement));
   assert.match(html, /Configured provider/);
-  assert.match(html, /Manage providers/);
+  assert.match(html, /Configure providers/);
   assert.doesNotMatch(html, /ciphertext|API_KEY|synthetic-registry-key/);
 });
 test("actual admin layout rejects signed-in non-admin accounts", async () => {
@@ -691,4 +703,33 @@ test("compact composer model state explains unavailable editing without claiming
   );
   assert.match(html, /AI unavailable/);
   assert.doesNotMatch(html, /administrator must configure|role="combobox"/);
+});
+
+test("admin AI subpages resolve the parent breadcrumb without matching unrelated paths", () => {
+  let pathname = "/ai/providers";
+  const { AdminTopbar } = load("../admin/components/common/AdminTopbar.tsx", {
+    "next/navigation": { usePathname: () => pathname },
+    "next-auth/react": {
+      useSession: () => ({ data: { user: { email: "admin@example.test" } } }),
+      signOut: () => {},
+    },
+    "./ThemeToggle": { ThemeToggle: () => null },
+    "@/components/ui/sidebar": { SidebarTrigger: () => null },
+    "@/components/ui/separator": { Separator: () => null },
+    "@/lib/navigation": {
+      navigation: [{ items: [{ href: "/ai", title: "AI Management" }] }],
+    },
+  });
+  for (const section of ["providers", "models", "usage"]) {
+    pathname = "/ai/" + section;
+    const html = renderToStaticMarkup(React.createElement(AdminTopbar));
+    assert.match(html, /AI Management/);
+    assert.match(html, new RegExp(">" + section + "<"));
+    assert.doesNotMatch(html, />Details</);
+  }
+  pathname = "/ai-unrelated";
+  assert.match(
+    renderToStaticMarkup(React.createElement(AdminTopbar)),
+    />Details</,
+  );
 });

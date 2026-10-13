@@ -1,16 +1,9 @@
 "use client";
 import { useRef, useState } from "react";
-import {
-  Paperclip,
-  Upload,
-  Library,
-  Lightbulb,
-  Send,
-  X,
-  RotateCcw,
-} from "lucide-react";
+import { Paperclip, Upload, Library, Send, X, RotateCcw } from "lucide-react";
 import { AppButton, AppTextarea, AppPopover, AppFileInput } from "@blynta/ui";
 import type { StudioAsset } from "./contracts";
+import scrollbars from "./studio-scrollbars.module.css";
 import type { useStudioAttachments } from "./attachments";
 type Attachments = ReturnType<typeof useStudioAttachments>;
 export function StudioPromptComposer({
@@ -84,7 +77,7 @@ export function StudioPromptComposer({
       {!!attachments.items.length && (
         <ul
           aria-label="Prompt attachments"
-          className="flex max-h-24 flex-wrap gap-2 overflow-y-auto"
+          className={`${scrollbars.slim} flex max-h-24 flex-wrap gap-2 overflow-y-auto`}
         >
           {attachments.items.map((a) => (
             <li
@@ -134,7 +127,7 @@ export function StudioPromptComposer({
         maxLength={4000}
         disabled={disabled}
         placeholder="Try: Add a smooth zoom from 00:00 to 00:03, then lower the original audio to 70%."
-        className="max-h-32 min-h-20 resize-y border-0 bg-transparent p-1 text-sm leading-6 shadow-none focus-visible:ring-0"
+        className={`${scrollbars.hidden} max-h-32 min-h-20 resize-y border-0 bg-transparent p-1 text-sm leading-6 shadow-none focus-visible:ring-0`}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -157,7 +150,7 @@ export function StudioPromptComposer({
           )}
         </div>
       )}
-      <div className="max-h-20 space-y-1 overflow-y-auto">
+      <div className={`${scrollbars.slim} max-h-20 space-y-1 overflow-y-auto`}>
         {attachments.items
           .filter((a) => a.error)
           .map((a) => (
@@ -196,7 +189,7 @@ export function StudioPromptComposer({
               </AppButton>
             }
           >
-            <div className="max-h-60 space-y-1 overflow-y-auto p-2">
+            <div className={`${scrollbars.slim} max-h-60 space-y-1 overflow-y-auto p-2`}>
               {library ? (
                 assets.length ? (
                   assets.map((a) => (
@@ -265,49 +258,6 @@ export function StudioPromptComposer({
             }}
           />
           {modelControl}
-          <AppPopover
-            title="Try an edit"
-            align="start"
-            side="top"
-            contentClassName="w-72 max-w-[calc(100vw-2rem)]"
-            trigger={
-              <AppButton
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={disabled}
-                aria-label="Prompt suggestions"
-              >
-                <Lightbulb className="size-4" />
-              </AppButton>
-            }
-          >
-            <div className="space-y-1 p-2">
-              {[
-                "Add a smooth zoom from 00:00 to 00:03.",
-                "Lower the original audio to 70%.",
-                ...(attachments.items.some(
-                  (a) =>
-                    a.name.toLowerCase().endsWith(".png") &&
-                    a.status === "ready",
-                )
-                  ? ["Add my attached image from 00:01 to 00:03."]
-                  : []),
-              ].map((s) => (
-                <AppButton
-                  key={s}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto w-full justify-start text-left text-xs"
-                  contentClassName="whitespace-normal"
-                  onClick={() => onChange(s)}
-                >
-                  {s}
-                </AppButton>
-              ))}
-            </div>
-          </AppPopover>
         </div>
         <div className="flex items-center gap-2">
           <AppButton

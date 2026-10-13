@@ -1,11 +1,14 @@
 "use client";
-import { AppSelect } from "@blynta/ui";
+import styles from "./ai-management.module.css";
+import { AppSelect, AppCheckbox, AppRadioGroup } from "@blynta/ui";
+import { AppDataTable as AppTable } from "@/components/common/DataTable";
+import { AppPageHeader } from "@/components/common/AppPageHeader";
+import type { Usage } from "./api";
 import { SelectItem } from "@blynta/ui/primitives/select";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Skeleton } from "@/components/ui/skeleton";
 import { AppButton as Button, AppInput as Input } from "@blynta/ui";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
@@ -16,14 +19,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   AppTabs as Tabs,
   AppTabsContent as TabsContent,
@@ -38,7 +33,10 @@ type Section = "providers" | "models" | "usage";
 const name = z.string().trim().min(1).max(100);
 const providerForm = z.object({
   name,
-  code: z.string().regex(/^[a-z][a-z0-9-]{1,39}$/),
+  code: z
+    .string()
+    .trim()
+    .regex(/^[a-z][a-z0-9-]{1,39}$/),
   adapter: z.enum(["google", "openai", "anthropic"]),
   enabled: z.boolean(),
   description: z.string().max(500),
@@ -59,24 +57,36 @@ function Field({
   value,
   type = "text",
   required = false,
+  hint,
 }: {
   label: string;
   name: string;
   value?: string | number;
   type?: string;
   required?: boolean;
+  hint?: string;
 }) {
   return (
-    <label className="grid gap-2 text-sm">
-      <Label>{label}</Label>
+    <div className="grid gap-2 text-sm">
+      <Label htmlFor={`ai-field-${name}`}>{label}</Label>
       <Input
+        id={`ai-field-${name}`}
         name={name}
         type={type}
         step={type === "number" ? "any" : undefined}
         defaultValue={value}
         required={required}
+        aria-describedby={hint ? `ai-hint-${name}` : undefined}
       />
-    </label>
+      {hint && (
+        <p
+          id={`ai-hint-${name}`}
+          className="text-xs leading-5 text-muted-foreground"
+        >
+          {hint}
+        </p>
+      )}
+    </div>
   );
 }
 function Check({
@@ -88,12 +98,7 @@ function Check({
   label: string;
   checked?: boolean;
 }) {
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <input type="checkbox" name={name} defaultChecked={checked} />
-      {label}
-    </label>
-  );
+  return <AppCheckbox name={name} defaultChecked={checked} label={label} />;
 }
 export function AIManagement({
   initialSection = "providers",
@@ -101,6 +106,7 @@ export function AIManagement({
   initialSection?: Section;
 }) {
   const cache = useQueryClient();
+  const actionLock = useRef(false);
   const [section, setSection] = useState<Section>(initialSection);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -171,6 +177,8 @@ export function AIManagement({
       setConfirmDeletion(path);
       return false;
     }
+    if (actionLock.current) return false;
+    actionLock.current = true;
     setBusy(true);
     setError("");
     setNotice("");
@@ -191,6 +199,7 @@ export function AIManagement({
       toast.error(e instanceof Error ? e.message : "Request failed");
       return false;
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
@@ -200,12 +209,20 @@ export function AIManagement({
     const parsed = providerForm.safeParse({
       name: form.get("name"),
       code: form.get("code"),
-      adapter: form.get("adapter"),
+      adapter: providerEdit?.adapter ?? form.get("adapter"),
       description: form.get("description"),
       enabled: form.has("enabled"),
     });
     if (!parsed.success) {
-      setError("Check the provider name, code and adapter.");
+      setError(
+        "Enter a name and a lowercase code of 2–40 characters (letters, numbers or hyphens), then choose an adapter.",
+      );
+      return;
+    }
+    if (parsed.data.enabled && parsed.data.adapter !== "google") {
+      setError(
+        "This adapter is not available yet. Uncheck Enabled to save its configuration.",
+      );
       return;
     }
     const payload = {
@@ -242,6 +259,41 @@ export function AIManagement({
     const allowedPlans = ["free", "pro", "business"].filter((p) =>
       form.has("plan-" + p),
     );
+    const tasks = [
+      "highlight_detection",
+      "edit_planning",
+      "edit_refinement",
+    ].filter((task) => form.has("task-" + task));
+    if (!tasks.length) {
+      setError("Select at least one supported task.");
+      return;
+    }
+    const inputPrice = String(form.get("inputPrice") ?? "").trim();
+    const outputPrice = String(form.get("outputPrice") ?? "").trim();
+    const pricing =
+      inputPrice || outputPrice
+        ? {
+            inputCostPerMillionTokens: Number(inputPrice),
+            outputCostPerMillionTokens: Number(outputPrice),
+            currency: "USD" as const,
+          }
+        : undefined;
+    if (
+      pricing &&
+      (!inputPrice ||
+        !outputPrice ||
+        ![
+          pricing.inputCostPerMillionTokens,
+          pricing.outputCostPerMillionTokens,
+        ].every(
+          (price) => Number.isFinite(price) && price >= 0 && price <= 10000,
+        ))
+    ) {
+      setError(
+        "Enter both token prices between 0 and 10,000 USD, or leave both blank.",
+      );
+      return;
+    }
     if (!parsed.success || !allowedPlans.length) {
       setError(
         "Check model settings and select at least one subscription plan.",
@@ -253,9 +305,7 @@ export function AIManagement({
       ...base,
       credentialId: form.get("credentialId") || null,
       enabled: form.has("enabled"),
-      tasks: ["highlight_detection", "edit_planning", "edit_refinement"].filter(
-        (task) => form.has("task-" + task),
-      ),
+      tasks,
       capabilities: Object.fromEntries(
         ["text", "vision", "audioInput", "structuredOutput", "toolCalling"].map(
           (k) => [k, form.has(k)],
@@ -263,15 +313,7 @@ export function AIManagement({
       ),
       settings: { temperature, maxOutputTokens, timeoutMs, maxRetries: 0 },
       access: { allowedPlans, selectable: form.has("selectable") },
-      ...(form.get("inputPrice") !== "" && form.get("outputPrice") !== ""
-        ? {
-            pricing: {
-              inputCostPerMillionTokens: Number(form.get("inputPrice")),
-              outputCostPerMillionTokens: Number(form.get("outputPrice")),
-              currency: "USD",
-            },
-          }
-        : {}),
+      ...(pricing ? { pricing } : {}),
     };
     if (
       await action(
@@ -323,12 +365,29 @@ export function AIManagement({
     section === "providers" ? providers : section === "models" ? models : usage;
   return (
     <div className="min-w-0 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">AI management</h1>
-        <p className="text-muted-foreground mt-1">
-          Manage providers, model access and measured API usage.
-        </p>
-      </div>
+      <AppPageHeader
+        title="AI management"
+        description="Configure providers, editing models and measured API usage."
+        action={
+          section !== "usage" ? (
+            <Button
+              disabled={busy}
+              onClick={() => {
+                toast.dismiss();
+                setError("");
+                setNotice("");
+                if (section === "providers") setProviderEdit(null);
+                else {
+                  setSelectedProvider("");
+                  setModelEdit(null);
+                }
+              }}
+            >
+              Add {section === "providers" ? "provider" : "model"}
+            </Button>
+          ) : undefined
+        }
+      />
       {error && (
         <p role="alert" className="text-destructive">
           {error ||
@@ -347,6 +406,8 @@ export function AIManagement({
           setPage(1);
           setSearch("");
           setFilter("");
+          setError("");
+          setNotice("");
         }}
       >
         <TabsList>
@@ -379,199 +440,261 @@ export function AIManagement({
               <SelectItem value="true">Enabled</SelectItem>
               <SelectItem value="false">Disabled</SelectItem>
             </AppSelect>
-            <Button
-              onClick={() =>
-                section === "providers"
-                  ? setProviderEdit(null)
-                  : (setSelectedProvider(""), setModelEdit(null))
-              }
-            >
-              Add {section === "providers" ? "provider" : "model"}
-            </Button>
           </div>
         )}
         <TabsContent value="providers">
-          <Card>
-            <CardContent className="pt-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Adapter</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Credential</TableHead>
-                    <TableHead>Models</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {providers.data?.items.map((p) => (
-                    <TableRow key={p._id}>
-                      <TableCell>
-                        {p.name}
-                        <div className="text-muted-foreground text-xs">
-                          {p.code}
+          {providers.isError ? (
+            <AppQueryState
+              title="AI management unavailable"
+              description="The service could not be reached. Retry to load your configuration."
+              onRetry={() => void providers.refetch()}
+              retrying={providers.isFetching}
+            />
+          ) : (
+            <AppTable<Provider>
+              data={providers.data?.items ?? []}
+              loading={providers.isPending}
+              emptyMessage={
+                search || filter
+                  ? "No records match your filters."
+                  : "No providers yet. Add a provider to configure AI access."
+              }
+              columns={[
+                {
+                  key: "column-0",
+                  header: "Provider",
+                  className: "align-top whitespace-normal",
+                  render: (p) => (
+                    <>
+                      {p.name}
+                      <div className="text-muted-foreground text-xs">
+                        {p.code}
+                      </div>
+                    </>
+                  ),
+                },
+                {
+                  key: "column-1",
+                  header: "Adapter",
+                  className: "align-top whitespace-normal",
+                  render: (p) => (
+                    <>
+                      {p.adapter}
+                      {p.adapter !== "google" && (
+                        <div className="text-xs">Adapter pending</div>
+                      )}
+                    </>
+                  ),
+                },
+                {
+                  key: "column-2",
+                  header: "Status",
+                  className: "align-top whitespace-normal",
+                  render: (p) => (
+                    <>
+                      <Badge variant="outline">
+                        {p.enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                    </>
+                  ),
+                },
+                {
+                  key: "column-3",
+                  header: "Credential",
+                  className: "align-top whitespace-normal",
+                  render: (p) => (
+                    <>{p.configured ? "Configured" : "Needs credential"}</>
+                  ),
+                },
+                {
+                  key: "column-4",
+                  header: "Models",
+                  className: "align-top whitespace-normal",
+                  render: (p) => <>{p.modelCount}</>,
+                },
+                {
+                  key: "column-5",
+                  header: "Actions",
+                  className: "align-top whitespace-normal",
+                  render: (p) => (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setProviderEdit(p)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setCredentialEdit(undefined);
+                          setCredentialProvider(p);
+                        }}
+                      >
+                        Credentials
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy || p.adapter !== "google"}
+                        onClick={() =>
+                          action("patch", "providers/" + p._id, {
+                            enabled: !p.enabled,
+                          })
+                        }
+                      >
+                        {p.enabled ? "Disable" : "Enable"}
+                      </Button>
+                    </>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="models">
+          {models.isError ? (
+            <AppQueryState
+              title="AI management unavailable"
+              description="The service could not be reached. Retry to load your configuration."
+              onRetry={() => void models.refetch()}
+              retrying={models.isFetching}
+            />
+          ) : (
+            <AppTable<AIModel>
+              data={models.data?.items ?? []}
+              loading={models.isPending}
+              emptyMessage={
+                search || filter
+                  ? "No records match your filters."
+                  : "No models yet. Add a model to configure editing."
+              }
+              columns={[
+                {
+                  key: "column-0",
+                  header: "Model",
+                  className: "align-top whitespace-normal",
+                  render: (m) => (
+                    <>
+                      {m.displayName}
+                      {m.isDefault && <Badge className="ml-2">Default</Badge>}
+                      <div className="text-muted-foreground text-xs">
+                        {m.modelId} ·{" "}
+                        {catalog.data?.items.find((p) => p._id === m.providerId)
+                          ?.name ?? m.providerId}
+                      </div>
+                      <Badge variant="outline">
+                        {m.enabled ? "Enabled" : "Disabled"}
+                      </Badge>
+                    </>
+                  ),
+                },
+                {
+                  key: "column-1",
+                  header: "Access",
+                  className: "align-top whitespace-normal",
+                  render: (m) => <>{m.access.allowedPlans.join(", ")}</>,
+                },
+                {
+                  key: "column-2",
+                  header: "Capabilities",
+                  className: "align-top whitespace-normal",
+                  render: (m) => (
+                    <>
+                      {Object.entries(m.capabilities)
+                        .filter(([, v]) => v)
+                        .map(([k]) => k)
+                        .join(", ")}
+                    </>
+                  ),
+                },
+                {
+                  key: "column-3",
+                  header: "Priority",
+                  className: "align-top whitespace-normal",
+                  render: (m) => <>{m.priority}</>,
+                },
+                {
+                  key: "column-4",
+                  header: "Last test",
+                  className: "align-top whitespace-normal",
+                  render: (m) => (
+                    <>
+                      {m.lastTestStatus ?? "Not tested"}
+                      {m.lastTestedAt && (
+                        <div className="text-xs">
+                          {new Date(m.lastTestedAt).toLocaleString()}
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {p.adapter}
-                        {p.adapter !== "google" && (
-                          <div className="text-xs">Adapter pending</div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {p.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {p.configured ? "Configured" : "Needs credential"}
-                      </TableCell>
-                      <TableCell>{p.modelCount}</TableCell>
-                      <TableCell className="space-x-2">
+                      )}
+                    </>
+                  ),
+                },
+                {
+                  key: "column-5",
+                  header: "Actions",
+                  className: "align-top whitespace-normal",
+                  render: (m) => (
+                    <>
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => setProviderEdit(p)}
+                          onClick={() => {
+                            setSelectedProvider("");
+                            setModelEdit(m);
+                          }}
                         >
                           Edit
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setCredentialEdit(undefined);
-                            setCredentialProvider(p);
-                          }}
+                          disabled={busy}
+                          onClick={() =>
+                            action("post", "models/" + m._id + "/test")
+                          }
                         >
-                          Credentials
+                          Test
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={busy || p.adapter !== "google"}
+                          disabled={busy}
                           onClick={() =>
-                            action("patch", "providers/" + p._id, {
-                              enabled: !p.enabled,
+                            action("patch", "models/" + m._id, {
+                              enabled: !m.enabled,
                             })
                           }
                         >
-                          {p.enabled ? "Disable" : "Enable"}
+                          {m.enabled ? "Disable" : "Enable"}
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="models">
-          <Card>
-            <CardContent className="pt-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Access</TableHead>
-                    <TableHead>Capabilities</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Last test</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {models.data?.items.map((m) => (
-                    <TableRow key={m._id}>
-                      <TableCell>
-                        {m.displayName}
-                        {m.isDefault && <Badge className="ml-2">Default</Badge>}
-                        <div className="text-muted-foreground text-xs">
-                          {m.modelId} ·{" "}
-                          {catalog.data?.items.find(
-                            (p) => p._id === m.providerId,
-                          )?.name ?? m.providerId}
-                        </div>
-                        <Badge variant="outline">
-                          {m.enabled ? "Enabled" : "Disabled"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{m.access.allowedPlans.join(", ")}</TableCell>
-                      <TableCell>
-                        {Object.entries(m.capabilities)
-                          .filter(([, v]) => v)
-                          .map(([k]) => k)
-                          .join(", ")}
-                      </TableCell>
-                      <TableCell>{m.priority}</TableCell>
-                      <TableCell>
-                        {m.lastTestStatus ?? "Not tested"}
-                        {m.lastTestedAt && (
-                          <div className="text-xs">
-                            {new Date(m.lastTestedAt).toLocaleString()}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedProvider("");
-                              setModelEdit(m);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={busy}
-                            onClick={() =>
-                              action("post", "models/" + m._id + "/test")
-                            }
-                          >
-                            Test
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={() =>
-                              action("patch", "models/" + m._id, {
-                                enabled: !m.enabled,
-                              })
-                            }
-                          >
-                            {m.enabled ? "Disable" : "Enable"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy || m.isDefault}
-                            onClick={() =>
-                              action("post", "models/" + m._id + "/set-default")
-                            }
-                          >
-                            Set default
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy || m.isDefault}
-                            onClick={() => action("delete", "models/" + m._id)}
-                          >
-                            Archive
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy || m.isDefault}
+                          onClick={() =>
+                            action("post", "models/" + m._id + "/set-default")
+                          }
+                        >
+                          Set default
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy || m.isDefault}
+                          onClick={() => action("delete", "models/" + m._id)}
+                        >
+                          Archive
+                        </Button>
+                      </div>
+                    </>
+                  ),
+                },
+              ]}
+            />
+          )}
         </TabsContent>
         <TabsContent value="usage">
           <div className="grid gap-4 md:grid-cols-2">
@@ -604,75 +727,92 @@ export function AIManagement({
               </Card>
             ))}
           </div>
-          <Card className="mt-4">
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Outcome</TableHead>
-                    <TableHead>Tokens in/out</TableHead>
-                    <TableHead>Latency</TableHead>
-                    <TableHead>Estimated USD</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {usage.data?.items.map((u) => (
-                    <TableRow key={u._id}>
-                      <TableCell>{u.modelId}</TableCell>
-                      <TableCell>{u.status}</TableCell>
-                      <TableCell>
-                        {u.inputTokens ?? "Unknown"} /{" "}
-                        {u.outputTokens ?? "Unknown"}
-                      </TableCell>
-                      <TableCell>{u.latencyMs} ms</TableCell>
-                      <TableCell>
-                        {u.estimatedCostUsd?.toFixed(6) ?? "Unknown"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          {usage.isError ? (
+            <AppQueryState
+              title="AI management unavailable"
+              description="The service could not be reached. Retry to load your configuration."
+              onRetry={() => void usage.refetch()}
+              retrying={usage.isFetching}
+            />
+          ) : (
+            <AppTable<Usage>
+              data={usage.data?.items ?? []}
+              loading={usage.isPending}
+              emptyMessage={
+                search || filter
+                  ? "No records match your filters."
+                  : "No API usage recorded yet."
+              }
+              columns={[
+                {
+                  key: "column-0",
+                  header: "Model",
+                  className: "align-top whitespace-normal",
+                  render: (u) => <>{u.modelId}</>,
+                },
+                {
+                  key: "column-1",
+                  header: "Outcome",
+                  className: "align-top whitespace-normal",
+                  render: (u) => <>{u.status}</>,
+                },
+                {
+                  key: "column-2",
+                  header: "Tokens in/out",
+                  className: "align-top whitespace-normal",
+                  render: (u) => (
+                    <>
+                      {u.inputTokens ?? "Unknown"} /{" "}
+                      {u.outputTokens ?? "Unknown"}
+                    </>
+                  ),
+                },
+                {
+                  key: "column-3",
+                  header: "Latency",
+                  className: "align-top whitespace-normal",
+                  render: (u) => <>{u.latencyMs} ms</>,
+                },
+                {
+                  key: "column-4",
+                  header: "Estimated USD",
+                  className: "align-top whitespace-normal",
+                  render: (u) => (
+                    <>{u.estimatedCostUsd?.toFixed(6) ?? "Unknown"}</>
+                  ),
+                },
+              ]}
+            />
+          )}
         </TabsContent>
       </Tabs>
-      {current.isError ? (
-        <AppQueryState
-          title="AI management unavailable"
-          description="The AI service could not be reached. Your configuration has not changed."
-          onRetry={() => void current.refetch()}
-          retrying={current.isFetching}
+      {(page > 1 || !!current.data?.items.length) && (
+        <AppPagination
+          page={page}
+          hasNext={(current.data?.items.length ?? 0) >= 25}
+          onPageChange={setPage}
+          disabled={current.isPending || current.isError}
         />
-      ) : current.isPending ? (
-        <div role="status" aria-label="Loading AI management">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="mt-3 h-12 w-full" />
-        </div>
-      ) : !current.data?.items.length ? (
-        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-          No records match your filters.
-        </p>
-      ) : null}
-      <AppPagination
-        page={page}
-        hasNext={(current.data?.items.length ?? 0) >= 25}
-        onPageChange={setPage}
-        disabled={current.isPending || current.isError}
-      />
+      )}
       <Dialog
         open={providerEdit !== undefined}
         onOpenChange={(open) => {
           if (!open) setProviderEdit(undefined);
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent
+          className={`${styles.scrollbar} max-h-[90dvh] overflow-y-auto sm:max-w-2xl`}
+        >
           <DialogHeader>
             <DialogTitle>
               {providerEdit ? "Edit provider" : "Add provider"}
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={saveProvider} className="grid gap-4">
+          <form
+            key={providerEdit?._id ?? "new-provider"}
+            onSubmit={saveProvider}
+            className="grid gap-4"
+          >
             {error && (
               <p role="alert" className="text-destructive text-sm">
                 {error}
@@ -688,22 +828,40 @@ export function AIManagement({
               label="Code"
               name="code"
               value={providerEdit?.code}
+              hint="A unique lowercase code, for example google-gemini."
               required
             />
-            <label className="grid gap-2 text-sm">
-              Adapter
-              <AppSelect
-                aria-label="Adapter"
+            <fieldset className="space-y-2" disabled={!!providerEdit}>
+              <legend className="text-sm font-medium">Adapter</legend>
+              <AppRadioGroup
                 name="adapter"
+                disabled={!!providerEdit}
+                aria-label="Adapter"
                 defaultValue={providerEdit?.adapter ?? "google"}
-              >
-                <SelectItem value="google">Google Gemini</SelectItem>
-                <SelectItem value="openai">OpenAI (adapter pending)</SelectItem>
-                <SelectItem value="anthropic">
-                  Anthropic (adapter pending)
-                </SelectItem>
-              </AppSelect>
-            </label>
+                options={[
+                  {
+                    value: "google",
+                    label: "Google Gemini",
+                    description: "Available for registered Gemini models.",
+                  },
+                  {
+                    value: "openai",
+                    label: "OpenAI",
+                    description: "Adapter pending. Save as disabled.",
+                  },
+                  {
+                    value: "anthropic",
+                    label: "Anthropic",
+                    description: "Adapter pending. Save as disabled.",
+                  },
+                ]}
+              />
+              {providerEdit && (
+                <p className="text-xs text-muted-foreground">
+                  The adapter cannot be changed after creation.
+                </p>
+              )}
+            </fieldset>
             <Field
               label="Description"
               name="description"
@@ -730,9 +888,11 @@ export function AIManagement({
             <Check
               name="enabled"
               label="Enabled"
-              checked={providerEdit?.enabled}
+              checked={providerEdit?.enabled ?? true}
             />
-            <Button disabled={busy}>Save provider</Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Saving…" : "Save provider"}
+            </Button>
           </form>
         </DialogContent>
       </Dialog>
@@ -788,8 +948,7 @@ export function AIManagement({
         }}
       >
         <DialogContent
-          key={credentialProvider?._id}
-          className="max-h-[85dvh] overflow-y-auto sm:max-w-2xl"
+          className={`${styles.scrollbar} max-h-[85dvh] overflow-y-auto sm:max-w-2xl`}
         >
           <DialogHeader>
             <DialogTitle>{credentialProvider?.name} credentials</DialogTitle>
@@ -888,7 +1047,7 @@ export function AIManagement({
               label="Enabled"
               checked={credentialEdit?.enabled ?? true}
             />
-            <Button disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {credentialEdit ? "Save replacement" : "Add credential"}
             </Button>
             {credentialEdit && (
@@ -909,196 +1068,233 @@ export function AIManagement({
           if (!open) setModelEdit(undefined);
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="shrink-0 border-b px-6 py-5">
             <DialogTitle>{modelEdit ? "Edit model" : "Add model"}</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Set model access, supported tasks and generation limits.
+            </p>
           </DialogHeader>
-          <form onSubmit={saveModel} className="grid gap-4">
-            {(error || modelCredentials.error) && (
-              <p role="alert" className="text-destructive text-sm">
-                {error || modelCredentials.error?.message}
+          <form
+            key={modelEdit?._id ?? "new-model"}
+            onSubmit={saveModel}
+            className="flex min-h-0 flex-col"
+          >
+            <div
+              className={`${styles.scrollbar} min-h-0 space-y-5 overflow-y-auto px-6 py-5`}
+            >
+              {(error || modelCredentials.error) && (
+                <p role="alert" className="text-destructive text-sm">
+                  {error || modelCredentials.error?.message}
+                </p>
+              )}
+              <h3 className="border-b pb-2 text-sm font-semibold">
+                Provider and model identity
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="grid gap-2 text-sm">
+                  Provider
+                  <AppSelect
+                    aria-label="Provider"
+                    name="providerId"
+                    value={modelProviderId}
+                    onValueChange={(e) => setSelectedProvider(e)}
+                    required
+                  >
+                    <SelectItem value="">Select provider</SelectItem>
+                    {catalog.data?.items
+                      .filter((p) => p.adapter === "google")
+                      .map((p) => (
+                        <SelectItem key={p._id} value={p._id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    {modelProviderId &&
+                      !catalog.data?.items.some(
+                        (p) => p._id === modelProviderId,
+                      ) && (
+                        <SelectItem value={modelProviderId}>
+                          Current provider
+                        </SelectItem>
+                      )}
+                  </AppSelect>
+                </label>
+                <label className="grid gap-2 text-sm">
+                  Credential
+                  <AppSelect
+                    aria-label="Credential"
+                    key={modelProviderId}
+                    name="credentialId"
+                    defaultValue={
+                      modelEdit?.providerId === modelProviderId
+                        ? (modelEdit.credentialId ?? "")
+                        : ""
+                    }
+                  >
+                    <SelectItem value="">Use provider default</SelectItem>
+                    {modelCredentials.data?.items.map((c) => (
+                      <SelectItem key={c._id} value={c._id}>
+                        {c.label}
+                        {c.enabled ? "" : " (disabled)"}
+                      </SelectItem>
+                    ))}
+                  </AppSelect>
+                </label>
+                <Field
+                  label="Gemini model identifier"
+                  name="modelId"
+                  value={modelEdit?.modelId}
+                  required
+                />
+                <Field
+                  label="Display name"
+                  name="displayName"
+                  value={modelEdit?.displayName}
+                  required
+                />
+                <Field
+                  label="Description"
+                  name="description"
+                  value={modelEdit?.description ?? ""}
+                />
+              </div>
+              <h3 className="mt-2 border-b pb-2 text-sm font-semibold">
+                Generation and pricing
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Temperature (optional)"
+                  name="temperature"
+                  type="number"
+                  value={modelEdit?.settings.temperature ?? ""}
+                />
+                <Field
+                  label="Output token limit"
+                  name="maxOutputTokens"
+                  type="number"
+                  value={modelEdit?.settings.maxOutputTokens ?? 4096}
+                />
+                <Field
+                  label="Timeout (ms)"
+                  name="timeoutMs"
+                  type="number"
+                  value={modelEdit?.settings.timeoutMs ?? 30000}
+                />
+                <Field
+                  label="Priority"
+                  name="priority"
+                  type="number"
+                  value={modelEdit?.priority ?? 100}
+                />
+                <Field
+                  label="Input USD / million tokens"
+                  name="inputPrice"
+                  type="number"
+                  value={modelEdit?.pricing?.inputCostPerMillionTokens ?? ""}
+                />
+                <Field
+                  label="Output USD / million tokens"
+                  name="outputPrice"
+                  type="number"
+                  value={modelEdit?.pricing?.outputCostPerMillionTokens ?? ""}
+                />
+              </div>
+              <p className="text-muted-foreground text-xs">
+                Provider retries are disabled; proposal correction is bounded
+                separately. Pricing is optional and used only for estimates.
               </p>
-            )}
-            <h3 className="border-b pb-2 text-sm font-semibold">
-              Provider and model identity
-            </h3>
-            <label className="grid gap-2 text-sm">
-              Provider
-              <AppSelect
-                aria-label="Provider"
-                name="providerId"
-                value={modelProviderId}
-                onValueChange={(e) => setSelectedProvider(e)}
-                required
-              >
-                <SelectItem value="">Select provider</SelectItem>
-                {catalog.data?.items
-                  .filter((p) => p.adapter === "google")
-                  .map((p) => (
-                    <SelectItem key={p._id} value={p._id}>
-                      {p.name}
-                    </SelectItem>
+              <div className="grid gap-6 md:grid-cols-2">
+                <fieldset className="grid gap-2">
+                  <legend className="mb-2 text-sm font-medium">
+                    Supported tasks
+                  </legend>
+                  {(
+                    [
+                      "highlight_detection",
+                      "edit_planning",
+                      "edit_refinement",
+                    ] as const
+                  ).map((task) => (
+                    <Check
+                      key={task}
+                      name={"task-" + task}
+                      label={task.replaceAll("_", " ")}
+                      checked={(
+                        modelEdit?.tasks ?? ["edit_planning", "edit_refinement"]
+                      ).includes(task)}
+                    />
                   ))}
-                {modelProviderId &&
-                  !catalog.data?.items.some(
-                    (p) => p._id === modelProviderId,
-                  ) && (
-                    <SelectItem value={modelProviderId}>
-                      Current provider
-                    </SelectItem>
-                  )}
-              </AppSelect>
-            </label>
-            <label className="grid gap-2 text-sm">
-              Credential
-              <AppSelect
-                aria-label="Credential"
-                key={modelProviderId}
-                name="credentialId"
-                defaultValue={
-                  modelEdit?.providerId === modelProviderId
-                    ? (modelEdit.credentialId ?? "")
-                    : ""
-                }
-              >
-                <SelectItem value="">Use provider default</SelectItem>
-                {modelCredentials.data?.items.map((c) => (
-                  <SelectItem key={c._id} value={c._id}>
-                    {c.label}
-                    {c.enabled ? "" : " (disabled)"}
-                  </SelectItem>
+                </fieldset>
+                <fieldset className="grid gap-2">
+                  <legend className="mb-2 text-sm font-medium">
+                    Capabilities
+                  </legend>
+                  {(
+                    [
+                      "text",
+                      "vision",
+                      "audioInput",
+                      "structuredOutput",
+                      "toolCalling",
+                    ] as const
+                  ).map((k) => (
+                    <Check
+                      key={k}
+                      name={k}
+                      label={
+                        {
+                          text: "Text",
+                          vision: "Vision",
+                          audioInput: "Audio input",
+                          structuredOutput: "Structured output",
+                          toolCalling: "Tool calling",
+                        }[k]
+                      }
+                      checked={
+                        modelEdit?.capabilities[k] ??
+                        ["text", "structuredOutput", "toolCalling"].includes(k)
+                      }
+                    />
+                  ))}
+                </fieldset>
+              </div>
+              <fieldset className="flex flex-wrap gap-4">
+                <legend className="mb-2 text-sm font-medium">
+                  Allowed plans
+                </legend>
+                {(["free", "pro", "business"] as const).map((p) => (
+                  <Check
+                    key={p}
+                    name={"plan-" + p}
+                    label={p}
+                    checked={modelEdit?.access.allowedPlans.includes(p) ?? true}
+                  />
                 ))}
-              </AppSelect>
-            </label>
-            <Field
-              label="Gemini model identifier"
-              name="modelId"
-              value={modelEdit?.modelId}
-              required
-            />
-            <Field
-              label="Display name"
-              name="displayName"
-              value={modelEdit?.displayName}
-              required
-            />
-            <Field
-              label="Description"
-              name="description"
-              value={modelEdit?.description ?? ""}
-            />
-            <h3 className="mt-2 border-b pb-2 text-sm font-semibold">
-              Generation and pricing
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field
-                label="Temperature (optional)"
-                name="temperature"
-                type="number"
-                value={modelEdit?.settings.temperature ?? ""}
+              </fieldset>
+              <Check
+                name="selectable"
+                label="Selectable by authorized premium accounts"
+                checked={modelEdit?.access.selectable ?? true}
               />
-              <Field
-                label="Output token limit"
-                name="maxOutputTokens"
-                type="number"
-                value={modelEdit?.settings.maxOutputTokens ?? 4096}
-              />
-              <Field
-                label="Timeout (ms)"
-                name="timeoutMs"
-                type="number"
-                value={modelEdit?.settings.timeoutMs ?? 30000}
-              />
-              <Field
-                label="Priority"
-                name="priority"
-                type="number"
-                value={modelEdit?.priority ?? 100}
-              />
-              <Field
-                label="Input USD / million tokens"
-                name="inputPrice"
-                type="number"
-                value={modelEdit?.pricing?.inputCostPerMillionTokens ?? ""}
-              />
-              <Field
-                label="Output USD / million tokens"
-                name="outputPrice"
-                type="number"
-                value={modelEdit?.pricing?.outputCostPerMillionTokens ?? ""}
+              <Check
+                name="enabled"
+                label="Enabled (successful test also required)"
+                checked={modelEdit?.enabled}
               />
             </div>
-            <p className="text-muted-foreground text-xs">
-              Provider retries are disabled; proposal correction is bounded
-              separately. Pricing is optional and used only for estimates.
-            </p>
-            <fieldset className="grid gap-2">
-              <legend className="mb-2 text-sm font-medium">
-                Supported tasks
-              </legend>
-              {(
-                [
-                  "highlight_detection",
-                  "edit_planning",
-                  "edit_refinement",
-                ] as const
-              ).map((task) => (
-                <Check
-                  key={task}
-                  name={"task-" + task}
-                  label={task.replaceAll("_", " ")}
-                  checked={(
-                    modelEdit?.tasks ?? ["edit_planning", "edit_refinement"]
-                  ).includes(task)}
-                />
-              ))}
-            </fieldset>
-            <fieldset className="grid gap-2">
-              <legend className="mb-2 text-sm font-medium">Capabilities</legend>
-              {(
-                [
-                  "text",
-                  "vision",
-                  "audioInput",
-                  "structuredOutput",
-                  "toolCalling",
-                ] as const
-              ).map((k) => (
-                <Check
-                  key={k}
-                  name={k}
-                  label={k}
-                  checked={
-                    modelEdit?.capabilities[k] ??
-                    ["text", "structuredOutput", "toolCalling"].includes(k)
-                  }
-                />
-              ))}
-            </fieldset>
-            <fieldset className="flex flex-wrap gap-4">
-              <legend className="mb-2 text-sm font-medium">
-                Allowed plans
-              </legend>
-              {(["free", "pro", "business"] as const).map((p) => (
-                <Check
-                  key={p}
-                  name={"plan-" + p}
-                  label={p}
-                  checked={modelEdit?.access.allowedPlans.includes(p) ?? true}
-                />
-              ))}
-            </fieldset>
-            <Check
-              name="selectable"
-              label="Selectable by authorized premium accounts"
-              checked={modelEdit?.access.selectable ?? true}
-            />
-            <Check
-              name="enabled"
-              label="Enabled (successful test also required)"
-              checked={modelEdit?.enabled}
-            />
-            <Button disabled={busy}>Save model</Button>
+            <div className="flex shrink-0 justify-end gap-2 border-t bg-popover px-6 py-4">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setModelEdit(undefined)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? "Saving…" : "Save model"}
+              </Button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>

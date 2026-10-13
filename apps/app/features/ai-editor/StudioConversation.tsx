@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUpRight, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUpRight } from "lucide-react";
+import scrollbars from "./studio-scrollbars.module.css";
 import { AppButton, AppSpinner } from "@blynta/ui";
 import { ProposalCard } from "./ProposalCard";
 import { ConversationMessage } from "./StudioPanels";
@@ -57,7 +58,7 @@ export function StudioConversation({
         aria-label="Editing conversation"
         aria-live="polite"
         aria-busy={loading || generating}
-        className={`themed-scrollbar min-h-60 max-h-[56dvh] flex-1 space-y-5 overflow-y-auto px-5 py-6 lg:max-h-none lg:min-h-0 ${empty ? "lg:flex lg:flex-col lg:justify-center" : ""}`}
+        className={`${scrollbars.slim} min-h-60 max-h-[56dvh] flex-1 space-y-5 overflow-y-auto px-5 py-6 lg:max-h-none lg:min-h-0 ${empty ? "lg:flex lg:flex-col lg:justify-center" : ""}`}
         onScroll={() => {
           const el = scroll.current;
           if (el)
@@ -78,7 +79,6 @@ export function StudioConversation({
           </p>
         ) : empty ? (
           <div className="w-full space-y-5 py-2">
-            <Sparkles className="size-6 text-primary" />
             <div className="space-y-2">
               <h3 className="text-xl font-semibold tracking-tight">
                 Make it your own.

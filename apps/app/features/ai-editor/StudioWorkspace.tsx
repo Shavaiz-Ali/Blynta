@@ -4,7 +4,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Download,
-  Sparkles,
   History,
   Library,
   ListChecks,
@@ -421,7 +420,7 @@ export function StudioWorkspace({
           >
             <header className="order-1 flex shrink-0 items-center justify-between gap-2 px-5 pb-0 pt-4">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <Sparkles className="size-4 text-primary" /> Edit with Blynta
+                Edit with Blynta
               </h2>
               <span className="hidden text-xs text-muted-foreground lg:inline">
                 Review before applying

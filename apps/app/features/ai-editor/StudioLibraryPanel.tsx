@@ -1,5 +1,6 @@
 "use client";
 import { useSyncExternalStore } from "react";
+import scrollbars from "./studio-scrollbars.module.css";
 import {
   AppButton as Button,
   AppSheet,
@@ -185,7 +186,7 @@ export function StudioLibraryPanel({
           or audio file.
         </p>
       ) : (
-        <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto">
+        <ul className={`${scrollbars.slim} mt-2 max-h-40 space-y-1 overflow-y-auto`}>
           {assets.data.items.map((asset) => (
             <li key={asset._id}>
               <Button
@@ -238,10 +239,10 @@ export function StudioLibraryPanel({
           value={tab}
           onValueChange={onTabChange}
           size="sm"
-          variant="line"
+          variant="default"
           className="min-h-0 flex-1 gap-0 px-4 pb-5"
-          listClassName="shrink-0"
-          contentClassName="themed-scrollbar min-h-0 overflow-y-auto py-4"
+          listClassName="w-full shrink-0 justify-start"
+          contentClassName={`${scrollbars.slim} min-h-0 overflow-y-auto py-4`}
           tabs={[
             { value: "history", label: "History", content: history },
             { value: "media", label: "Media", content: media },
