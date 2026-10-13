@@ -29,6 +29,7 @@ function setup() {
       exists: jest.fn().mockResolvedValue(false),
       create: jest.fn().mockResolvedValue({}),
       findById: jest.fn().mockResolvedValue(credential),
+      findOne: jest.fn(),
       findOneAndUpdate: jest.fn(() => ({
         orFail: jest.fn().mockResolvedValue(metadata),
       })),
@@ -167,5 +168,101 @@ describe('Administrator credential and provider boundaries', () => {
       }),
     ).rejects.toThrow('Audit unavailable');
     expect(s.registry.providers.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('Credential validation diagnostics', () => {
+  const originalFetch = global.fetch;
+  beforeEach(() => {
+    global.fetch = jest.fn() as typeof fetch;
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    global.fetch = originalFetch;
+  });
+  function validationSetup() {
+    const s = setup();
+    const encrypted = s.vault.encrypt(
+      'synthetic-private-secret',
+      providerId + ':' + id,
+    );
+    s.registry.credentials.findOne.mockReturnValue({
+      select: jest
+        .fn()
+        .mockResolvedValue({ ...s.credential, ...encrypted, enabled: true }),
+    });
+    return s;
+  }
+  it.each([400, 401, 403, 429, 500])(
+    'returns safe diagnostics for Google HTTP %s without its body or secret',
+    async (status) => {
+      const s = validationSetup();
+      const body = 'synthetic-private-secret upstream-sensitive-body';
+      const request = jest
+        .spyOn(global, 'fetch')
+        .mockResolvedValue(new Response(body, { status }));
+      const result = await s.service.validateCredential(id, id);
+      expect(result).toMatchObject({
+        valid: false,
+        upstreamStatus: status,
+        code:
+          status === 429
+            ? 'AI_QUOTA_OR_RATE_LIMIT'
+            : status >= 500
+              ? 'AI_PROVIDER_FAILED'
+              : 'AI_AUTH_OR_ACCESS_FAILED',
+      });
+      expect(JSON.stringify(result)).not.toContain('synthetic-private-secret');
+      expect(JSON.stringify(result)).not.toContain('upstream-sensitive-body');
+      expect(request).toHaveBeenCalledTimes(1);
+      const updates = s.registry.credentials.updateOne.mock
+        .calls as unknown as [
+        unknown,
+        { $set: { lastValidationStatus: string } },
+      ][];
+      expect(updates[0][0]).toEqual({ _id: id, revision: 1 });
+      expect(updates[0][1].$set.lastValidationStatus).toBe('invalid');
+    },
+  );
+  it('distinguishes decryption failures before contacting Google', async () => {
+    const s = validationSetup();
+    jest.spyOn(s.vault, 'decrypt').mockImplementation(() => {
+      throw new Error('private cryptographic details');
+    });
+    const request = jest.spyOn(global, 'fetch');
+    const result = await s.service.validateCredential(id, id);
+    expect(result).toMatchObject({
+      valid: false,
+      code: 'AI_CREDENTIAL_DECRYPT_FAILED',
+    });
+    expect(JSON.stringify(result)).not.toContain(
+      'private cryptographic details',
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+  it.each(['TimeoutError', 'TypeError'])(
+    'distinguishes %s without leaking transport details',
+    async (name) => {
+      const s = validationSetup();
+      const error = new Error('synthetic-private-secret transport details');
+      error.name = name;
+      jest.spyOn(global, 'fetch').mockRejectedValue(error);
+      const result = await s.service.validateCredential(id, id);
+      expect(result).toMatchObject({
+        valid: false,
+        code: name === 'TimeoutError' ? 'AI_TIMEOUT' : 'AI_NETWORK_FAILED',
+      });
+      expect(JSON.stringify(result)).not.toContain('synthetic-private-secret');
+    },
+  );
+  it('preserves the success response contract', async () => {
+    const s = validationSetup();
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValue(new Response('{}', { status: 200 }));
+    const result = await s.service.validateCredential(id, id);
+    expect(result.valid).toBe(true);
+    expect(typeof result.latencyMs).toBe('number');
+    expect(Object.keys(result).sort()).toEqual(['latencyMs', 'valid']);
   });
 });

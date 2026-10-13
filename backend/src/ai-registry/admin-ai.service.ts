@@ -270,8 +270,12 @@ export class AdminAIService {
     await this.audit(actor, 'credential.validate', id);
     const started = Date.now();
     let valid = false;
+    let failure:
+      { code: string; message: string; upstreamStatus?: number } | undefined;
+    let stage: 'decrypt' | 'request' = 'decrypt';
     try {
       const secret = this.vault.decrypt(c, c.providerId + ':' + id);
+      stage = 'request';
       const response = await fetch(
         'https://generativelanguage.googleapis.com/v1beta/models?pageSize=1',
         {
@@ -280,9 +284,48 @@ export class AdminAIService {
         },
       );
       valid = response.ok;
+      if (!valid) {
+        const status = response.status;
+        failure = {
+          code:
+            status === 400 || status === 401 || status === 403
+              ? 'AI_AUTH_OR_ACCESS_FAILED'
+              : status === 429
+                ? 'AI_QUOTA_OR_RATE_LIMIT'
+                : 'AI_PROVIDER_FAILED',
+          message:
+            status === 400 || status === 401 || status === 403
+              ? 'Google rejected the credential check. Verify the API key, Generative Language API access, and key restrictions for this backend server.'
+              : status === 429
+                ? 'Google rate limited the credential check. Retry later and check project quota.'
+                : 'Google could not complete the credential check. Retry later or check the provider service.',
+          upstreamStatus: status,
+        };
+      }
       await response.body?.cancel();
-    } catch {
+    } catch (error) {
       valid = false;
+      const timedOut =
+        error instanceof Error &&
+        ['AbortError', 'TimeoutError'].includes(error.name);
+      failure =
+        stage === 'decrypt'
+          ? {
+              code: 'AI_CREDENTIAL_DECRYPT_FAILED',
+              message:
+                'The backend could not decrypt this credential. Check AI_CREDENTIAL_KEYS and keep the encryption key version used when it was saved.',
+            }
+          : timedOut
+            ? {
+                code: 'AI_TIMEOUT',
+                message:
+                  'The Google credential check timed out. Check backend connectivity and retry.',
+              }
+            : {
+                code: 'AI_NETWORK_FAILED',
+                message:
+                  'The backend could not reach Google. Check DNS, TLS, proxy settings and outbound HTTPS access.',
+              };
     }
     await this.registry.credentials.updateOne(
       { _id: id, revision: c.revision },
@@ -293,7 +336,11 @@ export class AdminAIService {
         },
       },
     );
-    return { valid, latencyMs: Date.now() - started };
+    return {
+      valid,
+      latencyMs: Date.now() - started,
+      ...(!valid ? failure : {}),
+    };
   }
   async model(actor: string, body: unknown, id?: string) {
     const input = id

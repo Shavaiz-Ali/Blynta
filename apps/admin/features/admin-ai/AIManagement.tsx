@@ -188,13 +188,18 @@ export function AIManagement({
     try {
       const result = await aiAdminApi.write(method, path, payload);
       await refresh();
-      if (result && typeof result === "object" && "valid" in result)
-        setNotice(
-          result.valid
-            ? "Connection test passed."
-            : "Connection test failed. Check the model and credential.",
-        );
-      else setNotice("Saved.");
+      if (result && typeof result === "object" && "valid" in result) {
+        if (!result.valid) {
+          const message =
+            "message" in result && typeof result.message === "string"
+              ? result.message
+              : "Connection test failed. Check the model and credential.";
+          setError(message);
+          toast.error(message);
+          return false;
+        }
+        setNotice("Connection test passed.");
+      } else setNotice("Saved.");
       toast.success("AI configuration updated.");
       return true;
     } catch (e) {
