@@ -87,7 +87,7 @@ export function BillingView() {
         </section>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-card p-4">
             <div className="min-w-56 flex-1">
               <AppInput
                 label="Search customers"
@@ -100,7 +100,7 @@ export function BillingView() {
             <label className="space-y-2 text-sm">
               <span className="block">Subscription status</span>
               <AppSelect
-                aria-label="Select an option"
+                aria-label="Subscription status"
                 value={params.status || ""}
                 onValueChange={(e) =>
                   setParams({

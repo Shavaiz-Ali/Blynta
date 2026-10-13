@@ -29,7 +29,7 @@ export function UsersFilterBar({
     filters.isActive !== undefined;
 
   return (
-    <div className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-card rounded-xl border border-border p-4 shadow-sm">
+    <div className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-card rounded-lg border p-4">
       {/* Search */}
       <form
         onSubmit={handleSearchSubmit}

@@ -10,10 +10,15 @@ export function AppPageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-4 pb-1">
+    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border/80 pb-6">
       <div className="min-w-0 flex-1 basis-64">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          {title}
+          <span className="text-primary">.</span>
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground sm:text-base">
+          {description}
+        </p>
       </div>
       {action}
     </header>

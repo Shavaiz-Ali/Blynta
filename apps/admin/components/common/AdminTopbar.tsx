@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Bell, LogOut, UserRound } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
+import { AppPopover, AppIdentityAvatar } from "@blynta/ui";
 import { ThemeToggle } from "./ThemeToggle";
 import { AppButton, AppLinkButton } from "./AppButton";
 import { navigation } from "@/lib/navigation";
@@ -59,12 +60,28 @@ export function AdminTopbar() {
           <Bell />
         </AppLinkButton>
         <ThemeToggle />
-        <details className="relative">
-          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
-            <UserRound className="size-4" />
-            <span className="hidden sm:inline">Account</span>
-          </summary>
-          <div className="absolute right-0 z-30 mt-2 min-w-60 rounded-lg border bg-popover p-3 text-popover-foreground shadow-md">
+        <AppPopover
+          trigger={
+            <AppButton
+              variant="ghost"
+              className="h-auto gap-3 px-2 py-1"
+              aria-label="Account"
+            >
+              <span className="hidden text-right sm:block">
+                <span className="block text-sm font-semibold">
+                  {session?.user.name || "Administrator"}
+                </span>
+                <span className="block text-xs capitalize text-muted-foreground">
+                  {session?.user.role || "Admin"}
+                </span>
+              </span>
+              <AppIdentityAvatar
+                name={session?.user.name || session?.user.email || "Admin"}
+              />
+            </AppButton>
+          }
+        >
+          <div>
             <p className="mb-3 break-all text-sm text-muted-foreground">
               {session?.user.email}
             </p>
@@ -77,7 +94,7 @@ export function AdminTopbar() {
               Sign out
             </AppButton>
           </div>
-        </details>
+        </AppPopover>
       </div>
     </header>
   );

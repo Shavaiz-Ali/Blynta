@@ -1,4 +1,5 @@
 "use client";
+import { AppPageHeader } from "@/components/common/AppPageHeader";
 
 import * as React from "react";
 import { useAdminQueuesQuery } from "@/features/admin-jobs/queries";
@@ -14,7 +15,6 @@ import { AppSkeleton as Skeleton } from "@/components/common/primitives";
 import { AppButton } from "@blynta/ui";
 import { QueryErrorState } from "@/components/common/QueryErrorState";
 import {
-  Server,
   RefreshCw,
   Zap,
   AlertTriangle,
@@ -46,14 +46,10 @@ export function QueuesView() {
   if (isError) {
     return (
       <div className="flex flex-col gap-6">
-        <div className="border-b border-border/80 pb-6">
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
-            Queues &amp; Worker Topologies
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            BullMQ processing and background worker health.
-          </p>
-        </div>
+        <AppPageHeader
+          title="Queues & Worker Topologies"
+          description="BullMQ processing and background worker health."
+        />
         <QueryErrorState
           title="Queue telemetry is unavailable"
           description="Redis and BullMQ metrics could not be retrieved. No healthy status is being assumed."
@@ -67,47 +63,36 @@ export function QueuesView() {
   return (
     <div className="flex flex-col gap-8 pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
-            <Server className="size-5" />
+      <AppPageHeader
+        title="Queues & Worker Topologies"
+        description="Monitor video processing queues and background workers."
+        action={
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block">
+              <p className="text-[11px] text-muted-foreground">
+                Auto-polls every 15s
+              </p>
+              <p className="text-xs font-medium text-foreground">
+                {dataUpdatedAt
+                  ? format(dataUpdatedAt, "h:mm:ss a")
+                  : "Awaiting telemetry"}
+              </p>
+            </div>
+            <AppButton
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={isFetching}
+              className="gap-2"
+            >
+              <RefreshCw
+                className={`size-3.5 ${isFetching ? "animate-spin text-primary" : ""}`}
+              />
+              <span>{isFetching ? "Refreshing..." : "Refresh Telemetry"}</span>
+            </AppButton>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              Queues & Worker Topologies
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Live Redis & BullMQ message broker monitoring for dedicated video
-              rendering and background microservices.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="text-right hidden sm:block">
-            <p className="text-[11px] text-muted-foreground">
-              Auto-polls every 15s
-            </p>
-            <p className="text-xs font-medium text-foreground">
-              {dataUpdatedAt
-                ? format(dataUpdatedAt, "h:mm:ss a")
-                : "Awaiting telemetry"}
-            </p>
-          </div>
-          <AppButton
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={isFetching}
-            className="gap-2"
-          >
-            <RefreshCw
-              className={`size-3.5 ${isFetching ? "animate-spin text-primary" : ""}`}
-            />
-            <span>{isFetching ? "Refreshing..." : "Refresh Telemetry"}</span>
-          </AppButton>
-        </div>
-      </div>
+        }
+      />
 
       {/* Overview Stat Strip */}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">

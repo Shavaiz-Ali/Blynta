@@ -41,15 +41,17 @@ export function ClipsView() {
         title="Generated clips"
         description="Inspect generated videos and open their parent jobs in a full detail page."
       />
-      <AppInput
-        label="Find parent jobs"
-        value={search}
-        onChange={(event) => {
-          setSearch(event.target.value);
-          setPage(1);
-        }}
-        placeholder="Search video title or source"
-      />
+      <div className="rounded-lg border bg-card p-4">
+        <AppInput
+          label="Find parent jobs"
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search video title or source"
+        />
+      </div>
       {query.isError ? (
         <QueryErrorState onRetry={() => void query.refetch()} />
       ) : (

@@ -28,10 +28,11 @@ export function AnalyticsView() {
         title="Analytics"
         description="Daily user growth and processing outcomes · last 14 days"
       />
-      <label className="flex items-center gap-3 text-sm">
+      <label className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4 text-sm">
         Metric
         <AppSelect
           aria-label="Metric"
+          wrapperClassName="w-full sm:w-64"
           value={metric}
           onValueChange={(e) => setMetric(e as Metric)}
         >
@@ -49,8 +50,8 @@ export function AnalyticsView() {
       ) : query.data?.points.length ? (
         <>
           <Chart points={query.data.points} label={analyticsMetrics[metric]} />
-          <details>
-            <summary className="cursor-pointer text-sm">
+          <details className="rounded-lg border bg-card p-4">
+            <summary className="cursor-pointer rounded-md text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
               View source values
             </summary>
             <DataTable

@@ -126,7 +126,7 @@ export function AuditView() {
         <label className="space-y-2 text-sm">
           <span className="block">Category</span>
           <AppSelect
-            aria-label="Select an option"
+            aria-label="Category"
             value={params.category || ""}
             onValueChange={(event) =>
               setParams((current) => ({

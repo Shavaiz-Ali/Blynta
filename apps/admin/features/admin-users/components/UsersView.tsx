@@ -1,4 +1,5 @@
 "use client";
+import { AppPageHeader } from "@/components/common/AppPageHeader";
 
 import * as React from "react";
 import {
@@ -16,7 +17,7 @@ import { AppButton as Button } from "@/components/common/primitives";
 import { AppSkeleton as Skeleton } from "@/components/common/primitives";
 import { AppBadge as Badge } from "@/components/common/primitives";
 import { QueryErrorState } from "@/components/common/QueryErrorState";
-import { X, Pencil, Users, ShieldPlus, Coins } from "lucide-react";
+import { X, Pencil, ShieldPlus, Coins } from "lucide-react";
 
 const DEFAULT_FILTERS: ListUsersParams = {
   page: 1,
@@ -60,39 +61,28 @@ export function UsersView() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
-            <Users className="size-5" />
+      <AppPageHeader
+        title="User Management"
+        description="Inspect user accounts, manage subscription tiers, roles, and manual credit grants."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="font-mono text-xs">
+              {data?.meta?.total !== undefined
+                ? `${data.meta.total.toLocaleString()} Accounts`
+                : "Loading..."}
+            </Badge>
+            <Button
+              onClick={() => setCreateAdminOpen(true)}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <ShieldPlus className="size-4" />
+              Provision Admin
+            </Button>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              User Management
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Inspect user accounts, manage subscription tiers, roles, and
-              manual credit grants.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            {data?.meta?.total !== undefined
-              ? `${data.meta.total.toLocaleString()} Accounts`
-              : "Loading..."}
-          </Badge>
-          <Button
-            onClick={() => setCreateAdminOpen(true)}
-            variant="outline"
-            size="sm"
-            className="gap-2"
-          >
-            <ShieldPlus className="size-4" />
-            Provision Admin
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filters */}
       <UsersFilterBar

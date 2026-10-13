@@ -1,4 +1,5 @@
 "use client";
+import { AppPageHeader } from "@/components/common/AppPageHeader";
 
 import * as React from "react";
 import Link from "next/link";
@@ -21,7 +22,6 @@ import { AppInput as Input } from "@/components/common/primitives";
 import { AppSelect as Select } from "@blynta/ui";
 import { SelectItem } from "@blynta/ui/primitives/select";
 import {
-  Briefcase,
   Search,
   Upload,
   ExternalLink,
@@ -290,33 +290,22 @@ export function JobsView() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/80 pb-6">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20">
-            <Briefcase className="size-5" />
+      <AppPageHeader
+        title="Global Job Monitor"
+        description="Track video ingestion, transcription, highlight detection, and rendering."
+        action={
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="font-mono text-xs">
+              {data?.meta?.total !== undefined
+                ? `${data.meta.total.toLocaleString()} Total Jobs`
+                : "Loading..."}
+            </Badge>
           </div>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight text-foreground">
-              Global Job Monitor
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Track multi-stage AI video ingestion, transcription, highlight
-              detection, and FFmpeg renders.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="font-mono text-xs">
-            {data?.meta?.total !== undefined
-              ? `${data.meta.total.toLocaleString()} Total Jobs`
-              : "Loading..."}
-          </Badge>
-        </div>
-      </div>
+        }
+      />
 
       {/* Filter Bar */}
-      <div className="rounded-xl border border-border/80 bg-card p-4 shadow-xs space-y-3">
+      <div className="rounded-lg border bg-card p-4 space-y-3">
         <div className="flex flex-wrap gap-3 items-center">
           {/* Search Input - using shadcn Input */}
           <div className="relative w-full min-w-0 flex-1 sm:min-w-64">

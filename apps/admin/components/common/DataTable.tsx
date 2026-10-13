@@ -16,7 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AppButton, AppPagination } from "@blynta/ui";
+import { AppButton, AppPagination, AppPopover, AppCheckbox } from "@blynta/ui";
+import { Columns3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -107,42 +108,51 @@ export function DataTable<T extends { _id?: string; id?: string }>({
 
   return (
     <div className="min-w-0 space-y-3" aria-busy={loading}>
-      <details className="w-fit text-sm">
-        <summary className="cursor-pointer rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          Columns
-        </summary>
-        <div className="flex flex-wrap gap-4 py-3">
-          {columns.map((column) => {
-            const isVisible = !hiddenColumns.includes(column.key);
-            return (
-              <label key={column.key} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+      <div className="flex justify-end">
+        <AppPopover
+          title="Visible columns"
+          trigger={
+            <AppButton variant="outline" size="sm">
+              <Columns3 className="size-4" />
+              Columns
+            </AppButton>
+          }
+        >
+          <div className="grid gap-3">
+            {columns.map((column) => {
+              const isVisible = !hiddenColumns.includes(column.key);
+              return (
+                <AppCheckbox
+                  key={column.key}
+                  label={column.header || "Actions"}
                   checked={isVisible}
                   disabled={visibleColumns.length === 1 && isVisible}
-                  onChange={(event) =>
+                  onCheckedChange={(checked) =>
                     setHiddenColumns((current) =>
-                      event.target.checked
+                      checked
                         ? current.filter((key) => key !== column.key)
                         : [...current, column.key],
                     )
                   }
                 />
-                {column.header || "Actions"}
-              </label>
-            );
-          })}
-        </div>
-      </details>
+              );
+            })}
+          </div>
+        </AppPopover>
+      </div>
 
       <div className="min-w-0 overflow-x-auto rounded-lg border bg-card">
         <Table className="min-w-[640px]">
-          <TableHeader>
+          <TableHeader className="bg-muted/40">
             <TableRow>
               {visibleColumns.map((column) => (
                 <TableHead
                   key={column.key}
-                  className={column.className}
+                  className={cn(
+                    "h-12 px-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                    column.className,
+                    "align-middle",
+                  )}
                   aria-sort={
                     sorting?.sortBy === column.key
                       ? sorting.sortOrder === "asc"
@@ -205,7 +215,13 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                   )}
                 >
                   {visibleColumns.map((column) => (
-                    <TableCell key={column.key} className={column.className}>
+                    <TableCell
+                      key={column.key}
+                      className={cn(
+                        "px-6 py-5 whitespace-normal",
+                        column.className,
+                      )}
+                    >
                       {renderCellContent(
                         column.render
                           ? column.render(row)
@@ -229,7 +245,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
         </Table>
       </div>
 
-      {pagination && (
+      {pagination && (pagination.total > 0 || pagination.page > 1) && (
         <AppPagination
           page={pagination.page}
           totalPages={pagination.totalPages}

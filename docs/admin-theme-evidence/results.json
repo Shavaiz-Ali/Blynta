@@ -1,0 +1,206 @@
+[
+  {
+    "view": "overview",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "users",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "user-detail",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "jobs",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "job-detail",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "queues",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "billing",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "analytics",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "audit",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "clips",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "system",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "notifications",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "settings",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "flags",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "providers",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "models",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "usage",
+    "width": 390,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "overview",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "users",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "user-detail",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "jobs",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "job-detail",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "queues",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "billing",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "analytics",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "audit",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "clips",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "system",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "notifications",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "settings",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "flags",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "providers",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "models",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  },
+  {
+    "view": "usage",
+    "width": 1440,
+    "font": "Inter, system-ui, sans-serif",
+    "passed": true
+  }
+]

@@ -3,6 +3,9 @@ import styles from "./ai-management.module.css";
 import { AppSelect, AppCheckbox, AppRadioGroup } from "@blynta/ui";
 import { AppDataTable as AppTable } from "@/components/common/DataTable";
 import { AppPageHeader } from "@/components/common/AppPageHeader";
+import { AppFilterBar } from "@/components/common/AppFilterBar";
+import { AppStatusBadge } from "@/components/common/AppStatusBadge";
+import { Search } from "lucide-react";
 import type { Usage } from "./api";
 import { SelectItem } from "@blynta/ui/primitives/select";
 import { useRef, useState } from "react";
@@ -410,38 +413,41 @@ export function AIManagement({
           setNotice("");
         }}
       >
-        <TabsList>
-          <TabsTrigger value="providers">Providers</TabsTrigger>
-          <TabsTrigger value="models">Models</TabsTrigger>
-          <TabsTrigger value="usage">Usage</TabsTrigger>
-        </TabsList>
-        {section !== "usage" && (
-          <div className="my-4 flex flex-wrap items-center gap-3">
-            <Input
-              wrapperClassName="w-full sm:max-w-sm"
-              aria-label="Search"
-              placeholder="Search by name"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
-            />
-            <AppSelect
-              aria-label="Enabled filter"
-              wrapperClassName="w-full sm:w-40"
-              value={filter}
-              onValueChange={(e) => {
-                setFilter(e);
-                setPage(1);
-              }}
-            >
-              <SelectItem value="">All statuses</SelectItem>
-              <SelectItem value="true">Enabled</SelectItem>
-              <SelectItem value="false">Disabled</SelectItem>
-            </AppSelect>
-          </div>
-        )}
+        <AppFilterBar className="mb-6 justify-between">
+          <TabsList>
+            <TabsTrigger value="providers">Providers</TabsTrigger>
+            <TabsTrigger value="models">Models</TabsTrigger>
+            <TabsTrigger value="usage">Usage</TabsTrigger>
+          </TabsList>
+          {section !== "usage" && (
+            <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto">
+              <Input
+                wrapperClassName="w-full sm:w-64"
+                aria-label="Search"
+                placeholder="Search by name"
+                prefixIcon={<Search className="size-4" />}
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+              <AppSelect
+                aria-label="Enabled filter"
+                wrapperClassName="w-full sm:w-40"
+                value={filter}
+                onValueChange={(e) => {
+                  setFilter(e);
+                  setPage(1);
+                }}
+              >
+                <SelectItem value="">All statuses</SelectItem>
+                <SelectItem value="true">Enabled</SelectItem>
+                <SelectItem value="false">Disabled</SelectItem>
+              </AppSelect>
+            </div>
+          )}
+        </AppFilterBar>
         <TabsContent value="providers">
           {providers.isError ? (
             <AppQueryState
@@ -492,9 +498,9 @@ export function AIManagement({
                   className: "align-top whitespace-normal",
                   render: (p) => (
                     <>
-                      <Badge variant="outline">
-                        {p.enabled ? "Enabled" : "Disabled"}
-                      </Badge>
+                      <AppStatusBadge
+                        status={p.enabled ? "enabled" : "disabled"}
+                      />
                     </>
                   ),
                 },
@@ -517,7 +523,7 @@ export function AIManagement({
                   header: "Actions",
                   className: "align-top whitespace-normal",
                   render: (p) => (
-                    <>
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
                         variant="outline"
@@ -547,7 +553,7 @@ export function AIManagement({
                       >
                         {p.enabled ? "Disable" : "Enable"}
                       </Button>
-                    </>
+                    </div>
                   ),
                 },
               ]}
@@ -585,9 +591,9 @@ export function AIManagement({
                         {catalog.data?.items.find((p) => p._id === m.providerId)
                           ?.name ?? m.providerId}
                       </div>
-                      <Badge variant="outline">
-                        {m.enabled ? "Enabled" : "Disabled"}
-                      </Badge>
+                      <AppStatusBadge
+                        status={m.enabled ? "enabled" : "disabled"}
+                      />
                     </>
                   ),
                 },
@@ -605,7 +611,16 @@ export function AIManagement({
                     <>
                       {Object.entries(m.capabilities)
                         .filter(([, v]) => v)
-                        .map(([k]) => k)
+                        .map(
+                          ([k]) =>
+                            ({
+                              text: "Text",
+                              vision: "Vision",
+                              audioInput: "Audio input",
+                              structuredOutput: "Structured output",
+                              toolCalling: "Tool calling",
+                            })[k] ?? k,
+                        )
                         .join(", ")}
                     </>
                   ),
@@ -622,7 +637,7 @@ export function AIManagement({
                   className: "align-top whitespace-normal",
                   render: (m) => (
                     <>
-                      {m.lastTestStatus ?? "Not tested"}
+                      <AppStatusBadge status={m.lastTestStatus ?? "unknown"} />
                       {m.lastTestedAt && (
                         <div className="text-xs">
                           {new Date(m.lastTestedAt).toLocaleString()}
@@ -1068,7 +1083,7 @@ export function AIManagement({
           if (!open) setModelEdit(undefined);
         }}
       >
-        <DialogContent className="flex max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+        <DialogContent className="flex h-[min(860px,90dvh)] max-h-[90dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
           <DialogHeader className="shrink-0 border-b px-6 py-5">
             <DialogTitle>{modelEdit ? "Edit model" : "Add model"}</DialogTitle>
             <p className="text-sm text-muted-foreground">
@@ -1078,10 +1093,10 @@ export function AIManagement({
           <form
             key={modelEdit?._id ?? "new-model"}
             onSubmit={saveModel}
-            className="flex min-h-0 flex-col"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             <div
-              className={`${styles.scrollbar} min-h-0 space-y-5 overflow-y-auto px-6 py-5`}
+              className={`${styles.scrollbar} min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-6 py-5`}
             >
               {(error || modelCredentials.error) && (
                 <p role="alert" className="text-destructive text-sm">
@@ -1204,7 +1219,7 @@ export function AIManagement({
                 separately. Pricing is optional and used only for estimates.
               </p>
               <div className="grid gap-6 md:grid-cols-2">
-                <fieldset className="grid gap-2">
+                <fieldset className="min-w-0 space-y-3 rounded-lg border p-4">
                   <legend className="mb-2 text-sm font-medium">
                     Supported tasks
                   </legend>
@@ -1225,7 +1240,7 @@ export function AIManagement({
                     />
                   ))}
                 </fieldset>
-                <fieldset className="grid gap-2">
+                <fieldset className="min-w-0 space-y-3 rounded-lg border p-4">
                   <legend className="mb-2 text-sm font-medium">
                     Capabilities
                   </legend>
@@ -1258,7 +1273,7 @@ export function AIManagement({
                   ))}
                 </fieldset>
               </div>
-              <fieldset className="flex flex-wrap gap-4">
+              <fieldset className="flex min-w-0 flex-wrap gap-4 rounded-lg border p-4">
                 <legend className="mb-2 text-sm font-medium">
                   Allowed plans
                 </legend>
