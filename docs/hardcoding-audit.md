@@ -83,6 +83,8 @@ Rollback keeps additive fields and encrypted records intact. If an endpoint/vers
 
 ### Standalone backend packaging correction (2026-10-14)
 
+A follow-up build preflight now rejects missing, stale or incomplete installed contracts before Nest compilation and prints the required backend installation command. Explicit parent/previous guards keep cancellation and render-progress narrowing independent of optional-chain inference. The backend build, 40 cancellation/render-progress tests and 9 contract/install regression tests passed. Dependency diagnostics must run inside backend, not the monorepo root: the root frontend workspace does not represent the independently installed backend dependency tree.
+
 The initial local build used an installed workspace dependency and did not prove a backend-only installation. A reported TS2307 failure resolving @blynta/types/contracts also caused downstream enum-inference errors. The backend now installs its own generated contract artifact from vendor/blynta-types; .npmrc sets install-links=true so npm packs the local dependency rather than requiring a filesystem link. This preserves the canonical TypeScript source and the existing import paths. Five contract regression tests passed, including generated-artifact equality, lockfile resolution, and backend/frontend compatibility. A clean isolated backend npm ci (install hooks disabled), production build, and 73 focused backend tests passed. Deployment must include the vendor directory and .npmrc, then reinstall dependencies before building.
 
 - Full backend suite passed: 73 suites, 633 tests; 2 opt-in suites / 8 tests skipped.

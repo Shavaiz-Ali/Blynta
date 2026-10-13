@@ -54,7 +54,8 @@ export function clipProgressSample(
   // Out-of-order FFmpeg observations within an operation are discarded in full.
   if (
     sample &&
-    previous?.status === base.status &&
+    previous &&
+    previous.status === base.status &&
     percent(sample.progress) < percent(previous.stageProgress)
   )
     return previous;

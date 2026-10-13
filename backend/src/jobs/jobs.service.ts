@@ -127,7 +127,8 @@ export class JobsService {
   async finalizeCancellation(jobId: string) {
     const parent = await this.findJob(jobId);
     if (
-      parent?.status !== JobStatus.CANCELLING ||
+      !parent ||
+      parent.status !== JobStatus.CANCELLING ||
       parent.activeExecutions?.length
     )
       return;
