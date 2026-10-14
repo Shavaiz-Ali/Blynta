@@ -7,14 +7,10 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
-  ClockAlert,
-  Link2Off,
   LockKeyhole,
   RefreshCw,
-  ShieldCheck,
-  WifiOff,
 } from "lucide-react";
-import { AppButton, AppInput, Skeleton } from "@blynta/ui";
+import { AppButton, AppInput, AppSpinner } from "@blynta/ui";
 import { ApiError } from "@/config/axiosClient";
 import { passwordSchema } from "@/lib/validators/auth.schema";
 import { AuthCard } from "./AuthCard";
@@ -26,20 +22,42 @@ function ResetCard({ children }: { children: ReactNode }) {
       footer={
         <Link
           href="/login"
-          className="inline-flex items-center gap-2 rounded-md text-sm font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex items-center gap-1.5 rounded-md py-1 text-sm font-medium text-primary underline-offset-4 transition-colors hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
         >
           <ArrowLeft className="size-4" aria-hidden="true" /> Back to sign in
         </Link>
       }
     >
-      <section
-        className="flex min-h-[420px] flex-col"
-        aria-live="polite"
-        aria-atomic="false"
-      >
+      <section className="flex flex-col" aria-live="polite" aria-atomic="false">
         {children}
       </section>
     </AuthCard>
+  );
+}
+
+function ResetLinkStatus({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <ResetCard>
+      <div className="space-y-6 text-center">
+        <div className="space-y-2">
+          <h1 className="text-balance text-2xl font-bold tracking-tight text-foreground">
+            {title}
+          </h1>
+          <p className="text-pretty text-sm leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+        </div>
+        {children}
+      </div>
+    </ResetCard>
   );
 }
 
@@ -67,27 +85,16 @@ function Heading({
 
 export function ResetPasswordLoading() {
   return (
-    <ResetCard>
-      <div role="status" aria-busy="true">
-        <Heading
-          icon={<ShieldCheck className="size-6" aria-hidden="true" />}
-          title="Verifying your reset link"
-          description="Please wait while we securely check your link."
-        />
-        <div className="space-y-5" aria-hidden="true">
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-24 motion-reduce:animate-none" />
-            <Skeleton className="h-10 w-full motion-reduce:animate-none" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-28 motion-reduce:animate-none" />
-            <Skeleton className="h-10 w-full motion-reduce:animate-none" />
-          </div>
-          <Skeleton className="h-4 w-3/4 motion-reduce:animate-none" />
-          <Skeleton className="h-10 w-full motion-reduce:animate-none" />
-        </div>
-      </div>
-    </ResetCard>
+    <ResetLinkStatus
+      title="Verifying your reset link"
+      description="We're checking that your link is still valid."
+    >
+      <AppSpinner
+        size="sm"
+        label="Verifying reset link"
+        className="mx-auto text-muted-foreground motion-reduce:animate-none"
+      />
+    </ResetLinkStatus>
   );
 }
 
@@ -122,7 +129,7 @@ function ResetFlow({ token }: { token: string }) {
           For your security, your previous sessions have been signed out.
         </p>
         <AppButton
-          className="mt-auto h-10 w-full"
+          className="mt-6 h-10 w-full"
           onClick={() => window.location.assign("/login")}
         >
           Continue to sign in{" "}
@@ -133,47 +140,36 @@ function ResetFlow({ token }: { token: string }) {
 
   if (malformed || rejected || validation.data?.valid === false)
     return (
-      <ResetCard>
-        <Heading
-          icon={
-            malformed ? (
-              <Link2Off className="size-6" aria-hidden="true" />
-            ) : (
-              <ClockAlert className="size-6" aria-hidden="true" />
-            )
-          }
-          title={
-            malformed
-              ? "Invalid password reset link"
-              : "Password reset link expired"
-          }
-          description={
-            malformed
-              ? "This reset link is missing or incomplete. Request a new link to securely update your password."
-              : "This password reset link is no longer valid. For security reasons, reset links can only be used once and for a limited time."
-          }
-        />
-        <div className="rounded-xl border border-border bg-muted/30 p-4 text-sm leading-relaxed text-muted-foreground">
-          Request a fresh link and use the most recent email in your inbox.
-        </div>
+      <ResetLinkStatus
+        title={
+          malformed
+            ? "Your reset link is invalid"
+            : "Your reset link has expired"
+        }
+        description={
+          malformed
+            ? "This link is missing or incomplete. Request a new one to reset your password."
+            : "This link is no longer valid. Request a new one to reset your password."
+        }
+      >
         <AppButton
-          className="mt-auto h-10 w-full"
-          onClick={() => window.location.assign("/forgot-password")}
+          className="h-10 w-full font-semibold"
+          render={<Link href="/forgot-password" />}
+          nativeButton={false}
+          role="link"
         >
           Request a new link{" "}
           <ArrowRight className="size-4" aria-hidden="true" />
         </AppButton>
-      </ResetCard>
+      </ResetLinkStatus>
     );
 
   if (validation.isError && !validation.isFetching)
     return (
-      <ResetCard>
-        <Heading
-          icon={<WifiOff className="size-6" aria-hidden="true" />}
-          title="Unable to verify your link"
-          description="We couldn't verify your password reset link right now. Please check your connection and try again."
-        />
+      <ResetLinkStatus
+        title="Unable to verify your link"
+        description="We couldn't verify your password reset link right now. Please check your connection and try again."
+      >
         {validation.error instanceof ApiError &&
           validation.error.status === 429 && (
             <p className="text-sm text-muted-foreground">
@@ -181,12 +177,12 @@ function ResetFlow({ token }: { token: string }) {
             </p>
           )}
         <AppButton
-          className="mt-auto h-10 w-full"
+          className="h-10 w-full font-semibold"
           onClick={() => void validation.refetch()}
         >
           <RefreshCw className="size-4" aria-hidden="true" /> Try again
         </AppButton>
-      </ResetCard>
+      </ResetLinkStatus>
     );
 
   if (validation.isFetching || !validation.data)
@@ -200,7 +196,7 @@ function ResetFlow({ token }: { token: string }) {
         description="Choose a strong password to keep your Blynta account secure."
       />
       <form
-        className="flex flex-1 flex-col gap-4"
+        className="flex flex-col gap-4"
         noValidate
         onSubmit={async (event) => {
           event.preventDefault();
@@ -268,7 +264,7 @@ function ResetFlow({ token }: { token: string }) {
         )}
         <AppButton
           type="submit"
-          className="mt-auto h-10 w-full"
+          className="h-10 w-full"
           isLoading={reset.isPending}
           disabled={reset.isPending}
         >

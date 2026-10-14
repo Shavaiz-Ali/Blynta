@@ -13,7 +13,7 @@ export interface AuthCardProps {
 function AuthCard({ children, className, header, footer }: AuthCardProps) {
   return (
     <div className={cn("w-full max-w-md mx-auto space-y-5", className)}>
-      <div className="rounded-2xl border border-border/80 bg-card/90 text-card-foreground shadow-xl backdrop-blur-xl p-6 sm:p-8 space-y-5 transition-all">
+      <div className="rounded-2xl border border-border/80 bg-card/90 text-card-foreground shadow-xl backdrop-blur-xl p-6 sm:p-8 space-y-5 transition-all motion-reduce:transition-none">
         {header && <div className="text-left space-y-1">{header}</div>}
         {children}
       </div>
