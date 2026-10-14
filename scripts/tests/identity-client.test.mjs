@@ -77,6 +77,10 @@ await test("Identity transport", async (t) => {
   );
   for (const [httpStatus, backendCode, expectedCode] of [
     [401, "INVALID_CREDENTIALS", "invalid_credentials"],
+    [401, "INCORRECT_EMAIL", "incorrect_email"],
+    [401, "INCORRECT_PASSWORD", "incorrect_password"],
+    [401, "PASSWORD_SIGN_IN_UNAVAILABLE", "password_sign_in_unavailable"],
+    [403, "ACCOUNT_INACTIVE", "account_inactive"],
     [401, "UNAUTHORIZED", "backend_configuration"],
     [404, "NOT_FOUND", "backend_configuration"],
     [429, "TOO_MANY_REQUESTS", "rate_limited"],

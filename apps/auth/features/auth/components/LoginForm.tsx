@@ -73,7 +73,7 @@ function LoginForm({
   // Credentials login — redirect:false so we can handle errors in-page
   // ------------------------------------------------------------------
   const submitFn: SubmitHandler<LoginInput> = async ({ email, password }) => {
-    clearErrors("root.server");
+    clearErrors();
     let result;
     try {
       result = await signIn("credentials", {
@@ -95,10 +95,24 @@ function LoginForm({
           ["credentials", "invalid_credentials"].includes(result.code));
       const message = invalidCredentials
         ? "Invalid email or password. Please try again."
-        : result?.code === "rate_limited"
-          ? "Too many sign-in attempts. Wait a minute and try again."
-          : "Sign-in is temporarily unavailable. Please try again later.";
-      setError(invalidCredentials ? "email" : "root.server", {
+        : result?.code === "incorrect_email"
+          ? "Email is incorrect."
+          : result?.code === "incorrect_password"
+            ? "Password is incorrect."
+            : result?.code === "account_inactive"
+              ? "This account is inactive. Please contact support."
+              : result?.code === "password_sign_in_unavailable"
+                ? "Password sign-in is unavailable. Use your connected sign-in provider."
+                : result?.code === "rate_limited"
+                  ? "Too many sign-in attempts. Wait a minute and try again."
+                  : "Sign-in is temporarily unavailable. Please try again later.";
+      const field =
+        result?.code === "incorrect_email"
+          ? "email"
+          : result?.code === "incorrect_password"
+            ? "password"
+            : "root.server";
+      setError(field, {
         type: "server",
         message,
       });

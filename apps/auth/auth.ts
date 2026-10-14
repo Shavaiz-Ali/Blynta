@@ -56,15 +56,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     Credentials({
       credentials: { email: {}, password: {} },
       async authorize(credentials) {
-        if (
-          typeof credentials.email !== "string" ||
-          typeof credentials.password !== "string"
-        )
-          return null;
+        if (typeof credentials.email !== "string" || !credentials.email.trim())
+          throw new IdentitySignInError("incorrect_email");
+        if (typeof credentials.password !== "string" || !credentials.password)
+          throw new IdentitySignInError("incorrect_password");
         try {
           return await callIdentity<Identity>(
             "sso/login",
-            { email: credentials.email, password: credentials.password },
+            { email: credentials.email.trim(), password: credentials.password },
             true,
           );
         } catch (error) {
@@ -74,7 +73,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               : "backend_unavailable";
           if (
             error instanceof IdentityRequestError &&
-            code !== "invalid_credentials"
+            ![
+              "invalid_credentials",
+              "incorrect_email",
+              "incorrect_password",
+              "account_inactive",
+              "password_sign_in_unavailable",
+            ].includes(code)
           ) {
             console.error(
               `[auth:credentials] Identity service failure: ${JSON.stringify({ code, status: error.status })}`,

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 import { Menu, PanelLeft, Zap, Bell, Sun, Check } from "lucide-react";
 import { useTheme } from "next-themes";
 import { AppHeader } from "./AppWorkspace";
 import { AppButton } from "./AppButton";
+import { AppDialog } from "./AppDialog";
 import { AppPopover } from "./AppPopover";
 import { AppIdentityAvatar } from "./AppIdentityAvatar";
 import { Badge } from "../primitives/badge";
@@ -215,97 +216,164 @@ export function AppAccountMenu({
 }: {
   profile: AppAccountIdentity;
   links: AppAccountLink[];
-  onSignOut: () => void;
+  onSignOut: () => void | Promise<void>;
 }) {
   const paid = profile.plan === "pro" || profile.plan === "business";
   const { theme, setTheme } = useTheme();
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const logoutPending = useRef(false);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+
+  async function confirmLogout() {
+    if (logoutPending.current) return;
+    logoutPending.current = true;
+    setLoggingOut(true);
+    setLogoutError("");
+    try {
+      await onSignOut();
+      setLogoutOpen(false);
+    } catch {
+      setLogoutError("Unable to log out. Please try again.");
+    } finally {
+      logoutPending.current = false;
+      setLoggingOut(false);
+    }
+  }
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="flex items-center gap-2.5 rounded-lg p-1 pr-2 hover:bg-muted/60 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer"
-        aria-label="User menu"
-      >
-        <div className="hidden sm:flex flex-col items-end leading-tight text-right min-w-0">
-          <span className="max-w-40 truncate text-xs font-semibold text-foreground">
-            {profile.name || profile.email || "Your account"}
-          </span>
-          {profile.plan && (
-            <span className="text-[11px] capitalize text-muted-foreground">
-              {profile.plan} plan
-            </span>
-          )}
-        </div>
-        <AppIdentityAvatar
-          name={profile.name || profile.email || "User"}
-          src={profile.avatarUrl}
-        />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="end"
-        sideOffset={6}
-        className="w-56 rounded-xl p-1.5"
-      >
-        <div className="px-2.5 py-2">
-          <p className="text-xs font-semibold text-foreground truncate">
-            {profile.name || "User Account"}
-          </p>
-          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-            {profile.email}
-          </p>
-          {profile.plan && (
-            <Badge
-              variant="secondary"
-              className={cn(
-                "mt-1.5 text-[10px] h-5 px-1.5 font-bold uppercase tracking-wider",
-                paid && "bg-primary/15 text-primary border-primary/25",
-              )}
-            >
-              {profile.plan}
-            </Badge>
-          )}
-        </div>
-        <DropdownMenuSeparator />
-        {links.map((link) => (
-          <DropdownMenuItem
-            key={link.label}
-            render={link.render}
-            className="rounded-lg text-xs cursor-pointer"
-          >
-            {link.label}
-          </DropdownMenuItem>
-        ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger className="rounded-lg text-xs cursor-pointer">
-            <span className="flex items-center gap-2">
-              <Sun className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Appearance</span>
-            </span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-36 rounded-xl p-1">
-            {["light", "dark", "system"].map((value) => (
-              <DropdownMenuItem
-                key={value}
-                className="rounded-lg text-xs cursor-pointer flex items-center justify-between"
-                onClick={() => setTheme(value)}
-              >
-                <span className="capitalize">{value}</span>
-                {theme === value && (
-                  <Check className="h-3.5 w-3.5 text-primary" />
-                )}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          className="rounded-lg text-xs text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
-          onClick={onSignOut}
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          ref={menuTrigger}
+          className="flex items-center gap-2.5 rounded-lg p-1 pr-2 hover:bg-muted/60 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/40 cursor-pointer"
+          aria-label="User menu"
         >
-          Log out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <div className="hidden sm:flex flex-col items-end leading-tight text-right min-w-0">
+            <span className="max-w-40 truncate text-xs font-semibold text-foreground">
+              {profile.name || profile.email || "Your account"}
+            </span>
+            {profile.plan && (
+              <span className="text-[11px] capitalize text-muted-foreground">
+                {profile.plan} plan
+              </span>
+            )}
+          </div>
+          <AppIdentityAvatar
+            name={profile.name || profile.email || "User"}
+            src={profile.avatarUrl}
+          />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={6}
+          className="w-56 rounded-xl p-1.5"
+        >
+          <div className="px-2.5 py-2">
+            <p className="text-xs font-semibold text-foreground truncate">
+              {profile.name || "User Account"}
+            </p>
+            <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+              {profile.email}
+            </p>
+            {profile.plan && (
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "mt-1.5 text-[10px] h-5 px-1.5 font-bold uppercase tracking-wider",
+                  paid && "bg-primary/15 text-primary border-primary/25",
+                )}
+              >
+                {profile.plan}
+              </Badge>
+            )}
+          </div>
+          <DropdownMenuSeparator />
+          {links.map((link) => (
+            <DropdownMenuItem
+              key={link.label}
+              render={link.render}
+              className="rounded-lg text-xs cursor-pointer"
+            >
+              {link.label}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="rounded-lg text-xs cursor-pointer">
+              <span className="flex items-center gap-2">
+                <Sun className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Appearance</span>
+              </span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-36 rounded-xl p-1">
+              {["light", "dark", "system"].map((value) => (
+                <DropdownMenuItem
+                  key={value}
+                  className="rounded-lg text-xs cursor-pointer flex items-center justify-between"
+                  onClick={() => setTheme(value)}
+                >
+                  <span className="capitalize">{value}</span>
+                  {theme === value && (
+                    <Check className="h-3.5 w-3.5 text-primary" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="rounded-lg text-xs text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+            onClick={() => {
+              setLogoutError("");
+              setLogoutOpen(true);
+            }}
+          >
+            Log out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AppDialog
+        open={logoutOpen}
+        onOpenChange={(open) => {
+          if (!logoutPending.current) setLogoutOpen(open);
+        }}
+        title="Log out?"
+        description="Are you sure you want to log out of your account?"
+        size="sm"
+        finalFocus={menuTrigger}
+        dismissible={!loggingOut}
+        showCloseButton={!loggingOut}
+        bodyClassName="py-3"
+        footer={
+          <>
+            <AppButton
+              type="button"
+              variant="outline"
+              disabled={loggingOut}
+              onClick={() => setLogoutOpen(false)}
+            >
+              Cancel
+            </AppButton>
+            <AppButton
+              type="button"
+              variant="destructive"
+              isLoading={loggingOut}
+              onClick={confirmLogout}
+            >
+              Log out
+            </AppButton>
+          </>
+        }
+      >
+        {logoutError && (
+          <p role="alert" className="text-sm text-destructive">
+            {logoutError}
+          </p>
+        )}
+      </AppDialog>
+    </>
   );
 }
 

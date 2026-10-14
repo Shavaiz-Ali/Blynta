@@ -32,9 +32,7 @@ export function UserDropdown() {
             ]
           : []
       }
-      onSignOut={() => {
-        void logoutProduct();
-      }}
+      onSignOut={logoutProduct}
     />
   );
 }

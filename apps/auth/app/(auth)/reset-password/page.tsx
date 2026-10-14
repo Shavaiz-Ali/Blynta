@@ -7,6 +7,8 @@ import { axiosClient } from "@/config/axiosClient";
 function ResetForm() {
   const search = useSearchParams();
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmError, setConfirmError] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   return (
@@ -15,8 +17,13 @@ function ResetForm() {
         className="flex flex-col gap-4"
         onSubmit={async (event) => {
           event.preventDefault();
-          setLoading(true);
           setError("");
+          setConfirmError("");
+          if (password !== confirmPassword) {
+            setConfirmError("Passwords do not match.");
+            return;
+          }
+          setLoading(true);
           try {
             await axiosClient.post("/auth/reset-password", {
               token: search.get("token"),
@@ -39,8 +46,24 @@ function ResetForm() {
           required
           minLength={8}
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(e) => {
+            setPassword(e.target.value);
+            setConfirmError("");
+          }}
           error={error}
+        />
+        <AppInput
+          label="Confirm password"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={confirmPassword}
+          onChange={(e) => {
+            setConfirmPassword(e.target.value);
+            setConfirmError("");
+          }}
+          error={confirmError}
         />
         <AppButton type="submit" isLoading={loading}>
           Reset password

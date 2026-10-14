@@ -6,7 +6,13 @@ import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginDto } from './dto/login.dto';
 import { SocialLoginDto } from './dto/social-login.dto';
 import { AuthProvider } from '../users/schemas/user.schema';
-import { InvalidCredentialsException } from '../common/exceptions';
+import {
+  AccountInactiveException,
+  IncorrectEmailException,
+  IncorrectPasswordException,
+  InvalidCredentialsException,
+  PasswordSignInUnavailableException,
+} from '../common/exceptions';
 import { randomBytes, randomInt } from 'crypto';
 import { MailService } from '../mail/mail.service';
 import { ActivitiesService } from '../activities/activities.service';
@@ -68,15 +74,15 @@ export class AuthService {
 
   async validateLogin(dto: LoginDto): Promise<AuthResult> {
     const user = await this.usersService.findByEmailWithPassword(dto.email);
-    if (!user || !user.isActive || !user.password) {
-      throw new InvalidCredentialsException();
-    }
+    if (!user) throw new IncorrectEmailException();
+    if (!user.isActive) throw new AccountInactiveException();
+    if (!user.password) throw new PasswordSignInUnavailableException();
     const isValid = await this.usersService.validatePassword(
       dto.password,
       user.password,
     );
     if (!isValid) {
-      throw new InvalidCredentialsException();
+      throw new IncorrectPasswordException();
     }
 
     await this.usersService.handleFirstLoginReferralCheck(user._id.toString());

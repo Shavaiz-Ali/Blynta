@@ -2,6 +2,10 @@ import type { ApiEnvelope } from "@blynta/types";
 
 export type IdentityFailureCode =
   | "invalid_credentials"
+  | "incorrect_email"
+  | "incorrect_password"
+  | "account_inactive"
+  | "password_sign_in_unavailable"
   | "backend_unavailable"
   | "backend_configuration"
   | "rate_limited"
@@ -75,6 +79,20 @@ export async function callIdentity<T>(
     .catch(() => null)) as ApiEnvelope<T> | null;
   if (!response.ok) {
     const backendCode = json?.success === false ? json.error?.code : undefined;
+    if (response.status === 401) {
+      if (backendCode === "INCORRECT_EMAIL")
+        throw new IdentityRequestError("incorrect_email", response.status);
+      if (backendCode === "INCORRECT_PASSWORD")
+        throw new IdentityRequestError("incorrect_password", response.status);
+      if (backendCode === "PASSWORD_SIGN_IN_UNAVAILABLE")
+        throw new IdentityRequestError(
+          "password_sign_in_unavailable",
+          response.status,
+        );
+    }
+    if (response.status === 403 && backendCode === "ACCOUNT_INACTIVE") {
+      throw new IdentityRequestError("account_inactive", response.status);
+    }
     if (response.status === 401 && backendCode === "INVALID_CREDENTIALS") {
       throw new IdentityRequestError("invalid_credentials", response.status);
     }
