@@ -10,7 +10,7 @@ export function UserDropdown({ profile }: { profile: AppAccountIdentity }) {
         { label: "Profile", render: <Link href="/profile" /> },
         { label: "Billing & Plan", render: <Link href="/billing" /> },
       ]}
-      onSignOut={logoutProduct}
+      onSignOut={(onSuccess) => logoutProduct({ onSuccess })}
     />
   );
 }

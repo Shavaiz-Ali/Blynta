@@ -1,6 +1,8 @@
 "use client";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { AppButton, AppInput } from "@blynta/ui";
 import { AuthCard } from "@/features/auth";
 import { axiosClient } from "@/config/axiosClient";
@@ -12,7 +14,18 @@ function ResetForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   return (
-    <AuthCard header={<h1 className="text-2xl font-bold">Reset password</h1>}>
+    <AuthCard
+      header={<h1 className="text-2xl font-bold">Reset password</h1>}
+      footer={
+        <Link
+          href="/login"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to sign in
+        </Link>
+      }
+    >
       <form
         className="flex flex-col gap-4"
         onSubmit={async (event) => {
@@ -42,6 +55,7 @@ function ResetForm() {
         <AppInput
           label="New password"
           type="password"
+          placeholder="Enter your new password"
           autoComplete="new-password"
           required
           minLength={8}
@@ -55,6 +69,7 @@ function ResetForm() {
         <AppInput
           label="Confirm password"
           type="password"
+          placeholder="Re-enter your new password"
           autoComplete="new-password"
           required
           minLength={8}

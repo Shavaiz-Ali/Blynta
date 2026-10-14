@@ -7,6 +7,7 @@ import { useForm, Controller, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AppInput } from "@blynta/ui";
 import { AppButton } from "@blynta/ui";
+import { AppDialog, AppRedirectStatus } from "@blynta/ui";
 import { AuthDivider } from "@/features/auth/components/AuthDivider";
 import { SocialLoginButtons } from "@/features/auth/components/SocialLoginButtons";
 import { useEnabledProviders } from "@/features/auth/queries";
@@ -51,6 +52,16 @@ function LoginForm({
   const [socialLoading, setSocialLoading] = React.useState<
     "facebook" | "google" | null
   >(null);
+  const [signedIn, setSignedIn] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!signedIn) return;
+    const timer = window.setTimeout(
+      () => window.location.assign(redirectTo),
+      1200,
+    );
+    return () => window.clearTimeout(timer);
+  }, [signedIn, redirectTo]);
 
   // ------------------------------------------------------------------
   // Social login — full-page OAuth redirect (no redirect:false needed)
@@ -120,8 +131,7 @@ function LoginForm({
       return;
     }
 
-    toast.success("Signed in successfully!");
-    window.location.assign(redirectTo);
+    setSignedIn(true);
   };
 
   const activeProviders = fetchedProviders ??
@@ -133,6 +143,25 @@ function LoginForm({
 
   return (
     <div className={className}>
+      <AppDialog
+        open={signedIn}
+        onOpenChange={() => {}}
+        title="You're signed in"
+        description="Welcome back. Your account is ready."
+        size="sm"
+        titleClassName="text-center"
+        descriptionClassName="text-center"
+        dismissible={false}
+        showCloseButton={false}
+      >
+        <AppRedirectStatus
+          message={
+            redirectTo.startsWith("/login")
+              ? "Returning to your account…"
+              : "Opening your Blynta workspace…"
+          }
+        />
+      </AppDialog>
       {/* 1. Social Login Buttons at top (hidden when no social providers enabled) */}
       {showSocialSection && (
         <SocialLoginButtons
@@ -156,7 +185,7 @@ function LoginForm({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          handleSubmit(submitFn)(e);
+          if (!signedIn) handleSubmit(submitFn)(e);
         }}
         className="flex flex-col gap-4"
         noValidate
@@ -218,6 +247,7 @@ function LoginForm({
           size="lg"
           className="h-10 w-full mt-1 font-semibold shadow-md hover:shadow-lg transition-all"
           isLoading={isSubmitting}
+          disabled={signedIn}
         >
           Sign in
         </AppButton>

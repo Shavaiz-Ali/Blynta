@@ -6,6 +6,7 @@ import { useTheme } from "next-themes";
 import { AppHeader } from "./AppWorkspace";
 import { AppButton } from "./AppButton";
 import { AppDialog } from "./AppDialog";
+import { AppRedirectStatus } from "./AppRedirectStatus";
 import { AppPopover } from "./AppPopover";
 import { AppIdentityAvatar } from "./AppIdentityAvatar";
 import { Badge } from "../primitives/badge";
@@ -216,12 +217,13 @@ export function AppAccountMenu({
 }: {
   profile: AppAccountIdentity;
   links: AppAccountLink[];
-  onSignOut: () => void | Promise<void>;
+  onSignOut: (onSuccess: () => Promise<void>) => void | Promise<void>;
 }) {
   const paid = profile.plan === "pro" || profile.plan === "business";
   const { theme, setTheme } = useTheme();
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [loggedOut, setLoggedOut] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const logoutPending = useRef(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -232,9 +234,12 @@ export function AppAccountMenu({
     setLoggingOut(true);
     setLogoutError("");
     try {
-      await onSignOut();
-      setLogoutOpen(false);
+      await onSignOut(async () => {
+        setLoggedOut(true);
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      });
     } catch {
+      setLoggedOut(false);
       setLogoutError("Unable to log out. Please try again.");
     } finally {
       logoutPending.current = false;
@@ -337,36 +342,47 @@ export function AppAccountMenu({
       <AppDialog
         open={logoutOpen}
         onOpenChange={(open) => {
-          if (!logoutPending.current) setLogoutOpen(open);
+          if (!logoutPending.current && !loggedOut) setLogoutOpen(open);
         }}
-        title="Log out?"
-        description="Are you sure you want to log out of your account?"
+        title={loggedOut ? "You're logged out" : "Log out?"}
+        description={
+          loggedOut
+            ? "You have successfully logged out of this app."
+            : "Are you sure you want to log out of your account?"
+        }
         size="sm"
+        titleClassName={loggedOut ? "text-center" : undefined}
+        descriptionClassName={loggedOut ? "text-center" : undefined}
         finalFocus={menuTrigger}
-        dismissible={!loggingOut}
-        showCloseButton={!loggingOut}
+        dismissible={!loggingOut && !loggedOut}
+        showCloseButton={!loggingOut && !loggedOut}
         bodyClassName="py-3"
         footer={
-          <>
-            <AppButton
-              type="button"
-              variant="outline"
-              disabled={loggingOut}
-              onClick={() => setLogoutOpen(false)}
-            >
-              Cancel
-            </AppButton>
-            <AppButton
-              type="button"
-              variant="destructive"
-              isLoading={loggingOut}
-              onClick={confirmLogout}
-            >
-              Log out
-            </AppButton>
-          </>
+          !loggedOut && (
+            <>
+              <AppButton
+                type="button"
+                variant="outline"
+                disabled={loggingOut}
+                onClick={() => setLogoutOpen(false)}
+              >
+                Cancel
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="destructive"
+                isLoading={loggingOut}
+                onClick={confirmLogout}
+              >
+                Log out
+              </AppButton>
+            </>
+          )
         }
       >
+        {loggedOut && (
+          <AppRedirectStatus message="Returning to your account…" />
+        )}
         {logoutError && (
           <p role="alert" className="text-sm text-destructive">
             {logoutError}

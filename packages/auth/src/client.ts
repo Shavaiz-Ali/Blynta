@@ -31,11 +31,14 @@ export function startProductReauthentication() {
 export const productFetch = sessionFetch;
 
 /** Keep session watchers from restarting SSO while the cookie is being cleared. */
-export async function logoutProduct() {
+export async function logoutProduct(
+  options: { onSuccess?: () => void | Promise<void> } = {},
+) {
   if (productLogoutState.inProgress) return;
   productLogoutState.inProgress = true;
   try {
     await signOut({ redirect: false, redirectTo: "/auth/logged-out" });
+    await options.onSuccess?.();
     // Do not accept a stale Auth.js callback URL as the logout destination.
     window.location.assign("/auth/logged-out");
   } catch (error) {
