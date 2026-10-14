@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Post, UseGuards } from '@nestjs/common';
 import { AuthRateLimitGuard } from './auth-rate-limit.guard';
 import { SsoBridgeGuard } from './sso-bridge.guard';
 import { AuthService } from './auth.service';
@@ -12,6 +12,7 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { ResendOtpDto } from './dto/resend-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ValidateResetTokenDto } from './dto/validate-reset-token.dto';
 
 @Controller('auth')
 @UseGuards(AuthRateLimitGuard)
@@ -73,8 +74,17 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto.token, dto.newPassword);
+  }
+
+  @Post('validate-reset-token')
+  @Header('Cache-Control', 'no-store')
+  @Header('Referrer-Policy', 'no-referrer')
+  validateResetToken(@Body() dto: ValidateResetTokenDto) {
+    return this.authService.validateResetToken(dto.token);
   }
 
   // Adding Apple/Facebook later = copy-pasting one of the two methods above, swapping the enum value

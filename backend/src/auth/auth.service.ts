@@ -1,5 +1,11 @@
 import { SsoService } from './sso.service';
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { DomainException } from '../common/exceptions/domain.exception';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
@@ -260,19 +266,33 @@ export class AuthService {
     return { message: 'If that email exists, a reset link was sent' };
   }
 
+  async validateResetToken(token: string) {
+    const user = await this.usersService.findByValidResetToken(token);
+    return user
+      ? { valid: true as const }
+      : { valid: false as const, reason: 'TOKEN_INVALID_OR_EXPIRED' as const };
+  }
+
+  private invalidResetToken() {
+    return new DomainException(
+      'This password reset link is invalid or has expired.',
+      HttpStatus.BAD_REQUEST,
+      'TOKEN_INVALID_OR_EXPIRED',
+    );
+  }
+
   async resetPassword(token: string, newPassword: string) {
     const user = await this.usersService.findByValidResetToken(token);
     if (!user) {
-      throw new BadRequestException('Invalid or expired reset link');
+      throw this.invalidResetToken();
     }
 
     const consumed = await this.usersService.resetPassword(
       user._id.toString(),
       newPassword,
-      user.passwordResetToken!,
+      user.passwordResetToken,
     );
-    if (!consumed)
-      throw new BadRequestException('Invalid or expired reset link');
+    if (!consumed) throw this.invalidResetToken();
     await this.sso.revokeUser(user._id.toString());
 
     await this.activitiesService.queueCreate({

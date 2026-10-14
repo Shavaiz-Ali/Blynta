@@ -252,6 +252,9 @@ export class UsersService {
   }
 
   async findByValidResetToken(token: string) {
+    // Issued tokens are 32 random bytes encoded as hex. Reject malformed input
+    // before database work or bcrypt comparisons (which truncate long inputs).
+    if (!/^[a-f0-9]{64}$/.test(token)) return null;
     const users = await this.userModel
       .find({ passwordResetExpiresAt: { $gt: new Date() } })
       .select('+passwordResetToken')
