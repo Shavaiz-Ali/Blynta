@@ -83,47 +83,48 @@ const workspace = load("../../packages/ui/src/components/AppWorkspace.tsx", {
 });
 let currentPath = productionPath;
 const icon = () => React.createElement("svg");
-const { DashboardLayout, navGroups } = load(
-  "features/dashboard/components/DashboardLayout.tsx",
-  {
-    "next/navigation": { usePathname: () => currentPath },
-    "next/link": { default: (props) => React.createElement("a", props) },
-    "@/components/logo": { BlyntaLogo: () => null },
-    "@blynta/ui": {
-      ...workspace,
-      AppButton: container,
-      AppProductHeader: container,
-    },
-    "@/components/ui/separator": { Separator: () => null },
-    "@/components/ui/sheet": {
-      Sheet: container,
-      SheetContent: container,
-      SheetTitle: container,
-    },
-    "@/components/ui/tooltip": tooltip,
-    "@/components/ui/badge": { Badge: container },
-    "@/components/ui/avatar": {
-      Avatar: container,
-      AvatarFallback: container,
-    },
-    "@/lib/utils": load("lib/utils.ts"),
-    "@/features/auth/queries": { useCurrentUser: () => ({ data: null }) },
-    "./InviteMembersDialog": { InviteMembersDialog: () => null },
-    "../icons": Object.fromEntries(
-      [
-        "UserPlus",
-        "Film",
-        "Clock",
-        "CreditCard",
-        "Settings",
-        "Upload",
-        "Share2",
-        "User",
-        "Activity",
-      ].map((name) => [`${name}Icon`, icon]),
-    ),
+const { AppShell, navGroups } = load("components/layout/AppShell.tsx", {
+  "next/navigation": { usePathname: () => currentPath },
+  "./AppHeader": { AppHeader: () => null },
+  "@/features/dashboard/navigation": { isNavItemActive },
+  "next/link": { default: (props) => React.createElement("a", props) },
+  "@/components/logo": { BlyntaLogo: () => null },
+  "@blynta/ui": {
+    ...workspace,
+    AppButton: container,
+    AppProductHeader: container,
   },
-);
+  "@/components/ui/separator": { Separator: () => null },
+  "@/components/ui/sheet": {
+    Sheet: container,
+    SheetContent: container,
+    SheetTitle: container,
+  },
+  "@/components/ui/tooltip": tooltip,
+  "@/components/ui/badge": { Badge: container },
+  "@/components/ui/avatar": {
+    Avatar: container,
+    AvatarFallback: container,
+  },
+  "@/lib/utils": load("lib/utils.ts"),
+  "@/features/auth/queries": { useCurrentUser: () => ({ data: null }) },
+  "@/features/dashboard/components/InviteMembersDialog": {
+    InviteMembersDialog: () => null,
+  },
+  "@/features/dashboard/icons": Object.fromEntries(
+    [
+      "UserPlus",
+      "Film",
+      "Clock",
+      "CreditCard",
+      "Settings",
+      "Upload",
+      "Share2",
+      "User",
+      "Activity",
+    ].map((name) => [`${name}Icon`, icon]),
+  ),
+});
 
 const items = navGroups.flatMap((group) => group.items);
 
@@ -156,7 +157,7 @@ for (const pathname of [
 ]) {
   test(`rendered desktop and mobile sidebar highlights at ${pathname}`, () => {
     currentPath = pathname;
-    const html = renderToStaticMarkup(React.createElement(DashboardLayout));
+    const html = renderToStaticMarkup(React.createElement(AppShell));
     const navs = [...html.matchAll(/<nav\b[^>]*>(.*?)<\/nav>/gs)];
     assert.equal(navs.length, 2);
     const expectedHref =

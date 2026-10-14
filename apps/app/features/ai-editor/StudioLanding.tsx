@@ -10,7 +10,7 @@ import {
   AppQueryState,
 } from "@blynta/ui";
 import { Skeleton } from "@/components/ui/skeleton";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
+import { PageContent } from "@/components/layout/PageContent";
 import { useJobs, JobStatus } from "@/features/jobs";
 import { useRecentPlans } from "./queries";
 import { StudioClipCard } from "./StudioClipCard";
@@ -50,7 +50,7 @@ export function StudioLanding() {
     return sort === "oldest" ? order : -order;
   });
   return (
-    <DashboardLayout>
+    <PageContent>
       <div className="mx-auto w-full max-w-7xl space-y-7 pb-12">
         <header className="flex items-start gap-3">
           <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
@@ -220,6 +220,6 @@ export function StudioLanding() {
           </div>
         </section>
       </div>
-    </DashboardLayout>
+    </PageContent>
   );
 }

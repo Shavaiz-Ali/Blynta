@@ -178,11 +178,8 @@ test("details page uses the same dialog with the resolved clip ID", () => {
     },
     "@/config/axiosClient": { axiosClient: {} },
     "@/features/auth/queries": { useCurrentUser: () => ({}) },
-    "@/features/dashboard/components/DashboardLayout": {
-      DashboardLayout: component,
-    },
-    "@/features/dashboard/components/DashboardHeaderRight": {
-      DashboardHeaderRight: component,
+    "@/components/layout/PageContent": {
+      PageContent: component,
     },
     "@/components/ui/button": { Button: component },
     "./TranscriptDialog": { TranscriptDialog: component },

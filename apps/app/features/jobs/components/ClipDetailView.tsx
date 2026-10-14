@@ -12,8 +12,8 @@ import {
 } from "@/features/jobs";
 import { axiosClient } from "@/config/axiosClient";
 import { useCurrentUser } from "@/features/auth/queries";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { Button } from "@/components/ui/button";
 import { AppDialog } from "@blynta/ui";
 import { AlertTriangleIcon, TrashIcon } from "@/features/dashboard/icons";
@@ -288,50 +288,39 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
     toast.success("Downloaded subtitles (.srt)");
   };
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      {/* Compact breadcrumbs navigation */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-        <Link
-          href="/my-clips"
-          className="hover:text-foreground transition-colors shrink-0 font-medium"
-        >
-          My Clips
-        </Link>
-        <span>/</span>
-        <Link
-          href={`/my-clips/${jobId}`}
-          className="hover:text-foreground transition-colors truncate max-w-[140px] sm:max-w-[220px]"
-        >
-          {job ? getJobDisplayTitle(job, 30) : "Source Video"}
-        </Link>
-        <span>/</span>
-        <span className="truncate max-w-[140px] sm:max-w-[200px] font-semibold text-foreground">
-          {activeHighlight?.clipTitle || `Short #${clipIndex + 1}`}
-        </span>
-      </div>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
-        </div>
-      )}
+  const contextualToolbar = (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+      <Link
+        href="/my-clips"
+        className="hover:text-foreground transition-colors shrink-0 font-medium"
+      >
+        My Clips
+      </Link>
+      <span>/</span>
+      <Link
+        href={`/my-clips/${jobId}`}
+        className="hover:text-foreground transition-colors truncate max-w-[140px] sm:max-w-[220px]"
+      >
+        {job ? getJobDisplayTitle(job, 30) : "Source Video"}
+      </Link>
+      <span>/</span>
+      <span className="truncate max-w-[140px] sm:max-w-[200px] font-semibold text-foreground">
+        {activeHighlight?.clipTitle || `Short #${clipIndex + 1}`}
+      </span>
     </div>
   );
 
   if (isLoading) {
     return (
-      <DashboardLayout headerContent={headerContent}>
+      <PageContent toolbar={contextualToolbar}>
         <ClipDetailsSkeleton />
-      </DashboardLayout>
+      </PageContent>
     );
   }
 
   if (!job || !activeClip) {
     return (
-      <DashboardLayout headerContent={headerContent}>
+      <PageContent toolbar={contextualToolbar}>
         <div className="mx-auto my-12 max-w-lg rounded-xl border border-destructive/30 bg-card p-6 text-center">
           <AlertTriangleIcon className="mx-auto mb-3 h-10 w-10 text-destructive" />
           <h3 className="text-base font-bold text-foreground">
@@ -349,7 +338,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
             Back to generated shorts
           </Button>
         </div>
-      </DashboardLayout>
+      </PageContent>
     );
   }
 
@@ -364,7 +353,7 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
   ].join(" \u00b7 ");
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent toolbar={contextualToolbar}>
       {/* Content spans the same width as every other workspace page, so it lines
         up with the top bar. Sections are composed, not stretched: text keeps a
         reading width and the supporting content sits in cards. */}
@@ -546,6 +535,6 @@ export function ClipDetailView({ jobId, clipId }: ClipDetailViewProps) {
         defaultTags={clipKeywords}
         defaultHashtags={clipHashtags}
       />
-    </DashboardLayout>
+    </PageContent>
   );
 }

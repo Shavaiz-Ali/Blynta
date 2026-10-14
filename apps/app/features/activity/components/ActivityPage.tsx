@@ -4,8 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "@/features/auth/queries";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { InviteMembersDialog } from "@/features/dashboard/components/InviteMembersDialog";
 import { AppButton } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
@@ -299,27 +299,16 @@ export function ActivityPage() {
   );
   const hasQueryFilters = Boolean(activeStatus || searchQuery.trim());
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <h1 className="text-sm font-semibold text-foreground">Activity</h1>
-        <span className="text-xs font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
-          {total} events
-        </span>
-      </div>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-        </div>
-      )}
+  const contextualToolbar = (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+        {total} events
+      </span>
     </div>
   );
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent toolbar={contextualToolbar}>
       <div className="w-full space-y-5 pb-16">
         {/* ── Page Header Lockup ── */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-border/60">
@@ -496,6 +485,6 @@ export function ActivityPage() {
         )}
       </div>
       <InviteMembersDialog open={inviteOpen} onOpenChange={setInviteOpen} />
-    </DashboardLayout>
+    </PageContent>
   );
 }

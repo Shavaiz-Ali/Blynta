@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
-import { useCurrentUser } from "@/features/auth/queries";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { useYouTubeStatus, useDisconnectYouTube } from "../queries";
 import { toast } from "sonner";
 
@@ -13,7 +12,6 @@ import { SocialAccountsSecurityCard } from "./SocialAccountsSecurityCard";
 import { DisconnectYouTubeDialog } from "./DisconnectYouTubeDialog";
 
 export function SocialAccountsPage() {
-  const { data: profile } = useCurrentUser();
   const { data: status } = useYouTubeStatus();
   const [disconnectModalOpen, setDisconnectModalOpen] = React.useState(false);
 
@@ -27,15 +25,8 @@ export function SocialAccountsPage() {
     },
   });
 
-  const headerContent = (
-    <div className="flex items-center justify-between w-full">
-      <h1 className="text-sm font-semibold text-foreground">Social Accounts</h1>
-      {profile && <DashboardHeaderRight profile={profile} />}
-    </div>
-  );
-
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       <div className="w-full space-y-6 pb-16">
         {/* ── Page Header ── */}
         <div className="space-y-1">
@@ -74,6 +65,6 @@ export function SocialAccountsPage() {
         isPending={disconnectMutation.isPending}
         onConfirm={() => disconnectMutation.mutate()}
       />
-    </DashboardLayout>
+    </PageContent>
   );
 }

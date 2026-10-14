@@ -2,9 +2,8 @@
 import Link from "next/link";
 import { toast } from "sonner";
 import { logoutProduct } from "@blynta/auth/client";
-import { AppAccountMenu } from "@blynta/ui";
-import type { UserProfile } from "@/features/auth/types";
-export function UserDropdown({ profile }: { profile: UserProfile }) {
+import { AppAccountMenu, type AppAccountIdentity } from "@blynta/ui";
+export function UserDropdown({ profile }: { profile: AppAccountIdentity }) {
   return (
     <AppAccountMenu
       profile={profile}

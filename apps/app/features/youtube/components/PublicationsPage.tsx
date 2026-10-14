@@ -2,9 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
-import { useCurrentUser } from "@/features/auth/queries";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { useUserPublications, useRetryPublication } from "../queries";
 import { ClipPublication, PublicationStatus } from "../types";
 import { AppCard } from "@blynta/ui";
@@ -256,7 +255,6 @@ function PublicationCard({ pub }: { pub: ClipPublication }) {
 /* -------------------------------------------------------------------------- */
 
 export function PublicationsPage() {
-  const { data: profile } = useCurrentUser();
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [search, setSearch] = React.useState<string>("");
 
@@ -274,15 +272,8 @@ export function PublicationsPage() {
   const publications = response?.publications || [];
   const total = response?.total || 0;
 
-  const headerContent = (
-    <div className="flex items-center justify-between w-full">
-      <h1 className="text-sm font-semibold text-foreground">Publications</h1>
-      {profile && <DashboardHeaderRight profile={profile} />}
-    </div>
-  );
-
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       <div className="w-full space-y-6 pb-16">
         {/* ── Page Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -442,6 +433,6 @@ export function PublicationsPage() {
           </div>
         )}
       </div>
-    </DashboardLayout>
+    </PageContent>
   );
 }

@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { AppButton as Button, AppQueryState, AppSpinner } from "@blynta/ui";
 import { StudioConversation } from "./StudioConversation";
 import { StudioRenderStatus } from "./StudioRenderStatus";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
+import { PageContent } from "@/components/layout/PageContent";
 import { useJob, useClipSignedUrl, JobStatus } from "@/features/jobs";
 import { useAvailableEditingModels } from "./models";
 import { ModelSelector, modelSelectionError } from "./ModelSelector";
@@ -220,13 +220,13 @@ export function StudioWorkspace({
   }
   if (!validRoute || (job.data && !clip))
     return (
-      <DashboardLayout>
+      <PageContent>
         <EmptyWorkspace message="This clip could not be found. Open AI Studio from your clip details." />
-      </DashboardLayout>
+      </PageContent>
     );
   if (job.isError)
     return (
-      <DashboardLayout>
+      <PageContent>
         <AppQueryState
           className="mx-auto max-w-3xl"
           title="Your clip couldn’t be loaded"
@@ -234,23 +234,23 @@ export function StudioWorkspace({
           onRetry={() => void job.refetch()}
           retrying={job.isFetching}
         />
-      </DashboardLayout>
+      </PageContent>
     );
   if (job.isPending)
     return (
-      <DashboardLayout>
+      <PageContent>
         <WorkspaceSkeleton />
-      </DashboardLayout>
+      </PageContent>
     );
   if (!ready)
     return (
-      <DashboardLayout>
+      <PageContent>
         <EmptyWorkspace message="This clip is not ready to edit. Wait for processing to finish." />
-      </DashboardLayout>
+      </PageContent>
     );
   if (initialize.isError || plan.isError)
     return (
-      <DashboardLayout>
+      <PageContent>
         <div className="mx-auto max-w-5xl space-y-4">
           <AppQueryState
             title="Your editing workspace couldn’t be loaded"
@@ -286,15 +286,18 @@ export function StudioWorkspace({
             </section>
           )}
         </div>
-      </DashboardLayout>
+      </PageContent>
     );
   return (
-    <DashboardLayout workspace>
+    <PageContent workspace>
       <div
         className="flex min-h-0 w-full flex-col motion-reduce:[&_*]:transition-none lg:h-full"
         data-studio-workspace
       >
-        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 px-4 py-3 sm:px-6">
+        <header
+          aria-label="Clip tools"
+          className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 px-4 py-2 sm:px-6"
+        >
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               variant="ghost"
@@ -307,10 +310,7 @@ export function StudioWorkspace({
               <ArrowLeft className="size-4" />
             </Button>
             <div className="min-w-0">
-              <h1
-                className="truncate text-sm font-semibold sm:text-base"
-                title={clipTitle}
-              >
+              <h1 className="truncate text-sm font-semibold" title={clipTitle}>
                 {clipTitle}
               </h1>
               <p
@@ -603,7 +603,7 @@ export function StudioWorkspace({
           unresolvedSubmission={unresolvedSubmission}
         />
       </div>
-    </DashboardLayout>
+    </PageContent>
   );
 }
 

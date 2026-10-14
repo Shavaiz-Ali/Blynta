@@ -4,9 +4,8 @@ import * as React from "react";
 import { useViewMode } from "@/features/dashboard/use-view-mode";
 import { useRouter } from "next/navigation";
 import { JobStatus, useJobs } from "@/features/jobs";
-import { useCurrentUser } from "@/features/auth/queries";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { AppButton } from "@blynta/ui";
 import { AppTabs } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
@@ -78,7 +77,6 @@ function EmptyStateTips() {
 
 export function ClipsLibrary() {
   const router = useRouter();
-  const { data: profile } = useCurrentUser();
 
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -150,27 +148,16 @@ export function ClipsLibrary() {
     });
   }, [allJobs, statusFilter, searchQuery, sortBy]);
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <h1 className="text-sm font-semibold text-foreground">Clips</h1>
-        <span className="text-xs font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
-          {total} videos
-        </span>
-      </div>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-        </div>
-      )}
+  const contextualToolbar = (
+    <div className="flex items-center gap-2">
+      <span className="text-xs font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
+        {total} videos
+      </span>
     </div>
   );
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent toolbar={contextualToolbar}>
       {/* ── Page Header Lockup ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-border/60">
         <div>
@@ -396,6 +383,6 @@ export function ClipsLibrary() {
           )}
         </div>
       )}
-    </DashboardLayout>
+    </PageContent>
   );
 }

@@ -5,12 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import { BlyntaLogo } from "@/components/logo";
-import {
-  AppButton,
-  AppProductHeader,
-  AppSidebar,
-  AppSidebarItem,
-} from "@blynta/ui";
+import { AppButton, AppSidebar, AppSidebarItem } from "@blynta/ui";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -23,8 +18,14 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 
 import { useCurrentUser } from "@/features/auth/queries";
-import { InviteMembersDialog } from "./InviteMembersDialog";
-import { isNavItemActive, type NavRoute } from "../navigation";
+import { InviteMembersDialog } from "@/features/dashboard/components/InviteMembersDialog";
+import { AppHeader } from "./AppHeader";
+import { getAppRoute } from "./routes";
+import type { UserProfile } from "@/features/auth/types";
+import {
+  isNavItemActive,
+  type NavRoute,
+} from "@/features/dashboard/navigation";
 import {
   UserPlusIcon,
   FilmIcon,
@@ -35,7 +36,7 @@ import {
   Share2Icon,
   UserIcon,
   ActivityIcon,
-} from "../icons";
+} from "@/features/dashboard/icons";
 
 /* -------------------------------------------------------------------------- */
 /*                                 Icon set                                   */
@@ -188,13 +189,14 @@ function SidebarContent({
   isCollapsed,
   onOpenInvite,
   onNavigate,
+  profile,
 }: {
   isCollapsed: boolean;
   onOpenInvite: () => void;
   onNavigate?: () => void;
+  profile?: UserProfile;
 }) {
   const pathname = usePathname();
-  const { data: profile } = useCurrentUser();
 
   const initials = (profile?.name || profile?.email || "U")
     .split(" ")
@@ -315,21 +317,13 @@ function SidebarContent({
 }
 
 /* -------------------------------------------------------------------------- */
-/*                         Exported DashboardLayout                           */
+/*                         Authenticated application shell                    */
 /* -------------------------------------------------------------------------- */
 
-export interface DashboardLayoutProps {
-  children: React.ReactNode;
-  headerContent?: React.ReactNode;
-  /** Opt-in full viewport composition for the creative editor. */
-  workspace?: boolean;
-}
-
-export function DashboardLayout({
-  children,
-  headerContent,
-  workspace = false,
-}: DashboardLayoutProps) {
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { workspace } = getAppRoute(pathname);
+  const { data: profile, isError } = useCurrentUser();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(false);
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -337,13 +331,13 @@ export function DashboardLayout({
   return (
     <div
       className={cn(
-        workspace ? "h-dvh" : "h-screen",
-        "flex bg-background text-foreground overflow-hidden",
+        "flex h-dvh min-h-0 bg-background text-foreground overflow-hidden",
       )}
     >
       {/* ── Desktop Collapsible Sidebar ── */}
-      <AppSidebar collapsed={isCollapsed}>
+      <AppSidebar id="app-sidebar" collapsed={isCollapsed} className="h-full">
         <SidebarContent
+          profile={profile}
           isCollapsed={isCollapsed}
           onOpenInvite={() => setInviteOpen(true)}
         />
@@ -357,6 +351,7 @@ export function DashboardLayout({
         >
           <SheetTitle className="sr-only">Navigation</SheetTitle>
           <SidebarContent
+            profile={profile}
             isCollapsed={false}
             onOpenInvite={() => {
               setMobileOpen(false);
@@ -369,25 +364,22 @@ export function DashboardLayout({
 
       {/* ── Main Content Viewport ── */}
       <div
-        className={cn(
-          workspace ? "h-dvh" : "h-screen",
-          "flex-1 flex flex-col min-w-0 overflow-y-auto",
-        )}
+        className={cn("flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden")}
       >
         {/* Topbar */}
-        <AppProductHeader
+        <AppHeader
           collapsed={isCollapsed}
           onCollapse={() => setIsCollapsed((prev) => !prev)}
           onMenu={() => setMobileOpen(true)}
-        >
-          {headerContent}
-        </AppProductHeader>
+          profile={profile}
+          profileError={isError}
+        />
 
         <main
           className={
             workspace
-              ? "flex-1 min-h-0 min-w-0 w-full lg:overflow-hidden"
-              : "flex-1 min-w-0 w-full px-6 sm:px-8 py-6 lg:py-8 space-y-6 max-w-7xl mx-auto"
+              ? "flex-1 min-h-0 min-w-0 w-full overflow-y-auto lg:overflow-hidden"
+              : "flex-1 min-h-0 min-w-0 w-full overflow-y-auto"
           }
         >
           {children}

@@ -5,9 +5,8 @@ import { VideoActionsDropdown } from "./VideoActionsDropdown";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { JobStatus, useJob, useDeleteJob, useCancelJob } from "@/features/jobs";
-import { useCurrentUser } from "@/features/auth/queries";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { AppButton } from "@blynta/ui";
 import { GeneratedClipsGrid } from "./GeneratedClipsGrid";
 import { JobProcessingView } from "./JobProcessingView";
@@ -41,7 +40,6 @@ export interface SourceVideoDetailsProps {
 
 export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   const router = useRouter();
-  const { data: profile } = useCurrentUser();
   const { data: job, isLoading, error } = useJob(jobId);
 
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -93,44 +91,33 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
     }
   };
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      {/* Breadcrumbs */}
-      <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
-        <Link
-          href="/my-clips"
-          className="hover:text-foreground transition-colors flex items-center gap-1 font-medium shrink-0"
-        >
-          <ChevronLeftIcon className="h-3.5 w-3.5" />
-          <span>Clips</span>
-        </Link>
-        <span>/</span>
-        <span className="truncate max-w-[200px] sm:max-w-[320px] font-semibold text-foreground">
-          {job ? getJobDisplayTitle(job, 40) : "Loading..."}
-        </span>
-      </div>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-        </div>
-      )}
+  const contextualToolbar = (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground min-w-0">
+      <Link
+        href="/my-clips"
+        className="hover:text-foreground transition-colors flex items-center gap-1 font-medium shrink-0"
+      >
+        <ChevronLeftIcon className="h-3.5 w-3.5" />
+        <span>Clips</span>
+      </Link>
+      <span>/</span>
+      <span className="truncate max-w-[200px] sm:max-w-[320px] font-semibold text-foreground">
+        {job ? getJobDisplayTitle(job, 40) : "Loading..."}
+      </span>
     </div>
   );
 
   if (isLoading) {
     return (
-      <DashboardLayout headerContent={headerContent}>
+      <PageContent toolbar={contextualToolbar}>
         <SourceVideoDetailsSkeleton />
-      </DashboardLayout>
+      </PageContent>
     );
   }
 
   if (!job) {
     return (
-      <DashboardLayout headerContent={headerContent}>
+      <PageContent toolbar={contextualToolbar}>
         <div className="rounded-2xl border border-destructive/30 bg-card p-10 text-center shadow-sm max-w-lg mx-auto my-12">
           <AlertTriangleIcon className="h-10 w-10 text-destructive mx-auto mb-3" />
           <h3 className="text-base font-bold text-foreground">
@@ -149,7 +136,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
             Back to Clips Library
           </AppButton>
         </div>
-      </DashboardLayout>
+      </PageContent>
     );
   }
 
@@ -183,7 +170,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
   const totalHighlightsCount = job.highlights?.length || job.clips?.length || 0;
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent toolbar={contextualToolbar}>
       {job.billing && (
         <div
           role="status"
@@ -484,6 +471,6 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
           </>
         }
       />
-    </DashboardLayout>
+    </PageContent>
   );
 }

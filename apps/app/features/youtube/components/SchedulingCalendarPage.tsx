@@ -12,9 +12,8 @@ import {
   startOfMonth,
 } from "date-fns";
 import type { DayButtonProps } from "react-day-picker";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
-import { useCurrentUser } from "@/features/auth/queries";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { Calendar } from "@/components/ui/calendar";
 import { AppButton } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
@@ -66,7 +65,6 @@ interface ScheduledClipDetails {
 
 export function SchedulingCalendarPage() {
   const router = useRouter();
-  const { data: profile } = useCurrentUser();
   const [month, setMonth] = React.useState(() => new Date());
   const [selectedDate, setSelectedDate] = React.useState<Date>(
     () => new Date(),
@@ -343,13 +341,6 @@ export function SchedulingCalendarPage() {
     });
   };
 
-  const headerContent = (
-    <div className="flex w-full items-center justify-between">
-      <h1 className="text-sm font-semibold">Calendar</h1>
-      {profile && <DashboardHeaderRight profile={profile} />}
-    </div>
-  );
-
   const showPreviousMonth = () => setMonth((current) => addMonths(current, -1));
   const showNextMonth = () => setMonth((current) => addMonths(current, 1));
   const showToday = () => {
@@ -457,7 +448,7 @@ export function SchedulingCalendarPage() {
   );
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       <div className="w-full space-y-6 pb-14">
         <div className="flex flex-col gap-4 border-b border-border/60 pb-4 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1057,6 +1048,6 @@ export function SchedulingCalendarPage() {
           </div>
         )}
       </AppDialog>
-    </DashboardLayout>
+    </PageContent>
   );
 }

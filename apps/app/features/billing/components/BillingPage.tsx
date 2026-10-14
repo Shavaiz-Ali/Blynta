@@ -8,8 +8,8 @@ import { toast } from "sonner";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { AppButton } from "@blynta/ui";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentUser } from "@/features/auth/queries";
 import {
@@ -535,28 +535,13 @@ export function BillingPage() {
     return () => window.clearTimeout(t);
   }, [showSuccess, showCanceled, dismissSuccess, dismissCancel]);
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      <h1 className="text-sm font-medium text-foreground">Subscription</h1>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-        </div>
-      )}
-    </div>
-  );
-
   const handleUpgrade = (tier: BillingPlanTier) => {
     toast.loading(`Preparing ${tier.toUpperCase()} plan checkout...`);
     createCheckout.mutate({ plan: tier });
   };
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       {/* ── Feedback banner (success / canceled) ── */}
       {showSuccess && !dismissSuccess && (
         <FeedbackBanner
@@ -708,6 +693,6 @@ export function BillingPage() {
           </button>
         </p>
       </div>
-    </DashboardLayout>
+    </PageContent>
   );
 }

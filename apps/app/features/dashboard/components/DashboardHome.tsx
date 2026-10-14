@@ -3,10 +3,10 @@
 import * as React from "react";
 import { useCurrentUser } from "@/features/auth/queries";
 import { useJobs } from "@/features/jobs";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
+import { PageContent } from "@/components/layout/PageContent";
 import { WelcomeDialog } from "@/features/dashboard/components/WelcomeDialog";
 import { AppButton } from "@blynta/ui";
-import { DashboardHeaderRight } from "./DashboardHeaderRight";
+
 import { UpgradeBanner } from "./UpgradeBanner";
 import { HeroInput } from "./HeroInput";
 import { ActivePipelineBanner } from "./ActivePipelineBanner";
@@ -34,23 +34,8 @@ export function DashboardHome() {
   const [welcomeDismissed, setWelcomeDismissed] = React.useState(false);
   const showWelcome = profile?.isWelcomed === false && !welcomeDismissed;
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      <h1 className="text-sm font-medium text-foreground">Home</h1>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-        </div>
-      )}
-    </div>
-  );
-
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       {/* ── Top Upgrade Short Banner (if on free tier) ── */}
       {!profileLoading && <UpgradeBanner plan={profile?.plan ?? "free"} />}
 
@@ -124,6 +109,6 @@ export function DashboardHome() {
           creditsBalance={profile.creditsBalance ?? 0}
         />
       ) : null}
-    </DashboardLayout>
+    </PageContent>
   );
 }

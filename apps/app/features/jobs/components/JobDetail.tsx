@@ -4,9 +4,8 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { JobStatus, useJob, useDeleteClip } from "@/features/jobs";
-import { useCurrentUser } from "@/features/auth/queries";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { AppButton } from "@blynta/ui";
 import { AppDialog } from "@blynta/ui";
 import { isProcessingStatus } from "@/features/dashboard/utils";
@@ -36,7 +35,6 @@ export { VideoMetadataKit } from "./VideoMetadataKit";
 export function JobDetailContent({ jobId }: { jobId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: profile } = useCurrentUser();
   const { data: job, isLoading, error } = useJob(jobId);
   const deleteClipMutation = useDeleteClip();
 
@@ -58,33 +56,21 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
     }
   }, [job?.clips, searchParams]);
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center">
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-muted animate-pulse" />
-        </div>
-      )}
-    </div>
-  );
-
   if (error && !job) {
     return (
-      <DashboardLayout headerContent={headerContent}>
+      <PageContent>
         <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 2xl:px-12 py-6 lg:py-8">
           <FailedErrorInline message={(error as Error).message} />
         </div>
-      </DashboardLayout>
+      </PageContent>
     );
   }
 
   if (isLoading || !job) {
     return (
-      <DashboardLayout headerContent={headerContent}>
+      <PageContent>
         <JobDetailSkeleton />
-      </DashboardLayout>
+      </PageContent>
     );
   }
 
@@ -121,7 +107,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
   }
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       {/* Processing State: Show only when processing AND no completed clips are ready yet */}
       {isJobProcessing && <JobProcessingView job={job} />}
 
@@ -259,7 +245,7 @@ export function JobDetailContent({ jobId }: { jobId: string }) {
           </div>
         }
       />
-    </DashboardLayout>
+    </PageContent>
   );
 }
 

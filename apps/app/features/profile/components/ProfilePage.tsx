@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { AppQueryState, AppButton } from "@blynta/ui";
 import { useCurrentUser } from "@/features/auth";
-import { UserIcon } from "@/features/dashboard/icons";
 import { ProfileIdentityCard } from "./ProfileIdentityCard";
 import { ProfilePlanCard } from "./ProfilePlanCard";
 import { ProfileConnectedAccountsCard } from "./ProfileConnectedAccountsCard";
@@ -80,20 +79,8 @@ function ProfileSkeleton() {
 export function ProfilePage() {
   const { data: profile, isLoading, refetch, isFetching } = useCurrentUser();
 
-  const headerContent = (
-    <div className="flex items-center justify-between w-full">
-      <div className="flex items-center gap-2">
-        <UserIcon className="h-4 w-4 text-primary" />
-        <h1 className="text-sm font-semibold text-foreground">
-          Profile &amp; Account
-        </h1>
-      </div>
-      {profile && <DashboardHeaderRight profile={profile} />}
-    </div>
-  );
-
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent>
       {isLoading ? (
         <ProfileSkeleton />
       ) : !profile ? (
@@ -135,6 +122,6 @@ export function ProfilePage() {
           <DangerZone />
         </div>
       )}
-    </DashboardLayout>
+    </PageContent>
   );
 }

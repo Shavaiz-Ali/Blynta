@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useCurrentUser } from "@/features/auth/queries";
-import { DashboardLayout } from "@/features/dashboard/components/DashboardLayout";
-import { DashboardHeaderRight } from "@/features/dashboard/components/DashboardHeaderRight";
+import { PageContent } from "@/components/layout/PageContent";
+
 import { AppButton } from "@blynta/ui";
 import { AppTabs, AppTabItem } from "@blynta/ui";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +21,6 @@ import {
 import { NotificationStatus } from "../types";
 
 export function NotificationsPage() {
-  const { data: profile } = useCurrentUser();
   const [filterType, setFilterType] = React.useState<"all" | "unread">("all");
   const [categoryTab, setCategoryTab] =
     React.useState<NotificationCategoryTabValue>("all");
@@ -84,30 +82,18 @@ export function NotificationsPage() {
     },
   ];
 
-  const headerContent = (
-    <div className="flex-1 min-w-0 flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <h1 className="text-sm font-medium text-foreground">Notifications</h1>
-        {hasUnread && (
-          <span className="hidden sm:inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[11px] font-semibold">
-            {unreadCount} unread
-          </span>
-        )}
-      </div>
-
-      {profile ? (
-        <DashboardHeaderRight profile={profile} />
-      ) : (
-        <div className="ml-auto flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
-          <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
-        </div>
+  const contextualToolbar = (
+    <div className="flex items-center gap-2">
+      {hasUnread && (
+        <span className="hidden sm:inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[11px] font-semibold">
+          {unreadCount} unread
+        </span>
       )}
     </div>
   );
 
   return (
-    <DashboardLayout headerContent={headerContent}>
+    <PageContent toolbar={contextualToolbar}>
       <div className="space-y-6 max-w-5xl mx-auto">
         {/* ── Page Header & Quick Actions ── */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -211,6 +197,6 @@ export function NotificationsPage() {
           )}
         </div>
       </div>
-    </DashboardLayout>
+    </PageContent>
   );
 }
