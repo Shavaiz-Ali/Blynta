@@ -2,11 +2,17 @@ import { MEDIA_WORKER_POLICY } from './jobs.constants';
 import { createHash } from 'node:crypto';
 import { PipelineCacheService } from '../media/services/pipeline-cache.service';
 import {
+  assertTranscript,
+  transcriptIssue,
+  TranscriptValidationError,
+} from '../media/transcript-validation';
+import {
   artifactHash,
   highlightIdentity,
   normalizeInstructions,
   transcriptIsValid,
   DETECTION_VERSION,
+  TRANSCRIPT_VERSION,
 } from '../media/pipeline-cache-identity';
 import { buildHighlightSystemPrompt } from '../media/prompts/highlight-detection.prompts';
 import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
@@ -211,14 +217,39 @@ export class JobsProcessor
           );
       };
 
+      const fileHash = async (file: string) => {
+        const hash = createHash('sha256');
+        for await (const chunk of fs.createReadStream(file)) {
+          assertNotCancelled();
+          hash.update(chunk as Buffer);
+        }
+        return hash.digest('hex');
+      };
+      let localSourceHash: string | undefined;
       // =========================================================================
       // Resume-state detection — check DB fields AND verify files still exist on
       // disk before trusting them. Trusting DB alone risks ENOENT crashes deep in
       // a later stage if the volume was wiped between failure and retry.
       // =========================================================================
-      const hasLocalVideo = Boolean(
+      let hasLocalVideo = Boolean(
         job.localVideoPath && fs.existsSync(job.localVideoPath),
       );
+      if (hasLocalVideo) {
+        try {
+          const media = await this.inspection.inspect(job.localVideoPath);
+          hasLocalVideo =
+            media.hasVideo &&
+            Number.isFinite(media.durationSeconds) &&
+            media.durationSeconds > 0;
+          if (hasLocalVideo && job.sourceContentHash) {
+            localSourceHash = await fileHash(job.localVideoPath);
+            hasLocalVideo = localSourceHash === job.sourceContentHash;
+          }
+        } catch {
+          assertNotCancelled();
+          hasLocalVideo = false;
+        }
+      }
       const hasLocalAudio = Boolean(
         job.localAudioPath && fs.existsSync(job.localAudioPath),
       );
@@ -257,29 +288,64 @@ export class JobsProcessor
         : job.sourceUrl;
       const externalId =
         extractedId &&
+        // Existing job-owned media requires no network metadata/authentication.
+        // Keep unverified resumes owner-scoped rather than granting shared access.
+        !hasLocalVideo &&
+        !job.sourceObjectKey &&
         (await this.videoDownloadService.canShareSource(canonicalUrl))
           ? extractedId
           : null;
       let sourceVideo: SourceVideoDocument | null = null;
-      const fileHash = async (file: string) => {
-        const hash = createHash('sha256');
-        for await (const chunk of fs.createReadStream(file)) {
-          assertNotCancelled();
-          hash.update(chunk as Buffer);
-        }
-        return hash.digest('hex');
-      };
       let sourceVersion = '';
       let rejectedCachedMedia = false;
+      let verifiedAudioMetadata:
+        Awaited<ReturnType<MediaInspectionService['inspect']>> | undefined;
       const transcriptConfig = this.cache
         ? await this.transcriptionService.cacheConfiguration()
         : 'unit-test';
       const obtainTranscript = async () => {
-        const create = () =>
-          this.transcriptionService.transcribe(
+        lastProgressUpdate = 0;
+        await this.jobsService.updateJob(jobId, {
+          status: JobStatus.TRANSCRIBING,
+          progressPercent: 0,
+        });
+        const actualDuration =
+          (await this.jobsService.findJob(jobId))?.videoDuration ??
+          job.videoDuration;
+        let audioMetadata = verifiedAudioMetadata;
+        try {
+          if (!audioMetadata)
+            audioMetadata = await this.inspection.inspect(audioPath);
+        } catch {
+          assertNotCancelled();
+        }
+        const audioValid = () =>
+          audioMetadata?.hasAudio &&
+          Number.isFinite(audioMetadata.durationSeconds) &&
+          audioMetadata.durationSeconds > 0 &&
+          Math.abs(audioMetadata.durationSeconds - actualDuration) < 1;
+        if (!audioValid()) {
+          await this.videoDownloadService.extractAudio(videoPath, audioPath);
+          audioMetadata = await this.inspection.inspect(audioPath);
+        }
+        if (!audioValid())
+          throw new Error('Extracted audio is incomplete or invalid');
+        verifiedAudioMetadata = audioMetadata;
+        // Persist reusable paths before ASR; transcript + signature publish together later.
+        await this.jobsService.updateJob(jobId, {
+          localVideoPath: videoPath,
+          localAudioPath: audioPath,
+        });
+        const create = async () => {
+          const value = await this.transcriptionService.transcribe(
             audioPath,
             makeThrottledProgressUpdate(),
+            undefined,
+            audioMetadata!.durationSeconds,
           );
+          assertTranscript(value, actualDuration);
+          return value;
+        };
         const key = artifactHash({
           kind: 'transcript',
           sourceVersion,
@@ -289,9 +355,6 @@ export class JobsProcessor
           transcriptConfig,
           scope: externalId ? 'public' : userId,
         });
-        const actualDuration =
-          (await this.jobsService.findJob(jobId))?.videoDuration ??
-          job.videoDuration;
         const result = this.cache
           ? await this.cache.getOrCreate<TranscriptSegmentDto[]>({
               key,
@@ -299,6 +362,7 @@ export class JobsProcessor
               sourceVersion,
               jobId,
               metadata: {
+                schemaVersion: TRANSCRIPT_VERSION,
                 configurationHash: transcriptConfig,
                 sourceIdentityHash: artifactHash({
                   provider: job.sourcePlatform,
@@ -334,7 +398,15 @@ export class JobsProcessor
           metadata.durationSeconds <= 0
         )
           throw new UnrecoverableError('Invalid source video metadata');
-        const contentHash = await fileHash(input);
+        const contentHash =
+          hasLocalVideo && input === job.localVideoPath && localSourceHash
+            ? localSourceHash
+            : await fileHash(input);
+        if (
+          latest?.sourceContentHash &&
+          latest.sourceContentHash !== contentHash
+        )
+          throw new Error('Source checksum mismatch');
         if (cached?.contentHash && cached.contentHash !== contentHash)
           throw new Error('Cached source checksum mismatch');
         await this.jobsService.assertSourceBudget(
@@ -383,6 +455,16 @@ export class JobsProcessor
           );
         if (compatible) transcript = job.transcript;
         else {
+          if (hasTranscript)
+            this.logger.warn({
+              event: 'transcript.regenerate',
+              jobId,
+              reason:
+                transcriptIssue(
+                  job.transcript,
+                  (await this.jobsService.findJob(jobId))!.videoDuration,
+                )?.reason ?? 'incompatible_schema_or_provider_configuration',
+            });
           audioPath = hasLocalAudio
             ? job.localAudioPath
             : path.join(jobDir, 'audio.wav');
@@ -483,6 +565,7 @@ export class JobsProcessor
                     (!sourceVideo.audioContentHash ||
                       (await fileHash(audioPath)) ===
                         sourceVideo.audioContentHash);
+                  if (audioValid) verifiedAudioMetadata = audioMetadata;
                 } catch {
                   assertNotCancelled();
                 }
@@ -643,6 +726,7 @@ export class JobsProcessor
               Math.abs(audioMetadata.durationSeconds - duration) >= 1
             )
               throw new Error('Extracted audio is incomplete or invalid');
+            verifiedAudioMetadata = audioMetadata;
             if (sourceVideo) {
               const audioHash = await fileHash(audioPath),
                 audioKey = `source-videos/${sourceVersion}/audio-${audioHash}.wav`;
@@ -666,9 +750,8 @@ export class JobsProcessor
               progressPercent: 0,
             });
 
-            transcript = hasTranscript
-              ? job.transcript
-              : await obtainTranscript();
+            // A replaced source must not inherit a transcript merely because it is non-empty.
+            transcript = await obtainTranscript();
             const transcriptDocs: TranscriptSegment[] = transcript.map((t) => ({
               startTime: t.startTime,
               endTime: t.endTime,
@@ -934,7 +1017,7 @@ export class JobsProcessor
       const message = err instanceof Error ? err.message : String(err);
       assertNotCancelled();
       await this.jobsService.updateJob(jobId, {
-        status: latest?.renderManifestReady ? latest.status : JobStatus.PENDING,
+        status: latest?.status ?? JobStatus.PENDING,
         errorMessage: message,
         errorStage: latest?.status ?? 'pipeline',
       });
@@ -945,6 +1028,9 @@ export class JobsProcessor
           retryCount: bullJob.attemptsMade,
           stage: latest?.status,
           message,
+          ...(err instanceof TranscriptValidationError
+            ? { validation: { code: err.code, ...err.details } }
+            : {}),
         }),
       );
       throw err;

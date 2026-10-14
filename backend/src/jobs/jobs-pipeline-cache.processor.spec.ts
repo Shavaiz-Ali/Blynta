@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'node:crypto';
 import { Model, Types } from 'mongoose';
 import { Queue } from 'bullmq';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -261,6 +262,7 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
         budget?: number;
         owner?: string;
         url?: string;
+        defer?: boolean;
       } = {},
     ) {
       const id = new Types.ObjectId().toString();
@@ -303,7 +305,7 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
         attemptsMade: 0,
         timestamp: Date.now(),
       };
-      await processor.process(bull as never);
+      if (!options.defer) await processor.process(bull as never);
       return { id, parent, bull, op: operations.get(operationId)! };
     }
     return {
@@ -314,14 +316,132 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
       discover,
       detection,
       transcribe,
+      transcript,
       download,
       credits,
       jobs,
       enqueue,
       parents,
+      inspection,
       source: () => source,
     };
   }
+  test.each(['missing', 'invalid'] as const)(
+    'resume regenerates %s transcript without downloading or metadata probing',
+    async (mode) => {
+      const f = fixture();
+      const { parent, bull } = await f.run({ defer: true });
+      parent.localVideoPath = join(root, 'resume.mp4');
+      parent.localAudioPath = join(root, 'resume.wav');
+      await writeFile(parent.localVideoPath, 'video-bytes');
+      await writeFile(parent.localAudioPath, 'audio-bytes');
+      if (mode === 'invalid')
+        parent.transcript = [{ startTime: 0, endTime: 0, text: 'bad' }];
+      parent.transcriptSignature = 'whisper-settings-v1';
+      f.download.canShareSource.mockRejectedValue(
+        new Error('metadata authentication failure'),
+      );
+      await f.processor.process(bull as never);
+      expect(f.download.canShareSource).not.toHaveBeenCalled();
+      expect(f.download.downloadVideo).not.toHaveBeenCalled();
+      expect(f.download.extractAudio).not.toHaveBeenCalled();
+      expect(f.transcribe.transcribe).toHaveBeenCalledTimes(1);
+      expect(parent.transcript[0].endTime).toBeGreaterThan(0);
+    },
+  );
+  test('resume reuses a valid compatible transcript', async () => {
+    const f = fixture();
+    const { parent, bull } = await f.run({ defer: true });
+    parent.localVideoPath = join(root, 'resume.mp4');
+    await writeFile(parent.localVideoPath, 'video-bytes');
+    parent.transcript = structuredClone(f.transcript);
+    parent.transcriptSignature = 'whisper-settings-v1';
+    await f.processor.process(bull as never);
+    expect(f.transcribe.transcribe).not.toHaveBeenCalled();
+    expect(f.download.downloadVideo).not.toHaveBeenCalled();
+  });
+  test('resume repairs a readable but checksum-invalid local video from its durable source', async () => {
+    const f = fixture();
+    const { parent, bull } = await f.run({ defer: true });
+    parent.localVideoPath = join(root, 'partial.mp4');
+    await writeFile(parent.localVideoPath, 'partial-video');
+    parent.sourceContentHash = createHash('sha256')
+      .update('video-bytes')
+      .digest('hex');
+    parent.sourceObjectKey = 'durable-source';
+    f.objects.set('durable-source', Buffer.from('video-bytes'));
+    await f.processor.process(bull as never);
+    expect(f.download.downloadVideo).not.toHaveBeenCalled();
+    expect(f.download.canShareSource).not.toHaveBeenCalled();
+    expect(parent.sourceContentHash).toBe(
+      createHash('sha256').update('video-bytes').digest('hex'),
+    );
+    expect(parent.transcript.length).toBeGreaterThan(0);
+  });
+  test('resume replaces a partial audio file and reports the ASR stage accurately', async () => {
+    const f = fixture();
+    const { parent, bull } = await f.run({ defer: true });
+    parent.localVideoPath = join(root, 'resume.mp4');
+    parent.localAudioPath = join(root, 'resume.wav');
+    await writeFile(parent.localVideoPath, 'video-bytes');
+    await writeFile(parent.localAudioPath, 'corrupt');
+    f.transcribe.transcribe.mockRejectedValueOnce(new Error('ASR unavailable'));
+    await expect(f.processor.process(bull as never)).rejects.toThrow(
+      'ASR unavailable',
+    );
+    expect(parent.status).toBe(JobStatus.TRANSCRIBING);
+    expect(parent.errorStage).toBe(JobStatus.TRANSCRIBING);
+    expect(f.download.extractAudio).toHaveBeenCalledTimes(1);
+    expect(f.download.downloadVideo).not.toHaveBeenCalled();
+    await f.processor.process(bull as never);
+    expect(f.download.extractAudio).toHaveBeenCalledTimes(1);
+    expect(f.transcribe.transcribe).toHaveBeenCalledTimes(2);
+  });
+  test('interrupted transcript persistence resumes from a validated cache artifact', async () => {
+    const f = fixture();
+    const { parent, bull } = await f.run({ defer: true });
+    parent.localVideoPath = join(root, 'resume.mp4');
+    parent.localAudioPath = join(root, 'resume.wav');
+    await writeFile(parent.localVideoPath, 'video-bytes');
+    await writeFile(parent.localAudioPath, 'audio-bytes');
+    const original = f.jobs.updateJob.bind(f.jobs);
+    let interrupted = false;
+    const update = jest
+      .spyOn(f.jobs, 'updateJob')
+      .mockImplementation((id, values) => {
+        if ('transcript' in values && !interrupted) {
+          interrupted = true;
+          return Promise.reject(new Error('DB interrupted'));
+        }
+        return original(id, values);
+      });
+    await expect(f.processor.process(bull as never)).rejects.toThrow(
+      'DB interrupted',
+    );
+    expect(parent.transcript).toEqual([]);
+    update.mockRestore();
+    await f.processor.process(bull as never);
+    expect(f.transcribe.transcribe).toHaveBeenCalledTimes(1);
+    expect(f.download.downloadVideo).not.toHaveBeenCalled();
+    expect(parent.transcript.length).toBeGreaterThan(0);
+  });
+  test('invalid ASR output never publishes an artifact or reaches highlights and can retry', async () => {
+    const f = fixture();
+    const { parent, bull } = await f.run({ defer: true });
+    f.transcribe.transcribe.mockResolvedValueOnce([
+      { startTime: 0, endTime: 0, text: 'bad' },
+    ]);
+    await expect(f.processor.process(bull as never)).rejects.toThrow(
+      'non_positive_segment_duration',
+    );
+    expect(parent.transcript).toEqual([]);
+    expect(parent.errorStage).toBe(JobStatus.TRANSCRIBING);
+    expect(f.cache.rows.size).toBe(0);
+    expect(f.discover).not.toHaveBeenCalled();
+    await f.processor.process(bull as never);
+    expect(f.download.downloadVideo).toHaveBeenCalledTimes(1);
+    expect(parent.transcript.length).toBeGreaterThan(0);
+  });
   test.each([undefined, 'A private prompt'])(
     'identical source and instructions reuse all layers (%s)',
     async (customPrompt) => {

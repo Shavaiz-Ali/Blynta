@@ -77,7 +77,7 @@ describe('provider cancellation closes source file readers', () => {
     Reflect.set(service, 'groq', { audio: { transcriptions: { create } } });
     const work = mediaExecution.run(
       { signal: controller.signal, children: new Set() },
-      () => service.transcribe(inputPath),
+      () => service.transcribe(inputPath, undefined, undefined, 10),
     );
     const rejection = expect(work).rejects.toThrow('Processing cancelled');
     // stat() precedes the request; wait until the mock has acquired the reader.

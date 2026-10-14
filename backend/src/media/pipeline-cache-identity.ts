@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { TranscriptSegmentDto } from './services/transcription.service';
+import { transcriptIssue } from './transcript-validation';
 
 export const DETECTION_VERSION = 'quality-discovery-v3';
-export const TRANSCRIPT_VERSION = 'timestamped-transcript-v1';
+export const TRANSCRIPT_VERSION = 'timestamped-transcript-v2';
 export const MIN_HIGHLIGHT_SCORE = 0.7;
 
 export function normalizeInstructions(prompt?: string): string {
@@ -27,23 +27,10 @@ export function artifactHash(value: unknown): string {
 }
 
 export function transcriptIsValid(
-  segments: TranscriptSegmentDto[],
+  segments: unknown,
   duration: number,
 ): boolean {
-  return (
-    Array.isArray(segments) &&
-    segments.length > 0 &&
-    segments.every(
-      (s) =>
-        typeof s.text === 'string' &&
-        s.text.trim().length > 0 &&
-        Number.isFinite(s.startTime) &&
-        Number.isFinite(s.endTime) &&
-        s.startTime >= 0 &&
-        s.endTime > s.startTime &&
-        s.endTime <= duration + 30,
-    )
-  );
+  return !transcriptIssue(segments, duration);
 }
 
 export function highlightIdentity(input: {

@@ -1,7 +1,12 @@
 import { usageSample } from '../../billing/usage-context';
 import { artifactHash, TRANSCRIPT_VERSION } from '../pipeline-cache-identity';
 import { createReadStream } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  assertTranscript,
+  normalizeTranscriptResponse,
+  TranscriptValidationError,
+} from '../transcript-validation';
 import {
   cancellationSignal,
   assertNotCancelled,
@@ -141,17 +146,35 @@ export class TranscriptionService {
     audioPath: string,
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
+    verifiedDuration?: number,
   ): Promise<TranscriptSegmentDto[]> {
     const startedAt = Date.now();
     try {
+      const duration =
+        verifiedDuration ?? (await this.getAudioDurationSeconds(audioPath));
+      assertNotCancelled();
+      if (!Number.isFinite(duration) || duration <= 0)
+        throw new TranscriptValidationError({
+          reason: 'invalid_media_duration',
+        });
       const result = await (this.provider === 'groq'
-        ? this.transcribeWithGroq(audioPath, onProgress, initialPrompt)
-        : this.transcribeWithWhisperCpp(audioPath, onProgress, initialPrompt));
+        ? this.transcribeWithGroq(
+            audioPath,
+            onProgress,
+            initialPrompt,
+            duration,
+          )
+        : this.transcribeWithWhisperCpp(
+            audioPath,
+            onProgress,
+            initialPrompt,
+            duration,
+          ));
+      assertTranscript(result, duration);
       await usageSample('transcription', {
         provider: this.provider,
         model: this.modelName || this.whisperModelPath,
-        audioDurationSeconds:
-          (await this.getAudioDurationSeconds(audioPath)) || null,
+        audioDurationSeconds: duration,
         // Transcript end is recorded separately; verified audio duration is supplied by the operation.
         transcriptEndSeconds: result.length
           ? Math.max(...result.map((s) => s.endTime))
@@ -160,6 +183,13 @@ export class TranscriptionService {
       });
       return result;
     } catch (error) {
+      if (error instanceof TranscriptValidationError)
+        this.logger.warn({
+          event: 'transcript.validation_failed',
+          provider: this.provider,
+          code: error.code,
+          ...error.details,
+        });
       await usageSample('transcription', {
         provider: this.provider,
         model: this.modelName,
@@ -174,6 +204,7 @@ export class TranscriptionService {
     audioPath: string,
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
+    duration = 0,
   ): Promise<TranscriptSegmentDto[]> {
     this.logger.log(
       `Transcribing ${audioPath} with Groq (model=${this.modelName})`,
@@ -201,9 +232,22 @@ export class TranscriptionService {
 
       assertNotCancelled();
       onProgress?.(100);
-      return this.parseGroqOutput(transcription);
+      const response = transcription as unknown as Record<string, unknown>;
+      if (
+        (response.segments === undefined ||
+          (Array.isArray(response.segments) && !response.segments.length)) &&
+        typeof response.text === 'string' &&
+        response.text.trim()
+      )
+        this.logger.warn({
+          event: 'transcript.coarse_timing',
+          provider: 'groq',
+          durationSeconds: duration,
+        });
+      return normalizeTranscriptResponse('groq', transcription, duration);
     } catch (err) {
       assertNotCancelled();
+      if (err instanceof TranscriptValidationError) throw err;
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Groq transcription failed: ${message}`);
       throw new Error(`Groq transcription failed: ${message}`);
@@ -284,10 +328,14 @@ export class TranscriptionService {
       this.processRegistry.register(proc);
 
       let output = '';
-      proc.stdout?.on('data', (d) => (output += d.toString()));
-      proc.on('close', () => {
+      proc.stdout?.on('data', (d: Buffer) => (output += d.toString()));
+      proc.on('close', (code) => {
         const duration = parseFloat(output.trim());
-        resolve(isNaN(duration) ? 0 : duration);
+        resolve(
+          code === 0 && Number.isFinite(duration) && duration > 0
+            ? duration
+            : 0,
+        );
       });
       proc.on('error', () => resolve(0)); // duration unknown — simulation just won't run, real 0->100 jump happens instead
     });
@@ -306,7 +354,7 @@ export class TranscriptionService {
     let cancelled = false;
     let intervalId: NodeJS.Timeout | undefined;
 
-    this.getAudioDurationSeconds(audioPath).then((durationSeconds) => {
+    void this.getAudioDurationSeconds(audioPath).then((durationSeconds) => {
       if (cancelled || durationSeconds <= 0) return;
 
       // Conservative estimate: assume 150x real-time (below Groq's published
@@ -333,29 +381,11 @@ export class TranscriptionService {
     };
   }
 
-  private parseGroqOutput(transcription: any): TranscriptSegmentDto[] {
-    // verbose_json response shape: { text, segments: [{ start, end, text, ... }], ... }
-    const segments = transcription.segments || [];
-    if (segments.length === 0 && transcription.text) {
-      // Fallback: some responses may omit segment-level timestamps for very
-      // short audio — return one segment spanning the whole thing rather
-      // than silently dropping the transcript.
-      this.logger.warn(
-        'Groq response had no segment timestamps — returning single full-text segment',
-      );
-      return [{ startTime: 0, endTime: 0, text: transcription.text.trim() }];
-    }
-    return segments.map((seg: any) => ({
-      startTime: seg.start,
-      endTime: seg.end,
-      text: (seg.text || '').trim(),
-    }));
-  }
-
   private async transcribeWithWhisperCpp(
     audioPath: string,
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
+    duration = 0,
   ): Promise<TranscriptSegmentDto[]> {
     if (!this.whisperBinaryPath || !this.whisperModelPath) {
       throw new Error(
@@ -363,7 +393,11 @@ export class TranscriptionService {
       );
     }
 
-    const outputBase = audioPath.replace(/\.wav$/, '');
+    // An invocation owns its output. Never read a previous or unrelated JSON file.
+    const outputBase = path.join(
+      path.dirname(audioPath),
+      `transcript-${randomUUID()}`,
+    );
     this.logger.log(
       `Transcribing ${audioPath} with whisper.cpp (model=${this.whisperModelPath})`,
     );
@@ -390,83 +424,30 @@ export class TranscriptionService {
       args.push('--prompt', initialPrompt);
     }
 
-    await runCommandWithProgress(
-      binary,
-      args,
-      (line: string) => {
-        const match = line.match(/progress\s*=\s*(\d+)%/);
-        if (match && onProgress) onProgress(parseInt(match[1], 10));
-      },
-      this.processRegistry,
-    );
-
-    const candidatePaths = [
-      `${outputBase}.json`,
-      `${audioPath}.json`,
-      `${outputBase}.wav.json`,
-      `${audioPath}.wav.json`,
-    ];
-
-    let jsonPath: string | undefined;
-    for (const candidate of candidatePaths) {
-      try {
-        await fs.promises.access(candidate);
-        jsonPath = candidate;
-        break;
-      } catch {
-        // continue
-      }
-    }
-
-    if (!jsonPath) {
-      const dir = path.dirname(audioPath);
-      try {
-        const files = await fs.promises.readdir(dir);
-        const jsonFile = files.find((f) => f.endsWith('.json'));
-        if (jsonFile) {
-          jsonPath = path.join(dir, jsonFile);
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    if (!jsonPath) {
-      throw new Error(
-        `Whisper transcription finished but no output JSON file was found at ${outputBase}.json`,
+    try {
+      await runCommandWithProgress(
+        binary,
+        args,
+        (line: string) => {
+          const match = line.match(/progress\s*=\s*(\d+)%/);
+          if (match && onProgress) onProgress(parseInt(match[1], 10));
+        },
+        this.processRegistry,
       );
-    }
 
-    this.logger.log(`Reading whisper output from ${jsonPath}`);
-    const rawJson = await fs.promises.readFile(jsonPath, 'utf-8');
-    const parsed = JSON.parse(rawJson);
-
-    return this.parseWhisperOutput(parsed);
-  }
-
-  private parseWhisperOutput(parsed: any): TranscriptSegmentDto[] {
-    const segments = parsed.transcription || parsed.segments || [];
-    return segments.map((seg: any) => {
-      let startTime: number;
-      let endTime: number;
-      let text: string;
-
-      if (seg.offsets && typeof seg.offsets.from === 'number') {
-        startTime = seg.offsets.from / 1000;
-        endTime = seg.offsets.to / 1000;
-      } else if (typeof seg.t0 === 'number' && typeof seg.t1 === 'number') {
-        startTime = seg.t0 / 1000;
-        endTime = seg.t1 / 1000;
-      } else if (typeof seg.start === 'number' && typeof seg.end === 'number') {
-        startTime = seg.start;
-        endTime = seg.end;
-      } else {
-        startTime = 0;
-        endTime = 0;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(
+          await fs.promises.readFile(`${outputBase}.json`, 'utf-8'),
+        );
+      } catch {
+        throw new TranscriptValidationError({
+          reason: 'missing_or_malformed_provider_output',
+        });
       }
-
-      text = (seg.text || '').trim();
-      return { startTime, endTime, text };
-    });
+      return normalizeTranscriptResponse('whisper-cpp', parsed, duration);
+    } finally {
+      await fs.promises.unlink(`${outputBase}.json`).catch(() => undefined);
+    }
   }
 }

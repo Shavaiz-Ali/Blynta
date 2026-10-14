@@ -200,7 +200,14 @@ describe('pipeline source validation before paid work', () => {
     await expect(f.processor.process(f.bull as never)).rejects.toThrow(
       'stop after approved source',
     );
-    expect(f.inspection.inspect).toHaveBeenCalledTimes(2);
+    expect(f.inspection.inspect).toHaveBeenCalledWith(
+      expect.stringMatching(/source\.mp4$/),
+    );
+    // Legacy cached audio lacks a checksum; verify its replacement before ASR.
+    expect(f.download.extractAudio).toHaveBeenCalledTimes(1);
+    expect(f.inspection.inspect).toHaveBeenLastCalledWith(
+      expect.stringMatching(/audio\.wav$/),
+    );
     expect(f.download.downloadVideo).not.toHaveBeenCalled();
     expect(f.parent.videoDuration).toBe(3233.461);
     expect(f.transcribe.transcribe).toHaveBeenCalledTimes(1);

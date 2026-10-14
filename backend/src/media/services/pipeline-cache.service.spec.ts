@@ -3,6 +3,7 @@ import {
   artifactHash,
   highlightIdentity,
   normalizeInstructions,
+  transcriptIsValid,
 } from '../pipeline-cache-identity';
 
 describe('versioned pipeline artifacts and distributed single-flight', () => {
@@ -140,6 +141,28 @@ describe('versioned pipeline artifacts and distributed single-flight', () => {
     const opts = { ...options(), cacheable: () => false };
     await f.cache.getOrCreate(opts);
     expect(f.rows.size).toBe(0);
+    await f.cache.getOrCreate(opts);
+    expect(opts.create).toHaveBeenCalledTimes(2);
+  });
+  test('a malformed transcript with an intact checksum is regenerated, never reused', async () => {
+    const f = cacheFixture();
+    const opts = {
+      key: 'transcript-test',
+      kind: 'transcript' as const,
+      sourceVersion: 'source',
+      jobId: 'job',
+      validate: (
+        value: unknown,
+      ): value is { startTime: number; endTime: number; text: string }[] =>
+        transcriptIsValid(value, 10),
+      create: jest
+        .fn()
+        .mockResolvedValue([{ startTime: 0, endTime: 1, text: 'valid' }]),
+    };
+    await f.cache.getOrCreate(opts);
+    const row = f.rows.get(opts.key)!;
+    row.payload = [{ startTime: 0, endTime: 0, text: 'invalid' }];
+    row.payloadHash = artifactHash(row.payload);
     await f.cache.getOrCreate(opts);
     expect(opts.create).toHaveBeenCalledTimes(2);
   });
