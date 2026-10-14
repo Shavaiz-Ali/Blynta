@@ -9,7 +9,10 @@ import {
   providerEndpoint,
   providerRevisionFilter,
 } from './provider-policy';
-import { classifyProviderFailure } from './provider-errors';
+import {
+  classifyProviderFailure,
+  credentialWasRejected,
+} from './provider-errors';
 @Injectable()
 export class ProviderValidationService {
   constructor(
@@ -88,7 +91,11 @@ export class ProviderValidationService {
       {
         $set: {
           lastValidatedAt: new Date(),
-          lastValidationStatus: result.valid ? 'valid' : 'invalid',
+          lastValidationStatus: result.valid
+            ? 'valid'
+            : credentialWasRejected(result)
+              ? 'invalid'
+              : 'error',
         },
       },
     );

@@ -249,7 +249,9 @@ describe('Credential validation diagnostics', () => {
             ? 'AI_QUOTA_OR_RATE_LIMIT'
             : status >= 500
               ? 'AI_PROVIDER_FAILED'
-              : 'AI_AUTH_OR_ACCESS_FAILED',
+              : status === 400
+                ? 'AI_REQUEST_FAILED'
+                : 'AI_AUTH_OR_ACCESS_FAILED',
       });
       expect(JSON.stringify(result)).not.toContain('synthetic-private-secret');
       expect(JSON.stringify(result)).not.toContain('upstream-sensitive-body');
@@ -265,7 +267,9 @@ describe('Credential validation diagnostics', () => {
         enabled: true,
         archived: { $ne: true },
       });
-      expect(updates[0][1].$set.lastValidationStatus).toBe('invalid');
+      expect(updates[0][1].$set.lastValidationStatus).toBe(
+        status === 401 ? 'invalid' : 'error',
+      );
     },
   );
   it('distinguishes decryption failures before contacting Google', async () => {
@@ -306,6 +310,69 @@ describe('Credential validation diagnostics', () => {
     expect(result.valid).toBe(true);
     expect(typeof result.latencyMs).toBe('number');
     expect(Object.keys(result).sort()).toEqual(['latencyMs', 'valid']);
+  });
+  it('marks only a confirmed invalid-key rejection invalid and reports sanitized Google details', async () => {
+    const s = validationSetup();
+    s.transport.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: 400,
+            status: 'INVALID_ARGUMENT',
+            message: 'API key not valid.',
+            details: [
+              {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                reason: 'API_KEY_INVALID',
+              },
+            ],
+          },
+        }),
+        { status: 400 },
+      ),
+    );
+    await expect(s.service.validateCredential(id, id)).resolves.toMatchObject({
+      code: 'AI_AUTH_OR_ACCESS_FAILED',
+      upstreamReason: 'API_KEY_INVALID',
+    });
+    expect(s.registry.credentials.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ revision: 1 }),
+      { $set: expect.objectContaining({ lastValidationStatus: 'invalid' }) },
+    );
+  });
+  it('decrypts the latest saved revision on each validation using its authenticated identity', async () => {
+    const s = validationSetup();
+    s.transport.fetch.mockResolvedValue(new Response('{}', { status: 200 }));
+    await s.service.validateCredential(id, id);
+    expect(
+      (s.transport.fetch.mock.calls[0][1] as Request).headers.get(
+        'x-goog-api-key',
+      ),
+    ).toBe('synthetic-private-secret');
+    const updated = s.vault.encrypt(
+      'synthetic-replacement-secret',
+      providerId + ':' + id,
+    );
+    s.registry.credentials.findOne.mockReturnValue({
+      select: jest
+        .fn()
+        .mockResolvedValue({
+          ...s.credential,
+          ...updated,
+          revision: 2,
+          enabled: true,
+        }),
+    });
+    await s.service.validateCredential(id, id);
+    expect(
+      (s.transport.fetch.mock.calls[1][1] as Request).headers.get(
+        'x-goog-api-key',
+      ),
+    ).toBe('synthetic-replacement-secret');
+    expect(s.registry.credentials.updateOne).toHaveBeenLastCalledWith(
+      expect.objectContaining({ revision: 2 }),
+      { $set: expect.objectContaining({ lastValidationStatus: 'valid' }) },
+    );
   });
   it('does not certify a credential replaced during validation', async () => {
     const s = validationSetup();

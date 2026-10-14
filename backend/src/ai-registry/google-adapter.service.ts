@@ -1,6 +1,13 @@
-import { Injectable, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ProviderTransport } from './provider-transport.service';
-import { classifyProviderFailure } from './provider-errors';
+import {
+  classifyProviderFailure,
+  googleResponseFailure,
+} from './provider-errors';
 import { providerEndpoint } from './provider-policy';
 import { ChatGoogle } from '@langchain/google/node';
 import {
@@ -17,6 +24,7 @@ export function providerError(error: unknown) {
 @Injectable()
 export class GoogleAdapter {
   readonly freeAuto = true;
+  private readonly logger = new Logger(GoogleAdapter.name);
   constructor(private transport: ProviderTransport = new ProviderTransport()) {}
   create(model: AIModel, secret: string, provider: AIProvider) {
     const endpoint = providerEndpoint(provider);
@@ -93,17 +101,25 @@ export class GoogleAdapter {
         provider,
         new Request(
           endpoint.baseUrl + '/' + endpoint.apiVersion + '/models?pageSize=1',
-          { headers: { 'x-goog-api-key': secret }, signal },
+          { method: 'GET', headers: { 'x-goog-api-key': secret }, signal },
         ),
       );
-      return response.ok
-        ? { valid: true }
-        : {
-            valid: false,
-            ...classifyProviderFailure({ status: response.status }, true),
-          };
+      if (response.ok) return { valid: true };
+      const failure = await googleResponseFailure(response, secret, true);
+      this.logger.warn(
+        JSON.stringify({
+          operation: 'credential-validation',
+          request: { ...endpoint, method: 'GET', path: '/models', pageSize: 1 },
+          ...failure,
+        }),
+      );
+      return { valid: false, ...failure };
     } catch (error) {
-      return { valid: false, ...classifyProviderFailure(error, true) };
+      const failure = classifyProviderFailure(error, true);
+      this.logger.warn(
+        JSON.stringify({ operation: 'credential-validation', ...failure }),
+      );
+      return { valid: false, ...failure };
     }
   }
   async verifyModel(
@@ -124,10 +140,13 @@ export class GoogleAdapter {
         { headers: { 'x-goog-api-key': secret }, signal },
       ),
     );
-    if (!response.ok)
-      throw new ServiceUnavailableException(
-        classifyProviderFailure({ status: response.status }),
+    if (!response.ok) {
+      const failure = await googleResponseFailure(response, secret);
+      this.logger.warn(
+        JSON.stringify({ operation: 'model-lookup', ...failure }),
       );
+      throw new ServiceUnavailableException(failure);
+    }
     const data: unknown = await response.json();
     if (
       !data ||
