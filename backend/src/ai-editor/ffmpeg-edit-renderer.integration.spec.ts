@@ -21,6 +21,167 @@ integration('FFmpeg editing media integration', () => {
   afterAll(async () => {
     if (directory) await rm(directory, { recursive: true, force: true });
   });
+  it.each(['gain', 'zoom', 'emoji', 'combined'] as const)(
+    'executes the verified %s capability through the actual FFmpeg compiler',
+    async (kind) => {
+      const source = join(directory, 'capability-source.mp4');
+      await exec(ffmpeg!, [
+        '-y',
+        '-f',
+        'lavfi',
+        '-i',
+        'color=c=black:size=160x90:rate=24:duration=12',
+        '-f',
+        'lavfi',
+        '-i',
+        'sine=frequency=440:sample_rate=48000:duration=12',
+        '-c:v',
+        'libx264',
+        '-c:a',
+        'aac',
+        '-ac',
+        '2',
+        '-threads',
+        '1',
+        source,
+      ]);
+      const value = examplePlan();
+      const segment = value.video.segments[0];
+      if (segment.type === 'video') segment.sourceEnd = 12;
+      value.video.fps = 24;
+      if (kind === 'gain' || kind === 'combined')
+        value.audio.original.gain = 0.5;
+      const image = join(directory, 'capability-emoji.png');
+      await writeFile(image, emojiPng('😂'));
+      const plan = parseEdit(planSchema, {
+        ...value,
+        operations:
+          kind === 'emoji'
+            ? [
+                {
+                  id: 'emoji',
+                  type: 'emoji_overlay',
+                  start: 0,
+                  end: 12,
+                  params: {
+                    assetId: 'emoji-local',
+                    emoji: '😂',
+                    x: 0.5,
+                    y: 0.5,
+                    width: 0.2,
+                  },
+                },
+              ]
+            : kind === 'zoom' || kind === 'combined'
+              ? [
+                  {
+                    id: 'zoom',
+                    type: 'zoom',
+                    start: 5,
+                    end: 10,
+                    params: {
+                      fromScale: 1,
+                      toScale: 1.2,
+                      focusX: 0.5,
+                      focusY: 0.5,
+                    },
+                  },
+                ]
+              : [],
+      });
+      const spec = buildRenderSpec(
+        plan,
+        { path: source, hasAudio: true, duration: 12, width: 160, height: 90 },
+        new Map([
+          [
+            'emoji-local',
+            {
+              path: image,
+              hasAudio: false,
+              duration: 0,
+              width: 256,
+              height: 256,
+              format: 'png_pipe',
+            },
+          ],
+        ]),
+        directory,
+      );
+      await writeFile(join(directory, 'filters.txt'), spec.filters);
+      await exec(
+        ffmpeg!,
+        ['-filter_complex_threads', '1', '-threads', '1', ...spec.args],
+        { timeout: 90000, maxBuffer: 2000000 },
+      );
+      const output = join(directory, 'output.mp4');
+      const { stdout } = await exec(ffprobe!, [
+        '-v',
+        'error',
+        '-show_entries',
+        'format=duration',
+        '-of',
+        'json',
+        output,
+      ]);
+      expect(
+        Number(
+          (JSON.parse(stdout) as { format: { duration: string } }).format
+            .duration,
+        ),
+      ).toBeCloseTo(12, 1);
+      if (kind === 'gain' || kind === 'combined') {
+        const level = async (path: string) => {
+          const { stderr } = await exec(
+            ffmpeg!,
+            [
+              '-i',
+              path,
+              '-map',
+              '0:a:0',
+              '-af',
+              'volumedetect',
+              '-f',
+              'null',
+              '-',
+            ],
+            { maxBuffer: 1000000 },
+          );
+          return Number(/mean_volume: (-?[\d.]+) dB/.exec(stderr)?.[1]);
+        };
+        expect((await level(output)) - (await level(source))).toBeCloseTo(
+          -6,
+          0,
+        );
+      }
+      if (kind === 'emoji') {
+        for (const time of ['0.1', '6', '11.8']) {
+          const { stdout: pixel } = await exec(
+            ffmpeg!,
+            [
+              '-v',
+              'error',
+              '-ss',
+              time,
+              '-i',
+              output,
+              '-vf',
+              'format=rgb24,crop=1:1:640:360',
+              '-frames:v',
+              '1',
+              '-f',
+              'rawvideo',
+              'pipe:1',
+            ],
+            { encoding: 'buffer' },
+          );
+          expect(pixel[0]).toBeGreaterThan(180);
+          expect(pixel[1]).toBeGreaterThan(120);
+          expect(pixel[2]).toBeLessThan(100);
+        }
+      }
+    },
+    120000,
+  );
   it('normalizes a silent portrait VFR source to the requested CFR timeline', async () => {
     const source = join(directory, 'vfr.mp4');
     await exec(ffmpeg!, [

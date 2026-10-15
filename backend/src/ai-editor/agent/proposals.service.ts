@@ -23,6 +23,7 @@ import type { AgentMessage, AgentSession, EditProposal } from './agent.schemas';
 import { AgentTools } from './agent-tools.service';
 import { EditingGraph } from './editing-graph.service';
 import { mergeEditPatch } from './edit-patch';
+import { readBuildInfo } from '../../common/build-info';
 const proposeInput = z
   .object({
     planId: objectId,
@@ -118,6 +119,7 @@ export class ProposalsService {
         baseRevision: owned.plan.revision,
         beforePlan: owned.plan.plan,
         status: 'generating',
+        executionBuild: readBuildInfo(),
         summary: 'Generating a proposal',
         modelId: String(resolved.model._id),
       });
@@ -229,6 +231,12 @@ export class ProposalsService {
             300,
           );
         },
+        onDiagnostic: async (event) => {
+          await this.proposals.updateOne(
+            { _id: proposal._id, status: 'generating' },
+            { $push: { diagnostics: { $each: [event], $slice: -64 } } },
+          );
+        },
       });
       if (result.patch && result.patch.baseRevision !== proposal.baseRevision)
         throw new ConflictException(
@@ -268,7 +276,18 @@ export class ProposalsService {
             status: 'failed',
             summary:
               'AI proposal could not be generated; retry with a new request ID',
-            errorCode: AI_ERROR_CODES.PROPOSAL_FAILED,
+            errorCode:
+              error instanceof HttpException &&
+              typeof error.getResponse() === 'object' &&
+              [
+                'AI_UNVERIFIED_UNSUPPORTED',
+                'AI_PATCH_INVALID',
+                'AI_STRUCTURED_OUTPUT_INVALID',
+              ].includes(
+                String((error.getResponse() as { code?: unknown }).code),
+              )
+                ? (error.getResponse() as { code: string }).code
+                : AI_ERROR_CODES.PROPOSAL_FAILED,
             failedStage: lastStage,
             retryable: true,
           },

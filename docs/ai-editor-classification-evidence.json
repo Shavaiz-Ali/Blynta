@@ -1,0 +1,204 @@
+{
+  "observedAt": "2026-10-15T10:00:55.164Z",
+  "localRevision": "5d1dd307b98d35071ef65109cb99830e8963c3f3",
+  "localBuild": {
+    "revision": "9b0586923fa18b982c3e3f689051a7aa0c99d06b",
+    "sourceDirty": true,
+    "builtAt": "2026-10-15T08:59:09.186Z",
+    "artifactHash": "0e98f8025904e6dea5e36fce444bd5fabd0ee2f3a153f8456567237857162e07"
+  },
+  "compiledCapabilities": {
+    "hash": "2ce39c2363a32de179c09e66885af2978a69a886c732820325e20b87392443e8",
+    "operationTypes": [
+      "zoom",
+      "crop",
+      "image_overlay",
+      "emoji_overlay",
+      "text_overlay",
+      "transition"
+    ],
+    "emojiGenerationAvailable": true,
+    "imageGeneration": false,
+    "patchContractInInitialCapabilities": false,
+    "originalAudioInInitialCapabilities": false
+  },
+  "health": [
+    {
+      "status": 200,
+      "build": {
+        "revision": "5d1dd307b98d35071ef65109cb99830e8963c3f3",
+        "sourceDirty": false,
+        "builtAt": "2026-10-15T09:02:38.555Z",
+        "artifactHash": "0e98f8025904e6dea5e36fce444bd5fabd0ee2f3a153f8456567237857162e07"
+      }
+    },
+    {
+      "status": 200,
+      "build": {
+        "revision": "5d1dd307b98d35071ef65109cb99830e8963c3f3",
+        "sourceDirty": false,
+        "builtAt": "2026-10-15T09:02:38.555Z",
+        "artifactHash": "0e98f8025904e6dea5e36fce444bd5fabd0ee2f3a153f8456567237857162e07"
+      }
+    },
+    {
+      "status": 200,
+      "build": {
+        "revision": "5d1dd307b98d35071ef65109cb99830e8963c3f3",
+        "sourceDirty": false,
+        "builtAt": "2026-10-15T09:02:38.555Z",
+        "artifactHash": "0e98f8025904e6dea5e36fce444bd5fabd0ee2f3a153f8456567237857162e07"
+      }
+    }
+  ],
+  "database": "EXACT_PROPOSAL_FOUND",
+  "proposals": [
+    {
+      "_id": "6ad0a20532a8f10b4fc47404",
+      "executionId": "072dae76-bcae-47e5-9a1b-be73f0d04442",
+      "baseRevision": 1,
+      "status": "unsupported",
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "createdAt": "2026-10-15T09:51:01.846Z"
+    },
+    {
+      "_id": "6ad08c7ed746202f9341a2e8",
+      "executionId": "11a44108-d506-467e-93aa-1a59f23e3d98",
+      "baseRevision": 1,
+      "status": "unsupported",
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "createdAt": "2026-10-15T08:19:10.442Z"
+    },
+    {
+      "_id": "6ad08cd3d746202f9341a2ee",
+      "executionId": "d13164a1-8c54-476d-9e29-5942e85e93d2",
+      "baseRevision": 1,
+      "status": "unsupported",
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "createdAt": "2026-10-15T08:20:35.648Z"
+    },
+    {
+      "_id": "6ad0a23c32a8f10b4fc4740b",
+      "executionId": "a098918f-92ae-4946-806a-f1e20b679f9c",
+      "baseRevision": 1,
+      "status": "unsupported",
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "createdAt": "2026-10-15T09:51:56.506Z"
+    }
+  ],
+  "usage": [
+    {
+      "executionId": "072dae76-bcae-47e5-9a1b-be73f0d04442",
+      "call": 1,
+      "createdAt": "2026-10-15T09:51:07.927Z",
+      "latencyMs": 1425,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    },
+    {
+      "executionId": "072dae76-bcae-47e5-9a1b-be73f0d04442",
+      "call": 2,
+      "createdAt": "2026-10-15T09:51:17.929Z",
+      "latencyMs": 6835,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    },
+    {
+      "call": 1,
+      "executionId": "11a44108-d506-467e-93aa-1a59f23e3d98",
+      "createdAt": "2026-10-15T08:19:19.004Z",
+      "latencyMs": 3651,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    },
+    {
+      "executionId": "11a44108-d506-467e-93aa-1a59f23e3d98",
+      "call": 2,
+      "createdAt": "2026-10-15T08:19:25.547Z",
+      "latencyMs": 5437,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    },
+    {
+      "executionId": "a098918f-92ae-4946-806a-f1e20b679f9c",
+      "call": 1,
+      "createdAt": "2026-10-15T09:52:03.001Z",
+      "latencyMs": 1410,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    },
+    {
+      "executionId": "a098918f-92ae-4946-806a-f1e20b679f9c",
+      "call": 2,
+      "createdAt": "2026-10-15T09:52:07.033Z",
+      "latencyMs": 1475,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    },
+    {
+      "executionId": "d13164a1-8c54-476d-9e29-5942e85e93d2",
+      "call": 1,
+      "createdAt": "2026-10-15T08:20:44.795Z",
+      "latencyMs": 4233,
+      "modelId": "6acdf04c3208db09578cb0ca",
+      "status": "success"
+    }
+  ],
+  "tools": [
+    {
+      "name": "get_clip_context",
+      "createdAt": "2026-10-15T09:51:04.007Z",
+      "context": {
+        "revision": 1,
+        "outputDuration": 58,
+        "sourceDuration": 58
+      }
+    },
+    {
+      "name": "get_current_edit_plan",
+      "createdAt": "2026-10-15T09:51:04.595Z"
+    },
+    {
+      "name": "get_available_assets",
+      "createdAt": "2026-10-15T09:51:05.365Z"
+    },
+    {
+      "name": "resolve_asset",
+      "createdAt": "2026-10-15T09:51:09.966Z",
+      "resolution": {
+        "hasAssetId": true,
+        "mimeType": "image/png",
+        "width": 256,
+        "height": 256,
+        "needsInput": false
+      }
+    }
+  ],
+  "storedTrace": {
+    "diagnosticsPresent": false,
+    "rawStructuredModelOutputPersisted": false,
+    "reportedSummaryMatch": true
+  },
+  "model": {
+    "_id": "6acdf04c3208db09578cb0ca",
+    "enabled": true,
+    "capabilities": {
+      "text": true,
+      "vision": true,
+      "audioInput": true,
+      "structuredOutput": true,
+      "toolCalling": true
+    },
+    "tasks": [
+      "highlight_detection",
+      "edit_planning",
+      "edit_refinement"
+    ],
+    "settings": {
+      "maxOutputTokens": 4096,
+      "timeoutMs": 30000,
+      "maxRetries": 0
+    },
+    "updatedAt": "2026-10-15T07:56:58.268Z"
+  }
+}

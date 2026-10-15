@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   ServiceUnavailableException,
+  BadRequestException,
 } from '@nestjs/common';
 import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import { ProviderTransport } from './provider-transport.service';
@@ -74,6 +75,11 @@ export class GoogleAdapter {
         usage: isAIMessage(result.raw) ? result.raw.usage_metadata : undefined,
       };
     } catch (error) {
+      if (error instanceof z.ZodError)
+        throw new BadRequestException({
+          code: 'AI_STRUCTURED_OUTPUT_INVALID',
+          message: 'AI returned malformed structured output',
+        });
       throw new ServiceUnavailableException({
         message: 'AI provider request failed',
         code: providerError(error),

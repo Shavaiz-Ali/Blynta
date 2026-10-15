@@ -50,6 +50,18 @@ const answer = {
 const query = <T>(value: T) => ({
   maxTimeMS: jest.fn().mockResolvedValue(value),
 });
+const requestedCases = [
+  { prompt: 'Lower the original audio volume to 50%.', kind: 'gain' },
+  { prompt: 'Add a zoom from 00:05 to 00:10.', kind: 'zoom' },
+  {
+    prompt: 'Add a 😂 emoji at the center for the entire video.',
+    kind: 'emoji',
+  },
+  {
+    prompt: 'Add a zoom from 00:05 to 00:10 and lower audio volume to 50%.',
+    kind: 'combined',
+  },
+] as const;
 function setup(outputs: unknown[] = [intent, answer]) {
   const library: Partial<StudioAsset>[] = [];
   const plan = {
@@ -196,6 +208,90 @@ function setup(outputs: unknown[] = [intent, answer]) {
   };
 }
 describe('Bounded LangGraph proposal integration', () => {
+  it.each(requestedCases)(
+    'validates the exact request and corrects an unverified model veto: $prompt',
+    async ({ prompt, kind }) => {
+      const zoom = {
+        action: 'add',
+        operation: { ...patch.changes[0].operation, start: 5, end: 10 },
+      };
+      const gain = {
+        action: 'update_original_audio',
+        controls: { ...examplePlan().audio.original, gain: 0.5 },
+      };
+      const overlay = {
+        action: 'add',
+        operation: {
+          id: 'emoji',
+          type: 'emoji_overlay',
+          start: 0,
+          end: 58,
+          params: {
+            assetId: 'emoji-real',
+            emoji: '😂',
+            x: 0.5,
+            y: 0.5,
+            width: 0.2,
+          },
+        },
+      };
+      const changes =
+        kind === 'gain'
+          ? [gain]
+          : kind === 'zoom'
+            ? [zoom]
+            : kind === 'emoji'
+              ? [overlay]
+              : [zoom, gain];
+      const s = setup([
+        {
+          ...intent,
+          assets: kind === 'emoji' ? [{ kind: 'emoji', query: '😂' }] : [],
+        },
+        {
+          outcome: 'unsupported',
+          summary: 'This entire request is unsupported',
+          patchJson: '',
+        },
+        { ...answer, patchJson: JSON.stringify({ baseRevision: 1, changes }) },
+      ]);
+      s.plan.sourceMedia.duration = 58;
+      s.plan.outputDuration = 58;
+      const segment = s.plan.plan.video.segments[0];
+      if (segment.type === 'video') segment.sourceEnd = 58;
+      const result = await s.run(prompt);
+      expect(result).toMatchObject({ status: 'pending', calls: 3 });
+      expect(result.patch?.changes).toHaveLength(changes.length);
+      expect(s.onStage.mock.calls.map(([node]) => node)).toEqual([
+        'load_context',
+        'interpret',
+        'resolve_information',
+        'resolve_assets',
+        'generate_patch',
+        'validate',
+        'correct',
+        'validate',
+      ]);
+      expect(
+        s.onTool.mock.calls.some(([name]) => name === 'validate_edit_patch'),
+      ).toBe(true);
+      expect(s.emoji.generate).toHaveBeenCalledTimes(kind === 'emoji' ? 1 : 0);
+      expect(s.plan.revision).toBe(1);
+      expect(s.plan.plan.operations).toHaveLength(0);
+    },
+  );
+  it('does not persist unsupported when the model repeats an unverified veto', async () => {
+    const veto = {
+      outcome: 'unsupported',
+      summary: 'Center overlays are unsupported',
+      patchJson: '',
+    };
+    const s = setup([intent, veto, veto]);
+    await expect(s.run()).rejects.toMatchObject({
+      response: { code: 'AI_UNVERIFIED_UNSUPPORTED' },
+    });
+    expect(s.google.structured).toHaveBeenCalledTimes(3);
+  });
   it('resolves a deterministic shape and its requested color into an image operation', async () => {
     const shapePatch = {
       baseRevision: 1,
@@ -405,6 +501,7 @@ describe('Bounded LangGraph proposal integration', () => {
         outcome: 'unsupported',
         summary: 'Face tracking is not supported',
         patchJson: '',
+        unavailableCapabilities: ['face_tracking'],
       },
     ]);
     expect(await s.run()).toMatchObject({

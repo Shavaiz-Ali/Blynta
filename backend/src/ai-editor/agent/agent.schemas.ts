@@ -18,6 +18,8 @@ export interface AgentMessage {
   executionId: string;
 }
 export interface EditProposal {
+  diagnostics?: import('./agent-diagnostics').AgentDiagnostic[];
+  executionBuild?: object;
   failedStage?: string;
   retryable?: boolean;
   beforePlan?: EditPlan;
@@ -63,6 +65,8 @@ export const MessageSchema = new Schema<AgentMessage>(
 MessageSchema.index({ userId: 1, sessionId: 1, createdAt: -1 });
 export const ProposalSchema = new Schema<EditProposal>(
   {
+    diagnostics: { type: [Schema.Types.Mixed], default: [] },
+    executionBuild: Schema.Types.Mixed,
     failedStage: String,
     retryable: Boolean,
     userId: { type: String, required: true },
