@@ -21,6 +21,9 @@ export interface StoredEditPlan {
   status: string;
 }
 export interface EditVersion {
+  phase?: import('@blynta/types/contracts').EditRenderPhase;
+  attempt?: number;
+  failedPhase?: string;
   userId: string;
   planId: string;
   revision: number;
@@ -97,6 +100,9 @@ EditPlanSchema.index(
 );
 export const EditVersionSchema = new Schema<EditVersion>(
   {
+    phase: String,
+    attempt: Number,
+    failedPhase: String,
     userId: { type: String, required: true },
     planId: { type: String, required: true },
     revision: { type: Number, required: true },

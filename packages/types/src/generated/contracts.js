@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ADMIN_ROUTES = exports.APP_ROUTES = exports.API_ENDPOINTS = exports.JOB_STATUS_LABELS = exports.SUBSCRIPTION_PLANS = exports.UserPlan = exports.HTTP_STATUS = exports.AI_MODEL_POLICY = exports.PAGINATION = exports.AI_ERROR_CODES = exports.AI_ADAPTERS = exports.AI_TASK_LABELS = exports.AI_TASKS = exports.AI_TASK = exports.ClipProcessingState = exports.SourcePlatform = exports.JobStatus = void 0;
+exports.AI_EDIT_STAGE_LABEL = exports.EDIT_RENDER_PHASE_LABEL = exports.EDIT_RENDER_PHASE = exports.ADMIN_ROUTES = exports.APP_ROUTES = exports.API_ENDPOINTS = exports.JOB_STATUS_LABELS = exports.SUBSCRIPTION_PLANS = exports.UserPlan = exports.HTTP_STATUS = exports.AI_MODEL_POLICY = exports.PAGINATION = exports.AI_ERROR_CODES = exports.AI_ADAPTERS = exports.AI_TASK_LABELS = exports.AI_TASKS = exports.AI_TASK = exports.ClipProcessingState = exports.SourcePlatform = exports.JobStatus = void 0;
 /** Public, persisted identifiers. Keep serialized values compatible across deployments. */
 var JobStatus;
 (function (JobStatus) {
@@ -152,4 +152,38 @@ exports.ADMIN_ROUTES = {
     usage: "/ai/usage",
     user: (userId) => `/users/${id(userId)}`,
     job: (jobId) => `/jobs/${id(jobId)}`,
+};
+/** Percentages describe encoding only; other stages are indeterminate. */
+exports.EDIT_RENDER_PHASE = {
+    QUEUED: "queued",
+    PREPARING: "preparing_assets",
+    COMPILING: "compiling_plan",
+    ENCODING: "encoding",
+    VERIFYING: "verifying",
+    UPLOADING: "uploading_preview",
+    FINALIZING: "finalizing",
+    COMPLETED: "completed",
+    FAILED: "failed",
+    CANCELLED: "cancelled",
+};
+exports.EDIT_RENDER_PHASE_LABEL = {
+    queued: "Waiting to render",
+    preparing_assets: "Preparing assets",
+    compiling_plan: "Compiling edit plan",
+    encoding: "Encoding video",
+    verifying: "Verifying preview",
+    uploading_preview: "Uploading preview",
+    finalizing: "Finalizing preview",
+    completed: "Preview ready",
+    failed: "Preview failed",
+    cancelled: "Preview canceled",
+};
+exports.AI_EDIT_STAGE_LABEL = {
+    load_context: "Checking available editing options…",
+    interpret: "Understanding your request…",
+    resolve_information: "Finding the requested moments…",
+    resolve_assets: "Preparing requested assets…",
+    generate_patch: "Building your edit proposal…",
+    validate: "Checking your proposal…",
+    correct: "Checking your proposal…",
 };

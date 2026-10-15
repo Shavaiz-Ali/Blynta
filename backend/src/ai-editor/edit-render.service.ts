@@ -11,6 +11,11 @@ import { assertNotCancelled } from '../jobs/cancellation-context';
 import { EditPlanValidatorService } from './edit-plan-validator.service';
 import type { EditVersion } from './edit.schemas';
 import { buildRenderSpec, LocalMedia } from './ffmpeg-edit-renderer';
+import {
+  EDIT_RENDER_PHASE,
+  type EditRenderPhase,
+} from '@blynta/types/contracts';
+import { encodingProgress } from './encoding-progress';
 
 @Injectable()
 export class EditRenderService {
@@ -37,7 +42,9 @@ export class EditRenderService {
     version: EditVersion,
     directory: string,
     onProgress: (value: number) => void,
+    onPhase: (phase: EditRenderPhase) => Promise<void> = async () => {},
   ) {
+    await onPhase(EDIT_RENDER_PHASE.PREPARING);
     const validated = await this.validator.validate(
       version.userId,
       version.plan,
@@ -202,6 +209,7 @@ export class EditRenderService {
       throw new BadRequestException(
         'Segment buffering exceeds the 256 MiB preview budget; shorten or split this edit',
       );
+    await onPhase(EDIT_RENDER_PHASE.COMPILING);
     let spec: ReturnType<typeof buildRenderSpec>;
     try {
       spec = buildRenderSpec(validated.plan, source, assets, directory, {
@@ -226,25 +234,23 @@ export class EditRenderService {
     await writeFile(join(directory, 'filters.txt'), spec.filters);
     for (const file of spec.textFiles)
       await writeFile(file.path, file.text, 'utf8');
+    await onPhase(EDIT_RENDER_PHASE.ENCODING);
+    let lastEncoding = 0;
     await runCommandWithProgress(
       'ffmpeg',
       spec.args,
       (line) => {
-        if (line.startsWith('out_time_us=')) {
-          const elapsed = Number(line.slice('out_time_us='.length)) / 1e6;
-          if (Number.isFinite(elapsed))
-            onProgress(
-              Math.min(
-                95,
-                Math.max(1, Math.round((elapsed / spec.duration) * 95)),
-              ),
-            );
+        const value = encodingProgress(line, spec.duration);
+        if (value !== undefined && value > lastEncoding) {
+          lastEncoding = value;
+          onProgress(value);
         }
       },
       this.registry,
       { cwd: directory },
     );
     assertNotCancelled();
+    await onPhase(EDIT_RENDER_PHASE.VERIFYING);
     const outputPath = join(directory, 'output.mp4');
     const probe = await this.inspection.inspect(outputPath, true);
     if (

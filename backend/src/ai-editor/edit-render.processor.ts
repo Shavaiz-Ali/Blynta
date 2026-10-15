@@ -23,6 +23,10 @@ import type { EditVersion, StoredEditPlan } from './edit.schemas';
 import { EditAdmissionService, editJobId } from './edit-admission.service';
 import { HttpException } from '@nestjs/common';
 import { EDIT_QUEUE } from './edit-plans.service';
+import {
+  EDIT_RENDER_PHASE,
+  type EditRenderPhase,
+} from '@blynta/types/contracts';
 
 @Processor(EDIT_QUEUE, {
   concurrency: 1,
@@ -89,6 +93,11 @@ export class EditRenderProcessor
               {
                 $set: {
                   status: 'failed',
+                  phase: EDIT_RENDER_PHASE.FAILED,
+                  failedPhase: v.phase ?? EDIT_RENDER_PHASE.PREPARING,
+                  errorCode: 'EDIT_EXECUTION_INTERRUPTED',
+                  retryable: true,
+                  progress: 0,
                   error:
                     'Worker stopped before publication; retry this failed version',
                 },
@@ -240,7 +249,9 @@ export class EditRenderProcessor
       {
         $set: {
           status: 'processing',
-          progress: 1,
+          progress: 0,
+          phase: EDIT_RENDER_PHASE.PREPARING,
+          attempt: job.attemptsMade + 1,
           executionToken,
           executionExpiresAt: new Date(Date.now() + 60000),
         },
@@ -301,6 +312,7 @@ export class EditRenderProcessor
     let uploaded = false,
       completed = false;
     let directory: string | undefined;
+    let phase: EditRenderPhase = EDIT_RENDER_PHASE.PREPARING;
     try {
       await this.admission.acquire(v.userId, this.admission.key(v));
       directory = await mkdtemp(
@@ -316,27 +328,50 @@ export class EditRenderProcessor
               { $set: { status: 'processing' } },
             );
             let lastProgress = 0;
+            let lastTick = 0;
             let writes = Promise.resolve();
-            const result = await this.renderer.render(v, workspace, (value) => {
-              if (value <= lastProgress) return;
-              lastProgress = value;
-              writes = writes
-                .then(async () => {
-                  await job.updateProgress(value);
-                  await this.versions.updateOne(
-                    {
-                      _id: v._id,
-                      status: 'processing',
-                      executionToken,
-                      executionExpiresAt: { $gt: new Date() },
-                    },
-                    { $set: { progress: value } },
-                  );
-                })
-                .catch(() => {
-                  abort.abort();
-                });
+            const transient = () => ({
+              phase,
+              encodingPercent: lastProgress,
+              executionToken,
+              generation: v.generation ?? 0,
+              attempt: job.attemptsMade + 1,
             });
+            const onPhase = async (next: EditRenderPhase) => {
+              await writes;
+              assertNotCancelled();
+              phase = next;
+              // Persist lifecycle transitions, not every encoding tick.
+              const updated = await this.versions.updateOne(
+                {
+                  _id: v._id,
+                  status: 'processing',
+                  executionToken,
+                  executionExpiresAt: { $gt: new Date() },
+                },
+                { $set: { phase, progress: lastProgress } },
+              );
+              if (!updated.matchedCount)
+                throw new Error('Render execution lease lost');
+              await job.updateProgress(transient());
+            };
+            const result = await this.renderer.render(
+              v,
+              workspace,
+              (value) => {
+                if (!Number.isFinite(value) || value <= lastProgress) return;
+                lastProgress = Math.min(99, Math.max(0, value));
+                if (Date.now() - lastTick < 500) return;
+                lastTick = Date.now();
+                const snapshot = transient();
+                writes = writes
+                  .then(() => job.updateProgress(snapshot))
+                  .catch(() => {
+                    abort.abort();
+                  });
+              },
+              onPhase,
+            );
             await writes;
             assertNotCancelled();
             // Mark upload intent first: even an interrupted PUT is cleaned up below.
@@ -352,8 +387,13 @@ export class EditRenderProcessor
             if (!intent.modifiedCount)
               throw new Error('Render cancelled before upload');
             uploaded = true;
+            await onPhase(EDIT_RENDER_PHASE.UPLOADING);
             await this.r2.uploadFile(result.outputPath, key);
             assertNotCancelled();
+            const published = await this.r2.objectInfo(key);
+            if (published.size !== result.bytes)
+              throw new Error('Preview upload verification failed');
+            await onPhase(EDIT_RENDER_PHASE.FINALIZING);
             const saved = await this.versions.updateOne(
               {
                 _id: v._id,
@@ -365,6 +405,7 @@ export class EditRenderProcessor
                 $set: {
                   status: 'completed',
                   progress: 100,
+                  phase: EDIT_RENDER_PHASE.COMPLETED,
                   outputKey: key,
                   completedAt: new Date(),
                   renderStats: {
@@ -451,6 +492,14 @@ export class EditRenderProcessor
         {
           $set: {
             status,
+            phase:
+              status === 'cancelled'
+                ? EDIT_RENDER_PHASE.CANCELLED
+                : status === 'queued'
+                  ? EDIT_RENDER_PHASE.QUEUED
+                  : EDIT_RENDER_PHASE.FAILED,
+            failedPhase: phase,
+            progress: 0,
             errorCode,
             retryable: !permanent && status !== 'cancelled',
             error:

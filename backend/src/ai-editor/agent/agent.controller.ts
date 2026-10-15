@@ -50,6 +50,13 @@ export class AgentController {
   ) {
     return this.service.reject(r.user.userId, clipId, id);
   }
+  @Post('proposals/:id/cancel') cancel(
+    @Req() r: { user: { userId: string } },
+    @Param('clipId') clipId: string,
+    @Param('id') id: string,
+  ) {
+    return this.service.cancel(r.user.userId, clipId, id);
+  }
   @Get('sessions/:id') history(
     @Req() r: { user: { userId: string } },
     @Param('clipId') clipId: string,

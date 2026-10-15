@@ -261,3 +261,69 @@ describe('Attachment request boundary', () => {
     expect(validate).toHaveBeenCalledWith(id, clipId, planId, ['image-1']);
   });
 });
+
+describe('Generation cancellation ownership and races', () => {
+  function cancellationSetup(status = 'generating') {
+    const record = { _id: id, planId, executionId: 'owned-execution', status };
+    const proposals = {
+      findOne: jest.fn().mockResolvedValue(record),
+      findOneAndUpdate: jest
+        .fn()
+        .mockResolvedValue({ ...record, status: 'cancelled' }),
+    };
+    const redis = { set: jest.fn().mockResolvedValue('OK') };
+    const tools = { owned: jest.fn().mockResolvedValue({}) };
+    const service = new ProposalsService(
+      ...([
+        {},
+        {},
+        proposals,
+        {},
+        redis,
+        {},
+        {},
+        tools,
+        {},
+        {},
+      ] as unknown as ConstructorParameters<typeof ProposalsService>),
+    );
+    return { service, record, proposals, redis, tools };
+  }
+  it('claims only owned generating proposals and signals the matching execution', async () => {
+    const s = cancellationSetup();
+    expect(await s.service.cancel(id, clipId, id)).toMatchObject({
+      status: 'cancelled',
+    });
+    expect(s.proposals.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: id, userId: id, clipId, status: 'generating' },
+      expect.anything(),
+      { new: true },
+    );
+    expect(s.redis.set).toHaveBeenCalledWith(
+      `ai:cancel:${id}:owned-execution`,
+      '1',
+      'EX',
+      300,
+    );
+    expect(s.tools.owned).toHaveBeenCalledWith(id, clipId, planId);
+  });
+  it('is idempotent after cancellation and cannot cancel an already published proposal', async () => {
+    const s = cancellationSetup('cancelled');
+    expect(await s.service.cancel(id, clipId, id)).toBe(s.record);
+    expect(s.proposals.findOneAndUpdate).not.toHaveBeenCalled();
+    s.record.status = 'pending';
+    s.proposals.findOneAndUpdate.mockResolvedValueOnce(null);
+    await expect(s.service.cancel(id, clipId, id)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(s.redis.set).not.toHaveBeenCalled();
+  });
+  it('rejects inaccessible proposals before writing a cancellation flag', async () => {
+    const s = cancellationSetup();
+    s.proposals.findOne.mockResolvedValueOnce(null);
+    await expect(s.service.cancel('other', clipId, id)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(s.redis.set).not.toHaveBeenCalled();
+  });
+});

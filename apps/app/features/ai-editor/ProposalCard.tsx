@@ -35,11 +35,13 @@ export function ProposalCard({
                   ? "Edit unavailable"
                   : proposal.status === "rejected"
                     ? "Suggestion rejected"
-                    : proposal.status === "failed"
-                      ? "Suggestion failed"
-                      : proposal.status === "applying"
-                        ? "Saving changes"
-                        : "Preparing your suggestion"}
+                    : proposal.status === "cancelled"
+                      ? "Suggestion canceled"
+                      : proposal.status === "failed"
+                        ? "Suggestion failed"
+                        : proposal.status === "applying"
+                          ? "Saving changes"
+                          : "Preparing your suggestion"}
         </h3>
         <span className="text-[11px] text-muted-foreground">
           {proposal.patch

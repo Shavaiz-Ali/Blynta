@@ -17,6 +17,7 @@ import { Job } from '../../jobs/schemas/job.schema';
 import { GoogleAdapter } from '../../ai-registry/google-adapter.service';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import type { AIUsage } from '../../ai-registry/registry.schemas';
+import { EmojiAssetsService } from './emoji-assets.service';
 const id = '111111111111111111111111',
   clipId = '222222222222222222222222';
 const patch = {
@@ -50,6 +51,7 @@ const query = <T>(value: T) => ({
   maxTimeMS: jest.fn().mockResolvedValue(value),
 });
 function setup(outputs: unknown[] = [intent, answer]) {
+  const library: Partial<StudioAsset>[] = [];
   const plan = {
     _id: id,
     userId: id,
@@ -74,18 +76,52 @@ function setup(outputs: unknown[] = [intent, answer]) {
       sort: jest.fn().mockReturnThis(),
       limit: jest.fn().mockReturnThis(),
       maxTimeMS: jest.fn().mockReturnThis(),
-      lean: jest.fn().mockResolvedValue([]),
+      lean: jest.fn().mockImplementation(() => Promise.resolve(library)),
     })),
   };
   const validator = new EditPlanValidatorService(
     assets as unknown as Model<StudioAsset>,
-    {} as R2Service,
+    {
+      objectInfo: jest
+        .fn()
+        .mockResolvedValue({ size: 1000, contentType: 'image/png' }),
+    } as unknown as R2Service,
   );
+  const generated = {
+    assetId: 'emoji-real',
+    mimeType: 'image/png',
+    width: 256,
+    height: 256,
+  };
+  const emoji = {
+    generateShape: jest.fn().mockImplementation(() => {
+      library.push({
+        ...generated,
+        assetId: 'shape-real',
+        name: 'blue arrow',
+        kind: 'image',
+        size: 1000,
+        status: 'ready',
+      });
+      return Promise.resolve({ ...generated, assetId: 'shape-real' });
+    }),
+    generate: jest.fn().mockImplementation(() => {
+      library.push({
+        ...generated,
+        name: '😂 emoji',
+        kind: 'image',
+        size: 1000,
+        status: 'ready',
+      });
+      return Promise.resolve(generated);
+    }),
+  };
   const tools = new AgentTools(
     plans as unknown as Model<StoredEditPlan>,
     jobs as unknown as Model<Job>,
     assets as unknown as Model<StudioAsset>,
     validator,
+    emoji as unknown as EmojiAssetsService,
   );
   const registry = {
     resolveUserModel: jest.fn().mockResolvedValue({
@@ -127,16 +163,21 @@ function setup(outputs: unknown[] = [intent, answer]) {
     void _result;
     return Promise.resolve();
   });
-  const run = () =>
+  const onStage = jest.fn((_stage: string) => {
+    void _stage;
+    return Promise.resolve();
+  });
+  const run = (prompt = 'Add a zoom') =>
     graph.run({
       userId: id,
       clipId,
       planId: id,
-      prompt: 'Add a zoom',
+      prompt,
       history: [],
       executionId: 'execution',
       signal: AbortSignal.timeout(10000),
       onTool,
+      onStage,
     });
   return {
     run,
@@ -149,9 +190,128 @@ function setup(outputs: unknown[] = [intent, answer]) {
     registry,
     google,
     onTool,
+    onStage,
+    emoji,
+    library,
   };
 }
 describe('Bounded LangGraph proposal integration', () => {
+  it('resolves a deterministic shape and its requested color into an image operation', async () => {
+    const shapePatch = {
+      baseRevision: 1,
+      changes: [
+        {
+          action: 'add',
+          operation: {
+            id: 'arrow',
+            type: 'image_overlay',
+            start: 0,
+            end: 3,
+            params: { assetId: 'shape-real', x: 0.5, y: 0.5, width: 0.2 },
+          },
+        },
+      ],
+    };
+    const s = setup([
+      {
+        ...intent,
+        assets: [{ kind: 'shape', query: 'arrow', color: '#0000ff' }],
+      },
+      { ...answer, patchJson: JSON.stringify(shapePatch) },
+    ]);
+    expect(await s.run('Add a blue arrow')).toMatchObject({
+      status: 'pending',
+    });
+    expect(s.emoji.generateShape).toHaveBeenCalledWith(id, 'arrow', '#0000ff');
+  });
+  it('resolves an emoji even when interpretation prematurely says unsupported, and preserves a second edit', async () => {
+    const emojiPatch = {
+      ...patch,
+      changes: [
+        ...patch.changes,
+        {
+          action: 'add',
+          operation: {
+            id: 'laugh',
+            type: 'image_overlay',
+            start: 0,
+            end: 3,
+            params: {
+              assetId: 'emoji-real',
+              x: 0.5,
+              y: 0.5,
+              width: 0.2,
+              opacity: 1,
+            },
+          },
+        },
+      ],
+    };
+    const s = setup([
+      {
+        ...intent,
+        unsupported: 'Needs an emoji asset',
+        assets: [{ kind: 'emoji', query: '😂' }],
+      },
+      { ...answer, patchJson: JSON.stringify(emojiPatch) },
+    ]);
+    const result = await s.run(
+      'Add 😂 at the center for the whole video, and zoom in at the beginning.',
+    );
+    expect(s.emoji.generate).toHaveBeenCalledWith(id, '😂');
+    expect(result.status).toBe('pending');
+    expect(result.patch?.changes).toHaveLength(2);
+    expect(s.plan.plan.operations).toHaveLength(0);
+    expect((s.google.structured.mock.calls as unknown[][])[1][4]).toContain(
+      'emoji-real',
+    );
+  });
+  it('asks for selection when multiple uploaded assets match', async () => {
+    const s = setup([
+      { ...intent, assets: [{ kind: 'image', query: 'logo' }] },
+    ]);
+    s.library.push({ name: 'logo blue' }, { name: 'logo white' });
+    expect(await s.run()).toMatchObject({
+      status: 'clarification',
+      patch: undefined,
+    });
+    expect(s.google.structured).toHaveBeenCalledTimes(1);
+  });
+  it('resolves an existing owned PNG and validates its media before proposing', async () => {
+    const imagePatch = {
+      baseRevision: 1,
+      changes: [
+        {
+          action: 'add',
+          operation: {
+            id: 'logo',
+            type: 'image_overlay',
+            start: 0,
+            end: 3,
+            params: { assetId: 'logo-owned', x: 1, y: 0, width: 0.2 },
+          },
+        },
+      ],
+    };
+    const s = setup([
+      { ...intent, assets: [{ kind: 'image', query: 'logo' }] },
+      { ...answer, patchJson: JSON.stringify(imagePatch) },
+    ]);
+    s.library.push({
+      name: 'logo',
+      assetId: 'logo-owned',
+      kind: 'image',
+      mimeType: 'image/png',
+      size: 1000,
+      width: 100,
+      height: 100,
+    });
+    expect(await s.run()).toMatchObject({ status: 'pending' });
+    expect(s.assets.find).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: id, assetId: 'logo-owned' }),
+    );
+    expect(s.emoji.generate).not.toHaveBeenCalled();
+  });
   it('runs the real graph, owner-scoped tools, strict patch and original validator without rendering', async () => {
     const s = setup();
     const result = await s.run();
@@ -162,6 +322,14 @@ describe('Bounded LangGraph proposal integration', () => {
       patch: { baseRevision: 1 },
     });
     expect(s.plan.plan.operations).toEqual([]);
+    expect(s.onStage.mock.calls.map(([stage]) => stage)).toEqual([
+      'load_context',
+      'interpret',
+      'resolve_information',
+      'resolve_assets',
+      'generate_patch',
+      'validate',
+    ]);
     expect(s.plans.findOne).toHaveBeenCalledWith({
       _id: id,
       userId: id,
@@ -233,10 +401,15 @@ describe('Bounded LangGraph proposal integration', () => {
   it('returns unsupported effects without generating executable parameters', async () => {
     const s = setup([
       { ...intent, unsupported: 'Face tracking is not supported' },
+      {
+        outcome: 'unsupported',
+        summary: 'Face tracking is not supported',
+        patchJson: '',
+      },
     ]);
     expect(await s.run()).toMatchObject({
       status: 'unsupported',
-      calls: 1,
+      calls: 2,
       patch: undefined,
     });
   });
@@ -246,6 +419,7 @@ describe('Bounded LangGraph proposal integration', () => {
         ...intent,
         clarification:
           'Upload approved music first; this patch version cannot change audio tracks',
+        assets: [{ kind: 'audio', query: 'approved music' }],
       },
     ]);
     expect(await s.run()).toMatchObject({

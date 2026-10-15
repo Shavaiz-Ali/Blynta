@@ -14,6 +14,7 @@ import { examplePlan } from './edit-plan.fixture';
 import { existsSync } from 'node:fs';
 import { assertNotCancelled } from '../jobs/cancellation-context';
 import { BadRequestException } from '@nestjs/common';
+import type { EditRenderPhase } from '@blynta/types/contracts';
 
 describe('editing asset authorization', () => {
   const assetId = 'music';
@@ -251,7 +252,10 @@ describe('editing worker publication and retries', () => {
       updateOne: jest
         .fn()
         .mockImplementation(
-          (_filter: unknown, update: { $set?: { status?: string } }) => {
+          (
+            _filter: unknown,
+            update: { $set?: { status?: string; progress?: number } },
+          ) => {
             if (update.$set?.status) state.status = update.$set.status;
             return Promise.resolve({
               modifiedCount: 1,
@@ -271,12 +275,16 @@ describe('editing worker publication and retries', () => {
           (_version: unknown, dir: string, progress: (n: number) => void) => {
             directory = dir;
             progress(30);
-            return Promise.resolve({ outputPath: `${dir}/output.mp4` });
+            return Promise.resolve({
+              outputPath: `${dir}/output.mp4`,
+              bytes: 1000,
+            });
           },
         ),
     };
     const r2 = {
       uploadFile: jest.fn().mockResolvedValue('key'),
+      objectInfo: jest.fn().mockResolvedValue({ size: 1000 }),
       deleteFile: jest.fn().mockResolvedValue(undefined),
     };
     const processor = new EditRenderProcessor(
@@ -321,6 +329,55 @@ describe('editing worker publication and retries', () => {
       'job-sources/edits/owner/clip/',
     );
     expect(existsSync(s.directory()!)).toBe(false);
+  });
+  it('keeps encoding monotonic and below completion, writes ticks only to BullMQ, and persists phases', async () => {
+    const s = setup();
+    s.renderer.render.mockImplementationOnce(
+      async (
+        _v: unknown,
+        dir: string,
+        progress: (n: number) => void,
+        onPhase: (phase: EditRenderPhase) => Promise<void>,
+      ) => {
+        await onPhase('encoding');
+        progress(30);
+        progress(10);
+        progress(NaN);
+        progress(200);
+        await onPhase('verifying');
+        return { outputPath: `${dir}/output.mp4`, bytes: 1000 };
+      },
+    );
+    await s.processor.process(s.job);
+    const ticks = (
+      (s.job.updateProgress as jest.Mock).mock.calls as unknown[][]
+    ).map(([value]) => value as { phase: string; encodingPercent: number });
+    expect(ticks.every((tick) => tick.encodingPercent < 100)).toBe(true);
+    expect(
+      ticks
+        .filter((tick) => tick.phase === 'encoding')
+        .map((tick) => tick.encodingPercent),
+    ).toEqual([0, 30]);
+    expect(
+      ticks.find((tick) => tick.phase === 'verifying')?.encodingPercent,
+    ).toBe(99);
+    const sets = (
+      s.versions.updateOne.mock.calls as unknown as [
+        unknown,
+        { $set?: { status?: string; progress?: number } },
+      ][]
+    ).map(([, update]) => update.$set);
+    expect(sets.filter((set) => set?.progress === 30)).toHaveLength(0);
+    expect(sets.some((set) => set?.status === 'completed')).toBe(true);
+  });
+  it('does not publish 100 percent when uploaded output verification fails', async () => {
+    const s = setup();
+    s.r2.objectInfo.mockResolvedValueOnce({ size: 0 });
+    await expect(s.processor.process(s.job)).rejects.toThrow(
+      'verification failed',
+    );
+    expect(s.state.status).toBe('queued');
+    expect(s.r2.deleteFile).toHaveBeenCalledTimes(1);
   });
   it('cleans an interrupted upload and returns retriable work to queued', async () => {
     const s = setup();
@@ -372,8 +429,9 @@ describe('editing worker publication and retries', () => {
           matchedCount: 0,
         }),
     );
-    await expect(s.processor.process(s.job)).rejects.toThrow('publication');
-    const uploadedKey = (s.r2.uploadFile.mock.calls as unknown[][])[0][1];
+    await expect(s.processor.process(s.job)).rejects.toThrow('lease lost');
+    expect(s.r2.uploadFile).not.toHaveBeenCalled();
+    const uploadedKey = (s.r2.deleteFile.mock.calls as unknown[][])[0][0];
     expect(uploadedKey).not.toBe(winner);
     expect(s.r2.deleteFile).toHaveBeenCalledWith(uploadedKey);
     expect(s.r2.deleteFile).not.toHaveBeenCalledWith(winner);
@@ -384,7 +442,7 @@ describe('editing worker publication and retries', () => {
       ([, update]) =>
         (update as { $set?: { status?: string } }).$set?.status === 'completed',
     )?.[0];
-    expect(completionFilter).toHaveProperty('executionExpiresAt');
+    expect(completionFilter).toBeUndefined();
   });
   it('never removes delivered output if a later plan-status write fails', async () => {
     const s = setup();

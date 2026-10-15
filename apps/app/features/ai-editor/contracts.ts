@@ -64,6 +64,9 @@ export interface EditingPlan {
   };
 }
 export interface EditingVersion {
+  phase?: import("@blynta/types/contracts").EditRenderPhase;
+  attempt?: number;
+  generation?: number;
   _id: string;
   planId: string;
   revision: number;
@@ -82,6 +85,7 @@ export interface EditingVersion {
   };
 }
 export interface Proposal {
+  stage?: string;
   _id: string;
   planId: string;
   sessionId: string;
@@ -94,6 +98,7 @@ export interface Proposal {
     | "applied"
     | "rejected"
     | "failed"
+    | "cancelled"
     | "clarification"
     | "unsupported";
   summary: string;

@@ -71,6 +71,7 @@ export function StudioWorkspace({
   const currentProposal = useProposal(clipId, proposalId);
   const apply = useProposalAction(clipId, planId, "apply");
   const reject = useProposalAction(clipId, planId, "reject");
+  const cancelGeneration = useProposalAction(clipId, planId, "cancel");
   const [prompt, setPrompt] = useState("");
   const [modelId, setModelId] = useState("auto");
   const models = useAvailableEditingModels(
@@ -103,7 +104,11 @@ export function StudioWorkspace({
   const allProposals = [...(state.data?.proposals ?? [])];
   if (proposal) {
     const i = allProposals.findIndex((p) => p._id === proposal._id);
-    if (i >= 0) allProposals[i] = proposal;
+    if (i >= 0)
+      allProposals[i] = {
+        ...proposal,
+        stage: allProposals[i].stage ?? proposal.stage,
+      };
     else allProposals.push(proposal);
   }
   const unresolvedSubmission = propose.isError;
@@ -114,6 +119,22 @@ export function StudioWorkspace({
     (v) => v.revision === plan.data?.revision && v.status === "completed",
   );
   const url = mode === "original" ? original.data : version.data?.outputUrl;
+  const completedNotice = useRef("");
+  useEffect(() => {
+    const current = version.data;
+    if (
+      current?.status === "completed" &&
+      current.outputUrl &&
+      completedNotice.current !== current._id
+    ) {
+      completedNotice.current = current._id;
+      setMode("preview");
+      setPlaybackFailed(false);
+      toast.success("Edited preview ready.");
+      void plan.refetch();
+      void recentVersions.refetch();
+    }
+  }, [version.data, plan, recentVersions]);
   const clipTitle =
     job.data?.highlights?.find(
       (h) => h.startTime === clip?.startTime && h.endTime === clip?.endTime,
@@ -176,7 +197,7 @@ export function StudioWorkspace({
     try {
       const result = await render.mutateAsync(planId);
       setVersionId(result._id);
-      setMode("preview");
+      setMode(result.status === "completed" ? "preview" : "original");
       setPage(1);
       setPlaybackFailed(false);
     } catch (error) {
@@ -455,6 +476,12 @@ export function StudioWorkspace({
               }
               onApprove={(id, action) => void approve(id, action)}
               onSuggest={setPrompt}
+              onCancelGeneration={(id) => {
+                if (!cancelGeneration.isPending)
+                  cancelGeneration.mutate(id, {
+                    onError: (error) => toast.error(studioError(error)),
+                  });
+              }}
             >
               {(state.isError || history.isError) && (
                 <div role="alert" className="text-sm text-destructive">

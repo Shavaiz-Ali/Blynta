@@ -128,7 +128,7 @@ export declare const API_ENDPOINTS: {
         readonly preview: (planId: string) => string;
         readonly proposals: (clipId: string) => string;
         readonly proposal: (clipId: string, proposalId: string) => string;
-        readonly proposalAction: (clipId: string, proposalId: string, action: "apply" | "reject") => string;
+        readonly proposalAction: (clipId: string, proposalId: string, action: "apply" | "reject" | "cancel") => string;
         readonly propose: (clipId: string) => string;
         readonly session: (clipId: string, sessionId: string) => string;
         readonly state: (clipId: string, planId: string) => string;
@@ -153,3 +153,19 @@ export declare const ADMIN_ROUTES: {
     readonly user: (userId: string) => string;
     readonly job: (jobId: string) => string;
 };
+/** Percentages describe encoding only; other stages are indeterminate. */
+export declare const EDIT_RENDER_PHASE: {
+    readonly QUEUED: "queued";
+    readonly PREPARING: "preparing_assets";
+    readonly COMPILING: "compiling_plan";
+    readonly ENCODING: "encoding";
+    readonly VERIFYING: "verifying";
+    readonly UPLOADING: "uploading_preview";
+    readonly FINALIZING: "finalizing";
+    readonly COMPLETED: "completed";
+    readonly FAILED: "failed";
+    readonly CANCELLED: "cancelled";
+};
+export type EditRenderPhase = (typeof EDIT_RENDER_PHASE)[keyof typeof EDIT_RENDER_PHASE];
+export declare const EDIT_RENDER_PHASE_LABEL: Record<EditRenderPhase, string>;
+export declare const AI_EDIT_STAGE_LABEL: Record<string, string>;

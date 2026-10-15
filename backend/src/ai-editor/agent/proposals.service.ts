@@ -1,5 +1,5 @@
 import { AGENT_LIMITS } from './agent.constants';
-import { AI_ERROR_CODES } from '@blynta/types/contracts';
+import { AI_ERROR_CODES, AI_EDIT_STAGE_LABEL } from '@blynta/types/contracts';
 import {
   BadRequestException,
   ConflictException,
@@ -135,6 +135,22 @@ export class ProposalsService {
       }
       throw error;
     }
+    let lastStage = 'load_context';
+    const abort = new AbortController();
+    let checking = false;
+    const cancelPoll = setInterval(() => {
+      if (checking) return;
+      checking = true;
+      void this.redis
+        .get(`ai:cancel:${userId}:${proposal.executionId}`)
+        .then((cancelled) => {
+          if (cancelled) abort.abort();
+        })
+        .catch(() => abort.abort())
+        .finally(() => {
+          checking = false;
+        });
+    }, 1000);
     try {
       const configured = Number(
         this.config.get(
@@ -189,7 +205,7 @@ export class ProposalsService {
         modelId: input.modelId,
         task: input.sessionId ? 'edit_refinement' : 'edit_planning',
         executionId: proposal.executionId,
-        signal: AbortSignal.timeout(90000),
+        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(90000)]),
         priorEdits,
         history: history
           .reverse()
@@ -203,6 +219,16 @@ export class ProposalsService {
             executionId: proposal.executionId,
           });
         },
+        onStage: async (stage) => {
+          if (!AI_EDIT_STAGE_LABEL[stage]) return;
+          lastStage = stage;
+          await this.redis.set(
+            `ai:stage:${userId}:${proposal.executionId}`,
+            stage,
+            'EX',
+            300,
+          );
+        },
       });
       if (result.patch && result.patch.baseRevision !== proposal.baseRevision)
         throw new ConflictException(
@@ -213,6 +239,7 @@ export class ProposalsService {
         { $set: { ...result } },
         { new: true },
       );
+      if (!saved) return this.get(userId, clipId, String(proposal._id));
       await this.messages.create({
         userId,
         sessionId: String(session._id),
@@ -228,6 +255,12 @@ export class ProposalsService {
       );
       return saved;
     } catch (error) {
+      const current = await this.proposals.findOne({
+        _id: proposal._id,
+        userId,
+        status: 'cancelled',
+      });
+      if (current) return current;
       await this.proposals.updateOne(
         { _id: proposal._id, status: 'generating' },
         {
@@ -236,12 +269,42 @@ export class ProposalsService {
             summary:
               'AI proposal could not be generated; retry with a new request ID',
             errorCode: AI_ERROR_CODES.PROPOSAL_FAILED,
+            failedStage: lastStage,
+            retryable: true,
           },
         },
       );
       if (error instanceof HttpException) throw error;
       throw new BadRequestException('AI proposal could not be generated');
+    } finally {
+      clearInterval(cancelPoll);
     }
+  }
+  async cancel(userId: string, clipId: string, id: string) {
+    const prior = await this.get(userId, clipId, id);
+    if (prior.status === 'cancelled') return prior;
+    const cancelled = await this.proposals.findOneAndUpdate(
+      { _id: id, userId, clipId, status: 'generating' },
+      {
+        $set: {
+          status: 'cancelled',
+          summary: 'Suggestion canceled',
+          retryable: false,
+        },
+      },
+      { new: true },
+    );
+    if (!cancelled)
+      throw new ConflictException(
+        'Only a generating suggestion can be canceled',
+      );
+    await this.redis.set(
+      `ai:cancel:${userId}:${prior.executionId}`,
+      '1',
+      'EX',
+      300,
+    );
+    return cancelled;
   }
   async state(
     userId: string,
@@ -283,7 +346,16 @@ export class ProposalsService {
       );
       return this.state(userId, clipId, planId);
     }
-    return { session, proposals: proposals.reverse() };
+    const visible = await Promise.all(
+      proposals.reverse().map(async (p) => ({
+        ...p,
+        stage:
+          p.status === 'generating'
+            ? await this.redis.get(`ai:stage:${userId}:${p.executionId}`)
+            : undefined,
+      })),
+    );
+    return { session, proposals: visible };
   }
   async get(userId: string, clipId: string, id: string) {
     parseEdit(objectId, clipId);

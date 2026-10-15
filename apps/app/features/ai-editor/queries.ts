@@ -1,6 +1,11 @@
 "use client";
 import { API_ENDPOINTS, HTTP_STATUS } from "@blynta/types/contracts";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { axiosClient, ApiError } from "@/config/axiosClient";
 import type {
   EditingPlan,
@@ -87,14 +92,20 @@ export function useEditingPlan(id: string) {
   });
 }
 export function useEditingState(clip: string, plan: string) {
+  const submitting = useIsMutating({
+    mutationKey: ["ai-editor", "propose", clip, plan],
+  });
   return useQuery({
     queryKey: studioKeys.state(clip, plan),
     enabled: !!plan,
     queryFn: ({ signal }) =>
       get<StudioState>(API_ENDPOINTS.editor.state(clip, plan), signal),
+    // Also poll while the synchronous propose POST is running: its first
+    // generating record may not exist in the previous state snapshot yet.
     refetchInterval: (q) =>
+      submitting ||
       q.state.data?.proposals.some((p) => proposalPollInterval(p.status))
-        ? 2500
+        ? 1500
         : false,
   });
 }
@@ -121,6 +132,7 @@ export function useProposal(clip: string, id: string) {
 export function useProposeEdit(clip: string, plan: string) {
   const client = useQueryClient();
   return useMutation({
+    mutationKey: ["ai-editor", "propose", clip, plan],
     mutationFn: async (body: PromptSubmission) =>
       (
         await axiosClient.post<Proposal>(
@@ -142,7 +154,7 @@ export function useProposeEdit(clip: string, plan: string) {
 export function useProposalAction(
   clip: string,
   plan: string,
-  action: "apply" | "reject",
+  action: "apply" | "reject" | "cancel",
 ) {
   const client = useQueryClient();
   return useMutation({

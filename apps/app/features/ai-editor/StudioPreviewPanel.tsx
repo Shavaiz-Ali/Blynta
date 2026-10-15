@@ -11,6 +11,7 @@ import { StudioVideoPlayer } from "@blynta/ui/player";
 import { Video } from "lucide-react";
 import { editTime, renderPollInterval } from "./presentation";
 import type { EditingPlan, EditingVersion } from "./contracts";
+import rendering from "./rendering.module.css";
 export function StudioPreviewPanel({
   mode,
   onModeChange,
@@ -78,15 +79,19 @@ export function StudioPreviewPanel({
           </AppTabsList>
           <span className="text-xs text-muted-foreground">
             {mode === "preview" && version
-              ? `Rendered revision ${version.revision}`
+              ? version.status === "completed"
+                ? `Rendered revision ${version.revision}`
+                : `Revision ${version.revision} · preview pending`
               : "Source clip"}
           </span>
         </div>
-        <AppTabsContent key={mode} value={mode} className="mt-0 min-h-0 flex-1">
-          <div className="studio-canvas flex h-[min(34dvh,360px)] min-h-52 items-center justify-center px-4 py-2 lg:h-full lg:min-h-0 lg:px-8 lg:py-4">
+        <AppTabsContent value={mode} className="mt-0 min-h-0 flex-1">
+          <div
+            aria-busy={renderRunning}
+            className={`studio-canvas flex h-[min(34dvh,360px)] min-h-52 items-center justify-center px-4 py-2 lg:h-full lg:min-h-0 lg:px-8 lg:py-4 ${renderRunning ? rendering.rendering : ""}`}
+          >
             {url && !playbackFailed ? (
               <StudioVideoPlayer
-                key={url}
                 src={url}
                 onError={onPlaybackError}
                 ariaLabel={

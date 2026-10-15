@@ -18,6 +18,8 @@ export interface AgentMessage {
   executionId: string;
 }
 export interface EditProposal {
+  failedStage?: string;
+  retryable?: boolean;
   beforePlan?: EditPlan;
   createdAt?: Date;
   userId: string;
@@ -61,6 +63,8 @@ export const MessageSchema = new Schema<AgentMessage>(
 MessageSchema.index({ userId: 1, sessionId: 1, createdAt: -1 });
 export const ProposalSchema = new Schema<EditProposal>(
   {
+    failedStage: String,
+    retryable: Boolean,
     userId: { type: String, required: true },
     clipId: String,
     planId: String,
@@ -83,6 +87,7 @@ export const ProposalSchema = new Schema<EditProposal>(
         'applied',
         'rejected',
         'failed',
+        'cancelled',
       ],
       default: 'generating',
     },

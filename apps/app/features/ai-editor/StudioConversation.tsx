@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import scrollbars from "./studio-scrollbars.module.css";
 import { AppButton, AppSpinner } from "@blynta/ui";
+import { AI_EDIT_STAGE_LABEL } from "@blynta/types/contracts";
 import { ProposalCard } from "./ProposalCard";
 import { ConversationMessage } from "./StudioPanels";
 import { conversationItems, followsConversation } from "./conversation";
@@ -17,6 +18,7 @@ export function StudioConversation({
   busy,
   onApprove,
   onSuggest,
+  onCancelGeneration,
   children,
 }: {
   messages: StudioMessage[];
@@ -27,6 +29,7 @@ export function StudioConversation({
   busy: boolean;
   onApprove: (id: string, action: "apply" | "reject") => void;
   onSuggest: (text: string) => void;
+  onCancelGeneration?: (id: string) => void;
   children?: React.ReactNode;
 }) {
   const scroll = useRef<HTMLDivElement>(null);
@@ -134,7 +137,24 @@ export function StudioConversation({
             role="status"
             className="flex items-center gap-2 py-3 text-sm text-muted-foreground"
           >
-            <AppSpinner size="xs" /> Preparing your suggestion…
+            <AppSpinner size="xs" />{" "}
+            {AI_EDIT_STAGE_LABEL[
+              proposals.findLast((p) => p.status === "generating")?.stage ?? ""
+            ] ?? "Submitting your request…"}
+            {onCancelGeneration &&
+              proposals.some((p) => p.status === "generating") && (
+                <AppButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    onCancelGeneration(
+                      proposals.findLast((p) => p.status === "generating")!._id,
+                    )
+                  }
+                >
+                  Cancel
+                </AppButton>
+              )}
           </p>
         )}
         {children}

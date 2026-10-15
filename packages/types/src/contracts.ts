@@ -137,7 +137,7 @@ export const API_ENDPOINTS = {
     proposalAction: (
       clipId: string,
       proposalId: string,
-      action: "apply" | "reject",
+      action: "apply" | "reject" | "cancel",
     ) => `/clips/${id(clipId)}/ai-edit/proposals/${id(proposalId)}/${action}`,
     propose: (clipId: string) => `/clips/${id(clipId)}/ai-edit/propose`,
     session: (clipId: string, sessionId: string) =>
@@ -166,3 +166,39 @@ export const ADMIN_ROUTES = {
   user: (userId: string) => `/users/${id(userId)}`,
   job: (jobId: string) => `/jobs/${id(jobId)}`,
 } as const;
+/** Percentages describe encoding only; other stages are indeterminate. */
+export const EDIT_RENDER_PHASE = {
+  QUEUED: "queued",
+  PREPARING: "preparing_assets",
+  COMPILING: "compiling_plan",
+  ENCODING: "encoding",
+  VERIFYING: "verifying",
+  UPLOADING: "uploading_preview",
+  FINALIZING: "finalizing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+} as const;
+export type EditRenderPhase =
+  (typeof EDIT_RENDER_PHASE)[keyof typeof EDIT_RENDER_PHASE];
+export const EDIT_RENDER_PHASE_LABEL: Record<EditRenderPhase, string> = {
+  queued: "Waiting to render",
+  preparing_assets: "Preparing assets",
+  compiling_plan: "Compiling edit plan",
+  encoding: "Encoding video",
+  verifying: "Verifying preview",
+  uploading_preview: "Uploading preview",
+  finalizing: "Finalizing preview",
+  completed: "Preview ready",
+  failed: "Preview failed",
+  cancelled: "Preview canceled",
+};
+export const AI_EDIT_STAGE_LABEL: Record<string, string> = {
+  load_context: "Checking available editing options…",
+  interpret: "Understanding your request…",
+  resolve_information: "Finding the requested moments…",
+  resolve_assets: "Preparing requested assets…",
+  generate_patch: "Building your edit proposal…",
+  validate: "Checking your proposal…",
+  correct: "Checking your proposal…",
+};

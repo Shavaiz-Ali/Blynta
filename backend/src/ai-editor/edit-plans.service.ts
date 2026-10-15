@@ -30,6 +30,7 @@ import {
 } from './edit-admission.service';
 export { EDIT_QUEUE } from './edit.constants';
 import { EDIT_QUEUE } from './edit.constants';
+import { EDIT_RENDER_PHASE } from '@blynta/types/contracts';
 
 @Injectable()
 export class EditPlansService {
@@ -353,8 +354,36 @@ export class EditPlansService {
     parseEdit(objectId, id);
     const v = await this.versions.findOne({ _id: id, userId }).lean();
     if (!v) throw new NotFoundException('Edit version not found');
+    let live: { phase?: string; progress?: number } = {};
+    if (v.status === 'processing' && v.executionToken) {
+      const queued = await this.queue.getJob(
+        editJobId(String(v._id), v.generation),
+      );
+      const tick = queued?.progress as Record<string, unknown> | undefined;
+      if (
+        tick &&
+        typeof tick === 'object' &&
+        tick.executionToken === v.executionToken &&
+        tick.generation === (v.generation ?? 0) &&
+        tick.attempt === v.attempt
+      ) {
+        live = {
+          phase:
+            typeof tick.phase === 'string' &&
+            Object.values(EDIT_RENDER_PHASE).some((p) => p === tick.phase)
+              ? tick.phase
+              : v.phase,
+          progress:
+            typeof tick.encodingPercent === 'number' &&
+            Number.isFinite(tick.encodingPercent)
+              ? Math.min(99, Math.max(0, tick.encodingPercent))
+              : v.progress,
+        };
+      }
+    }
     return {
       ...editView(v),
+      ...live,
       outputUrl:
         v.status === 'completed' && v.outputKey
           ? await this.r2.getSignedDownloadUrl(v.outputKey, 3600)
@@ -418,7 +447,11 @@ export class EditPlansService {
           : { $or: [{ generation: 0 }, { generation: { $exists: false } }] }),
       },
       {
-        $set: { status: 'queued', progress: 0 },
+        $set: {
+          status: 'queued',
+          progress: 0,
+          phase: EDIT_RENDER_PHASE.QUEUED,
+        },
         $inc: { generation: 1, manualRetries: 1 },
         $unset: {
           error: '',
@@ -448,7 +481,13 @@ export class EditPlansService {
     parseEdit(objectId, id);
     const v = await this.versions.findOneAndUpdate(
       { _id: id, userId, status: { $in: ['queued', 'processing'] } },
-      { $set: { status: 'cancelled' } },
+      {
+        $set: {
+          status: 'cancelled',
+          phase: EDIT_RENDER_PHASE.CANCELLED,
+          progress: 0,
+        },
+      },
       { new: true },
     );
     if (!v) {

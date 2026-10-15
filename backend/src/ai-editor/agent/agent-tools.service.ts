@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
@@ -14,6 +15,7 @@ import { objectId, parseEdit } from '../edit-plan.contract';
 import { compileTimeline } from '../timeline';
 import { EditPlanValidatorService } from '../edit-plan-validator.service';
 import { editPatchSchema, mergeEditPatch } from './edit-patch';
+import { EmojiAssetsService } from './emoji-assets.service';
 
 export interface TranscriptRange {
   startTime: number;
@@ -68,6 +70,7 @@ export class AgentTools {
     @InjectModel(Job.name) private jobs: Model<Job>,
     @InjectModel('StudioAsset') private assets: Model<StudioAsset>,
     private validator: EditPlanValidatorService,
+    @Optional() private emojiAssets?: EmojiAssetsService,
   ) {}
   async owned(userId: string, clipId: string, planId: string) {
     parseEdit(objectId, clipId);
@@ -166,11 +169,67 @@ export class AgentTools {
     checkBudget: () => void,
     selectedAssetIds?: string[],
   ) {
+    const generatedIds = new Set<string>();
     const load = async () => {
       checkBudget();
       return this.owned(userId, clipId, planId);
     };
     return {
+      resolveAsset: async (requirement: {
+        kind: 'emoji' | 'shape' | 'image' | 'audio';
+        query: string;
+        color?: string;
+      }) => {
+        await load();
+        if (requirement.kind === 'emoji' || requirement.kind === 'shape') {
+          if (!this.emojiAssets)
+            return { clarification: 'Upload a PNG for this graphic.' };
+          try {
+            const asset =
+              requirement.kind === 'shape'
+                ? await this.emojiAssets.generateShape(
+                    userId,
+                    requirement.query,
+                    requirement.color,
+                  )
+                : await this.emojiAssets.generate(userId, requirement.query);
+            generatedIds.add(asset.assetId);
+            return { ...asset, query: requirement.query };
+          } catch (error) {
+            if (error instanceof BadRequestException)
+              return { clarification: error.message };
+            throw error;
+          }
+        }
+        const records = await this.assets
+          .find({
+            userId,
+            status: 'ready',
+            kind: requirement.kind,
+            ...(selectedAssetIds?.length
+              ? { assetId: { $in: selectedAssetIds } }
+              : {}),
+          })
+          .select(
+            'assetId name kind mimeType size duration width height hasAudio -_id',
+          )
+          .limit(51)
+          .maxTimeMS(5000)
+          .lean();
+        const wanted = normalize(requirement.query);
+        const matches = records.filter((asset) =>
+          normalize(asset.name).includes(wanted),
+        );
+        if (!wanted || matches.length !== 1 || records.length > 50)
+          return {
+            clarification:
+              matches.length > 1 || records.length > 50
+                ? `Select the ${requirement.kind} attachment to use for “${requirement.query}”.`
+                : `Upload or select the ${requirement.kind} for “${requirement.query}”. Image generation is not configured.`,
+          };
+        await this.selectedAssets(userId, clipId, planId, [matches[0].assetId]);
+        return matches[0];
+      },
       context: tool(
         async () => {
           const { plan, job, transcript } = await load();
@@ -311,7 +370,11 @@ export class AgentTools {
                   : [],
               ),
             ];
-            const allowed = new Set([...selectedAssetIds, ...existing]);
+            const allowed = new Set([
+              ...selectedAssetIds,
+              ...existing,
+              ...generatedIds,
+            ]);
             const referenced = [
               ...merged.plan.audio.tracks.map((t) => t.assetId),
               ...merged.plan.operations.flatMap((o) =>

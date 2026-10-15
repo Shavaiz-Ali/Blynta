@@ -7,6 +7,7 @@ import { examplePlan } from './edit-plan.fixture';
 import { parseEdit, planSchema } from './edit-plan.contract';
 import { buildRenderSpec } from './ffmpeg-edit-renderer';
 import { mergeEditPatch } from './agent/edit-patch';
+import { emojiPng } from './agent/emoji-artwork';
 const exec = promisify(execFile);
 const ffmpeg = process.env.EDIT_FFMPEG_PATH;
 const ffprobe = process.env.EDIT_FFPROBE_PATH;
@@ -190,16 +191,7 @@ integration('FFmpeg editing media integration', () => {
       'sine=frequency=880:sample_rate=32000:duration=4',
       music,
     ]);
-    await exec(ffmpeg!, [
-      '-y',
-      '-f',
-      'lavfi',
-      '-i',
-      'color=c=red:size=64x64',
-      '-frames:v',
-      '1',
-      png,
-    ]);
+    await writeFile(png, emojiPng('😂', 64));
     const p = parseEdit(planSchema, {
       ...examplePlan(),
       video: {

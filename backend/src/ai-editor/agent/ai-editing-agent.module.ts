@@ -8,14 +8,17 @@ import { AgentTools } from './agent-tools.service';
 import { EditingGraph } from './editing-graph.service';
 import { ProposalsService } from './proposals.service';
 import { AgentController } from './agent.controller';
+import { StorageModule } from '../../storage/storage.module';
+import { EmojiAssetsService } from './emoji-assets.service';
 @Module({
   imports: [
     AiEditorModule,
     AIRegistryModule,
     RedisModule,
+    StorageModule,
     MongooseModule.forFeature(agentModels),
   ],
-  providers: [AgentTools, EditingGraph, ProposalsService],
+  providers: [EmojiAssetsService, AgentTools, EditingGraph, ProposalsService],
   controllers: [AgentController],
 })
 export class AIEditingAgentModule {}
