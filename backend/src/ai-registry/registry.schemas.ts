@@ -15,6 +15,11 @@ export interface AICredential extends SealedSecret {
   createdBy: string;
   lastValidatedAt?: Date;
   lastValidationStatus?: string;
+  lastSuccessfulValidationAt?: Date;
+  lastValidationAttemptStatus?: string;
+  lastValidationErrorCode?: string;
+  lastValidationMessage?: string;
+  lastValidationContext?: string;
 }
 export interface AIModel extends ModelInput {
   archived: boolean;
@@ -85,6 +90,11 @@ export const CredentialSchema = new Schema<AICredential>(
     keyVersion: { type: String, select: false, required: true },
     lastValidatedAt: Date,
     lastValidationStatus: String,
+    lastSuccessfulValidationAt: Date,
+    lastValidationAttemptStatus: String,
+    lastValidationErrorCode: String,
+    lastValidationMessage: String,
+    lastValidationContext: String,
   },
   { timestamps: true, collection: 'ai_provider_credentials' },
 );

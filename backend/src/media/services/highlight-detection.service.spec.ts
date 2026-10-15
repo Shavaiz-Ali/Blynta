@@ -726,6 +726,10 @@ describe('registry highlight adapter integration', () => {
       }),
     };
     const registry = { recordUsage: jest.fn().mockResolvedValue(undefined) };
+    const languageModel = jest.fn(
+      async (selected: { modelId: string }) =>
+        `google-model:${selected.modelId}`,
+    );
     const service = new HighlightDetectionService(
       new ConfigService({
         LLM_PROVIDER: 'google',
@@ -736,12 +740,11 @@ describe('registry highlight adapter integration', () => {
       registry as never,
       {
         get: () => ({
-          languageModel: async (selected: { modelId: string }) =>
-            `google-model:${selected.modelId}`,
+          languageModel,
         }),
       } as never,
     );
-    return { service, routing, registry };
+    return { service, routing, registry, languageModel };
   }
   it('uses the database-selected adapter/settings and records measured tokens with existing metering', async () => {
     const s = registryFixture();
@@ -760,6 +763,11 @@ describe('registry highlight adapter integration', () => {
       { videoDuration: 30, registeredModel: { userId: 'owner', selection } },
     );
     expect(s.routing.resolve).toHaveBeenCalledWith('owner', selection);
+    expect(s.languageModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'gemini-registered' }),
+      { adapter: 'google' },
+      'synthetic-registry-key',
+    );
     expect(mockGenerateObject).toHaveBeenCalledWith(
       expect.objectContaining({
         model: 'google-model:gemini-registered',

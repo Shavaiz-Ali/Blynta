@@ -167,8 +167,7 @@ export function credentialWasRejected(
   return (
     (result.upstreamReason !== undefined &&
       invalidKeyReasons.has(result.upstreamReason)) ||
-    result.upstreamErrorStatus === 'UNAUTHENTICATED' ||
-    result.upstreamStatus === 401
+    result.upstreamErrorStatus === 'UNAUTHENTICATED'
   );
 }
 export function classifyProviderFailure(
@@ -181,6 +180,7 @@ export function classifyProviderFailure(
           status?: unknown;
           statusCode?: unknown;
           name?: unknown;
+          code?: unknown;
           upstreamErrorStatus?: string;
           upstreamReason?: string;
         })
@@ -203,13 +203,31 @@ export function classifyProviderFailure(
     googleStatus === 'DEADLINE_EXCEEDED' ||
     status === HttpStatus.REQUEST_TIMEOUT ||
     status === HttpStatus.GATEWAY_TIMEOUT ||
-    ['AbortError', 'TimeoutError'].includes(String(value.name))
+    ['AbortError', 'TimeoutError'].includes(String(value.name)) ||
+    value.code === 'ETIMEDOUT'
   )
     return {
       code: AI_ERROR_CODES.TIMEOUT,
       ...(status ? { upstreamStatus: status } : {}),
       message:
         'Provider request timed out. Check backend connectivity and retry.',
+    };
+  if (
+    status >= HttpStatus.INTERNAL_SERVER_ERROR ||
+    ['UNAVAILABLE', 'INTERNAL', 'UNKNOWN'].includes(googleStatus ?? '')
+  )
+    return {
+      code: AI_ERROR_CODES.PROVIDER_FAILED,
+      message:
+        'Provider is temporarily unavailable. Retry later; this does not establish an invalid API key.',
+      ...(status ? { upstreamStatus: status } : {}),
+    };
+  if (status === HttpStatus.NOT_FOUND || googleStatus === 'NOT_FOUND')
+    return {
+      code: AI_ERROR_CODES.MODEL_UNAVAILABLE,
+      upstreamStatus: status,
+      message:
+        'The configured model or API version is unavailable. Check the model identifier and provider API version.',
     };
   if (
     [HttpStatus.UNAUTHORIZED, HttpStatus.FORBIDDEN].includes(status) ||
@@ -229,14 +247,17 @@ export function classifyProviderFailure(
         ? AI_ERROR_CODES.AUTH_OR_ACCESS_FAILED
         : AI_ERROR_CODES.AUTH_FAILED,
       upstreamStatus: status,
-      message:
-        'Provider rejected access. Check the API key, API access and restrictions for this backend server.',
-    };
-  if (status === HttpStatus.NOT_FOUND || googleStatus === 'NOT_FOUND')
-    return {
-      code: AI_ERROR_CODES.MODEL_UNAVAILABLE,
-      upstreamStatus: status,
-      message: 'Provider model or API endpoint is unavailable.',
+      message: invalidKeyReasons.has(reason)
+        ? 'Google rejected this API key as invalid, expired or revoked. Replace the stored credential.'
+        : reason === 'API_KEY_IP_ADDRESS_BLOCKED'
+          ? 'API key IP restrictions block this backend server. Check the allowed server IP addresses.'
+          : reason === 'API_KEY_HTTP_REFERRER_BLOCKED'
+            ? 'API key referrer restrictions block server requests. Configure restrictions suitable for this backend.'
+            : reason === 'SERVICE_DISABLED'
+              ? 'The Gemini API is disabled for this Google project. Enable the service; the API key itself may still be valid.'
+              : reason === 'BILLING_DISABLED'
+                ? 'Google project billing is disabled. Check billing configuration; the API key itself may still be valid.'
+                : 'Provider denied access to this request. Check model permissions and API restrictions; this does not establish that the API key is invalid.',
     };
   if (
     status === HttpStatus.BAD_REQUEST ||
@@ -250,7 +271,22 @@ export function classifyProviderFailure(
       message:
         'Provider rejected the request parameters or configuration. Credential validity is undetermined; inspect the sanitized upstream diagnostics.',
     };
-  if (!status && value.name === 'TypeError')
+  if (
+    !status &&
+    (value.name === 'TypeError' ||
+      [
+        'ENOTFOUND',
+        'EAI_AGAIN',
+        'ECONNREFUSED',
+        'ECONNRESET',
+        'EHOSTUNREACH',
+        'ENETUNREACH',
+        'ERR_TLS_CERT_ALTNAME_INVALID',
+        'CERT_HAS_EXPIRED',
+        'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+        'DEPTH_ZERO_SELF_SIGNED_CERT',
+      ].includes(String(value.code)))
+  )
     return {
       code: AI_ERROR_CODES.NETWORK_FAILED,
       message:
@@ -260,5 +296,40 @@ export function classifyProviderFailure(
     code: AI_ERROR_CODES.PROVIDER_FAILED,
     message: 'Provider could not complete the request.',
     ...(status ? { upstreamStatus: status } : {}),
+  };
+}
+
+/** Attempt outcome is separate from the persisted credential identity state. */
+export function validationOutcome(
+  result: Partial<ProviderFailure> & { valid?: boolean },
+) {
+  const category = result.valid
+    ? 'success'
+    : credentialWasRejected(result)
+      ? 'invalid_api_key'
+      : result.code === AI_ERROR_CODES.AUTH_FAILED ||
+          result.code === AI_ERROR_CODES.AUTH_OR_ACCESS_FAILED
+        ? 'permission_denied'
+        : result.code === AI_ERROR_CODES.MODEL_UNAVAILABLE
+          ? 'model_unavailable'
+          : result.code === AI_ERROR_CODES.REQUEST_FAILED
+            ? 'malformed_request'
+            : result.code === AI_ERROR_CODES.QUOTA_OR_RATE_LIMIT
+              ? 'quota_exceeded'
+              : result.code === AI_ERROR_CODES.NETWORK_FAILED
+                ? 'network_error'
+                : result.code === AI_ERROR_CODES.TIMEOUT
+                  ? 'timeout'
+                  : result.code === AI_ERROR_CODES.CREDENTIAL_DECRYPT_FAILED
+                    ? 'credential_storage_error'
+                    : 'provider_unavailable';
+  return {
+    category,
+    credentialStatus: result.valid
+      ? 'valid'
+      : credentialWasRejected(result)
+        ? 'invalid'
+        : 'undetermined',
+    modelAccessStatus: result.valid ? 'accessible' : 'undetermined',
   };
 }

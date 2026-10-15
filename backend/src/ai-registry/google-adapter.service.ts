@@ -3,12 +3,13 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import { ProviderTransport } from './provider-transport.service';
 import {
   classifyProviderFailure,
   googleResponseFailure,
 } from './provider-errors';
-import { providerEndpoint } from './provider-policy';
+import { providerEndpoint, AI_LIMITS } from './provider-policy';
 import { ChatGoogle } from '@langchain/google/node';
 import {
   HumanMessage,
@@ -80,44 +81,104 @@ export class GoogleAdapter {
       });
     }
   }
-  async languageModel(model: AIModel, provider: AIProvider, secret: string) {
+  async languageModel(
+    model: Pick<AIModel, 'modelId'>,
+    provider: AIProvider,
+    secret: string,
+    onResponse?: (status: number) => void,
+  ) {
     const { createGoogleGenerativeAI } = await import('@ai-sdk/google');
     const endpoint = providerEndpoint(provider);
     return createGoogleGenerativeAI({
       apiKey: secret,
       baseURL: endpoint.baseUrl + '/' + endpoint.apiVersion,
-      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-        this.transport.fetch(provider, new Request(input, init)),
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const response = await this.transport.fetch(
+          provider,
+          new Request(input, init),
+        );
+        onResponse?.(response.status);
+        return response;
+      },
     })(model.modelId);
   }
   async validateCredential(
     provider: AIProvider,
     secret: string,
     signal: AbortSignal,
+    model: Pick<AIModel, 'modelId' | 'settings'>,
   ) {
+    let responseStatus: number | undefined;
     try {
-      const endpoint = providerEndpoint(provider);
-      const response = await this.transport.fetch(
+      // Share the SDK factory, endpoint and protected transport with highlight inference.
+      const client = await this.languageModel(
+        model,
         provider,
-        new Request(
-          endpoint.baseUrl + '/' + endpoint.apiVersion + '/models?pageSize=1',
-          { method: 'GET', headers: { 'x-goog-api-key': secret }, signal },
-        ),
+        secret,
+        (status) => {
+          responseStatus = status;
+        },
       );
-      if (response.ok) return { valid: true };
-      const failure = await googleResponseFailure(response, secret, true);
+      const result = await client.doGenerate({
+        prompt: [
+          { role: 'user', content: [{ type: 'text', text: 'Reply with OK.' }] },
+        ],
+        maxOutputTokens: Math.min(
+          AI_LIMITS.TEST_OUTPUT_TOKENS,
+          model.settings.maxOutputTokens,
+        ),
+        temperature: model.settings.temperature,
+        abortSignal: signal,
+      });
+      const text = result.content.some(
+        (part) => part.type === 'text' && part.text.trim().length > 0,
+      );
+      // Thinking models can exhaust the small budget before returning text.
+      const capped =
+        result.finishReason.unified === 'length' &&
+        (result.usage.outputTokens.total ?? 0) +
+          (result.usage.inputTokens.total ?? 0) >
+          0;
+      if (text || capped) return { valid: true };
+      return {
+        valid: false,
+        ...classifyProviderFailure({ status: 400 }, true),
+        message:
+          'The model returned no generated text. Check model generation settings and availability; credential validity is undetermined.',
+      };
+    } catch (error) {
+      // SDK API errors retain the HTTP body. Parse only allowlisted diagnostics;
+      // never log the error object, request URL, headers or raw body.
+      const sdk = error as {
+        statusCode?: unknown;
+        responseBody?: unknown;
+      } | null;
+      const status = Number(sdk?.statusCode);
+      const failure =
+        responseStatus !== undefined &&
+        responseStatus >= 200 &&
+        responseStatus < 300
+          ? {
+              code: AI_ERROR_CODES.PROVIDER_FAILED,
+              upstreamStatus: responseStatus,
+              message:
+                'Provider returned a malformed generation response. Credential validity is undetermined.',
+            }
+          : status >= 400 &&
+              status <= 599 &&
+              typeof sdk?.responseBody === 'string'
+            ? await googleResponseFailure(
+                new Response(sdk.responseBody, { status }),
+                secret,
+                true,
+              )
+            : classifyProviderFailure(error, true);
       this.logger.warn(
         JSON.stringify({
           operation: 'credential-validation',
-          request: { ...endpoint, method: 'GET', path: '/models', pageSize: 1 },
+          modelId: model.modelId,
           ...failure,
         }),
-      );
-      return { valid: false, ...failure };
-    } catch (error) {
-      const failure = classifyProviderFailure(error, true);
-      this.logger.warn(
-        JSON.stringify({ operation: 'credential-validation', ...failure }),
       );
       return { valid: false, ...failure };
     }

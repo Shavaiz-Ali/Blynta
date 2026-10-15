@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { GoogleAdapter } from './google-adapter.service';
+import { testGoogleAdapter } from '../../test/google-sdk.fixture';
 import {
   googleResponseFailure,
   sanitizeProviderMessage,
@@ -8,6 +8,11 @@ import {
 import type { AIProvider } from './registry.schemas';
 
 const secret = 'synthetic-private-secret';
+const modelId = 'gemini-3.5-flash-lite';
+const model = { modelId, settings: { maxOutputTokens: 4096 } };
+const generationSuccess = JSON.stringify({
+  candidates: [{ content: { parts: [{ text: 'OK' }] } }],
+});
 const provider = {
   adapter: 'google',
   baseUrl: 'https://generativelanguage.googleapis.com',
@@ -49,24 +54,32 @@ describe('Google credential request and safe diagnostics', () => {
   afterEach(() => jest.restoreAllMocks());
 
   it.each(['v1', 'v1beta'])(
-    'uses the configured %s model-list endpoint, GET, key header, and pageSize=1',
+    'uses the configured %s generation endpoint, model, POST and key header',
     async (apiVersion) => {
       const fetch = jest
         .fn<Promise<Response>, [AIProvider, Request]>()
-        .mockResolvedValue(new Response('{"models":[]}', { status: 200 }));
-      const adapter = new GoogleAdapter({ fetch });
+        .mockResolvedValue(new Response(generationSuccess, { status: 200 }));
+      const adapter = testGoogleAdapter({ fetch });
       const signal = AbortSignal.timeout(1000);
       await expect(
-        adapter.validateCredential({ ...provider, apiVersion }, secret, signal),
+        adapter.validateCredential(
+          { ...provider, apiVersion },
+          secret,
+          signal,
+          model,
+        ),
       ).resolves.toEqual({ valid: true });
       const request = fetch.mock.calls[0][1];
       expect(request.url).toBe(
-        `https://generativelanguage.googleapis.com/${apiVersion}/models?pageSize=1`,
+        `https://generativelanguage.googleapis.com/${apiVersion}/models/${modelId}:generateContent`,
       );
-      expect(request.method).toBe('GET');
+      expect(request.method).toBe('POST');
       expect(request.headers.get('x-goog-api-key')).toBe(secret);
       expect(request.headers.get('authorization')).toBeNull();
-      expect(request.body).toBeNull();
+      expect(await request.json()).toMatchObject({
+        contents: [{ parts: [{ text: 'Reply with OK.' }] }],
+        generationConfig: { maxOutputTokens: 128 },
+      });
       expect(warnings).not.toHaveBeenCalled();
     },
   );
@@ -104,6 +117,10 @@ describe('Google credential request and safe diagnostics', () => {
       false,
     ],
     [401, 'UNAUTHENTICATED', undefined, 'AI_AUTH_OR_ACCESS_FAILED', true],
+    [404, 'NOT_FOUND', undefined, 'AI_MODEL_UNAVAILABLE', false],
+    [500, 'INTERNAL', undefined, 'AI_PROVIDER_FAILED', false],
+    [502, 'UNAVAILABLE', undefined, 'AI_PROVIDER_FAILED', false],
+    [503, 'UNAVAILABLE', undefined, 'AI_PROVIDER_FAILED', false],
     [504, 'DEADLINE_EXCEEDED', undefined, 'AI_TIMEOUT', false],
   ] as const)(
     'maps HTTP %s / %s / %s by Google details',
@@ -113,10 +130,11 @@ describe('Google credential request and safe diagnostics', () => {
         .mockResolvedValue(
           failure(http, status, reason, `Explanation includes ${secret}.`),
         );
-      const result = await new GoogleAdapter({ fetch }).validateCredential(
+      const result = await testGoogleAdapter({ fetch }).validateCredential(
         provider,
         secret,
         AbortSignal.timeout(1000),
+        model,
       );
       expect(result).toMatchObject({
         valid: false,
@@ -146,9 +164,9 @@ describe('Google credential request and safe diagnostics', () => {
     async (name) => {
       const error = new Error(secret);
       error.name = name;
-      const result = await new GoogleAdapter({
+      const result = await testGoogleAdapter({
         fetch: jest.fn().mockRejectedValue(error),
-      }).validateCredential(provider, secret, AbortSignal.timeout(1000));
+      }).validateCredential(provider, secret, AbortSignal.timeout(1000), model);
       expect(result).toMatchObject({ valid: false, code: 'AI_TIMEOUT' });
       expect(JSON.stringify(result)).not.toContain(secret);
       expect(credentialWasRejected(result)).toBe(false);
@@ -186,4 +204,49 @@ describe('Google credential request and safe diagnostics', () => {
       expect(value).not.toContain(sensitive);
     expect(value).toContain('message');
   });
+  it('does not accept a models-list payload or malformed 200 as generation proof', async () => {
+    for (const payload of [{ models: [] }, {}, { candidates: [] }]) {
+      const result = await testGoogleAdapter({
+        fetch: jest
+          .fn()
+          .mockResolvedValue(
+            new Response(JSON.stringify(payload), { status: 200 }),
+          ),
+      }).validateCredential(provider, secret, AbortSignal.timeout(1000), model);
+      expect(result).toMatchObject({ valid: false, code: 'AI_REQUEST_FAILED' });
+      expect(credentialWasRejected(result)).toBe(false);
+    }
+  });
+  it('does not reject a valid key when a thinking model consumes the bounded probe token budget', async () => {
+    const response = {
+      candidates: [{ finishReason: 'MAX_TOKENS' }],
+      usageMetadata: {
+        promptTokenCount: 4,
+        thoughtsTokenCount: 124,
+        totalTokenCount: 128,
+      },
+    };
+    const result = await testGoogleAdapter({
+      fetch: jest
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify(response), { status: 200 }),
+        ),
+    }).validateCredential(provider, secret, AbortSignal.timeout(1000), model);
+    expect(result).toEqual({ valid: true });
+  });
+  it.each(['ENOTFOUND', 'ECONNRESET', 'ETIMEDOUT'])(
+    'classifies Node transport failure %s without exposing its message',
+    async (code) => {
+      const error = Object.assign(new Error(secret), { code });
+      const result = await testGoogleAdapter({
+        fetch: jest.fn().mockRejectedValue(error),
+      }).validateCredential(provider, secret, AbortSignal.timeout(1000), model);
+      expect(result.code).toBe(
+        code === 'ETIMEDOUT' ? 'AI_TIMEOUT' : 'AI_NETWORK_FAILED',
+      );
+      expect(credentialWasRejected(result)).toBe(false);
+      expect(JSON.stringify(result)).not.toContain(secret);
+    },
+  );
 });

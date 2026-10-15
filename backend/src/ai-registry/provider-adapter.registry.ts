@@ -16,6 +16,7 @@ export interface AIProviderAdapter {
     provider: AIProvider,
     secret: string,
     signal: AbortSignal,
+    model: Pick<AIModel, 'modelId' | 'settings'>,
   ): Promise<{ valid: boolean } & Partial<ProviderFailure>>;
   verifyModel(
     modelId: string,
