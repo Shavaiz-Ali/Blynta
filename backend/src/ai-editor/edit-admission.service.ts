@@ -90,6 +90,7 @@ export function editView(record: object): Record<string, unknown> {
     '_id',
     'planId',
     'revision',
+    'lastAppliedProposalId',
     'schemaVersion',
     'sourceClipId',
     'plan',

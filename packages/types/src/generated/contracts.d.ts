@@ -118,6 +118,7 @@ export declare const API_ENDPOINTS: {
         readonly retry: (jobId: string) => string;
     };
     readonly editor: {
+        readonly clips: "/ai-editor/clips";
         readonly plans: "/ai-editor/plans";
         readonly assets: "/ai-editor/assets";
         readonly initialize: "/ai-editor/initialize";
@@ -131,6 +132,7 @@ export declare const API_ENDPOINTS: {
         readonly proposalAction: (clipId: string, proposalId: string, action: "apply" | "reject" | "cancel") => string;
         readonly propose: (clipId: string) => string;
         readonly session: (clipId: string, sessionId: string) => string;
+        readonly sessions: (clipId: string) => string;
         readonly state: (clipId: string, planId: string) => string;
     };
 };

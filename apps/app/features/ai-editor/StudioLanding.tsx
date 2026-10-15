@@ -1,7 +1,7 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Search, Sparkles, Clapperboard } from "lucide-react";
+import { Search } from "lucide-react";
 import {
   AppButton,
   AppInput,
@@ -11,215 +11,178 @@ import {
 } from "@blynta/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PageContent } from "@/components/layout/PageContent";
-import { useJobs, JobStatus } from "@/features/jobs";
-import { useRecentPlans } from "./queries";
+import { useRecentPlans, useStudioClips } from "./queries";
 import { StudioClipCard } from "./StudioClipCard";
 export function StudioLanding() {
-  const [page, setPage] = useState(1),
-    [search, setSearch] = useState(""),
-    [sort, setSort] = useState("newest"),
-    [filter, setFilter] = useState("all");
-  const jobs = useJobs({ status: JobStatus.COMPLETED, page, limit: 12 });
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
+  const [sort, setSort] = useState("newest");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setQuery(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const clips = useStudioClips(query, sort, page);
   const recent = useRecentPlans();
-  const edited = new Set(recent.data?.items.map((p) => p.sourceClipId));
-  const allClips =
-    jobs.data?.jobs.flatMap((job) =>
-      job.clips
-        .filter(
-          (c) => c.status === JobStatus.COMPLETED && !job.deletionRequested,
-        )
-        .map((clip, index) => ({
-          job,
-          clip,
-          title:
-            job.highlights?.find(
-              (h) =>
-                h.startTime === clip.startTime && h.endTime === clip.endTime,
-            )?.clipTitle || `Clip ${index + 1}`,
-        })),
-    ) ?? [];
-  const clips = allClips.filter(
-    (c) =>
-      c.title.toLowerCase().includes(search.trim().toLowerCase()) &&
-      (filter === "all" || edited.has(String(c.clip._id || c.clip.id))),
-  );
-  clips.sort((a, b) => {
-    const order =
-      new Date(a.clip.createdAt || a.job.createdAt).getTime() -
-      new Date(b.clip.createdAt || b.job.createdAt).getTime();
-    return sort === "oldest" ? order : -order;
-  });
   return (
     <PageContent>
-      <div className="mx-auto w-full max-w-7xl space-y-7 pb-12">
-        <header className="flex items-start gap-3">
-          <div className="rounded-lg bg-primary/10 p-2.5 text-primary">
-            <Sparkles className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">AI Studio</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Turn your clips into something better. Make your next edit with a
-              prompt.
-            </p>
-          </div>
+      <div className="mx-auto w-full max-w-7xl space-y-9 pb-12">
+        <header className="space-y-2">
+          <h1 className="text-2xl font-semibold tracking-tight">AI Studio</h1>
+          <p className="text-sm text-muted-foreground">
+            Turn your clips into something better. Make your next edit with a
+            prompt.
+          </p>
         </header>
-        {recent.isError ? (
-          <AppQueryState
-            title="Recent edits couldn’t be loaded"
-            description="You can still start from a clip below."
-            onRetry={() => void recent.refetch()}
-          />
-        ) : recent.isPending ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Skeleton className="h-32" />
-            <Skeleton className="h-32" />
-          </div>
-        ) : (
-          !!recent.data?.items.length && (
-            <section aria-labelledby="recent-edits">
-              <h2 id="recent-edits" className="mb-3 text-base font-semibold">
-                Continue editing
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {recent.data.items.slice(0, 8).map((plan) => (
-                  <StudioClipCard
-                    key={plan._id}
-                    href={`/studio/${plan.sourceClipId}?jobId=${plan.sourceJobId}`}
-                    title={plan.clipTitle || "Edited clip"}
-                    thumbnail={plan.thumbnailUrl}
-                    duration={plan.outputDuration}
-                    subtitle={`Edited ${new Date(plan.updatedAt).toLocaleDateString()} · ${plan.latestPreview ? "Preview " + plan.latestPreview.status + " · r" + plan.latestPreview.revision : "No preview yet"}`}
-                    action="Continue editing"
-                  />
-                ))}
-              </div>
-            </section>
-          )
-        )}
-        <section aria-labelledby="editable-clips">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 id="editable-clips" className="text-base font-semibold">
-              Start a new edit
+        <section aria-labelledby="recent-edits" className="space-y-4">
+          <h2 id="recent-edits" className="text-sm font-semibold">
+            Continue editing
+          </h2>
+          {recent.isPending ? (
+            <ClipSkeletons count={3} />
+          ) : recent.isError ? (
+            <AppQueryState
+              title="Recent edits couldn’t be loaded"
+              description="Your clips are still available below."
+              onRetry={() => void recent.refetch()}
+            />
+          ) : recent.data?.items.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {recent.data.items.slice(0, 4).map((plan) => (
+                <StudioClipCard
+                  key={plan._id}
+                  href={`/studio/${plan.sourceClipId}?jobId=${plan.sourceJobId}`}
+                  title={plan.clipTitle || plan.sourceTitle || "Edited clip"}
+                  thumbnail={plan.thumbnailUrl}
+                  duration={plan.outputDuration}
+                  subtitle={`Edited ${new Date(plan.updatedAt).toLocaleDateString()} · ${plan.latestPreview?.status === "completed" ? (plan.latestPreview.revision === plan.revision ? "Preview ready" : "Preview outdated") : plan.latestPreview?.status === "processing" || plan.latestPreview?.status === "queued" ? "Rendering preview" : "Saved edits"}`}
+                  action="Continue editing"
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Your editing projects will appear here. Choose a clip below to
+              begin.
+            </p>
+          )}
+        </section>
+        <section aria-labelledby="your-clips" className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="your-clips" className="text-sm font-semibold">
+              Your clips
             </h2>
-            <AppButton
-              variant="link"
-              size="sm"
-              nativeButton={false}
-              role="link"
-              render={<Link href="/my-clips" />}
-            >
-              All clips
-            </AppButton>
-          </div>
-          <div className="mb-4 space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <div className="relative min-w-0 flex-1 basis-56">
-                <Search className="absolute left-3 top-3 size-4 text-muted-foreground" />
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <div className="relative min-w-0 flex-1 sm:w-64">
+                <Search
+                  aria-hidden
+                  className="absolute left-3 top-2.5 size-4 text-muted-foreground"
+                />
                 <AppInput
-                  aria-label="Search clip titles on this page"
+                  aria-label="Search your clips"
+                  placeholder="Search clips…"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search clip titles on this page…"
-                  className="pl-9"
+                  className="h-9 pl-9"
                 />
               </div>
               <AppSelect
-                aria-label="Sort clips on this page"
+                aria-label="Sort clips"
                 value={sort}
-                onValueChange={setSort}
-                wrapperClassName="w-44"
+                onValueChange={(v) => {
+                  setSort(v);
+                  setPage(1);
+                }}
+                wrapperClassName="w-32 shrink-0"
                 options={[
-                  { value: "newest", label: "Newest on page" },
-                  { value: "oldest", label: "Oldest on page" },
-                ]}
-              />
-              <AppSelect
-                aria-label="Editing status on this page"
-                value={filter}
-                onValueChange={setFilter}
-                disabled={recent.isPending || recent.isError}
-                wrapperClassName="w-44"
-                options={[
-                  { value: "all", label: "All clips" },
-                  { value: "recent", label: "Recent edits" },
+                  { value: "newest", label: "Newest first" },
+                  { value: "oldest", label: "Oldest first" },
                 ]}
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              Search and sort cover this page of 12 videos. Recent edits matches
-              your last 25 editing plans.
-            </p>
           </div>
-          {jobs.isPending ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {[0, 1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-60 rounded-lg" />
-              ))}
-            </div>
-          ) : jobs.isError ? (
+          {clips.isPending ? (
+            <ClipSkeletons count={8} />
+          ) : clips.isError ? (
             <AppQueryState
               title="Clips couldn’t be loaded"
               description="Retry to browse your completed clips."
-              onRetry={() => void jobs.refetch()}
-              retrying={jobs.isFetching}
+              onRetry={() => void clips.refetch()}
             />
-          ) : !clips.length ? (
-            <div className="rounded-xl border border-dashed px-4 py-10 text-center">
-              <Clapperboard className="mx-auto mb-3 size-7 text-muted-foreground" />
+          ) : !clips.data?.items.length ? (
+            <div className="py-14 text-center">
               <h3 className="font-medium">
-                {allClips.length
-                  ? "No matching clips on this page"
-                  : "No completed clips on this page"}
+                {query
+                  ? "No matching clips"
+                  : "Your first edit starts with a clip"}
               </h3>
               <p className="mt-2 text-sm text-muted-foreground">
-                {allClips.length
-                  ? "Clear your filters or browse another page."
-                  : "Generate shorts from a video to start your first edit."}
+                {query
+                  ? "Try another title or clear your search."
+                  : "Create clips from a video, then bring them here."}
               </p>
-              <AppButton
-                className="mt-4"
-                variant="outline"
-                size="sm"
-                {...(allClips.length
-                  ? {
-                      onClick: () => {
-                        setSearch("");
-                        setFilter("all");
-                      },
-                    }
-                  : { render: <Link href="/dashboard" /> })}
-              >
-                {allClips.length ? "Clear filters" : "Create clips"}
-              </AppButton>
+              {query ? (
+                <AppButton
+                  variant="ghost"
+                  className="mt-4"
+                  onClick={() => setSearch("")}
+                >
+                  Clear search
+                </AppButton>
+              ) : (
+                <AppButton
+                  variant="outline"
+                  className="mt-4"
+                  nativeButton={false}
+                  render={<Link href="/dashboard" />}
+                >
+                  Create clips
+                </AppButton>
+              )}
             </div>
           ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {clips.map(({ job, clip, title }) => (
+            <div className="grid gap-x-4 gap-y-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {clips.data.items.map((clip) => (
                 <StudioClipCard
-                  key={`${job._id}-${clip._id}`}
-                  href={`/studio/${clip._id}?jobId=${job._id}`}
-                  title={title}
-                  thumbnail={job.thumbnailUrl}
-                  duration={clip.endTime - clip.startTime}
+                  key={clip._id}
+                  href={`/studio/${clip._id}?jobId=${clip.jobId}`}
+                  title={clip.title}
+                  thumbnail={clip.thumbnailUrl}
+                  duration={clip.duration}
+                  subtitle={new Date(clip.createdAt).toLocaleDateString()}
                   action="Edit with AI"
                 />
               ))}
             </div>
           )}
-          <div className="mt-5 border-t pt-4">
-            <AppPagination
-              page={page}
-              totalPages={jobs.data?.totalPages}
-              onPageChange={(p) => {
-                setPage(p);
-                setSearch("");
-              }}
-              disabled={jobs.isFetching}
-            />
-          </div>
+          <AppPagination
+            page={page}
+            totalPages={clips.data?.totalPages}
+            onPageChange={setPage}
+            disabled={clips.isFetching}
+          />
         </section>
       </div>
     </PageContent>
+  );
+}
+function ClipSkeletons({ count }: { count: number }) {
+  return (
+    <div
+      role="status"
+      aria-label="Loading clips"
+      className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4"
+    >
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="space-y-3">
+          <Skeleton className="aspect-video w-full rounded-lg" />
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+      ))}
+    </div>
   );
 }

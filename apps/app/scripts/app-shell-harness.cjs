@@ -126,9 +126,19 @@ function workspaceMocks() {
       "useProposalAction",
       "useProposeEdit",
       "useRenderAction",
+      "useStudioSessions",
+      "useSessionAction",
     ].map((name) => [name, () => result(undefined)]),
   );
-  const plan = { _id: "plan", revision: 1, actions: [], outputDuration: 30 };
+  const plan = {
+    _id: "plan",
+    revision: 1,
+    outputDuration: 30,
+    plan: {
+      operations: [],
+      audio: { tracks: [], original: { enabled: true, gain: 1 } },
+    },
+  };
   Object.assign(queries, {
     useInitializePlan: () => result(plan),
     useEditingPlan: () => result(plan),
@@ -136,6 +146,7 @@ function workspaceMocks() {
     useEditingSession: () => result({ messages: [] }),
     useEditingVersions: () => result({ items: [], totalPages: 1 }),
     useEditingAssets: () => result({ items: [] }),
+    useStudioSessions: () => result({ items: [] }),
     studioError: String,
     downloadEditingVersion: async () => ({}),
   });
@@ -145,6 +156,9 @@ function workspaceMocks() {
     mocks: {
       "@blynta/types/contracts": { APP_ROUTES: {} },
       "./queries": queries,
+      "@/features/auth/queries": {
+        useCurrentUser: () => result({ id: "fixture" }),
+      },
       "@/features/jobs": {
         JobStatus: { COMPLETED: "completed" },
         useJob: () =>
@@ -184,6 +198,7 @@ function workspaceMocks() {
         }),
       },
       "./studio-scrollbars.module.css": { default: {} },
+      "./rendering.module.css": { default: {} },
       "next-themes": { useTheme: () => ({ theme: "dark", setTheme() {} }) },
     },
   };

@@ -18,6 +18,12 @@ type UserRequest = Request & { user: { userId: string } };
 @UseGuards(AuthGuard('jwt'), EditRateLimitGuard)
 export class EditPlansController {
   constructor(private service: EditPlansService) {}
+  @Get('clips') clips(
+    @Req() r: UserRequest,
+    @Query() query: Record<string, string>,
+  ) {
+    return this.service.listClips(r.user.userId, query);
+  }
   @Get('plans') recent(@Req() r: UserRequest) {
     return this.service.recent(r.user.userId);
   }
@@ -50,8 +56,9 @@ export class EditPlansController {
   @Post('plans/:id/preview') render(
     @Req() r: UserRequest,
     @Param('id') id: string,
+    @Body() body: unknown,
   ) {
-    return this.service.render(r.user.userId, id);
+    return this.service.render(r.user.userId, id, body);
   }
   @Get('plans/:id/versions') versions(
     @Req() r: UserRequest,

@@ -264,16 +264,14 @@ describe('generate_patch outcome regressions: no provider or render calls', () =
       'validate',
     ]);
   });
-  it('reproduces the currently deployed false USER_INPUT_REQUIRED outcome', async () => {
-    const s = setup([failure]);
-    expect(await s.run()).toMatchObject({
-      status: 'clarification',
-      summary: failure.summary,
-      patch: undefined,
+  it('does not accept the historical false USER_INPUT_REQUIRED outcome', async () => {
+    const s = setup([failure, failure]);
+    await expect(s.run()).rejects.toMatchObject({
+      response: { code: 'AI_PATCH_INVALID' },
     });
     expect(s.resolveAsset).toHaveBeenCalledTimes(1);
     expect(s.validate).not.toHaveBeenCalled();
-    expect(s.nodes).not.toContain('correct');
+    expect(s.nodes).toContain('correct');
   });
   it('REGRESSION: corrects an invalid patch instead of treating it as missing user information', async () => {
     const s = setup([failure, validAnswer]);

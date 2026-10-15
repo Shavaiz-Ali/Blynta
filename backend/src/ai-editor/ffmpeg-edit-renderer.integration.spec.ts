@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve, dirname, basename } from 'node:path';
 import { examplePlan } from './edit-plan.fixture';
 import { parseEdit, planSchema } from './edit-plan.contract';
 import { buildRenderSpec } from './ffmpeg-edit-renderer';
@@ -19,7 +19,16 @@ integration('FFmpeg editing media integration', () => {
     directory = await mkdtemp(join(tmpdir(), 'blynta-edit-integration-'));
   }, 30000);
   afterAll(async () => {
-    if (directory) await rm(directory, { recursive: true, force: true });
+    if (directory) {
+      if (
+        dirname(resolve(directory)) !== resolve(tmpdir()) ||
+        !basename(directory).startsWith('blynta-edit-integration-')
+      )
+        throw new Error(
+          'Refusing cleanup outside the generated integration fixture directory',
+        );
+      await rm(directory, { recursive: true, force: true });
+    }
   });
   it.each(['gain', 'zoom', 'emoji', 'combined'] as const)(
     'executes the verified %s capability through the actual FFmpeg compiler',

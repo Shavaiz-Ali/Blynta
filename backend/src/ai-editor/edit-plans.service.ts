@@ -9,7 +9,8 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { HydratedDocument, Model } from 'mongoose';
+import { HydratedDocument, Model, Types } from 'mongoose';
+import { z } from 'zod';
 import { Job, JobStatus } from '../jobs/schemas/job.schema';
 import { clipMediaCandidates } from '../studio/clip-media';
 import { R2Service } from '../storage/r2.service';
@@ -49,6 +50,85 @@ export class EditPlansService {
     const plan = await this.plans.findOne({ _id: id, userId });
     if (!plan) throw new NotFoundException('EditPlan not found');
     return plan;
+  }
+  async listClips(userId: string, query: unknown) {
+    const input = parseEdit(
+      z
+        .object({
+          search: z.string().trim().max(100).default(''),
+          sort: z.enum(['newest', 'oldest']).default('newest'),
+          page: z.coerce.number().int().min(1).max(10000).default(1),
+        })
+        .strict(),
+      query,
+    );
+    const pattern = input.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const [result] = await this.jobs.aggregate<{
+      items: object[];
+      total: { count: number }[];
+    }>([
+      {
+        $match: {
+          userId: new Types.ObjectId(userId),
+          deletionRequested: { $ne: true },
+        },
+      },
+      { $unwind: '$clips' },
+      { $match: { 'clips.status': JobStatus.COMPLETED } },
+      {
+        $set: {
+          highlight: {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$highlights', []] },
+                  as: 'h',
+                  cond: {
+                    $and: [
+                      { $eq: ['$$h.startTime', '$clips.startTime'] },
+                      { $eq: ['$$h.endTime', '$clips.endTime'] },
+                    ],
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $project: {
+          _id: '$clips._id',
+          jobId: '$_id',
+          title: {
+            $ifNull: [
+              '$highlight.clipTitle',
+              { $ifNull: ['$videoTitle', 'Untitled clip'] },
+            ],
+          },
+          thumbnailUrl: 1,
+          duration: { $subtract: ['$clips.endTime', '$clips.startTime'] },
+          createdAt: { $ifNull: ['$clips.createdAt', '$createdAt'] },
+        },
+      },
+      ...(pattern
+        ? [{ $match: { title: { $regex: pattern, $options: 'i' } } }]
+        : []),
+      { $sort: { createdAt: input.sort === 'oldest' ? 1 : -1, _id: 1 } },
+      {
+        $facet: {
+          items: [{ $skip: (input.page - 1) * 12 }, { $limit: 12 }],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ]);
+    const total = result?.total[0]?.count ?? 0;
+    return {
+      items: result?.items ?? [],
+      page: input.page,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / 12)),
+    };
   }
   async recent(userId: string) {
     const records = await this.plans
@@ -121,7 +201,7 @@ export class EditPlansService {
             },
           ],
         })
-        .select('assetId name kind mimeType duration')
+        .select('assetId name kind mimeType duration sourceGroup')
         .sort({ createdAt: -1 })
         .limit(50)
         .lean(),
@@ -278,8 +358,21 @@ export class EditPlansService {
       );
     return editView(result);
   }
-  async render(userId: string, id: string) {
+  async render(userId: string, id: string, body: unknown = {}) {
+    const input = parseEdit(
+      z
+        .object({ expectedRevision: z.number().int().min(1).optional() })
+        .strict(),
+      body ?? {},
+    );
     const p = await this.owned(userId, id);
+    if (
+      input.expectedRevision !== undefined &&
+      input.expectedRevision !== p.revision
+    )
+      throw new ConflictException(
+        'The saved revision changed; refresh before rendering',
+      );
     const validated = await this.validator.validate(
       userId,
       p.plan,

@@ -118,6 +118,7 @@ exports.API_ENDPOINTS = {
         retry: (jobId) => `/jobs/${id(jobId)}/retry`,
     },
     editor: {
+        clips: "/ai-editor/clips",
         plans: "/ai-editor/plans",
         assets: "/ai-editor/assets",
         initialize: "/ai-editor/initialize",
@@ -131,6 +132,7 @@ exports.API_ENDPOINTS = {
         proposalAction: (clipId, proposalId, action) => `/clips/${id(clipId)}/ai-edit/proposals/${id(proposalId)}/${action}`,
         propose: (clipId) => `/clips/${id(clipId)}/ai-edit/propose`,
         session: (clipId, sessionId) => `/clips/${id(clipId)}/ai-edit/sessions/${id(sessionId)}`,
+        sessions: (clipId) => `/clips/${id(clipId)}/ai-edit/sessions`,
         state: (clipId, planId) => `/clips/${id(clipId)}/ai-edit/state?planId=${id(planId)}`,
     },
 };

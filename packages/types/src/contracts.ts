@@ -120,6 +120,7 @@ export const API_ENDPOINTS = {
     retry: (jobId: string) => `/jobs/${id(jobId)}/retry`,
   },
   editor: {
+    clips: "/ai-editor/clips",
     plans: "/ai-editor/plans",
     assets: "/ai-editor/assets",
     initialize: "/ai-editor/initialize",
@@ -142,6 +143,7 @@ export const API_ENDPOINTS = {
     propose: (clipId: string) => `/clips/${id(clipId)}/ai-edit/propose`,
     session: (clipId: string, sessionId: string) =>
       `/clips/${id(clipId)}/ai-edit/sessions/${id(sessionId)}`,
+    sessions: (clipId: string) => `/clips/${id(clipId)}/ai-edit/sessions`,
     state: (clipId: string, planId: string) =>
       `/clips/${id(clipId)}/ai-edit/state?planId=${id(planId)}`,
   },

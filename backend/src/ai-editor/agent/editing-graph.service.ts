@@ -11,7 +11,7 @@ import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.regi
 import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import { AgentTools } from './agent-tools.service';
-import { editPatchSchema } from './edit-patch';
+import { editPatchSchema, modelPatchSchema } from './edit-patch';
 import type { EditPatch } from './edit-patch';
 import { editingCapabilities } from './edit-capabilities';
 import {
@@ -345,7 +345,7 @@ export class EditingGraph {
         return {
           answer: await modelCall(answerSchema, {
             task: 'Generate patchJson as JSON with baseRevision and changes; update includes operationId and complete operation of same id/type. No full replacement plans. Return clarification or unsupported with empty patchJson when appropriate.',
-            patchContract: z.toJSONSchema(editPatchSchema, { io: 'input' }),
+            patchContract: z.toJSONSchema(modelPatchSchema, { io: 'input' }),
             context: s.context,
             searches: s.searches,
             resolvedAssets: s.resolvedAssets,
@@ -372,7 +372,7 @@ export class EditingGraph {
               : 'UNVERIFIED_UNSUPPORTED: No unavailable capability was identified. Produce a schema-valid patch using the supplied operation and original-audio contracts. Multiple compatible changes, centered overlays, and full output-duration intervals are implemented. Missing assets require clarification. Do not repeat a blanket refusal.',
           };
         }
-        if (s.answer.outcome === 'clarification') {
+        if (s.answer.outcome === 'clarification' && s.intent.clarification) {
           await diagnose({
             event: 'validation',
             reason: 'USER_INPUT_REQUIRED',
@@ -381,7 +381,7 @@ export class EditingGraph {
         }
         try {
           const patch = editPatchSchema.parse(
-            JSON.parse(s.answer.patchJson) as unknown,
+            modelPatchSchema.parse(JSON.parse(s.answer.patchJson) as unknown),
           );
           const resolved = JSON.parse(s.resolvedAssets || '[]') as {
             assetId?: string;
@@ -408,7 +408,11 @@ export class EditingGraph {
             tools.validate.invoke(patch),
           );
           await diagnose({ event: 'validation', reason: 'PATCH_VALID' });
-          return { patch, issues: '' };
+          return {
+            patch,
+            issues: '',
+            answer: { ...s.answer, outcome: 'proposal' as const },
+          };
         } catch (error) {
           if (
             error instanceof HttpException &&
@@ -430,14 +434,14 @@ export class EditingGraph {
         return {
           corrections: s.corrections + 1,
           answer: await modelCall(answerSchema, {
-            task: 'Correct the invalid patch once; otherwise ask for clarification. Return the same envelope.',
+            task: 'Correct the invalid patch once using the supplied contract. Invalid generated patches are internal failures, never missing user information. Return the same envelope.',
             context: s.context,
             searches: s.searches,
             resolvedAssets: s.resolvedAssets,
             prompt: input.prompt,
             prior: s.answer,
             issues: s.issues,
-            patchContract: z.toJSONSchema(editPatchSchema, { io: 'input' }),
+            patchContract: z.toJSONSchema(modelPatchSchema, { io: 'input' }),
           }),
         };
       })
@@ -492,7 +496,9 @@ export class EditingGraph {
       });
     return {
       patch: result.patch,
-      summary: result.answer.summary,
+      summary: result.patch
+        ? `Review ${result.patch.changes.length} proposed ${result.patch.changes.length === 1 ? 'change' : 'changes'} before applying.`
+        : result.intent.clarification || result.answer.summary,
       status:
         result.answer.outcome === 'proposal'
           ? 'pending'

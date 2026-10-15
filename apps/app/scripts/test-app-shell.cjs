@@ -185,7 +185,9 @@ test("editor toolbar remains contextual and History, Media, Changes and preview 
     ["Media", "media"],
     ["Changes", "changes"],
   ]) {
-    tree.find((el) => el.props["aria-label"] === label).props.onClick();
+    elements(tree.find((el) => el.type === Preview).props.tools)
+      .find((el) => el.props["aria-label"] === label)
+      .props.onClick();
     tree = render();
     assert.equal(tree.find((el) => el.type === Library).props.open, true);
     assert.equal(tree.find((el) => el.type === Library).props.tab, tab);
@@ -265,4 +267,51 @@ test("only authenticated route layout mounts the shell; providers stay above it"
     }
   }
   audit(path.join(root, "features"));
+});
+
+test("mobile Studio viewport follows the visual viewport when a keyboard reduces usable space", () => {
+  const fixture = workspaceMocks(),
+    effects = [];
+  const previousWindow = global.window;
+  const viewport = new EventTarget();
+  viewport.height = 900;
+  viewport.offsetTop = 0;
+  let narrow = true;
+  const browser = new EventTarget();
+  browser.visualViewport = viewport;
+  browser.matchMedia = () => ({ matches: narrow });
+  global.window = browser;
+  try {
+    const { StudioWorkspace } = load("features/ai-editor/StudioWorkspace.tsx", {
+      ...fixture.mocks,
+      react: {
+        ...React,
+        useEffect: (fn) => effects.push(fn),
+        useRef: (value) => ({ current: value }),
+        useState: (value) => [value, () => {}],
+      },
+    });
+    const workspace = elements(StudioWorkspace(fixture)).find(
+      (el) => "data-studio-workspace" in el.props,
+    );
+    const surface = { style: {}, getBoundingClientRect: () => ({ top: 56 }) };
+    workspace.props.ref.current = surface;
+    const cleanup = effects
+      .map((effect) => effect())
+      .filter((fn) => typeof fn === "function");
+    assert.equal(surface.style.maxHeight, "844px");
+    viewport.height = 480;
+    viewport.dispatchEvent(new Event("resize"));
+    assert.equal(surface.style.maxHeight, "424px");
+    viewport.height = 900;
+    viewport.dispatchEvent(new Event("resize"));
+    assert.equal(surface.style.maxHeight, "844px");
+    narrow = false;
+    browser.dispatchEvent(new Event("resize"));
+    assert.equal(surface.style.maxHeight, "");
+    cleanup.forEach((fn) => fn());
+  } finally {
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+  }
 });

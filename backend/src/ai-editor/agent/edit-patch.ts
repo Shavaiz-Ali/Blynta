@@ -64,6 +64,32 @@ export const editPatchSchema = z
   })
   .strict();
 export type EditPatch = z.infer<typeof editPatchSchema>;
+// Provider output cannot set provenance. The persisted patch parser remains
+// compatible with older proposals; mergeEditPatch controls provenance itself.
+const operationOptions = operationSchema.options.map((option) =>
+  option.omit({ source: true, metadata: true }),
+);
+const modelOperation = z.discriminatedUnion('type', [
+  operationOptions[0],
+  ...operationOptions.slice(1),
+]);
+const changeOptions = editPatchSchema.shape.changes.element.options.map(
+  (option) =>
+    'operation' in option.shape
+      ? option.extend({ operation: modelOperation })
+      : option,
+);
+export const modelPatchSchema = editPatchSchema.extend({
+  changes: z
+    .array(
+      z.discriminatedUnion('action', [
+        changeOptions[0],
+        ...changeOptions.slice(1),
+      ]),
+    )
+    .min(1)
+    .max(20),
+});
 export function mergeEditPatch(
   plan: EditPlan,
   revision: number,
@@ -143,7 +169,13 @@ export function mergeEditPatch(
           throw new BadRequestException(
             'Updates preserve operation identity and type',
           );
-        result.operations[index] = { ...change.operation, source: 'ai' };
+        const existing = result.operations[index];
+        result.operations[index] = {
+          ...change.operation,
+          source: existing.source,
+          metadata: existing.metadata,
+        };
+        if (!existing.metadata) delete result.operations[index].metadata;
       } else result.operations[index].enabled = change.action === 'enable';
     }
   }

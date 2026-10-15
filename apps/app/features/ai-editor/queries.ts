@@ -4,6 +4,7 @@ import {
   useIsMutating,
   useMutation,
   useQuery,
+  useInfiniteQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { axiosClient, ApiError } from "@/config/axiosClient";
@@ -15,9 +16,15 @@ import type {
   StudioMessage,
   StudioState,
   PromptSubmission,
+  AgentSession,
+  StudioClip,
 } from "./contracts";
 import { renderPollInterval, proposalPollInterval } from "./presentation";
 export const studioKeys = {
+  clips: (search: string, sort: string, page: number) =>
+    ["ai-editor", "clips", search, sort, page] as const,
+  sessions: (clip: string, plan: string) =>
+    ["ai-editor", "sessions", clip, plan] as const,
   recent: ["ai-editor", "recent"] as const,
   plan: (id: string) => ["ai-editor", "plan", id] as const,
   versions: (id: string, page = 1) =>
@@ -110,15 +117,39 @@ export function useEditingState(clip: string, plan: string) {
   });
 }
 export function useEditingSession(clip: string, id: string) {
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: studioKeys.session(id),
     enabled: !!id,
-    queryFn: ({ signal }) =>
-      get<{ messages: StudioMessage[] }>(
-        API_ENDPOINTS.editor.session(clip, id),
+    initialPageParam: "",
+    queryFn: ({ signal, pageParam }) =>
+      get<{
+        session: AgentSession;
+        messages: StudioMessage[];
+        proposals: Proposal[];
+        nextCursor?: string | null;
+      }>(
+        `${API_ENDPOINTS.editor.session(clip, id)}${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ""}`,
         signal,
       ),
+    getNextPageParam: (last) => last.nextCursor || undefined,
   });
+  return {
+    ...query,
+    data: query.data
+      ? {
+          session: query.data.pages[0].session,
+          messages: [...query.data.pages].reverse().flatMap((p) => p.messages),
+          proposals: [
+            ...new Map(
+              [...query.data.pages]
+                .reverse()
+                .flatMap((p) => p.proposals || [])
+                .map((p) => [p._id, p]),
+            ).values(),
+          ],
+        }
+      : undefined,
+  };
 }
 export function useProposal(clip: string, id: string) {
   return useQuery({
@@ -147,6 +178,9 @@ export function useProposeEdit(clip: string, plan: string) {
     },
     onSettled: () => {
       void client.invalidateQueries({ queryKey: studioKeys.state(clip, plan) });
+      void client.invalidateQueries({
+        queryKey: studioKeys.sessions(clip, plan),
+      });
       void client.invalidateQueries({ queryKey: ["ai-editor", "session"] });
     },
   });
@@ -206,12 +240,13 @@ export function useRenderAction(
 ) {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) =>
+    mutationFn: async (id: string | { expectedRevision: number }) =>
       (
         await axiosClient.post<EditingVersion>(
           action === "preview"
             ? API_ENDPOINTS.editor.preview(plan)
-            : API_ENDPOINTS.editor.versionAction(id, action),
+            : API_ENDPOINTS.editor.versionAction(String(id), action),
+          action === "preview" && typeof id === "object" ? id : undefined,
         )
       ).data,
     retry: false,
@@ -222,6 +257,62 @@ export function useRenderAction(
       });
       void client.invalidateQueries({ queryKey: ["ai-editor", "version"] });
       void client.invalidateQueries({ queryKey: studioKeys.plan(plan) });
+    },
+  });
+}
+export function useStudioClips(search: string, sort: string, page: number) {
+  return useQuery({
+    queryKey: studioKeys.clips(search, sort, page),
+    queryFn: ({ signal }) =>
+      get<{ items: StudioClip[]; totalPages: number; total: number }>(
+        `${API_ENDPOINTS.editor.clips}?${new URLSearchParams({ search, sort, page: String(page) })}`,
+        signal,
+      ),
+    staleTime: 30000,
+  });
+}
+export function useStudioSessions(clip: string, plan: string) {
+  return useQuery({
+    queryKey: studioKeys.sessions(clip, plan),
+    enabled: !!plan,
+    queryFn: ({ signal }) =>
+      get<{ items: AgentSession[] }>(
+        `${API_ENDPOINTS.editor.sessions(clip)}?planId=${encodeURIComponent(plan)}`,
+        signal,
+      ),
+  });
+}
+export function useSessionAction(clip: string, plan: string) {
+  const client = useQueryClient();
+  return useMutation({
+    retry: false,
+    mutationFn: async (
+      input:
+        | { id: string; title?: string; status?: "active" | "archived" }
+        | { requestId: string },
+    ) => {
+      if ("id" in input) {
+        const { id, ...body } = input;
+        return (
+          await axiosClient.patch<AgentSession>(
+            API_ENDPOINTS.editor.session(clip, id),
+            body,
+          )
+        ).data;
+      }
+      return (
+        await axiosClient.post<AgentSession>(
+          API_ENDPOINTS.editor.sessions(clip),
+          { ...input, planId: plan },
+        )
+      ).data;
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({
+        queryKey: studioKeys.sessions(clip, plan),
+      });
+      void client.invalidateQueries({ queryKey: studioKeys.state(clip, plan) });
+      void client.invalidateQueries({ queryKey: ["ai-editor", "session"] });
     },
   });
 }

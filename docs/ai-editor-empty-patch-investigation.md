@@ -1,5 +1,7 @@
 # generate_patch / clarification investigation
 
+Follow-up: the downstream validation/routing fix and regression coverage are now implemented locally as part of the approved Studio work. See [AI Studio redesign and verification](ai-studio-redesign.md). The investigation below records the original failure and pre-fix results.
+
 Execution: `118cdae8-02f4-40f3-b34b-8d49b4566195`. Application code remains unchanged during this investigation. No provider requests, FFmpeg executions, uploads, jobs, database mutations or deployment changes were made.
 
 ## Exact failed patch recovered

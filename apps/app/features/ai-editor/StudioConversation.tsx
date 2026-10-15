@@ -7,7 +7,13 @@ import { AI_EDIT_STAGE_LABEL } from "@blynta/types/contracts";
 import { ProposalCard } from "./ProposalCard";
 import { ConversationMessage } from "./StudioPanels";
 import { conversationItems, followsConversation } from "./conversation";
-import type { EditingPlan, Proposal, StudioMessage } from "./contracts";
+import { describeChange } from "./presentation";
+import type {
+  EditingPlan,
+  Proposal,
+  StudioMessage,
+  StudioAsset,
+} from "./contracts";
 
 export function StudioConversation({
   messages,
@@ -20,6 +26,10 @@ export function StudioConversation({
   onSuggest,
   onCancelGeneration,
   children,
+  hasOlder,
+  loadingOlder,
+  onLoadOlder,
+  assets,
 }: {
   messages: StudioMessage[];
   proposals: Proposal[];
@@ -31,6 +41,10 @@ export function StudioConversation({
   onSuggest: (text: string) => void;
   onCancelGeneration?: (id: string) => void;
   children?: React.ReactNode;
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => Promise<unknown>;
+  assets?: StudioAsset[];
 }) {
   const scroll = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -53,7 +67,7 @@ export function StudioConversation({
   return (
     <div
       id="studio-conversation"
-      className="relative order-3 flex min-h-0 flex-1 flex-col lg:order-2"
+      className="relative order-2 flex min-h-0 flex-1 flex-col"
     >
       <div
         ref={scroll}
@@ -61,7 +75,7 @@ export function StudioConversation({
         aria-label="Editing conversation"
         aria-live="polite"
         aria-busy={loading || generating}
-        className={`${scrollbars.slim} min-h-60 max-h-[56dvh] flex-1 space-y-5 overflow-y-auto px-5 py-6 lg:max-h-none lg:min-h-0 ${empty ? "lg:flex lg:flex-col lg:justify-center" : ""}`}
+        className={`${scrollbars.slim} min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-5 py-5 ${empty ? "flex flex-col justify-center" : ""}`}
         onScroll={() => {
           const el = scroll.current;
           if (el)
@@ -73,6 +87,27 @@ export function StudioConversation({
           if (following.current) setUnread(false);
         }}
       >
+        {hasOlder && (
+          <AppButton
+            variant="ghost"
+            size="sm"
+            disabled={loadingOlder}
+            onClick={async () => {
+              const height = scroll.current?.scrollHeight ?? 0;
+              following.current = false;
+              await onLoadOlder?.();
+              requestAnimationFrame(() => {
+                if (scroll.current)
+                  scroll.current.scrollTop +=
+                    scroll.current.scrollHeight - height;
+              });
+            }}
+          >
+            {loadingOlder
+              ? "Loading earlier messages…"
+              : "Load earlier messages"}
+          </AppButton>
+        )}
         {loading ? (
           <p
             role="status"
@@ -114,19 +149,37 @@ export function StudioConversation({
         ) : (
           items.map((item) => (
             <div key={item.key} className="space-y-3">
-              {item.message && (
-                <ConversationMessage
-                  role={item.message.role}
-                  content={item.message.content}
-                />
-              )}
+              {item.message &&
+                !(
+                  item.proposal &&
+                  item.message.role === "assistant" &&
+                  item.message.content === item.proposal.summary
+                ) && (
+                  <ConversationMessage
+                    role={item.message.role}
+                    content={item.message.content}
+                  />
+                )}
               {item.proposal && (
                 <ProposalCard
+                  assets={assets}
                   proposal={item.proposal}
                   plan={plan}
                   busy={busy}
                   onApply={() => onApprove(item.proposal!._id, "apply")}
                   onReject={() => onApprove(item.proposal!._id, "reject")}
+                  onRevise={() =>
+                    onSuggest(
+                      `Revise this suggestion: ${
+                        item
+                          .proposal!.patch?.changes.map((c) => {
+                            const change = describeChange(c, plan);
+                            return `${change.title} (${change.detail})`;
+                          })
+                          .join("; ") || item.proposal!.summary
+                      }. `,
+                    )
+                  }
                 />
               )}
             </div>

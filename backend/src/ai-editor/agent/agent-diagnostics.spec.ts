@@ -1,5 +1,39 @@
 import { diagnosticOutput } from './agent-diagnostics';
 describe('Sanitized graph diagnostics', () => {
+  it('reports safe field types and empty array constraints without exposing values', () => {
+    expect(
+      diagnosticOutput({
+        outcome: 'clarification',
+        patchJson: '{"baseRevision":1,"changes":[]}',
+      }).patchIssues,
+    ).toEqual([
+      {
+        path: ['changes'],
+        code: 'too_small',
+        expected: undefined,
+        actualType: 'array',
+        minimum: 1,
+        actualCount: 0,
+      },
+    ]);
+    const result = diagnosticOutput({
+      patchJson: JSON.stringify({
+        baseRevision: 'PRIVATE',
+        changes: [
+          { action: 'add', operation: { type: 'PRIVATE', params: {} } },
+        ],
+      }),
+    });
+    expect(
+      result.patchIssues?.some(
+        (i) =>
+          i.path.join('.') === 'baseRevision' &&
+          i.actualType === 'string' &&
+          i.expected === 'number',
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(result)).not.toContain('PRIVATE');
+  });
   it('records actual decision fields but never summaries, prompts, reasoning, asset names, or arbitrary operation text', () => {
     const result = diagnosticOutput({
       outcome: 'unsupported',

@@ -13,6 +13,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { HydratedDocument, Model } from 'mongoose';
 import Redis from 'ioredis';
 import { createHash, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
@@ -104,6 +105,7 @@ export class ProposalsService {
           clipId,
           planId: input.planId,
           status: 'active',
+          title: input.prompt.slice(0, 100),
         });
     if (!session) throw new NotFoundException('Editing session not found');
     let proposal: HydratedDocument<EditProposal>;
@@ -259,7 +261,14 @@ export class ProposalsService {
       });
       await this.sessions.updateOne(
         { _id: session._id, userId },
-        { $set: { selectedModelId: result.modelId } },
+        {
+          $set: {
+            selectedModelId: input.modelId || 'auto',
+            ...(session.title === 'New conversation' || !session.title
+              ? { title: input.prompt.slice(0, 100) }
+              : {}),
+          },
+        },
       );
       return saved;
     } catch (error) {
@@ -333,7 +342,7 @@ export class ProposalsService {
     parseEdit(objectId, planId);
     await this.tools.owned(userId, clipId, planId);
     const session = await this.sessions
-      .findOne({ userId, clipId, planId })
+      .findOne({ userId, clipId, planId, status: 'active' })
       .sort({ updatedAt: -1, _id: -1 })
       .lean();
     const proposals = await this.proposals
@@ -421,11 +430,16 @@ export class ProposalsService {
         {
           $set: {
             status: 'applied',
-            appliedRevision: proposal.baseRevision + 1,
+            appliedRevision: proposal.noChanges
+              ? proposal.baseRevision
+              : proposal.baseRevision + 1,
           },
         },
       );
-      return this.editing.get(userId, proposal.planId);
+      return {
+        ...(await this.editing.get(userId, proposal.planId)),
+        noChanges: !!proposal.noChanges,
+      };
     }
     let merged: ReturnType<typeof mergeEditPatch>;
     try {
@@ -437,6 +451,27 @@ export class ProposalsService {
           { $set: { status: 'pending' } },
         );
       throw error;
+    }
+    if (isDeepStrictEqual(merged.plan, current.plan)) {
+      const marked = await this.proposals.updateOne(
+        { _id: id, userId, status: { $in: ['pending', 'applying'] } },
+        {
+          $set: {
+            status: 'applied',
+            appliedRevision: proposal.baseRevision,
+            noChanges: true,
+            summary: 'No changes needed; these edits are already saved.',
+          },
+        },
+      );
+      if (marked.modifiedCount === 0)
+        throw new ConflictException(
+          'Proposal state changed; refresh before applying',
+        );
+      return {
+        ...(await this.editing.get(userId, proposal.planId)),
+        noChanges: true,
+      };
     }
     if (proposal.status === 'pending') {
       const claimed = await this.proposals.findOneAndUpdate(
@@ -499,9 +534,15 @@ export class ProposalsService {
       );
     return updated;
   }
-  async history(userId: string, clipId: string, sessionId: string) {
+  async history(
+    userId: string,
+    clipId: string,
+    sessionId: string,
+    before?: string,
+  ) {
     parseEdit(objectId, clipId);
     parseEdit(objectId, sessionId);
+    if (before) parseEdit(objectId, before);
     const session = await this.sessions.findOne({
       _id: sessionId,
       userId,
@@ -510,10 +551,125 @@ export class ProposalsService {
     if (!session) throw new NotFoundException('Session not found');
     await this.tools.owned(userId, clipId, session.planId);
     const messages = await this.messages
-      .find({ userId, sessionId, role: { $in: ['user', 'assistant'] } })
-      .sort({ createdAt: -1, _id: -1 })
-      .limit(50)
+      .find({
+        userId,
+        sessionId,
+        role: { $in: ['user', 'assistant'] },
+        ...(before ? { _id: { $lt: before } } : {}),
+      })
+      .sort({ _id: -1 })
+      .limit(51)
       .lean();
-    return { session, messages: messages.reverse() };
+    const hasMore = messages.length > 50;
+    const page = messages.slice(0, 50);
+    const nextCursor = hasMore ? String(page[page.length - 1]._id) : null;
+    const proposals = await this.proposals
+      .find({
+        userId,
+        clipId,
+        sessionId,
+        planId: session.planId,
+        ...(before
+          ? {
+              _id: {
+                $in: page.flatMap((m) => (m.proposalId ? [m.proposalId] : [])),
+              },
+            }
+          : {}),
+      })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(100)
+      .select('-beforePlan -fingerprint')
+      .lean();
+    return {
+      session,
+      messages: page.reverse(),
+      proposals: proposals.reverse(),
+      nextCursor,
+    };
+  }
+
+  async listSessions(userId: string, clipId: string, planId: string) {
+    parseEdit(objectId, planId);
+    await this.tools.owned(userId, clipId, planId);
+    const items = await this.sessions
+      .find({ userId, clipId, planId, status: 'active' })
+      .sort({ updatedAt: -1, _id: -1 })
+      .limit(200)
+      .lean();
+    return { items };
+  }
+
+  async createSession(userId: string, clipId: string, body: unknown) {
+    const input = parseEdit(
+      z
+        .object({
+          planId: objectId,
+          title: z.string().trim().min(1).max(100).optional(),
+          requestId: z.string().uuid(),
+        })
+        .strict(),
+      body,
+    );
+    await this.tools.owned(userId, clipId, input.planId);
+    const identity = {
+      userId,
+      clipId,
+      planId: input.planId,
+      requestId: input.requestId,
+    };
+    try {
+      return await this.sessions.findOneAndUpdate(
+        identity,
+        {
+          $setOnInsert: {
+            ...input,
+            userId,
+            clipId,
+            status: 'active',
+            title: input.title || 'New conversation',
+          },
+        },
+        { upsert: true, new: true },
+      );
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+      const existing = await this.sessions.findOne(identity);
+      if (existing) return existing;
+      throw new ConflictException(
+        'Session request ID belongs to a different clip or plan',
+      );
+    }
+  }
+
+  async updateSession(
+    userId: string,
+    clipId: string,
+    sessionId: string,
+    body: unknown,
+  ) {
+    parseEdit(objectId, sessionId);
+    const input = parseEdit(
+      z
+        .object({
+          title: z.string().trim().min(1).max(100).optional(),
+          status: z.enum(['active', 'archived']).optional(),
+        })
+        .strict()
+        .refine((v) => Object.keys(v).length > 0),
+      body,
+    );
+    const session = await this.sessions.findOne({
+      _id: sessionId,
+      userId,
+      clipId,
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    await this.tools.owned(userId, clipId, session.planId);
+    return this.sessions.findOneAndUpdate(
+      { _id: sessionId, userId, clipId },
+      { $set: input },
+      { new: true },
+    );
   }
 }

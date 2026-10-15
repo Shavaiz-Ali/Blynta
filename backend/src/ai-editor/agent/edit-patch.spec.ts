@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { examplePlan } from '../edit-plan.fixture';
 import { compileTimeline } from '../timeline';
-import { mergeEditPatch } from './edit-patch';
+import { mergeEditPatch, modelPatchSchema } from './edit-patch';
 import { searchTranscript } from './agent-tools.service';
 const zoom = {
   id: 'zoom',
@@ -17,6 +17,34 @@ const zoom = {
   },
 };
 describe('AI proposal patches reuse Phase 1', () => {
+  it('keeps operation provenance under backend control while accepting legacy persisted patches', () => {
+    const plan = examplePlan();
+    plan.operations = [
+      {
+        ...zoom,
+        enabled: true,
+        source: 'user',
+        metadata: { origin: 'saved-user-edit' },
+      } as (typeof plan.operations)[number],
+    ];
+    const input = {
+      baseRevision: 1,
+      changes: [
+        {
+          action: 'update',
+          operationId: 'zoom',
+          operation: { ...zoom, source: 'ai', metadata: { origin: 'forged' } },
+        },
+      ],
+    };
+    expect(modelPatchSchema.safeParse(input).success).toBe(false);
+    expect(mergeEditPatch(plan, 1, input).plan.operations[0].source).toBe(
+      'user',
+    );
+    expect(mergeEditPatch(plan, 1, input).plan.operations[0].metadata).toEqual({
+      origin: 'saved-user-edit',
+    });
+  });
   it('uses original typed audio tracks for music adjustment and preserves unrelated effects', () => {
     const track = {
       id: 'music',

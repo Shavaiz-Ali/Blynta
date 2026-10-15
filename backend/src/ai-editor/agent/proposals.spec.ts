@@ -74,6 +74,31 @@ function setup() {
   return { service, proposal, current, proposals, plans, editing, tools };
 }
 describe('Proposal approval delegates to existing optimistic updates', () => {
+  it('does not increment the plan revision for a semantic no-op', async () => {
+    const s = setup();
+    s.proposal.patch = {
+      baseRevision: 1,
+      changes: [
+        {
+          action: 'update_original_audio',
+          controls: s.current.plan.audio.original,
+        },
+      ],
+    } as unknown as typeof patch;
+    await expect(s.service.apply(id, clipId, id)).resolves.toMatchObject({
+      noChanges: true,
+    });
+    expect(s.editing.update).not.toHaveBeenCalled();
+    expect(s.proposals.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: id }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          noChanges: true,
+          appliedRevision: 1,
+        }) as unknown,
+      }),
+    );
+  });
   it('claims pending approval before the plan write so rejection cannot race approval', async () => {
     const s = setup();
     s.proposals.findOneAndUpdate.mockResolvedValue(null);

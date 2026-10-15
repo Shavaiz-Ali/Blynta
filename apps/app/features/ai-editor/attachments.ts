@@ -26,6 +26,7 @@ export function validateAttachment(file: Pick<File, "name" | "size">) {
   return mime;
 }
 export interface Attachment {
+  sessionScope?: string;
   key: string;
   name: string;
   status: "selected" | "uploading" | "processing" | "ready" | "failed";
@@ -39,9 +40,10 @@ interface LibraryMedia {
   status: string;
   error?: string;
 }
-export function useStudioAttachments() {
+export function useStudioAttachments(sessionScope = "") {
   const client = useQueryClient();
-  const [items, setItems] = useState<Attachment[]>([]);
+  const [allItems, setItems] = useState<Attachment[]>([]);
+  const items = allItems.filter((a) => (a.sessionScope ?? "") === sessionScope);
   const itemsRef = useRef(items);
   useEffect(() => {
     itemsRef.current = items;
@@ -50,7 +52,7 @@ export function useStudioAttachments() {
   const workspace = useRef<Promise<string> | null>(null);
   const active = useRef(new Set<string>());
   const [project, setProject] = useState("");
-  const waiting = items.some((a) => a.status === "processing");
+  const waiting = allItems.some((a) => a.status === "processing");
   const validation = useQuery({
     queryKey: ["ai-editor", "upload-validation", project],
     enabled: !!project && waiting,
@@ -171,6 +173,7 @@ export function useStudioAttachments() {
         if (itemsRef.current.length + entries.length >= 8)
           throw Error("Attach up to eight files per prompt.");
         entries.push({
+          sessionScope,
           key: crypto.randomUUID(),
           name: file.name,
           file,
@@ -181,7 +184,7 @@ export function useStudioAttachments() {
       }
     }
     itemsRef.current = [...itemsRef.current, ...entries];
-    setItems(itemsRef.current);
+    setItems((all) => [...all, ...entries]);
     for (const entry of entries) void upload(entry);
   }
   function select(asset: StudioAsset) {
@@ -194,6 +197,7 @@ export function useStudioAttachments() {
     const next = [
       ...itemsRef.current,
       {
+        sessionScope,
         key: asset.assetId,
         assetId: asset.assetId,
         name: asset.name,
@@ -201,7 +205,7 @@ export function useStudioAttachments() {
       },
     ];
     itemsRef.current = next;
-    setItems(next);
+    setItems((all) => [...all, next[next.length - 1]]);
   }
   return {
     items,
@@ -209,7 +213,10 @@ export function useStudioAttachments() {
     select,
     addFiles,
     remove: (key: string) => setItems((v) => v.filter((a) => a.key !== key)),
-    clear: () => setItems([]),
+    clear: () =>
+      setItems((all) =>
+        all.filter((a) => (a.sessionScope ?? "") !== sessionScope),
+      ),
     retry: (key: string) => {
       const entry = itemsRef.current.find((a) => a.key === key);
       if (entry) void upload(entry);

@@ -33,6 +33,7 @@ export function StudioPreviewPanel({
   applying,
   onRender,
   renderFeedback,
+  tools,
 }: {
   mode: "original" | "preview";
   onModeChange: (v: "original" | "preview") => void;
@@ -54,10 +55,11 @@ export function StudioPreviewPanel({
   applying: boolean;
   onRender: () => void;
   renderFeedback?: React.ReactNode;
+  tools?: React.ReactNode;
 }) {
   return (
     <section
-      className="flex min-h-0 min-w-0 flex-col bg-muted/20 lg:h-full"
+      className="flex h-full min-h-0 min-w-0 flex-col bg-muted/20"
       aria-label="Video preview"
     >
       <AppTabs
@@ -73,7 +75,7 @@ export function StudioPreviewPanel({
             <AppTabsTrigger size="sm" value="original">
               Original
             </AppTabsTrigger>
-            <AppTabsTrigger size="sm" value="preview" disabled={!version}>
+            <AppTabsTrigger size="sm" value="preview">
               Edited preview
             </AppTabsTrigger>
           </AppTabsList>
@@ -88,7 +90,7 @@ export function StudioPreviewPanel({
         <AppTabsContent value={mode} className="mt-0 min-h-0 flex-1">
           <div
             aria-busy={renderRunning}
-            className={`studio-canvas flex h-[min(34dvh,360px)] min-h-52 items-center justify-center px-4 py-2 lg:h-full lg:min-h-0 lg:px-8 lg:py-4 ${renderRunning ? rendering.rendering : ""}`}
+            className={`studio-canvas flex h-full min-h-0 items-center justify-center overflow-hidden px-3 py-2 sm:px-5 ${renderRunning ? rendering.rendering : ""}`}
           >
             {url && !playbackFailed ? (
               <StudioVideoPlayer
@@ -129,7 +131,7 @@ export function StudioPreviewPanel({
                             : "Your preview is rendering."
                       : mode === "original"
                         ? "Source playback is unavailable."
-                        : "Apply an edit, then render a preview to see the result."}
+                        : "Review and apply an edit to create your first preview automatically."}
                 </p>
                 {(playbackFailed || sourceError || previewError) && (
                   <Button
@@ -158,12 +160,16 @@ export function StudioPreviewPanel({
             {mode === "original"
               ? "Original clip"
               : version?.status === "completed"
-                ? "Preview ready"
+                ? version.revision === plan?.revision
+                  ? "Preview ready"
+                  : "Preview outdated · newer edits are saved"
                 : version?.status === "failed"
                   ? "Preview failed"
                   : version?.status === "cancelled"
                     ? "Preview cancelled"
-                    : "Preview rendering"}
+                    : version
+                      ? "Preview rendering"
+                      : "No edited preview yet"}
           </span>{" "}
           ·{" "}
           {editTime(
@@ -171,31 +177,40 @@ export function StudioPreviewPanel({
               ? clipDuration
               : (plan?.outputDuration ?? clipDuration),
           )}
-          {plan && plan.revision > 0 && !currentRevisionRendered
+          {plan && plan.revision > 1 && !currentRevisionRendered
             ? " · Changes pending"
             : ""}
         </p>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={
-            !plan ||
-            renderPending ||
-            renderRunning ||
-            applying ||
-            !!renderPollInterval(version?.status)
-          }
-          onClick={() => void onRender()}
-        >
-          <Video className="size-4" />
-          {renderPending
-            ? "Preparing preview…"
-            : renderRunning
-              ? "Rendering…"
-              : "Render preview"}
-        </Button>
+        {!!plan &&
+          plan.revision > 1 &&
+          !currentRevisionRendered &&
+          !renderRunning &&
+          !(
+            version?.status === "failed" && version.revision === plan.revision
+          ) && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={
+                !plan ||
+                renderPending ||
+                renderRunning ||
+                applying ||
+                !!renderPollInterval(version?.status)
+              }
+              onClick={() => void onRender()}
+            >
+              <Video className="size-4" />
+              {renderPending
+                ? "Preparing preview…"
+                : renderRunning
+                  ? "Rendering…"
+                  : "Render preview"}
+            </Button>
+          )}
       </div>
       {renderFeedback}
+      {tools}
     </section>
   );
 }

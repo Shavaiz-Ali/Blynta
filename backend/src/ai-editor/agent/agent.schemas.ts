@@ -2,6 +2,8 @@ import { Schema } from 'mongoose';
 import type { EditPatch } from './edit-patch';
 import type { EditPlan } from '../edit-plan.contract';
 export interface AgentSession {
+  title?: string;
+  requestId?: string;
   userId: string;
   clipId: string;
   planId: string;
@@ -18,6 +20,7 @@ export interface AgentMessage {
   executionId: string;
 }
 export interface EditProposal {
+  noChanges?: boolean;
   diagnostics?: import('./agent-diagnostics').AgentDiagnostic[];
   executionBuild?: object;
   failedStage?: string;
@@ -41,6 +44,8 @@ export interface EditProposal {
 }
 export const SessionSchema = new Schema<AgentSession>(
   {
+    title: { type: String, maxlength: 100 },
+    requestId: String,
     userId: { type: String, required: true },
     clipId: String,
     planId: String,
@@ -50,6 +55,10 @@ export const SessionSchema = new Schema<AgentSession>(
   { timestamps: true, collection: 'ai_agent_sessions' },
 );
 SessionSchema.index({ userId: 1, clipId: 1, createdAt: -1 });
+SessionSchema.index(
+  { userId: 1, requestId: 1 },
+  { unique: true, partialFilterExpression: { requestId: { $type: 'string' } } },
+);
 export const MessageSchema = new Schema<AgentMessage>(
   {
     userId: String,
@@ -65,6 +74,7 @@ export const MessageSchema = new Schema<AgentMessage>(
 MessageSchema.index({ userId: 1, sessionId: 1, createdAt: -1 });
 export const ProposalSchema = new Schema<EditProposal>(
   {
+    noChanges: Boolean,
     diagnostics: { type: [Schema.Types.Mixed], default: [] },
     executionBuild: Schema.Types.Mixed,
     failedStage: String,

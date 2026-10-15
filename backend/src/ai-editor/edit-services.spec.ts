@@ -222,6 +222,20 @@ describe('editing persistence and queue contract', () => {
       `edit-${String(s.version._id)}`,
     );
   });
+  it('rejects an automatic render for a different saved revision before validating or enqueueing', async () => {
+    const s = setup();
+    await expect(
+      s.service.render('owner', String(s.p._id), { expectedRevision: 2 }),
+    ).rejects.toThrow('revision changed');
+    expect(s.validator.validate).not.toHaveBeenCalled();
+    expect(s.queue.add).not.toHaveBeenCalled();
+    await s.service.render('owner', String(s.p._id), { expectedRevision: 1 });
+    expect(s.versions.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ revision: 1 }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
 });
 
 describe('editing worker publication and retries', () => {
@@ -505,5 +519,48 @@ describe('editing worker publication and retries', () => {
       -1,
     )![1] as { $unset: Record<string, unknown> };
     expect(last.$unset).not.toHaveProperty('pendingOutputKeys');
+  });
+});
+
+describe('Studio clip search', () => {
+  it('searches and paginates after scoping clips to the authenticated owner', async () => {
+    const aggregate = jest
+      .fn()
+      .mockResolvedValue([{ items: [], total: [{ count: 25 }] }]);
+    const service = new EditPlansService(
+      ...([
+        {},
+        {},
+        { aggregate },
+        {},
+        {},
+        {},
+        {},
+      ] as unknown as ConstructorParameters<typeof EditPlansService>),
+    );
+    const owner = '111111111111111111111111';
+    await expect(
+      service.listClips(owner, {
+        search: 'zoom [x]',
+        page: '2',
+        sort: 'oldest',
+      }),
+    ).resolves.toMatchObject({ page: 2, totalPages: 3, total: 25 });
+    const pipeline = (aggregate.mock.calls as unknown[][])[0][0] as object[];
+    expect(pipeline[0]).toMatchObject({
+      $match: {
+        userId: new Types.ObjectId(owner),
+        deletionRequested: { $ne: true },
+      },
+    });
+    expect(pipeline).toContainEqual({
+      $match: { title: { $regex: 'zoom \\[x\\]', $options: 'i' } },
+    });
+    expect(pipeline).toContainEqual({
+      $facet: {
+        items: [{ $skip: 12 }, { $limit: 12 }],
+        total: [{ $count: 'count' }],
+      },
+    });
   });
 });

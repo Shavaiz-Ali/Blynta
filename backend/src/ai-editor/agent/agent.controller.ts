@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   Post,
+  Patch,
   Req,
   Query,
   UseGuards,
@@ -15,6 +16,28 @@ import { ProposalsService } from './proposals.service';
 @UseGuards(AuthGuard('jwt'), AIRateLimitGuard)
 export class AgentController {
   constructor(private service: ProposalsService) {}
+  @Get('sessions') sessions(
+    @Req() r: { user: { userId: string } },
+    @Param('clipId') clipId: string,
+    @Query('planId') planId: string,
+  ) {
+    return this.service.listSessions(r.user.userId, clipId, planId);
+  }
+  @Post('sessions') createSession(
+    @Req() r: { user: { userId: string } },
+    @Param('clipId') clipId: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.createSession(r.user.userId, clipId, body);
+  }
+  @Patch('sessions/:id') updateSession(
+    @Req() r: { user: { userId: string } },
+    @Param('clipId') clipId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.service.updateSession(r.user.userId, clipId, id, body);
+  }
   @Get('state') state(
     @Req() r: { user: { userId: string } },
     @Param('clipId') clipId: string,
@@ -61,7 +84,8 @@ export class AgentController {
     @Req() r: { user: { userId: string } },
     @Param('clipId') clipId: string,
     @Param('id') id: string,
+    @Query('before') before?: string,
   ) {
-    return this.service.history(r.user.userId, clipId, id);
+    return this.service.history(r.user.userId, clipId, id, before);
   }
 }

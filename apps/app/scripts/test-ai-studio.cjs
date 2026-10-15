@@ -741,43 +741,90 @@ test("agent stage polling starts during submission and stops after terminal outc
   h.mocks["@tanstack/react-query"].useIsMutating = () => submitting;
   const hooks = load("features/ai-editor/queries.ts", h.mocks);
   const active = hooks.useEditingState("clip", "plan");
-  assert.equal(active.refetchInterval({ state: { data: { proposals: [] } } }), 1500);
+  assert.equal(
+    active.refetchInterval({ state: { data: { proposals: [] } } }),
+    1500,
+  );
   submitting = 0;
   const idle = hooks.useEditingState("clip", "plan");
-  assert.equal(idle.refetchInterval({ state: { data: { proposals: [{ status: "cancelled" }] } } }), false);
-  assert.equal(idle.refetchInterval({ state: { data: { proposals: [{ status: "generating" }] } } }), 1500);
+  assert.equal(
+    idle.refetchInterval({
+      state: { data: { proposals: [{ status: "cancelled" }] } },
+    }),
+    false,
+  );
+  assert.equal(
+    idle.refetchInterval({
+      state: { data: { proposals: [{ status: "generating" }] } },
+    }),
+    1500,
+  );
 });
 
 test("render status shows genuine encoding percentage and indeterminate upload phases", () => {
-  const { StudioRenderStatus } = load("features/ai-editor/StudioRenderStatus.tsx");
+  const { StudioRenderStatus } = load(
+    "features/ai-editor/StudioRenderStatus.tsx",
+  );
   const props = { loading: false, busy: false, onCancel() {}, onRetry() {} };
-  const encode = renderToStaticMarkup(React.createElement(StudioRenderStatus, {
-    ...props, version: { status: "processing", phase: "encoding", progress: 64 },
-  }));
+  const encode = renderToStaticMarkup(
+    React.createElement(StudioRenderStatus, {
+      ...props,
+      version: { status: "processing", phase: "encoding", progress: 64 },
+    }),
+  );
   assert.match(encode, /Encoding video — 64%/);
   assert.match(encode, /value="64"/);
-  const upload = renderToStaticMarkup(React.createElement(StudioRenderStatus, {
-    ...props, version: { status: "processing", phase: "uploading_preview", progress: 99 },
-  }));
+  const upload = renderToStaticMarkup(
+    React.createElement(StudioRenderStatus, {
+      ...props,
+      version: {
+        status: "processing",
+        phase: "uploading_preview",
+        progress: 99,
+      },
+    }),
+  );
   assert.match(upload, /Uploading preview/);
   assert.doesNotMatch(upload, /<progress/);
-  const cancelled = renderToStaticMarkup(React.createElement(StudioRenderStatus, {
-    ...props, version: { status: "cancelled", phase: "cancelled" },
-  }));
+  const cancelled = renderToStaticMarkup(
+    React.createElement(StudioRenderStatus, {
+      ...props,
+      version: { status: "cancelled", phase: "cancelled" },
+    }),
+  );
   assert.match(cancelled, /cancelled/i);
   assert.doesNotMatch(cancelled, /Retry render/);
-  const failed = renderToStaticMarkup(React.createElement(StudioRenderStatus, {
-    ...props, version: { status: "failed", retryable: true },
-  }));
+  const failed = renderToStaticMarkup(
+    React.createElement(StudioRenderStatus, {
+      ...props,
+      version: { status: "failed", retryable: true },
+    }),
+  );
   assert.match(failed, /Retry render/);
 });
 
 test("render treatment preserves the shared player and respects reduced motion", () => {
-  const source = fs.readFileSync(path.join(root, "features/ai-editor/StudioPreviewPanel.tsx"), "utf8");
+  const source = fs.readFileSync(
+    path.join(root, "features/ai-editor/StudioPreviewPanel.tsx"),
+    "utf8",
+  );
   assert.match(source, /StudioVideoPlayer/);
   assert.doesNotMatch(source, /key=\{url\}|key=\{mode\}/);
   assert.match(source, /aria-busy=\{renderRunning\}/);
-  const css = fs.readFileSync(path.join(root, "features/ai-editor/rendering.module.css"), "utf8");
+  const css = fs.readFileSync(
+    path.join(root, "features/ai-editor/rendering.module.css"),
+    "utf8",
+  );
   assert.match(css, /prefers-reduced-motion: reduce/);
   assert.match(css, /animation: none/);
+});
+
+test("automatic preview transport carries the exact saved revision and never retries an expensive request implicitly", async () => {
+  const h = transportHarness(),
+    hooks = load("features/ai-editor/queries.ts", h.mocks);
+  const options = hooks.useRenderAction("plan", "preview");
+  await options.mutationFn({ expectedRevision: 7 });
+  assert.equal(h.calls[0][0], "/ai-editor/plans/plan/preview");
+  assert.deepEqual(h.calls[0][1], { expectedRevision: 7 });
+  assert.equal(options.retry, false);
 });

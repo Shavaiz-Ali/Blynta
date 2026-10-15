@@ -47,6 +47,7 @@ export type PatchChange =
     }
   | { action: "update_original_audio"; controls: OriginalAudio };
 export interface EditingPlan {
+  lastAppliedProposalId?: string;
   clipTitle?: string;
   sourceTitle?: string;
   thumbnailUrl?: string;
@@ -85,6 +86,8 @@ export interface EditingVersion {
   };
 }
 export interface Proposal {
+  noChanges?: boolean;
+  appliedRevision?: number;
   stage?: string;
   _id: string;
   planId: string;
@@ -106,9 +109,20 @@ export interface Proposal {
   patch?: { baseRevision: number; changes: PatchChange[] };
 }
 export interface AgentSession {
+  title?: string;
+  status?: "active" | "archived";
+  updatedAt?: string;
   _id: string;
   planId: string;
   selectedModelId?: string;
+}
+export interface StudioClip {
+  _id: string;
+  jobId: string;
+  title: string;
+  thumbnailUrl?: string;
+  duration: number;
+  createdAt: string;
 }
 export interface StudioState {
   session: AgentSession | null;
@@ -121,6 +135,7 @@ export interface StudioMessage {
   proposalId?: string;
 }
 export interface StudioAsset {
+  sourceGroup?: string;
   _id: string;
   assetId: string;
   name: string;

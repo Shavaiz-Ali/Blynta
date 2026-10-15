@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { editPatchSchema } from './edit-patch';
+import { editPatchSchema, modelPatchSchema } from './edit-patch';
 import { editingCapabilities } from './edit-capabilities';
 
 /** Only contract identifiers/counts/decisions. Never free-form model/user text. */
@@ -21,6 +21,14 @@ export interface AgentDiagnostic {
   outcome?: 'proposal' | 'clarification' | 'unsupported';
   patchJsonPresent?: boolean;
   patchSchemaValid?: boolean;
+  patchIssues?: {
+    path: (string | number)[];
+    code: string;
+    expected?: string;
+    actualType: string;
+    minimum?: number;
+    actualCount?: number;
+  }[];
   changeCount?: number;
   actions?: string[];
   operations?: string[];
@@ -72,14 +80,78 @@ export function diagnosticOutput(value: unknown): Partial<AgentDiagnostic> {
   if (output.patchJson !== undefined) {
     fields.patchJsonPresent = !!output.patchJson;
     try {
-      const patch = editPatchSchema.safeParse(
+      const patch = modelPatchSchema.safeParse(
         JSON.parse(output.patchJson) as unknown,
       );
       fields.patchSchemaValid = patch.success;
+      if (!patch.success) {
+        const raw: unknown = JSON.parse(output.patchJson);
+        // Zod paths may contain untrusted keys. Only expose contract field names.
+        const keys = new Set([
+          'baseRevision',
+          'changes',
+          'action',
+          'operation',
+          'operationId',
+          'id',
+          'type',
+          'start',
+          'end',
+          'params',
+          'assetId',
+          'emoji',
+          'x',
+          'y',
+          'width',
+          'height',
+          'enabled',
+          'source',
+          'controls',
+          'volume',
+          'muted',
+          'track',
+          'trackId',
+        ]);
+        fields.patchIssues = patch.error.issues.slice(0, 12).map((issue) => {
+          let actual: unknown = raw;
+          for (const key of issue.path)
+            actual =
+              actual && typeof actual === 'object'
+                ? (actual as Record<PropertyKey, unknown>)[key]
+                : undefined;
+          const details = issue as typeof issue & {
+            expected?: string;
+            minimum?: number;
+          };
+          return {
+            path: issue.path.map((key) =>
+              typeof key === 'number'
+                ? key
+                : keys.has(String(key))
+                  ? String(key)
+                  : '[field]',
+            ),
+            code: issue.code,
+            expected: details.expected,
+            actualType:
+              actual === undefined
+                ? 'missing'
+                : actual === null
+                  ? 'null'
+                  : Array.isArray(actual)
+                    ? 'array'
+                    : typeof actual,
+            minimum:
+              typeof details.minimum === 'number' ? details.minimum : undefined,
+            actualCount: Array.isArray(actual) ? actual.length : undefined,
+          };
+        });
+      }
       if (patch.success) {
-        fields.changeCount = patch.data.changes.length;
-        fields.actions = patch.data.changes.map((change) => change.action);
-        fields.operations = patch.data.changes.flatMap((change) =>
+        const normalized = editPatchSchema.parse(patch.data);
+        fields.changeCount = normalized.changes.length;
+        fields.actions = normalized.changes.map((change) => change.action);
+        fields.operations = normalized.changes.flatMap((change) =>
           'operation' in change ? [change.operation.type] : [],
         );
       }

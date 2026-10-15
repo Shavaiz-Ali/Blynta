@@ -1,7 +1,7 @@
 "use client";
 import { AppButton as Button } from "@blynta/ui";
-import { Check, Sparkles } from "lucide-react";
-import type { EditingPlan, Proposal } from "./contracts";
+import { Check } from "lucide-react";
+import type { EditingPlan, Proposal, StudioAsset } from "./contracts";
 import { describeChange } from "./presentation";
 export function ProposalCard({
   proposal,
@@ -9,26 +9,31 @@ export function ProposalCard({
   busy,
   onApply,
   onReject,
+  onRevise,
+  assets = [],
 }: {
   proposal: Proposal;
   plan?: EditingPlan;
   busy: boolean;
   onApply: () => void;
   onReject: () => void;
+  onRevise?: () => void;
+  assets?: StudioAsset[];
 }) {
   const stale = !!plan && proposal.baseRevision !== plan.revision;
   return (
     <article
-      className="rounded-xl bg-primary/5 p-4 ring-1 ring-primary/20"
+      className="rounded-lg border border-border/70 p-3.5"
       aria-label="Editing proposal"
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
-          <Sparkles className="size-4 text-primary" />{" "}
           {proposal.status === "pending"
             ? "Suggested edit"
             : proposal.status === "applied"
-              ? "Changes applied"
+              ? proposal.noChanges
+                ? "No changes needed"
+                : "Changes saved"
               : proposal.status === "clarification"
                 ? "A quick question"
                 : proposal.status === "unsupported"
@@ -70,12 +75,25 @@ export function ProposalCard({
           })}
         </ol>
       )}
+      {proposal.patch?.changes.some(
+        (c) =>
+          "operation" in c &&
+          assets.some(
+            (a) =>
+              a.assetId === c.operation.params.assetId &&
+              a.sourceGroup === "generated",
+          ),
+      ) && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Includes a generated image asset.
+        </p>
+      )}
       {(proposal.status === "pending" || proposal.status === "applying") && (
         <>
           <p className="mt-3 text-xs text-muted-foreground">
             {stale
               ? "This suggestion uses an older revision. Reject it, then ask again to use your newer edits."
-              : "Applying saves these changes. Rendering a preview is a separate action."}
+              : "Apply to save these changes and create a preview."}
           </p>
           <div className="mt-3 flex gap-2">
             <Button
@@ -96,6 +114,16 @@ export function ProposalCard({
                 onClick={onReject}
               >
                 Reject
+              </Button>
+            )}
+            {proposal.status === "pending" && onRevise && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={onRevise}
+              >
+                Revise
               </Button>
             )}
           </div>

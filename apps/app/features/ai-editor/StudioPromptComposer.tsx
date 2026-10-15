@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Paperclip, Upload, Library, Send, X, RotateCcw } from "lucide-react";
 import { AppButton, AppTextarea, AppPopover, AppFileInput } from "@blynta/ui";
 import type { StudioAsset } from "./contracts";
@@ -32,6 +32,14 @@ export function StudioPromptComposer({
   modelControl?: React.ReactNode;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const input = inputRef.current;
+    if (input) {
+      input.style.height = "auto";
+      input.style.height = `${Math.min(128, Math.max(48, input.scrollHeight))}px`;
+    }
+  }, [prompt]);
   const [picker, setPicker] = useState(false),
     [library, setLibrary] = useState(false),
     [dragging, setDragging] = useState(false);
@@ -39,7 +47,7 @@ export function StudioPromptComposer({
   return (
     <form
       aria-label="Editing prompt composer"
-      className={`relative order-2 m-3 shrink-0 space-y-2 rounded-xl bg-muted/50 p-3 ring-1 ring-border/60 focus-within:ring-primary/50 sm:m-4 lg:order-3 lg:mt-0 ${dragging ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
+      className={`relative order-3 mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] mt-2 shrink-0 space-y-2 rounded-xl bg-muted/40 p-2.5 ring-1 ring-border/70 focus-within:ring-ring ${dragging ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
       onDragEnter={(e) => {
         if (!disabled && e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
@@ -120,14 +128,15 @@ export function StudioPromptComposer({
         Describe your editing instructions
       </label>
       <AppTextarea
+        ref={inputRef}
         id="studio-prompt"
         value={prompt}
         onChange={(e) => onChange(e.target.value)}
         rows={2}
         maxLength={4000}
         disabled={disabled}
-        placeholder="Try: Add a smooth zoom from 00:00 to 00:03, then lower the original audio to 70%."
-        className={`${scrollbars.hidden} max-h-32 min-h-20 resize-y border-0 bg-transparent p-1 text-sm leading-6 shadow-none focus-visible:ring-0`}
+        placeholder="Ask Blynta to edit your video…"
+        className={`${scrollbars.slim} max-h-32 min-h-12 resize-none overflow-y-auto border-0 bg-transparent p-1 text-sm leading-6 shadow-none focus-visible:ring-0`}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -189,7 +198,9 @@ export function StudioPromptComposer({
               </AppButton>
             }
           >
-            <div className={`${scrollbars.slim} max-h-60 space-y-1 overflow-y-auto p-2`}>
+            <div
+              className={`${scrollbars.slim} max-h-60 space-y-1 overflow-y-auto p-2`}
+            >
               {library ? (
                 assets.length ? (
                   assets.map((a) => (
@@ -276,7 +287,9 @@ export function StudioPromptComposer({
             ? "Wait for validation, retry failed files, or remove them before sending."
             : "Enter to send · Shift+Enter for a new line"}
         </span>
-        <span className="shrink-0 tabular-nums">{prompt.length}/4000</span>
+        {prompt.length >= 3500 && (
+          <span className="shrink-0 tabular-nums">{prompt.length}/4000</span>
+        )}
       </p>
     </form>
   );

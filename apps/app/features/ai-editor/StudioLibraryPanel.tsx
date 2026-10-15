@@ -12,10 +12,9 @@ import {
 } from "@blynta/ui";
 import { RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ProposalCard } from "./ProposalCard";
 import type { EditingPlan, Proposal } from "./contracts";
 import { studioError, useEditingVersions, useEditingAssets } from "./queries";
-import { editTime } from "./presentation";
+import { describeChange, editTime } from "./presentation";
 import type { StudioAsset } from "./contracts";
 const desktopQuery = "(min-width: 1024px)";
 const subscribeDesktop = (onChange: () => void) => {
@@ -41,10 +40,10 @@ export function StudioLibraryPanel({
   onTabChange,
   proposals,
   plan,
-  onApprove,
   onCancel,
   onRetry,
   renderBusy,
+  attachedAssetIds = [],
 }: {
   versions: ReturnType<typeof useEditingVersions>;
   assets: ReturnType<typeof useEditingAssets>;
@@ -65,12 +64,32 @@ export function StudioLibraryPanel({
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
   renderBusy: boolean;
+  attachedAssetIds?: string[];
 }) {
   const desktop = useSyncExternalStore(
     subscribeDesktop,
     desktopSnapshot,
     serverSnapshot,
   );
+  const usedAssets = new Set([
+    ...attachedAssetIds,
+    ...(plan?.plan.audio.tracks.map((t) => t.assetId) ?? []),
+    ...(plan?.plan.operations.flatMap((op) =>
+      typeof op.params.assetId === "string" ? [op.params.assetId] : [],
+    ) ?? []),
+    ...proposals.flatMap(
+      (p) =>
+        p.patch?.changes.flatMap((c) =>
+          "operation" in c && typeof c.operation.params.assetId === "string"
+            ? [c.operation.params.assetId]
+            : "track" in c
+              ? [c.track.assetId]
+              : [],
+        ) ?? [],
+    ),
+  ]);
+  const workspaceAssets =
+    assets.data?.items.filter((a) => usedAssets.has(a.assetId)) ?? [];
   const history = (
     <div className="min-w-0">
       <p className="mt-2 text-xs text-muted-foreground">
@@ -171,8 +190,8 @@ export function StudioLibraryPanel({
   const media = (
     <div className="min-w-0">
       <p className="mt-2 text-xs leading-5 text-muted-foreground">
-        Ready media from your library. Select a file to attach it to your next
-        instruction.
+        Media used in this clip’s edits and conversation. Choose other library
+        media from Attach in the composer.
       </p>
       {assets.isPending ? (
         <Skeleton className="mt-3 h-10 w-full" />
@@ -180,14 +199,16 @@ export function StudioLibraryPanel({
         <p role="alert" className="mt-2 text-xs text-destructive">
           {studioError(assets.error)}
         </p>
-      ) : !assets.data?.items.length ? (
+      ) : !workspaceAssets.length ? (
         <p className="mt-3 text-xs text-muted-foreground">
           No ready media yet. Use Attach in the composer to upload a PNG image
           or audio file.
         </p>
       ) : (
-        <ul className={`${scrollbars.slim} mt-2 max-h-40 space-y-1 overflow-y-auto`}>
-          {assets.data.items.map((asset) => (
+        <ul
+          className={`${scrollbars.slim} mt-2 max-h-40 space-y-1 overflow-y-auto`}
+        >
+          {workspaceAssets.map((asset) => (
             <li key={asset._id}>
               <Button
                 type="button"
@@ -251,20 +272,50 @@ export function StudioLibraryPanel({
               label: "Changes",
               content: (
                 <div className="space-y-4">
-                  {proposals.length ? (
-                    proposals.map((p) => (
-                      <ProposalCard
-                        key={p._id}
-                        proposal={p}
-                        plan={plan}
-                        busy={generating}
-                        onApply={() => onApprove(p._id, "apply")}
-                        onReject={() => onApprove(p._id, "reject")}
-                      />
-                    ))
+                  {plan ? (
+                    <>
+                      <h3 className="text-sm font-medium">Saved edits</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Original audio ·{" "}
+                        {plan.plan.audio.original.enabled
+                          ? `${Math.round(plan.plan.audio.original.gain * 100)}% volume`
+                          : "Muted"}
+                      </p>
+                      {plan.plan.operations.map((op) => {
+                        const text = describeChange({
+                          action: "add",
+                          operation: op,
+                        });
+                        return (
+                          <div key={op.id} className="space-y-1">
+                            <p className="text-sm font-medium">
+                              {text.title.replace(/^Add /, "")} ·{" "}
+                              {op.enabled ? "Enabled" : "Disabled"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {text.detail}
+                            </p>
+                          </div>
+                        );
+                      })}
+                      {plan.plan.audio.tracks.map((t) => (
+                        <p key={t.id} className="text-sm">
+                          {t.role.replaceAll("_", " ")} ·{" "}
+                          {t.enabled
+                            ? `${Math.round(t.gain * 100)}% volume`
+                            : "Disabled"}
+                        </p>
+                      ))}
+                      {!plan.plan.operations.length &&
+                        !plan.plan.audio.tracks.length && (
+                          <p className="text-xs text-muted-foreground">
+                            No visual effects or additional audio tracks.
+                          </p>
+                        )}
+                    </>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      Your editing suggestions will appear here.
+                      Saved editing operations will appear here.
                     </p>
                   )}
                 </div>
