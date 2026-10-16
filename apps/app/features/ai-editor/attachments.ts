@@ -11,6 +11,9 @@ export const attachmentFormats: Record<string, string> = {
   m4a: "audio/mp4",
   ogg: "audio/ogg",
 };
+export const attachmentAccept = Object.keys(attachmentFormats)
+  .map((ext) => `.${ext}`)
+  .join(",");
 export function validateAttachment(file: Pick<File, "name" | "size">) {
   const mime =
     attachmentFormats[file.name.split(".").pop()?.toLowerCase() ?? ""];

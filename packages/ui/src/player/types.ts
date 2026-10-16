@@ -16,6 +16,8 @@ export interface StudioVideoPlayerProps extends PlayerMenuActions {
   badgeText?: string;
   /** Fit natural media dimensions to the surrounding stage, with controls below the image. */
   dockedControls?: boolean;
+  /** Fill an editor pane with centered, contained media and full-width docked controls. */
+  fillWorkspace?: boolean;
   showTopBar?: boolean;
 }
 

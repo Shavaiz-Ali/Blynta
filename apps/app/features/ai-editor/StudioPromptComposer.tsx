@@ -5,6 +5,7 @@ import { AppButton, AppTextarea, AppPopover, AppFileInput } from "@blynta/ui";
 import type { StudioAsset } from "./contracts";
 import scrollbars from "./studio-scrollbars.module.css";
 import type { useStudioAttachments } from "./attachments";
+import { attachmentAccept } from "./attachments";
 type Attachments = ReturnType<typeof useStudioAttachments>;
 export function StudioPromptComposer({
   prompt,
@@ -262,7 +263,7 @@ export function StudioPromptComposer({
           <AppFileInput
             ref={fileRef}
             label="Upload editing media"
-            accept=".png,.mp3,.wav,.m4a,.ogg"
+            accept={attachmentAccept}
             disabled={disabled}
             onFile={(file) => {
               if (file) attachments.addFiles([file]);

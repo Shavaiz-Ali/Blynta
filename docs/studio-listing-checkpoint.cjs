@@ -10,7 +10,7 @@ const { chromium } = require(
   ),
 );
 const { fixture, user, ids } = require("./ui-audit-data.cjs");
-const out = path.join(__dirname, "studio-simplification-listing-evidence");
+const out = path.join(__dirname, "studio-polish-listing-evidence");
 fs.mkdirSync(out, { recursive: true });
 const date = "2026-10-16T08:00:00Z";
 const projects = [
@@ -229,9 +229,19 @@ const clips = projects.map((p, i) => ({
       );
       assert.equal(overflow, false);
       if (width === 1440) {
+        const nextResponse = page.waitForResponse(
+          (r) =>
+            r.url().includes("/ai-editor/clips?") && r.url().includes("page=2"),
+        );
         await page.getByRole("button", { name: "Next", exact: true }).click();
-        await page.getByText("Page 2 of 3", { exact: true }).waitFor();
+        await nextResponse;
+        await page.getByLabel("Page 2 of 3", { exact: true }).waitFor();
         assert(queries.some((q) => q.includes("page=2")));
+        const sorted=page.waitForResponse(r=>r.url().includes("/ai-editor/clips?") && r.url().includes("sort=oldest") && r.url().includes("page=1"));
+        await page.getByRole("combobox",{name:"Sort clips"}).click();
+        await page.getByRole("option",{name:"Oldest",exact:true}).click();
+        await sorted;
+        await page.getByLabel("Page 1 of 3",{exact:true}).waitFor();
         await page
           .getByRole("textbox", { name: "Search clips", exact: true })
           .fill("no such title");

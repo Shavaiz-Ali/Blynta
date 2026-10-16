@@ -1,7 +1,13 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { AppButton, AppCard, AppQueryState, AppSpinner } from "@blynta/ui";
+import {
+  AppButton,
+  AppCard,
+  AppPagination,
+  AppQueryState,
+  AppSpinner,
+} from "@blynta/ui";
 import { PageContent } from "@/components/layout/PageContent";
 import { useViewMode } from "@/features/dashboard/use-view-mode";
 import {
@@ -9,7 +15,6 @@ import {
   LibraryHeading,
   LibraryToolbar,
   LibraryItems,
-  LibraryPagination,
 } from "@/features/jobs/components/ClipLibraryLayout";
 import { useStudioClips } from "./queries";
 import { StudioClipCard } from "./StudioClipCard";
@@ -141,7 +146,12 @@ export function StudioLanding() {
               <StudioClipCard key={clip._id} clip={clip} viewMode={viewMode} />
             ))}
           </LibraryItems>
-          <LibraryPagination
+          <AppPagination
+            variant="activity"
+            itemLabel="clips"
+            total={clips.data.total}
+            pageSize={12}
+            visibleCount={clips.data.items.length}
             page={page}
             totalPages={clips.data.totalPages}
             disabled={clips.isFetching || changing}

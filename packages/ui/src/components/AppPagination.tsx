@@ -1,6 +1,7 @@
 "use client";
 import { AppButton } from "./AppButton";
 import { AppSelect } from "./AppSelect";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export function AppPagination({
   page,
@@ -11,6 +12,9 @@ export function AppPagination({
   onPageChange,
   onPageSizeChange,
   disabled = false,
+  variant = "default",
+  itemLabel = "records",
+  visibleCount,
 }: {
   page: number;
   totalPages?: number;
@@ -20,7 +24,61 @@ export function AppPagination({
   onPageChange: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
   disabled?: boolean;
+  /** Activity's compact range and page indicator presentation. */
+  variant?: "default" | "activity";
+  itemLabel?: string;
+  visibleCount?: number;
 }) {
+  if (variant === "activity") {
+    const pages = Math.max(1, totalPages ?? 1);
+    const start = (page - 1) * (pageSize ?? 1) + 1;
+    return (
+      <nav
+        aria-label="Pagination"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 pb-6 border-t border-border/40"
+      >
+        <p className="text-xs text-muted-foreground">
+          Showing{" "}
+          <span className="font-semibold text-foreground">
+            {start}–
+            {Math.min(start - 1 + (visibleCount ?? pageSize ?? 1), total ?? 0)}
+          </span>{" "}
+          of <span className="font-semibold text-foreground">{total}</span>{" "}
+          {itemLabel}
+        </p>
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          <AppButton
+            variant="outline"
+            size="sm"
+            disabled={disabled || page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            icon={<ChevronLeft className="h-3.5 w-3.5" />}
+            iconPosition="left"
+            className="h-8 text-xs font-medium px-3 whitespace-nowrap cursor-pointer shadow-2xs"
+          >
+            Previous
+          </AppButton>
+          <span
+            aria-label={`Page ${page} of ${pages}`}
+            className="text-xs font-mono font-medium text-foreground px-2.5 py-1 rounded-md bg-muted/60 border border-border/50 select-none"
+          >
+            {page} / {pages}
+          </span>
+          <AppButton
+            variant="outline"
+            size="sm"
+            disabled={disabled || page >= pages}
+            onClick={() => onPageChange(page + 1)}
+            icon={<ChevronRight className="h-3.5 w-3.5" />}
+            iconPosition="right"
+            className="h-8 text-xs font-medium px-3 whitespace-nowrap cursor-pointer shadow-2xs"
+          >
+            Next
+          </AppButton>
+        </div>
+      </nav>
+    );
+  }
   return (
     <nav
       aria-label="Pagination"

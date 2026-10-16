@@ -86,12 +86,13 @@ export function StudioPreviewPanel({
         <AppTabsContent value={mode} className="mt-0 min-h-0 flex-1">
           <div
             aria-busy={renderRunning}
-            className={`studio-canvas flex h-full min-h-0 items-center justify-center overflow-hidden px-3 py-2 sm:px-5 ${renderRunning ? rendering.rendering : ""}`}
+            className={`studio-canvas flex h-full min-h-0 items-center justify-center overflow-hidden ${renderRunning ? rendering.rendering : ""}`}
           >
             {url && !playbackFailed ? (
               <StudioVideoPlayer
                 src={url}
                 dockedControls
+                fillWorkspace
                 showTopBar={false}
                 onError={onPlaybackError}
                 ariaLabel={
@@ -104,7 +105,7 @@ export function StudioPreviewPanel({
                     ? "Original"
                     : `Preview · r${version?.revision}`
                 }
-                className="max-w-full rounded-lg"
+                className="max-w-full"
               />
             ) : mode === "original" && sourcePending ? (
               <div

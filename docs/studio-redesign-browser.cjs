@@ -10,7 +10,7 @@ const { chromium } = require(
     "playwright",
   ),
 );
-const out = path.join(__dirname, "studio-simplification-evidence");
+const out = path.join(__dirname, "studio-polish-evidence");
 fs.mkdirSync(out, { recursive: true });
 const results = [];
 if (
@@ -33,6 +33,8 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
     complete: false,
     failRender: !!options.failRender,
     newSessions: 0,
+    uploads: [],
+    failNextUpload: false,
   };
   const sessions = options.noSession
     ? []
@@ -95,7 +97,55 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
     } catch {}
     const ok = (data) => ({ status: 200, data: { success: true, data } });
     let response;
-    if (url.pathname === "/ai-editor/clips")
+    if (url.pathname.endsWith("/apply") && options.slowApply)
+      await new Promise((r) => setTimeout(r, 650));
+    if (url.hostname === "uploads.example.test") {
+      if (state.failNextUpload) {
+        state.failNextUpload = false;
+        return route.fulfill({
+          status: 503,
+          headers,
+          body: "Synthetic upload failure",
+        });
+      }
+      return route.fulfill({ status: 200, headers, body: "" });
+    }
+    if (url.pathname.endsWith("/assets/upload")) {
+      const asset = {
+        assetId: "uploaded-" + state.uploads.length,
+        name: body.name,
+        kind: "image",
+        mimeType: body.mimeType,
+        status: "uploading",
+      };
+      state.uploads.push(asset);
+      response = ok({
+        assetId: asset.assetId,
+        uploadUrl: "https://uploads.example.test/" + asset.assetId,
+      });
+    } else if (url.pathname.endsWith("/assets/complete")) {
+      state.uploads.find((a) => a.assetId === body.assetId).status =
+        "processing";
+      response = ok({ status: "processing" });
+    } else if (url.pathname === "/studio/projects/fixture-assets/assets") {
+      state.uploads.forEach((a) => {
+        if (a.status === "processing") a.status = "ready";
+      });
+      response = ok(state.uploads.map((a) => ({ ...a, id: a.assetId })));
+    } else if (url.pathname === "/ai-editor/assets") {
+      const existing = options.empty
+        ? []
+        : fixture(url.pathname, method, body, "ready", state, 4100).data.data
+            .items;
+      response = ok({
+        items: [
+          ...existing,
+          ...state.uploads
+            .filter((a) => a.status === "ready")
+            .map((a) => ({ ...a, _id: a.assetId })),
+        ],
+      });
+    } else if (url.pathname === "/ai-editor/clips")
       response = ok({
         items: [
           {
@@ -173,6 +223,16 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
         data.noChanges = true;
       }
       if (data && typeof data === "object") {
+        if (options.empty) {
+          if (data.plan && typeof data.plan === "object" && data.plan.audio) {
+            data.plan.operations = [];
+            data.plan.audio.original.gain = 1;
+            data.plan.audio.tracks = [];
+          }
+          if (data.messages) data.messages = [];
+          if (data.proposals) data.proposals = [];
+        }
+
         if ("revision" in data) data.revision = state.revision + 1;
         if ("planId" in data && "baseRevision" in data) {
           data.baseRevision = 1;
@@ -287,6 +347,10 @@ async function record(c, label, width, theme) {
   if (geometry.video && geometry.player && geometry.canvas) {
     assert(geometry.video.height > 100, "Media must be prominent");
     assert(
+      Math.abs(geometry.player.width - geometry.canvas.width) < 3,
+      "Player fills the workspace width",
+    );
+    assert(
       geometry.player.bottom <= geometry.canvas.bottom + 2,
       "Player fits the stage",
     );
@@ -297,6 +361,20 @@ async function record(c, label, width, theme) {
     assert(
       controls.y >= geometry.video.bottom - 2,
       "Playback controls must not cover footage",
+    );
+    assert(
+      Math.abs(controls.width - geometry.player.width) < 3,
+      "Controls span the player",
+    );
+    const header = await c.page.getByLabel("Clip tools").evaluate((el) => ({
+      overflow: el.scrollWidth > el.clientWidth,
+      title: el.querySelector("h1").getBoundingClientRect().y,
+      status: el.querySelector("p").getBoundingClientRect().y,
+    }));
+    assert.equal(header.overflow, false);
+    assert(
+      Math.abs(header.title - header.status) < 6,
+      "Save indicator aligns with title",
     );
   }
   assert.deepEqual(c.errors, [], `${label} errors`);
@@ -358,6 +436,109 @@ async function record(c, label, width, theme) {
       await dialogs.page.keyboard.press("Escape");
     }
     await dialogs.context.close();
+
+    for (const width of [390, 1440]) {
+      const media = await open(browser, width, "workspace", { empty: true });
+      await media.page
+        .getByRole("button", { name: "History", exact: true })
+        .click();
+      await media.page
+        .getByRole("heading", { name: "No edit history yet" })
+        .waitFor();
+      await media.page.screenshot({
+        path: path.join(out, "history-empty-" + width + ".png"),
+      });
+      await media.page.keyboard.press("Escape");
+      await media.page
+        .getByRole("button", { name: "Changes", exact: true })
+        .click();
+      await media.page
+        .getByRole("heading", { name: "No pending changes" })
+        .waitFor();
+      await media.page.screenshot({
+        path: path.join(out, "changes-empty-" + width + ".png"),
+      });
+      await media.page.keyboard.press("Escape");
+      await media.page
+        .getByRole("button", { name: "Media", exact: true })
+        .click();
+      const dialog = media.page.getByRole("dialog");
+      await dialog.getByRole("heading", { name: "No media yet" }).waitFor();
+      await media.page.screenshot({
+        path: path.join(out, "media-empty-" + width + ".png"),
+      });
+      const chooser = dialog.getByLabel("Upload media to AI Studio");
+      await chooser.setInputFiles({
+        name: "unsupported.jpg",
+        mimeType: "image/jpeg",
+        buffer: Buffer.from("invalid"),
+      });
+      await dialog
+        .getByRole("alert")
+        .filter({ hasText: "Choose a PNG" })
+        .waitFor();
+      assert.equal(media.state.uploads.length, 0);
+      const png = Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=",
+        "base64",
+      );
+      await chooser.setInputFiles({
+        name: "opening-mark.png",
+        mimeType: "image/png",
+        buffer: png,
+      });
+      await dialog
+        .getByRole("button", { name: "Remove from prompt", exact: true })
+        .waitFor({ timeout: 15000 });
+      assert.equal(await dialog.count(), 1, "Upload keeps dialog open");
+      await media.page.screenshot({
+        path: path.join(out, "media-uploaded-" + width + ".png"),
+      });
+      media.state.failNextUpload = true;
+      await chooser.setInputFiles({
+        name: "retry-mark.png",
+        mimeType: "image/png",
+        buffer: png,
+      });
+      await dialog
+        .getByRole("button", { name: "Retry upload", exact: true })
+        .waitFor();
+      assert.equal(
+        await dialog.getByText("opening-mark.png", { exact: true }).count(),
+        1,
+        "Existing media survives upload failure",
+      );
+      await dialog
+        .getByRole("button", { name: "Retry upload", exact: true })
+        .click();
+      await media.page.waitForFunction(
+        () =>
+          document.querySelectorAll('[role="dialog"] button').length > 0 &&
+          [...document.querySelectorAll('[role="dialog"] button')].filter(
+            (b) => b.textContent === "Remove from prompt",
+          ).length === 2,
+      );
+      await media.page.keyboard.press("Escape");
+      if (width < 1280)
+        await media.page
+          .getByRole("tab", { name: "Chat", exact: true })
+          .click();
+      await media.page
+        .getByLabel("Describe your editing instructions")
+        .fill("Use the uploaded image");
+      await media.page
+        .getByRole("button", { name: "Send", exact: true })
+        .click();
+      await media.page.waitForFunction(
+        () => document.querySelector("#studio-prompt")?.value === "",
+      );
+      assert.equal(media.state.promptPayload.selectedAssetIds.length, 2);
+      assert.deepEqual(media.errors, []);
+      await media.context.close();
+    }
+    console.log(
+      "Dialog empty states, upload validation, upload → ready → attached, retained media on failure, retry and selected asset submission passed",
+    );
     const clarification = await open(browser, 1440, "workspace", {
       clarification: true,
     });
@@ -396,12 +577,46 @@ async function record(c, label, width, theme) {
       frame: v.getBoundingClientRect().width / v.getBoundingClientRect().height,
     }));
     assert(Math.abs(dimensions.width / dimensions.height - 16 / 9) < 0.01);
-    assert(Math.abs(dimensions.frame - 16 / 9) < 0.01);
+    assert.equal(
+      await landscape.page
+        .locator("video")
+        .evaluate((v) => getComputedStyle(v).objectFit),
+      "contain",
+    );
     await record(landscape, "landscape", 1440, "light");
     await landscape.page.setViewportSize({ width: 1440, height: 650 });
     await record(landscape, "short-height", 1440, "dark");
     await landscape.context.close();
-    const c = await open(browser, 1440);
+    const c = await open(browser, 1440, "workspace", { slowApply: true });
+    const player = c.page.getByRole("region", {
+      name: "Original clip",
+      exact: true,
+    });
+    await player.focus();
+    await c.page.keyboard.press("KeyM");
+    assert.equal(await c.page.locator("video").evaluate((v) => v.muted), true);
+    await c.page.keyboard.press("KeyL");
+    assert.equal(await c.page.locator("video").evaluate((v) => v.loop), false);
+    await c.page.getByTitle("Change Speed", { exact: true }).click();
+    assert.equal(
+      await c.page.locator("video").evaluate((v) => v.playbackRate),
+      1.25,
+    );
+    await player.focus();
+    await c.page.keyboard.press("ArrowRight");
+    assert((await c.page.locator("video").evaluate((v) => v.currentTime)) > 0);
+    await c.page.keyboard.press("ArrowLeft");
+    await c.page.keyboard.press("Space");
+    await c.page.waitForFunction(() => !document.querySelector("video").paused);
+    await c.page.keyboard.press("Space");
+    await c.page
+      .getByRole("button", { name: "Enter fullscreen", exact: true })
+      .click();
+    await c.page.waitForFunction(() => !!document.fullscreenElement);
+    await c.page
+      .getByRole("button", { name: "Exit fullscreen", exact: true })
+      .click();
+    await c.page.waitForFunction(() => !document.fullscreenElement);
     await c.page
       .getByLabel("Describe your editing instructions")
       .fill("Keep this draft");
@@ -419,7 +634,15 @@ async function record(c, label, width, theme) {
     await c.page
       .getByRole("button", { name: "Apply changes", exact: true })
       .click();
+    await c.page
+      .getByLabel("Clip tools")
+      .getByText("Saving…", { exact: true })
+      .waitFor();
     await c.page.getByText("42%", { exact: false }).waitFor();
+    await c.page
+      .getByLabel("Clip tools")
+      .getByText("Saved", { exact: true })
+      .waitFor();
     assert.equal(c.state.applyRequests, 1);
     assert.deepEqual(c.state.renderRequests, [{ expectedRevision: 2 }]);
     c.state.complete = true;
@@ -465,6 +688,19 @@ async function record(c, label, width, theme) {
       await safe.page.waitForTimeout(700);
       assert.equal(safe.state.renderRequests.length, 0);
       assert.equal(safe.state.applyRequests, 1);
+      if (scenario.failApply) {
+        await safe.page
+          .getByLabel("Clip tools")
+          .getByText("Save not confirmed", { exact: true })
+          .waitFor();
+        assert.equal(
+          await safe.page
+            .getByLabel("Clip tools")
+            .getByText("Saved", { exact: true })
+            .count(),
+          0,
+        );
+      }
       await safe.context.close();
     }
     const recovered = await open(browser, 1440, "workspace", {
@@ -525,6 +761,9 @@ async function record(c, label, width, theme) {
         {
           layouts: results,
           interactions: [
+            "full-width player and control bar; inline save indicator",
+            "direct Media uploads, validation, failure recovery and selected IDs",
+            "centered dialog empty states at mobile and desktop widths",
             "draft preservation",
             "latest active conversation resumes",
             "refresh restoration",

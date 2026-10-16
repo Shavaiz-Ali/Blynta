@@ -634,6 +634,7 @@ test("proposal transport forwards selected IDs as structured context and retains
 test("editing composer exposes attachment removal, counts, multiline input and validation blocking", () => {
   const { StudioPromptComposer } = load(
     "features/ai-editor/StudioPromptComposer.tsx",
+    transportHarness().mocks,
   );
   const html = renderToStaticMarkup(
     React.createElement(StudioPromptComposer, {
@@ -928,4 +929,51 @@ test("latest valid conversation ignores archived and older sessions", () => {
     "latest",
   );
   assert.equal(latestStudioSession([]), undefined);
+});
+
+test("Activity pagination shows a bounded visible range and compact page indicator", () => {
+  const { AppPagination } = load(
+    "../../packages/ui/src/components/AppPagination.tsx",
+  );
+  const render = (page, count) =>
+    renderToStaticMarkup(
+      React.createElement(AppPagination, {
+        variant: "activity",
+        page,
+        totalPages: 3,
+        total: 28,
+        pageSize: 12,
+        visibleCount: count,
+        itemLabel: "clips",
+        onPageChange() {},
+      }),
+    );
+  const last = render(3, 4);
+  assert.match(last, /25–28/);
+  assert.match(last, /3 \/ 3/);
+  assert.match(last, /Next<\/span>/);
+  assert.equal((last.match(/<button\b[^>]* disabled=""/g) || []).length, 1);
+  const first = render(1, 12);
+  assert.match(first, /1–12/);
+  assert.match(first, /border-t border-border\/40/);
+  assert.doesNotMatch(first, /rounded-xl/);
+});
+test("workspace player is opt-in and retains shared playback controls", () => {
+  const { StudioVideoPlayer } = load(
+    "../../packages/ui/src/player/StudioVideoPlayer.tsx",
+  );
+  const render = (props) =>
+    renderToStaticMarkup(
+      React.createElement(StudioVideoPlayer, { src: "/preview.mp4", ...props }),
+    );
+  const workspace = render({
+    dockedControls: true,
+    fillWorkspace: true,
+    showTopBar: false,
+  });
+  assert.match(workspace, /h-full w-full rounded-none border-0/);
+  assert.match(workspace, /object-contain/);
+  assert.match(workspace, /aria-label="Video position"/);
+  assert.match(workspace, /aria-label="Enter fullscreen"/);
+  assert.doesNotMatch(render({}), /h-full w-full rounded-none border-0/);
 });

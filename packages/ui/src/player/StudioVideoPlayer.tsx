@@ -19,6 +19,7 @@ export function StudioVideoPlayer({
   className,
   badgeText = "9:16 Shorts",
   dockedControls = false,
+  fillWorkspace = false,
   showTopBar = true,
   onDownloadTranscript,
   onDownloadSubtitles,
@@ -34,7 +35,7 @@ export function StudioVideoPlayer({
   const [fittedWidth, setFittedWidth] = React.useState<number>();
   const player = useVideoPlayback({ containerRef, videoRef });
   React.useEffect(() => {
-    if (!dockedControls || player.isFullscreen) return;
+    if (!dockedControls || fillWorkspace || player.isFullscreen) return;
     const parent = containerRef.current?.parentElement;
     if (!parent) return;
     const fit = () => {
@@ -57,7 +58,7 @@ export function StudioVideoPlayer({
     if (controlsRef.current) observer.observe(controlsRef.current);
     fit();
     return () => observer.disconnect();
-  }, [dockedControls, ratio, player.isFullscreen]);
+  }, [dockedControls, fillWorkspace, ratio, player.isFullscreen]);
 
   return (
     <div
@@ -67,7 +68,7 @@ export function StudioVideoPlayer({
       aria-label={ariaLabel}
       data-controls-layout={dockedControls ? "docked" : "overlay"}
       style={
-        dockedControls && !player.isFullscreen
+        dockedControls && !fillWorkspace && !player.isFullscreen
           ? { width: fittedWidth }
           : undefined
       }
@@ -82,6 +83,9 @@ export function StudioVideoPlayer({
         dockedControls &&
           "flex-col aspect-auto h-auto w-full bg-transparent border-border shadow-none",
         dockedControls && player.isFullscreen && "h-full w-full",
+        dockedControls &&
+          fillWorkspace &&
+          "h-full w-full rounded-none border-0",
       )}
     >
       <div
@@ -91,8 +95,9 @@ export function StudioVideoPlayer({
         style={
           dockedControls
             ? {
-                aspectRatio: player.isFullscreen ? undefined : ratio,
-                flex: player.isFullscreen ? 1 : undefined,
+                aspectRatio:
+                  player.isFullscreen || fillWorkspace ? undefined : ratio,
+                flex: player.isFullscreen || fillWorkspace ? 1 : undefined,
               }
             : undefined
         }

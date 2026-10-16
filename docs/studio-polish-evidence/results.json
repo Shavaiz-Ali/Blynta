@@ -1,0 +1,639 @@
+{
+  "layouts": [
+    {
+      "label": "preview",
+      "theme": "light",
+      "width": 360,
+      "height": 900,
+      "documentWidth": 360,
+      "workspace": {
+        "x": 0,
+        "y": 56,
+        "width": 360,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": null,
+      "canvas": {
+        "x": 0,
+        "y": 253,
+        "width": 360,
+        "height": 606,
+        "bottom": 859
+      },
+      "player": {
+        "x": 0,
+        "y": 253,
+        "width": 360,
+        "height": 606,
+        "bottom": 859
+      },
+      "video": {
+        "x": 0,
+        "y": 253,
+        "width": 360,
+        "height": 525,
+        "bottom": 778
+      },
+      "chat": null
+    },
+    {
+      "label": "chat",
+      "theme": "dark",
+      "width": 360,
+      "height": 900,
+      "documentWidth": 360,
+      "workspace": {
+        "x": 0,
+        "y": 56,
+        "width": 360,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 12,
+        "y": 756,
+        "width": 336,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": null,
+      "player": null,
+      "video": null,
+      "chat": {
+        "x": 0,
+        "y": 161,
+        "width": 360,
+        "height": 739,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "preview",
+      "theme": "light",
+      "width": 390,
+      "height": 900,
+      "documentWidth": 390,
+      "workspace": {
+        "x": 0,
+        "y": 56,
+        "width": 390,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": null,
+      "canvas": {
+        "x": 0,
+        "y": 253,
+        "width": 390,
+        "height": 606,
+        "bottom": 859
+      },
+      "player": {
+        "x": 0,
+        "y": 253,
+        "width": 390,
+        "height": 606,
+        "bottom": 859
+      },
+      "video": {
+        "x": 0,
+        "y": 253,
+        "width": 390,
+        "height": 525,
+        "bottom": 778
+      },
+      "chat": null
+    },
+    {
+      "label": "chat",
+      "theme": "dark",
+      "width": 390,
+      "height": 900,
+      "documentWidth": 390,
+      "workspace": {
+        "x": 0,
+        "y": 56,
+        "width": 390,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 12,
+        "y": 756,
+        "width": 366,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": null,
+      "player": null,
+      "video": null,
+      "chat": {
+        "x": 0,
+        "y": 161,
+        "width": 390,
+        "height": 739,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "preview",
+      "theme": "light",
+      "width": 768,
+      "height": 900,
+      "documentWidth": 768,
+      "workspace": {
+        "x": 220,
+        "y": 56,
+        "width": 548,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": null,
+      "canvas": {
+        "x": 220,
+        "y": 217,
+        "width": 548,
+        "height": 642,
+        "bottom": 859
+      },
+      "player": {
+        "x": 220,
+        "y": 217,
+        "width": 548,
+        "height": 642,
+        "bottom": 859
+      },
+      "video": {
+        "x": 220,
+        "y": 217,
+        "width": 548,
+        "height": 561,
+        "bottom": 778
+      },
+      "chat": null
+    },
+    {
+      "label": "chat",
+      "theme": "dark",
+      "width": 768,
+      "height": 900,
+      "documentWidth": 768,
+      "workspace": {
+        "x": 220,
+        "y": 56,
+        "width": 548,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 232,
+        "y": 756,
+        "width": 524,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": null,
+      "player": null,
+      "video": null,
+      "chat": {
+        "x": 220,
+        "y": 161,
+        "width": 548,
+        "height": 739,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "preview",
+      "theme": "light",
+      "width": 1024,
+      "height": 900,
+      "documentWidth": 1024,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 784,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": null,
+      "canvas": {
+        "x": 240,
+        "y": 217,
+        "width": 784,
+        "height": 642,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 217,
+        "width": 784,
+        "height": 642,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 217,
+        "width": 784,
+        "height": 561,
+        "bottom": 778
+      },
+      "chat": null
+    },
+    {
+      "label": "chat",
+      "theme": "dark",
+      "width": 1024,
+      "height": 900,
+      "documentWidth": 1024,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 784,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 252,
+        "y": 756,
+        "width": 760,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": null,
+      "player": null,
+      "video": null,
+      "chat": {
+        "x": 240,
+        "y": 161,
+        "width": 784,
+        "height": 739,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "preview",
+      "theme": "light",
+      "width": 1440,
+      "height": 900,
+      "documentWidth": 1440,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1200,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 913,
+        "y": 756,
+        "width": 515,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 621,
+        "bottom": 778
+      },
+      "chat": {
+        "x": 900,
+        "y": 101,
+        "width": 540,
+        "height": 799,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "chat",
+      "theme": "dark",
+      "width": 1440,
+      "height": 900,
+      "documentWidth": 1440,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1200,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 913,
+        "y": 756,
+        "width": 515,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 621,
+        "bottom": 778
+      },
+      "chat": {
+        "x": 900,
+        "y": 101,
+        "width": 540,
+        "height": 799,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "preview",
+      "theme": "light",
+      "width": 1920,
+      "height": 900,
+      "documentWidth": 1920,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1680,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 1177,
+        "y": 756,
+        "width": 731,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 924,
+        "height": 702,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 924,
+        "height": 702,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 924,
+        "height": 621,
+        "bottom": 778
+      },
+      "chat": {
+        "x": 1164,
+        "y": 101,
+        "width": 756,
+        "height": 799,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "chat",
+      "theme": "dark",
+      "width": 1920,
+      "height": 900,
+      "documentWidth": 1920,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1680,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 1177,
+        "y": 756,
+        "width": 731,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 924,
+        "height": 702,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 924,
+        "height": 702,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 924,
+        "height": 621,
+        "bottom": 778
+      },
+      "chat": {
+        "x": 1164,
+        "y": 101,
+        "width": 756,
+        "height": 799,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "clarification",
+      "theme": "dark",
+      "width": 1440,
+      "height": 900,
+      "documentWidth": 1440,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1200,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 913,
+        "y": 756,
+        "width": 515,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 621,
+        "bottom": 778
+      },
+      "chat": {
+        "x": 900,
+        "y": 101,
+        "width": 540,
+        "height": 799,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "landscape",
+      "theme": "light",
+      "width": 1440,
+      "height": 900,
+      "documentWidth": 1440,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1200,
+        "height": 844,
+        "bottom": 900
+      },
+      "composer": {
+        "x": 913,
+        "y": 756,
+        "width": 515,
+        "height": 132,
+        "bottom": 888
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 702,
+        "bottom": 859
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 621,
+        "bottom": 778
+      },
+      "chat": {
+        "x": 900,
+        "y": 101,
+        "width": 540,
+        "height": 799,
+        "bottom": 900
+      }
+    },
+    {
+      "label": "short-height",
+      "theme": "dark",
+      "width": 1440,
+      "height": 650,
+      "documentWidth": 1440,
+      "workspace": {
+        "x": 240,
+        "y": 56,
+        "width": 1200,
+        "height": 594,
+        "bottom": 650
+      },
+      "composer": {
+        "x": 913,
+        "y": 506,
+        "width": 515,
+        "height": 132,
+        "bottom": 638
+      },
+      "canvas": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 452,
+        "bottom": 609
+      },
+      "player": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 452,
+        "bottom": 609
+      },
+      "video": {
+        "x": 240,
+        "y": 157,
+        "width": 660,
+        "height": 371,
+        "bottom": 528
+      },
+      "chat": {
+        "x": 900,
+        "y": 101,
+        "width": 540,
+        "height": 549,
+        "bottom": 650
+      }
+    }
+  ],
+  "interactions": [
+    "full-width player and control bar; inline save indicator",
+    "direct Media uploads, validation, failure recovery and selected IDs",
+    "centered dialog empty states at mobile and desktop widths",
+    "draft preservation",
+    "latest active conversation resumes",
+    "refresh restoration",
+    "missing conversation initializes once and resumes on refresh",
+    "automatic rendering",
+    "encoding progress",
+    "completion switches preview",
+    "render retry without reapply",
+    "no render after failed or no-op apply",
+    "refresh recovers apply-render gap without reapply",
+    "IME-safe Enter and Shift+Enter",
+    "keyboard preview/chat tabs",
+    "focused History, Media and Changes dialogs without tabs",
+    "older completed renders do not replace the current preview",
+    "rejected proposals do not render"
+  ]
+}

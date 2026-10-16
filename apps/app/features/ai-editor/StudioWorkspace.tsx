@@ -8,7 +8,6 @@ import {
   History,
   Library,
   ListChecks,
-  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -446,7 +445,7 @@ export function StudioWorkspace({
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header
             aria-label="Clip tools"
-            className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 px-4 py-2 sm:px-6"
+            className="flex shrink-0 items-center justify-between gap-3 border-b border-border/50 px-4 py-2 sm:px-6"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <Button
@@ -466,25 +465,24 @@ export function StudioWorkspace({
                 >
                   {clipTitle}
                 </h1>
-                <p
-                  aria-live="polite"
-                  className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"
-                >
-                  {plan.data ? (
-                    <>
-                      <Check className="size-3" />{" "}
-                      {apply.isPending
-                        ? "Saving…"
-                        : saveUnconfirmed
-                          ? "Save not confirmed"
-                          : "Saved"}
-                    </>
-                  ) : (
-                    "Loading edit"
-                  )}
-                </p>
               </div>
             </div>
+            <p
+              aria-live="polite"
+              className="shrink-0 text-xs text-muted-foreground"
+            >
+              {plan.data ? (
+                <>
+                  {apply.isPending
+                    ? "Saving…"
+                    : saveUnconfirmed
+                      ? "Save not confirmed"
+                      : "Saved"}
+                </>
+              ) : (
+                "Loading edit"
+              )}
+            </p>
           </header>
           <AppTabs
             value={preferences.tab}
@@ -844,7 +842,8 @@ export function StudioWorkspace({
             </section>
           </div>
           <StudioToolDialog
-            attachedAssetIds={attachments.selectedAssetIds}
+            attachments={attachments}
+            onApprove={(id, action) => void approve(id, action)}
             versions={versions}
             assets={assets}
             page={page}

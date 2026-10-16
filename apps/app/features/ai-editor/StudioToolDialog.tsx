@@ -1,11 +1,16 @@
 "use client";
 import scrollbars from "./studio-scrollbars.module.css";
-import { AppButton as Button, AppDialog } from "@blynta/ui";
+import { useRef } from "react";
+import { attachmentAccept, type useStudioAttachments } from "./attachments";
+import { ProposalCard } from "./ProposalCard";
+import { AppButton as Button, AppDialog, AppFileInput } from "@blynta/ui";
 import { RefreshCw } from "lucide-react";
 import type { EditingPlan, Proposal, StudioAsset } from "./contracts";
 import { studioError, useEditingVersions, useEditingAssets } from "./queries";
 import { describeChange, editTime } from "./presentation";
 export function StudioToolDialog({
+  attachments,
+  onApprove,
   versions,
   assets,
   page,
@@ -23,8 +28,9 @@ export function StudioToolDialog({
   onCancel,
   onRetry,
   renderBusy,
-  attachedAssetIds = [],
 }: {
+  attachments: ReturnType<typeof useStudioAttachments>;
+  onApprove: (id: string, action: "apply" | "reject") => void;
   versions: ReturnType<typeof useEditingVersions>;
   assets: ReturnType<typeof useEditingAssets>;
   page: number;
@@ -42,32 +48,39 @@ export function StudioToolDialog({
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
   renderBusy: boolean;
-  attachedAssetIds?: string[];
 }) {
-  const usedAssets = new Set([
-    ...attachedAssetIds,
-    ...(plan?.plan.audio.tracks.map((t) => t.assetId) ?? []),
-    ...(plan?.plan.operations.flatMap((op) =>
-      typeof op.params.assetId === "string" ? [op.params.assetId] : [],
-    ) ?? []),
-    ...proposals.flatMap(
-      (p) =>
-        p.patch?.changes.flatMap((c) =>
-          "operation" in c && typeof c.operation.params.assetId === "string"
-            ? [c.operation.params.assetId]
-            : "track" in c
-              ? [c.track.assetId]
-              : [],
-        ) ?? [],
-    ),
-  ]);
-  const workspaceAssets =
-    assets.data?.items.filter((a) => usedAssets.has(a.assetId)) ?? [];
+  const fileRef = useRef<HTMLInputElement>(null);
+  const workspaceAssets = assets.data?.items ?? [];
+  const pending = proposals.filter(
+    (p) => p.status === "pending" || p.status === "applying",
+  );
+  const original = plan?.plan.audio.original;
+  const hasSavedChanges =
+    !!plan &&
+    (plan.revision > 1 ||
+      plan.plan.operations.length > 0 ||
+      plan.plan.audio.tracks.length > 0 ||
+      (!!original &&
+        (!original.enabled ||
+          original.gain !== 1 ||
+          original.mutes.length > 0 ||
+          original.automation.length > 0)));
+  const uploadButton = (
+    <Button
+      type="button"
+      disabled={generating || unresolvedSubmission}
+      onClick={() => fileRef.current?.click()}
+    >
+      Upload Media
+    </Button>
+  );
   const history = (
     <div className="min-w-0">
-      <p className="mt-2 text-xs text-muted-foreground">
-        Select a render to preview it. Your saved edit stays current.
-      </p>
+      {!!versions.data?.items.length && (
+        <p className="text-xs text-muted-foreground">
+          Select a render to preview it. Your saved edit stays current.
+        </p>
+      )}
       <div className="mt-3 space-y-2">
         {versions.isPending ? (
           <p role="status" className="py-4 text-sm text-muted-foreground">
@@ -87,9 +100,10 @@ export function StudioToolDialog({
             </Button>
           </div>
         ) : !versions.data?.items.length ? (
-          <p className="py-4 text-sm text-muted-foreground">
-            Your rendered previews will appear here.
-          </p>
+          <DialogEmpty
+            title="No edit history yet"
+            description="Your rendered previews will appear here."
+          />
         ) : (
           versions.data.items.map((v) => (
             <div key={v._id} className="space-y-1">
@@ -164,58 +178,141 @@ export function StudioToolDialog({
     </div>
   );
   const media = (
-    <div className="min-w-0">
-      <p className="mt-2 text-xs leading-5 text-muted-foreground">
-        Media used in this clip’s edits and conversation. Choose other library
-        media from Attach in the composer.
-      </p>
-      {assets.isPending ? (
-        <p role="status" className="mt-3 text-sm text-muted-foreground">
+    <div className="min-w-0 space-y-4">
+      <AppFileInput
+        ref={fileRef}
+        label="Upload media to AI Studio"
+        accept={attachmentAccept}
+        disabled={generating || unresolvedSubmission}
+        onFile={(file) => {
+          if (file) attachments.addFiles([file]);
+        }}
+      />
+      {!!workspaceAssets.length && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Choose media to attach to your next edit.
+          </p>
+          {uploadButton}
+        </div>
+      )}
+      {assets.isPending && !assets.data ? (
+        <p role="status" className="py-4 text-sm text-muted-foreground">
           Loading media…
         </p>
       ) : assets.isError && !assets.data ? (
-        <p role="alert" className="mt-2 text-xs text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {studioError(assets.error)}
         </p>
       ) : !workspaceAssets.length ? (
-        <p className="mt-3 text-xs text-muted-foreground">
-          No ready media yet. Use Attach in the composer to upload a PNG image
-          or audio file.
-        </p>
+        <DialogEmpty
+          title="No media yet"
+          description="Upload assets to use in your AI edits."
+        >
+          {uploadButton}
+        </DialogEmpty>
       ) : (
         <ul
-          className={`${scrollbars.slim} mt-2 max-h-40 space-y-1 overflow-y-auto`}
+          aria-label="Ready editing media"
+          className={
+            scrollbars.slim + " max-h-[45dvh] space-y-2 overflow-y-auto"
+          }
         >
-          {workspaceAssets.map((asset) => (
-            <li key={asset._id}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-
-                disabled={generating || unresolvedSubmission}
-                onClick={() => {
-                  onAttach(asset);
-                  onOpenChange(false);
-                }}
-                className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-xs hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary"
+          {workspaceAssets.map((asset) => {
+            const attached = attachments.items.find(
+              (a) => a.assetId === asset.assetId,
+            );
+            return (
+              <li
+                key={asset.assetId}
+                className="flex items-center justify-between gap-3 rounded-lg border p-3"
               >
-                <span className="truncate">{asset.name}</span>
-                <span className="ml-3 text-muted-foreground">
-                  Ready · {asset.kind}
-                  {asset.duration ? ` · ${editTime(asset.duration)}` : ""}
-                </span>
-              </Button>
-            </li>
-          ))}
+                <div className="min-w-0">
+                  <p
+                    className="truncate text-sm font-medium"
+                    title={asset.name}
+                  >
+                    {asset.name}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {asset.kind === "image" ? "Image" : "Audio"}
+                    {asset.duration ? " · " + editTime(asset.duration) : ""}
+                    {asset.sourceGroup ? " · " + asset.sourceGroup : ""}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={attached ? "ghost" : "outline"}
+                  className="shrink-0"
+                  disabled={generating || unresolvedSubmission}
+                  onClick={() => {
+                    if (attached) attachments.remove(attached.key);
+                    else onAttach(asset);
+                  }}
+                >
+                  {attached ? "Remove from prompt" : "Use in edit"}
+                </Button>
+              </li>
+            );
+          })}
         </ul>
+      )}
+      {!!attachments.items.filter((a) => a.file || a.status !== "ready")
+        .length && (
+        <ul aria-label="Media uploads" className="space-y-2">
+          {attachments.items
+            .filter((a) => a.file || a.status !== "ready")
+            .map((a) => (
+              <li key={a.key} className="rounded-lg border p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate">{a.name}</span>
+                  <span
+                    role="status"
+                    className="shrink-0 text-xs text-muted-foreground"
+                  >
+                    {a.status === "processing"
+                      ? "Validating…"
+                      : a.status === "uploading"
+                        ? "Uploading…"
+                        : a.status}
+                  </span>
+                </div>
+                {a.error && (
+                  <p role="alert" className="mt-2 text-xs text-destructive">
+                    {a.error}
+                  </p>
+                )}
+                {a.status === "failed" && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    disabled={generating || unresolvedSubmission}
+                    onClick={() => attachments.retry(a.key)}
+                  >
+                    Retry upload
+                  </Button>
+                )}
+              </li>
+            ))}
+        </ul>
+      )}
+      {(attachments.error || attachments.validationError) && (
+        <p role="alert" className="text-sm text-destructive">
+          {attachments.error || attachments.validationError}
+          {attachments.validationError && (
+            <Button variant="link" size="sm" onClick={attachments.recheck}>
+              Check validation again
+            </Button>
+          )}
+        </p>
       )}
       <Button
         type="button"
         variant="ghost"
         size="sm"
-
-        className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        disabled={assets.isFetching}
         onClick={() => void assets.refetch()}
       >
         <RefreshCw className="size-3" /> Refresh assets
@@ -224,7 +321,22 @@ export function StudioToolDialog({
   );
   const changes = (
     <div className="space-y-4">
-      {plan ? (
+      {!!pending.length && (
+        <div className="space-y-3">
+          {pending.map((p) => (
+            <ProposalCard
+              key={p._id}
+              proposal={p}
+              plan={plan}
+              assets={assets.data?.items}
+              busy={generating || unresolvedSubmission}
+              onApply={() => onApprove(p._id, "apply")}
+              onReject={() => onApprove(p._id, "reject")}
+            />
+          ))}
+        </div>
+      )}
+      {plan && hasSavedChanges ? (
         <>
           <h3 className="text-sm font-medium">Saved edits</h3>
           <p className="text-xs text-muted-foreground">
@@ -261,9 +373,12 @@ export function StudioToolDialog({
           )}
         </>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          Saved editing operations will appear here.
-        </p>
+        !pending.length && (
+          <DialogEmpty
+            title="No pending changes"
+            description="Ask Blynta to edit your video to get started."
+          />
+        )
       )}
     </div>
   );
@@ -272,19 +387,36 @@ export function StudioToolDialog({
       open={open}
       onOpenChange={onOpenChange}
       size="lg"
-      contentClassName="sm:max-w-3xl max-h-[85dvh]"
+      contentClassName={
+        tab === "media"
+          ? "sm:max-w-2xl max-h-[85dvh]"
+          : "sm:max-w-lg max-h-[85dvh]"
+      }
       title={
         tab === "history" ? "History" : tab === "media" ? "Media" : "Changes"
-      }
-      description={
-        tab === "history"
-          ? "Preview versions for this clip."
-          : tab === "media"
-            ? "Media used in this clip’s edits."
-            : "Changes saved to this clip."
       }
     >
       {tab === "history" ? history : tab === "media" ? media : changes}
     </AppDialog>
+  );
+}
+
+function DialogEmpty({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-44 flex-col items-center justify-center gap-2 py-8 text-center">
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="max-w-xs text-sm leading-6 text-muted-foreground">
+        {description}
+      </p>
+      {children && <div className="mt-3">{children}</div>}
+    </div>
   );
 }
