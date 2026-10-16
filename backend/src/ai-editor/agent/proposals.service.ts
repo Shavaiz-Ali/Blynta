@@ -25,6 +25,7 @@ import { AgentTools } from './agent-tools.service';
 import { EditingGraph } from './editing-graph.service';
 import { mergeEditPatch } from './edit-patch';
 import { readBuildInfo } from '../../common/build-info';
+import { callFailure } from '../../ai-registry/call-diagnostics';
 const proposeInput = z
   .object({
     planId: objectId,
@@ -278,6 +279,7 @@ export class ProposalsService {
         status: 'cancelled',
       });
       if (current) return current;
+      const failure = callFailure(error, abort.signal.aborted);
       await this.proposals.updateOne(
         { _id: proposal._id, status: 'generating' },
         {
@@ -296,9 +298,9 @@ export class ProposalsService {
                 String((error.getResponse() as { code?: unknown }).code),
               )
                 ? (error.getResponse() as { code: string }).code
-                : AI_ERROR_CODES.PROPOSAL_FAILED,
+                : failure.code,
             failedStage: lastStage,
-            retryable: true,
+            retryable: failure.retryable,
           },
         },
       );

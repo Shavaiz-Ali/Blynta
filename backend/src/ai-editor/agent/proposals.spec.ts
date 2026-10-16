@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ProposalsService } from './proposals.service';
@@ -31,6 +32,97 @@ const patch = {
     },
   ],
 };
+describe('Persisted model-call failures', () => {
+  it.each([
+    ['AI_REQUEST_FAILED', 'request', false],
+    ['AI_QUOTA_OR_RATE_LIMIT', 'quota', true],
+    ['AI_STRUCTURED_OUTPUT_INVALID', 'structured_output', true],
+    ['AI_OUTPUT_TOKEN_LIMIT', 'token_limit', false],
+  ])(
+    'preserves %s and its retry policy on the failed proposal',
+    async (code, category, retryable) => {
+      const query = {
+        sort: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue([]),
+      };
+      const sessions = { create: jest.fn().mockResolvedValue({ _id: id }) };
+      const messages = {
+        find: jest.fn().mockReturnValue(query),
+        create: jest.fn().mockResolvedValue({}),
+      };
+      const proposals = {
+        findOne: jest.fn().mockResolvedValue(null),
+        find: jest.fn().mockReturnValue(query),
+        create: jest
+          .fn()
+          .mockResolvedValue({
+            _id: id,
+            executionId: 'synthetic-execution',
+            status: 'generating',
+            baseRevision: 1,
+          }),
+        updateOne: jest.fn().mockResolvedValue({}),
+      };
+      const exception = new ServiceUnavailableException({
+        code,
+        callFailure: { code, category, retryable, origin: 'provider_response' },
+      });
+      const graph = {
+        run: jest.fn(
+          async (input: { onStage: (stage: string) => Promise<void> }) => {
+            await input.onStage('generate_patch');
+            throw exception;
+          },
+        ),
+      };
+      const service = new ProposalsService(
+        ...([
+          sessions,
+          messages,
+          proposals,
+          {},
+          {
+            eval: jest.fn().mockResolvedValue(1),
+            set: jest.fn().mockResolvedValue('OK'),
+          },
+          new ConfigService(),
+          {
+            resolveUserModel: jest
+              .fn()
+              .mockResolvedValue({ model: { _id: id } }),
+          },
+          {
+            owned: jest
+              .fn()
+              .mockResolvedValue({
+                plan: { revision: 1, plan: examplePlan() },
+              }),
+          },
+          graph,
+          {},
+        ] as unknown as ConstructorParameters<typeof ProposalsService>),
+      );
+      await expect(
+        service.propose(id, clipId, {
+          planId,
+          prompt: 'Synthetic edit',
+          requestId: '66666666-6666-4666-8666-666666666666',
+        }),
+      ).rejects.toBe(exception);
+      expect(proposals.updateOne).toHaveBeenCalledWith(expect.anything(), {
+        $set: expect.objectContaining({
+          status: 'failed',
+          errorCode: code,
+          failedStage: 'generate_patch',
+          retryable,
+        }),
+      });
+      expect(graph.run).toHaveBeenCalledTimes(1);
+    },
+  );
+});
 function setup() {
   const proposal = {
     _id: id,

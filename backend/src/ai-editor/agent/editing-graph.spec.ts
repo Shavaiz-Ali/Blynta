@@ -528,14 +528,23 @@ describe('Bounded LangGraph proposal integration', () => {
   it('stops on provider timeout and records a failed request', async () => {
     const s = setup();
     s.google.structured.mockRejectedValue(
-      new ServiceUnavailableException('AI provider request failed'),
+      new ServiceUnavailableException({
+        code: 'AI_TIMEOUT',
+        message: 'AI model request timed out',
+        callFailure: {
+          code: 'AI_TIMEOUT',
+          category: 'timeout',
+          origin: 'transport',
+          retryable: true,
+        },
+      }),
     );
     await expect(s.run()).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(s.google.structured).toHaveBeenCalledTimes(1);
     expect(s.registry.recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'failed',
-        errorCode: 'AI_REQUEST_FAILED',
+        errorCode: 'AI_TIMEOUT',
       }),
     );
   });

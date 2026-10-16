@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { editPatchSchema, modelPatchSchema } from './edit-patch';
 import { editingCapabilities } from './edit-capabilities';
+import type { CallFailure } from '../../ai-registry/call-diagnostics';
 
 /** Only contract identifiers/counts/decisions. Never free-form model/user text. */
 export interface AgentDiagnostic {
@@ -10,11 +11,25 @@ export interface AgentDiagnostic {
   event:
     | 'node_enter'
     | 'model_result'
+    | 'model_started'
     | 'model_failed'
     | 'validation'
     | 'route'
     | 'asset_resolution';
   call?: number;
+  modelId?: string;
+  providerModelId?: string;
+  credentialRevision?: number;
+  credentialChanged?: boolean;
+  baseUrl?: string;
+  apiVersion?: string;
+  structuredOutputMethod?: 'functionCalling';
+  maxOutputTokens?: number;
+  temperature?: number;
+  timeoutMs?: number;
+  promptBytes?: number;
+  durationMs?: number;
+  failure?: CallFailure;
   schemaValid?: boolean;
   outputHash?: string;
   capabilityHash?: string;
@@ -45,6 +60,11 @@ export interface AgentDiagnostic {
     | 'DECLARED_UNAVAILABLE'
     | 'USER_INPUT_REQUIRED'
     | 'SCHEMA_INVALID'
+    | 'PROVIDER_HTTP_FAILURE'
+    | 'MODEL_RESPONSE_FAILURE'
+    | 'TRANSPORT_FAILURE'
+    | 'ADAPTER_FAILURE'
+    | 'EXECUTION_FAILURE'
     | 'PROVIDER_OR_EXECUTION_FAILURE';
   next?: string;
 }

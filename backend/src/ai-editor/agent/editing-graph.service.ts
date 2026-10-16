@@ -8,12 +8,13 @@ import {
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import { z } from 'zod';
 import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.registry';
-import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import { AgentTools } from './agent-tools.service';
 import { editPatchSchema, modelPatchSchema } from './edit-patch';
 import type { EditPatch } from './edit-patch';
 import { editingCapabilities } from './edit-capabilities';
+import { callFailure } from '../../ai-registry/call-diagnostics';
+import { providerEndpoint } from '../../ai-registry/provider-policy';
 import {
   capabilityHash,
   diagnosticOutput,
@@ -161,7 +162,22 @@ export class EditingGraph {
         );
       const started = Date.now();
       const call = calls;
+      let phase: 'adapter' | 'execution' = 'adapter';
       try {
+        await diagnose({
+          event: 'model_started',
+          call,
+          modelId,
+          providerModelId: fresh.model.modelId,
+          credentialRevision: fresh.credential?.revision,
+          credentialChanged: fresh.secret !== resolved.secret,
+          ...providerEndpoint(fresh.provider),
+          structuredOutputMethod: 'functionCalling',
+          maxOutputTokens: fresh.model.settings.maxOutputTokens,
+          temperature: fresh.model.settings.temperature,
+          timeoutMs: fresh.model.settings.timeoutMs,
+          promptBytes: Buffer.byteLength(encoded) + Buffer.byteLength(SYSTEM),
+        });
         const signal = AbortSignal.any([
           input.signal,
           AbortSignal.timeout(fresh.model.settings.timeoutMs),
@@ -177,6 +193,7 @@ export class EditingGraph {
             signal,
             fresh.provider,
           );
+        phase = 'execution';
         const usage = result.usage;
         const pricing = fresh.model.pricing;
         const inputTokens = usage?.input_tokens,
@@ -193,6 +210,7 @@ export class EditingGraph {
           event: 'model_result',
           call,
           schemaValid: parsed.success,
+          durationMs: Date.now() - started,
           capabilityHash,
           ...diagnosticOutput(result.parsed),
         });
@@ -200,6 +218,7 @@ export class EditingGraph {
           throw new BadRequestException({
             code: 'AI_STRUCTURED_OUTPUT_INVALID',
             message: 'AI returned malformed structured output',
+            issues: [],
           });
         await this.registry.recordUsage({
           executionId: input.executionId,
@@ -219,28 +238,55 @@ export class EditingGraph {
         });
         return parsed.data;
       } catch (error) {
+        const failure = callFailure(error, input.signal.aborted);
         await diagnose({
           event: 'model_failed',
           call,
-          reason:
-            error instanceof BadRequestException
-              ? 'SCHEMA_INVALID'
-              : 'PROVIDER_OR_EXECUTION_FAILURE',
-        });
-        await this.registry.recordUsage({
-          executionId: input.executionId,
-          call,
-          userId: input.userId,
           modelId,
           providerModelId: fresh.model.modelId,
-          providerId: fresh.model.providerId,
-          taskType: 'edit_proposal',
-          latencyMs: Date.now() - started,
-          status: 'failed',
-          errorCode: input.signal.aborted
-            ? AI_ERROR_CODES.TIMEOUT
-            : AI_ERROR_CODES.REQUEST_FAILED,
-        });
+          durationMs: Date.now() - started,
+          failure,
+          reason:
+            failure.category === 'structured_output'
+              ? 'SCHEMA_INVALID'
+              : failure.origin === 'provider_http'
+                ? 'PROVIDER_HTTP_FAILURE'
+                : failure.origin === 'provider_response'
+                  ? 'MODEL_RESPONSE_FAILURE'
+                  : failure.origin === 'transport'
+                    ? 'TRANSPORT_FAILURE'
+                    : failure.origin === 'adapter'
+                      ? 'ADAPTER_FAILURE'
+                      : 'EXECUTION_FAILURE',
+        }).catch(() =>
+          this.logger.error('AI failure diagnostic could not be persisted'),
+        );
+        await this.registry
+          .recordUsage({
+            executionId: input.executionId,
+            call,
+            userId: input.userId,
+            modelId,
+            providerModelId: fresh.model.modelId,
+            providerId: fresh.model.providerId,
+            taskType: 'edit_proposal',
+            latencyMs: Date.now() - started,
+            status: 'failed',
+            errorCode: failure.code,
+          })
+          .catch(() =>
+            this.logger.error('AI failure usage could not be persisted'),
+          );
+        if (failure.origin === 'execution' && phase === 'execution')
+          throw new HttpException(
+            {
+              code: failure.code,
+              message: 'AI proposal execution failed after the model response',
+              callFailure: failure,
+              issues: [failure],
+            },
+            500,
+          );
         throw error;
       }
     };
