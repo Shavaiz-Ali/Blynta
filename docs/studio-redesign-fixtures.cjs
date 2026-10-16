@@ -9,6 +9,7 @@ const files = [
   path.join(dir, "page.tsx"),
   path.join(dir, "Fixture.tsx"),
   video,
+  path.join(root, "apps/app/public/auth/studio-landscape.mp4"),
 ];
 if (process.argv.includes("--clean")) {
   for (const file of files) {
@@ -22,6 +23,17 @@ if (process.argv.includes("--clean")) {
     fs.readFileSync(validator, "utf8").includes("/auth/studio-preview")
   )
     fs.unlinkSync(validator);
+  for (const typesRoot of [".next/dev/types", ".next/types"]) {
+    const generatedPage = path.join(
+      root,
+      "apps/app",
+      typesRoot,
+      "app/auth/studio-preview/page.ts",
+    );
+    if (!generatedPage.startsWith(root + path.sep))
+      throw Error("Unsafe generated type path");
+    if (fs.existsSync(generatedPage)) fs.unlinkSync(generatedPage);
+  }
   process.exit(0);
 }
 fs.mkdirSync(dir, { recursive: true });
@@ -36,7 +48,8 @@ fs.writeFileSync(
   `"use client";
 import { useSearchParams } from "next/navigation"; import { AppShell } from "@/components/layout/AppShell";
 import { StudioWorkspace } from "@/features/ai-editor/StudioWorkspace"; import { StudioLanding } from "@/features/ai-editor/StudioLanding";
-export default function Fixture(){const listing=useSearchParams().get("view")==="listing"; return <AppShell>{listing ? <StudioLanding /> : <StudioWorkspace jobId="bbbbbbbbbbbbbbbbbbbbbbbb" clipId="cccccccccccccccccccccccc" />}</AppShell>;}`,
+import { ClipsLibrary } from "@/features/jobs/components/ClipsLibrary";
+export default function Fixture(){const view=useSearchParams().get("view"); return <AppShell>{view === "reference" ? <ClipsLibrary /> : view === "listing" ? <StudioLanding /> : <StudioWorkspace jobId="bbbbbbbbbbbbbbbbbbbbbbbb" clipId="cccccccccccccccccccccccc" />}</AppShell>;}`,
 );
 execFileSync(process.env.EDIT_FFMPEG_PATH || "ffmpeg", [
   "-hide_banner",
@@ -57,3 +70,19 @@ execFileSync(process.env.EDIT_FFMPEG_PATH || "ffmpeg", [
 console.log(
   "Synthetic Studio fixture created. Start apps/app with UI_AUDIT_PREVIEW=1 on port 4100.",
 );
+execFileSync(process.env.EDIT_FFMPEG_PATH || "ffmpeg", [
+  "-hide_banner",
+  "-loglevel",
+  "error",
+  "-y",
+  "-f",
+  "lavfi",
+  "-i",
+  "testsrc2=size=640x360:rate=24:duration=3",
+  "-c:v",
+  "libx264",
+  "-pix_fmt",
+  "yuv420p",
+  "-an",
+  files[3],
+]);

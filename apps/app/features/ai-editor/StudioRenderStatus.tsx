@@ -15,6 +15,7 @@ export function StudioRenderStatus({
   busy,
   onCancel,
   onRetry,
+  inline = false,
 }: {
   version?: EditingVersion;
   loading: boolean;
@@ -22,12 +23,17 @@ export function StudioRenderStatus({
   busy: boolean;
   onCancel: () => void;
   onRetry: () => void;
+  inline?: boolean;
 }) {
   const active = !!renderPollInterval(version?.status);
   return (
     <div
       aria-live="polite"
-      className="shrink-0 space-y-2 border-t border-border/40 px-4 py-3 sm:px-6"
+      className={
+        inline
+          ? "w-full space-y-2"
+          : "shrink-0 space-y-2 border-t border-border/40 px-4 py-3 sm:px-6"
+      }
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2 text-sm">

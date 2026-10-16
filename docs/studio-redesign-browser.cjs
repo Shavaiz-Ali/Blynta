@@ -10,7 +10,7 @@ const { chromium } = require(
     "playwright",
   ),
 );
-const out = path.join(__dirname, "../.test-results/studio-redesign");
+const out = path.join(__dirname, "studio-editor-checkpoint-evidence");
 fs.mkdirSync(out, { recursive: true });
 const results = [];
 if (
@@ -53,6 +53,7 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
   });
   const page = await context.newPage(),
     errors = [];
+  page.setDefaultNavigationTimeout(90000);
   page.on("pageerror", (e) => errors.push(e.message));
   const version = () => ({
     _id: ids.version,
@@ -63,7 +64,7 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
     progress: state.complete ? 100 : 42,
     createdAt: "2026-10-15T08:00:00Z",
     outputUrl: state.complete
-      ? "http://localhost:4100/auth/studio-preview.mp4"
+      ? "http://127.0.0.1:4100/auth/studio-preview.mp4"
       : undefined,
   });
   await context.route("**/*", async (route) => {
@@ -78,7 +79,7 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
           accessToken: "synthetic-token",
         },
       });
-    if (url.hostname === "localhost" && url.port === "4100")
+    if (url.hostname === "127.0.0.1" && url.port === "4100")
       return route.continue();
     const headers = {
       "access-control-allow-origin": "*",
@@ -190,19 +191,35 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
           data.proposals = [];
           if (id !== ids.session) data.messages = [];
         }
+        if (options.clarification) {
+          for (const p of data.proposals || []) {
+            p.status = "clarification";
+            p.summary = "Which phrase or timestamp should I use?";
+            delete p.patch;
+          }
+          for (const message of data.messages || [])
+            if (message.role === "assistant") {
+              message.proposalId = ids.proposal;
+              message.content = "An older wording of this clarification";
+            }
+        }
       }
     }
     return route.fulfill({
       status: response.status,
       headers,
       contentType: "application/json",
-      body: JSON.stringify(response.data).replaceAll(
-        "/auth/ui-audit-video.mp4",
-        "/auth/studio-preview.mp4",
-      ),
+      body: JSON.stringify(response.data)
+        .replaceAll(
+          "/auth/ui-audit-video.mp4",
+          options.landscape
+            ? "/auth/studio-landscape.mp4"
+            : "/auth/studio-preview.mp4",
+        )
+        .replaceAll("http://localhost:4100", "http://127.0.0.1:4100"),
     });
   });
-  await page.goto(`http://localhost:4100/auth/studio-preview?view=${view}`, {
+  await page.goto(`http://127.0.0.1:4100/auth/studio-preview?view=${view}`, {
     waitUntil: "networkidle",
     timeout: 120000,
   });
@@ -215,6 +232,12 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
       exact: true,
     })
     .waitFor();
+  if (view !== "listing") {
+    await page.locator("video").waitFor();
+    await page.waitForFunction(
+      () => document.querySelector("video")?.readyState >= 2,
+    );
+  }
   return { page, context, state, errors, sessions };
 }
 async function record(c, label, width, theme) {
@@ -242,6 +265,9 @@ async function record(c, label, width, theme) {
       workspace: rect("[data-studio-workspace]"),
       composer: rect('[aria-label="Editing prompt composer"]'),
       canvas: rect(".studio-canvas"),
+      player: rect('[data-controls-layout="docked"]'),
+      video: rect("video"),
+      chat: rect("#studio-view-chat"),
     };
   });
   assert.equal(geometry.documentWidth, width, `${label} ${width} overflow`);
@@ -255,6 +281,21 @@ async function record(c, label, width, theme) {
       geometry.composer.bottom <= geometry.height + 2,
       `${label} composer overflow`,
     );
+  if (geometry.video && geometry.player && geometry.canvas) {
+    assert(geometry.video.height > 100, "Media must be prominent");
+    assert(
+      geometry.player.bottom <= geometry.canvas.bottom + 2,
+      "Player fits the stage",
+    );
+    const controls = await c.page
+      .locator('[data-controls-layout="docked"] > div')
+      .last()
+      .boundingBox();
+    assert(
+      controls.y >= geometry.video.bottom - 2,
+      "Playback controls must not cover footage",
+    );
+  }
   assert.deepEqual(c.errors, [], `${label} errors`);
   await c.page.screenshot({
     path: path.join(out, `${label}-${width}-${theme}.png`),
@@ -280,12 +321,51 @@ async function record(c, label, width, theme) {
         .fill("Draft for the opening zoom");
       await record(c, "chat", width, "dark");
       await c.context.close();
-      const listing = await open(browser, width, "listing");
-      await record(listing, "listing", width, "light");
-      await record(listing, "listing", width, "dark");
-      await listing.context.close();
       console.log(`layouts ${width} passed`);
     }
+    const clarification = await open(browser, 1440, "workspace", {
+      clarification: true,
+    });
+    const question = clarification.page.getByText(
+      "Which phrase or timestamp should I use?",
+      { exact: true },
+    );
+    await question.waitFor();
+    assert.equal(await question.count(), 1);
+    assert.equal(
+      await clarification.page
+        .getByText("An older wording of this clarification", { exact: true })
+        .count(),
+      0,
+    );
+    await clarification.page
+      .getByLabel("Describe your editing instructions")
+      .fill("Keep this draft");
+    await clarification.page
+      .getByRole("button", { name: "Answer in chat", exact: true })
+      .click();
+    assert.equal(
+      await clarification.page
+        .getByLabel("Describe your editing instructions")
+        .inputValue(),
+      "Keep this draft",
+    );
+    await record(clarification, "clarification", 1440, "dark");
+    await clarification.context.close();
+    const landscape = await open(browser, 1440, "workspace", {
+      landscape: true,
+    });
+    const dimensions = await landscape.page.locator("video").evaluate((v) => ({
+      width: v.videoWidth,
+      height: v.videoHeight,
+      frame: v.getBoundingClientRect().width / v.getBoundingClientRect().height,
+    }));
+    assert(Math.abs(dimensions.width / dimensions.height - 16 / 9) < 0.01);
+    assert(Math.abs(dimensions.frame - 16 / 9) < 0.01);
+    await record(landscape, "landscape", 1440, "light");
+    await landscape.page.setViewportSize({ width: 1440, height: 650 });
+    await record(landscape, "short-height", 1440, "dark");
+    await landscape.context.close();
     const c = await open(browser, 1440);
     await c.page
       .getByLabel("Describe your editing instructions")
@@ -306,6 +386,10 @@ async function record(c, label, width, theme) {
       "Keep this draft",
     );
     await c.page.reload({ waitUntil: "networkidle" });
+    await c.page.waitForFunction(
+      () =>
+        document.querySelector("#studio-prompt")?.value === "Keep this draft",
+    );
     assert.equal(
       await c.page
         .getByLabel("Describe your editing instructions")

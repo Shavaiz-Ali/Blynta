@@ -14,6 +14,9 @@ export interface StudioVideoPlayerProps extends PlayerMenuActions {
   autoPlay?: boolean;
   className?: string;
   badgeText?: string;
+  /** Fit natural media dimensions to the surrounding stage, with controls below the image. */
+  dockedControls?: boolean;
+  showTopBar?: boolean;
 }
 
 export interface ClipMediaStageProps extends PlayerMenuActions {

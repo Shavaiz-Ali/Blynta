@@ -24,8 +24,11 @@ export class EditPlansController {
   ) {
     return this.service.listClips(r.user.userId, query);
   }
-  @Get('plans') recent(@Req() r: UserRequest) {
-    return this.service.recent(r.user.userId);
+  @Get('plans') recent(
+    @Req() r: UserRequest,
+    @Query() query: Record<string, string>,
+  ) {
+    return this.service.listProjects(r.user.userId, query);
   }
   @Get('assets') assets(@Req() r: UserRequest) {
     return this.service.ownedAssets(r.user.userId);

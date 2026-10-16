@@ -6,14 +6,28 @@ export function conversationItems(
   proposals: Proposal[],
 ) {
   const remaining = new Map(proposals.map((p) => [p._id, p]));
+  const seenMessages = new Set<string>();
+  const linked = new Set<string>();
   const items: { key: string; message?: StudioMessage; proposal?: Proposal }[] =
     [];
   for (const message of messages) {
+    if (seenMessages.has(message._id)) continue;
+    seenMessages.add(message._id);
+    // Polling/page overlap can repeat an assistant result with a different message ID.
+    if (
+      message.role === "assistant" &&
+      message.proposalId &&
+      linked.has(message.proposalId)
+    )
+      continue;
     const proposal =
       message.role === "assistant" && message.proposalId
         ? remaining.get(message.proposalId)
         : undefined;
-    if (proposal) remaining.delete(proposal._id);
+    if (proposal) {
+      remaining.delete(proposal._id);
+      linked.add(proposal._id);
+    }
     items.push({ key: message._id, message, proposal });
   }
   for (const proposal of remaining.values())

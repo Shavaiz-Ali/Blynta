@@ -1,0 +1,32 @@
+[
+  {
+    "width": 375,
+    "overflow": false,
+    "browserErrors": [],
+    "writes": []
+  },
+  {
+    "width": 768,
+    "overflow": false,
+    "browserErrors": [],
+    "writes": []
+  },
+  {
+    "width": 1024,
+    "overflow": false,
+    "browserErrors": [],
+    "writes": []
+  },
+  {
+    "width": 1440,
+    "overflow": false,
+    "browserErrors": [],
+    "writes": []
+  },
+  {
+    "width": 1920,
+    "overflow": false,
+    "browserErrors": [],
+    "writes": []
+  }
+]

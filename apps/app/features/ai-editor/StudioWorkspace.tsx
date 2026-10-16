@@ -12,9 +12,17 @@ import {
   PanelLeft,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AppButton as Button, AppQueryState, AppSkeleton } from "@blynta/ui";
+import {
+  AppButton as Button,
+  AppQueryState,
+  AppSkeleton,
+  AppTabs,
+  AppTabsList,
+  AppTabsTrigger,
+} from "@blynta/ui";
 import { useCurrentUser } from "@/features/auth/queries";
 import { StudioSessionSidebar } from "./StudioSessionSidebar";
+import layout from "./workspace.module.css";
 import { useStudioPreferences } from "./useStudioPreferences";
 import { StudioConversation } from "./StudioConversation";
 import { StudioRenderStatus } from "./StudioRenderStatus";
@@ -87,10 +95,7 @@ export function StudioWorkspace({
     const fit = () => {
       const workspace = workspaceViewport.current;
       if (!workspace) return;
-      workspace.style.maxHeight = window.matchMedia("(max-width: 1279px)")
-        .matches
-        ? `${Math.max(0, viewport.height + viewport.offsetTop - workspace.getBoundingClientRect().top)}px`
-        : "";
+      workspace.style.maxHeight = `${Math.max(0, viewport.height + viewport.offsetTop - workspace.getBoundingClientRect().top)}px`;
     };
     fit();
     viewport.addEventListener("resize", fit);
@@ -359,7 +364,7 @@ export function StudioWorkspace({
         <EmptyWorkspace message="This clip could not be found. Open AI Studio from your clip details." />
       </PageContent>
     );
-  if (job.isError)
+  if (job.isError && !job.data)
     return (
       <PageContent>
         <AppQueryState
@@ -373,7 +378,7 @@ export function StudioWorkspace({
     );
   if (job.isPending)
     return (
-      <PageContent>
+      <PageContent workspace>
         <WorkspaceSkeleton />
       </PageContent>
     );
@@ -383,7 +388,7 @@ export function StudioWorkspace({
         <EmptyWorkspace message="This clip is not ready to edit. Wait for processing to finish." />
       </PageContent>
     );
-  if (initialize.isError || plan.isError)
+  if (initialize.isError || (plan.isError && !plan.data))
     return (
       <PageContent>
         <div className="mx-auto max-w-5xl space-y-4">
@@ -426,7 +431,7 @@ export function StudioWorkspace({
   return (
     <PageContent workspace>
       <div
-        className="flex h-full min-h-0 w-full overflow-hidden motion-reduce:[&_*]:transition-none"
+        className={`${layout.workspace} flex h-full min-h-0 w-full overflow-hidden motion-reduce:[&_*]:transition-none`}
         data-studio-workspace
         ref={workspaceViewport}
       >
@@ -479,7 +484,7 @@ export function StudioWorkspace({
                     : "Open conversations"
                 }
                 onClick={() => {
-                  if (window.matchMedia("(min-width: 1440px)").matches)
+                  if ((workspaceViewport.current?.clientWidth ?? 0) >= 1200)
                     preferences.toggleCollapsed();
                   else setSessionsOpen(true);
                 }}
@@ -522,67 +527,41 @@ export function StudioWorkspace({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-              {version.data?.status === "completed" && (
-                <Button
-                  size="sm"
-                  disabled={downloading}
-                  aria-label={
-                    downloading ? "Preparing download" : "Download 720p preview"
-                  }
-                  onClick={() => void download()}
-                >
-                  <Download className="size-4" />
-                  <span className="hidden sm:inline">
-                    {downloading ? "Preparing…" : "Download 720p preview"}
-                  </span>
-                </Button>
-              )}
-            </div>
           </header>
-          <div
-            role="tablist"
-            aria-label="Studio view"
-            className="flex shrink-0 gap-1 border-b border-border/50 px-4 py-2 xl:hidden"
+          <AppTabs
+            value={preferences.tab}
+            onValueChange={preferences.setTab}
+            className={layout.mobileTabs}
           >
-            {["preview", "chat"].map((tab) => (
-              <Button
-                key={tab}
-                id={`studio-tab-${tab}`}
-                role="tab"
-                tabIndex={preferences.tab === tab ? 0 : -1}
-                aria-selected={preferences.tab === tab}
-                aria-controls={`studio-view-${tab}`}
-                variant={preferences.tab === tab ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => preferences.setTab(tab)}
-                onKeyDown={(e) => {
-                  if (
-                    !["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)
-                  )
-                    return;
-                  e.preventDefault();
-                  const next =
-                    e.key === "Home"
-                      ? "preview"
-                      : e.key === "End"
-                        ? "chat"
-                        : tab === "preview"
-                          ? "chat"
-                          : "preview";
-                  preferences.setTab(next);
-                  document.getElementById(`studio-tab-${next}`)?.focus();
-                }}
-                className="h-9 flex-1 capitalize"
+            <AppTabsList
+              activateOnFocus
+              aria-label="Studio view"
+              className="m-3 w-[calc(100%-1.5rem)]"
+            >
+              <AppTabsTrigger
+                id="studio-tab-preview"
+                value="preview"
+                aria-controls="studio-view-preview"
+                className="flex-1"
               >
-                {tab === "chat" ? "Chat" : "Preview"}
-              </Button>
-            ))}
-          </div>
-          <div className="grid min-h-0 flex-1 xl:grid-cols-[minmax(0,1fr)_minmax(320px,360px)] 2xl:grid-cols-[minmax(0,1fr)_380px]">
+                Preview
+              </AppTabsTrigger>
+              <AppTabsTrigger
+                id="studio-tab-chat"
+                value="chat"
+                aria-controls="studio-view-chat"
+                className="flex-1"
+              >
+                Chat
+              </AppTabsTrigger>
+            </AppTabsList>
+          </AppTabs>
+          <div className={layout.split}>
             <div
               id="studio-view-preview"
-              className={`${preferences.tab === "preview" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col xl:flex`}
+              role="tabpanel"
+              aria-labelledby="studio-tab-preview"
+              className={`${layout.preview} ${preferences.tab === "preview" ? layout.active : ""}`}
             >
               <StudioPreviewPanel
                 mode={mode}
@@ -608,9 +587,28 @@ export function StudioWorkspace({
                 )}
                 applying={apply.isPending}
                 onRender={() => void renderPreview()}
+                downloadControl={
+                  version.data?.status === "completed" ? (
+                    <Button
+                      size="sm"
+                      disabled={downloading}
+                      aria-label={
+                        downloading
+                          ? "Preparing download"
+                          : "Download 720p preview"
+                      }
+                      onClick={() => void download()}
+                    >
+                      <Download className="size-4" />
+                      <span className="hidden sm:inline">
+                        {downloading ? "Preparing…" : "Download 720p preview"}
+                      </span>
+                    </Button>
+                  ) : null
+                }
                 tools={
                   <div
-                    className="flex items-center gap-1 border-t border-border/40 px-3 py-2"
+                    className="flex flex-wrap items-center gap-1"
                     aria-label="Video tools"
                   >
                     {[
@@ -642,7 +640,7 @@ export function StudioWorkspace({
                   renderError.revision === plan.data?.revision ? (
                     <div
                       role="alert"
-                      className="px-4 pb-3 text-xs leading-5 text-muted-foreground"
+                      className="w-full text-xs leading-5 text-muted-foreground"
                     >
                       {renderError.message}
                       <Button
@@ -658,6 +656,7 @@ export function StudioWorkspace({
                     (version.data?.status !== "completed" ||
                       version.isError) ? (
                     <StudioRenderStatus
+                      inline
                       version={version.data}
                       loading={version.isPending}
                       error={
@@ -681,7 +680,9 @@ export function StudioWorkspace({
             </div>
             <section
               id="studio-view-chat"
-              className={`${preferences.tab === "chat" ? "flex" : "hidden"} min-h-0 min-w-0 flex-col border-border/50 bg-background xl:flex xl:border-l`}
+              role="tabpanel"
+              aria-labelledby="studio-tab-chat"
+              className={`${layout.chat} ${preferences.tab === "chat" ? layout.active : ""} bg-card`}
               aria-label="AI editing assistant"
             >
               <header className="order-1 flex shrink-0 items-center justify-between gap-2 px-5 pb-0 pt-4">
@@ -918,9 +919,9 @@ function WorkspaceSkeleton() {
     <div
       role="status"
       aria-label="Loading editing workspace"
-      className="flex h-full min-h-96 gap-4 p-4"
+      className={`${layout.workspace} flex h-full min-h-96 gap-4 p-4`}
     >
-      <div className="hidden w-48 space-y-3 min-[1440px]:block">
+      <div className={`${layout.sessionAside} space-y-3`}>
         <AppSkeleton className="h-9" />
         {[0, 1, 2, 3].map((i) => (
           <AppSkeleton key={i} className="h-8" />
@@ -928,11 +929,18 @@ function WorkspaceSkeleton() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-4">
         <AppSkeleton className="h-12 w-full" />
-        <div className="flex min-h-0 flex-1 gap-4">
-          <AppSkeleton className="min-h-64 flex-1" />
-          <div className="hidden w-80 flex-col gap-4 xl:flex">
-            <AppSkeleton className="flex-1" />
-            <AppSkeleton className="h-28" />
+        <div className={`${layout.split} gap-4`}>
+          <div className="flex min-h-0 items-center justify-center bg-muted/10 p-4">
+            <AppSkeleton className="aspect-[9/16] h-full w-auto max-w-full" />
+          </div>
+          <div className={`${layout.chat} gap-4`}>
+            <AppSkeleton className="h-4 w-28" />
+            <AppSkeleton className="ml-auto h-16 w-4/5" />
+            <div className="flex-1 space-y-2">
+              <AppSkeleton className="h-4 w-full" />
+              <AppSkeleton className="h-4 w-4/5" />
+            </div>
+            <AppSkeleton className="h-36 shrink-0" />
           </div>
         </div>
       </div>

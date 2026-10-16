@@ -47,7 +47,7 @@ export function StudioPromptComposer({
   return (
     <form
       aria-label="Editing prompt composer"
-      className={`relative order-3 mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] mt-2 shrink-0 space-y-2 rounded-xl bg-muted/40 p-2.5 ring-1 ring-border/70 focus-within:ring-ring ${dragging ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
+      className={`relative order-3 mx-3 mb-[max(0.75rem,env(safe-area-inset-bottom))] mt-2 shrink-0 space-y-1.5 rounded-lg border border-input bg-background p-2.5 shadow-xs focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30 ${dragging ? "ring-2 ring-inset ring-primary bg-primary/5" : ""}`}
       onDragEnter={(e) => {
         if (!disabled && e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
@@ -136,7 +136,7 @@ export function StudioPromptComposer({
         maxLength={4000}
         disabled={disabled}
         placeholder="Ask Blynta to edit your video…"
-        className={`${scrollbars.slim} max-h-32 min-h-12 resize-none overflow-y-auto border-0 bg-transparent p-1 text-sm leading-6 shadow-none focus-visible:ring-0`}
+        className={`${scrollbars.slim} max-h-32 min-h-12 resize-none overflow-y-auto border-0 bg-transparent p-1 text-base leading-6 shadow-none focus-visible:ring-0 sm:text-sm`}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();

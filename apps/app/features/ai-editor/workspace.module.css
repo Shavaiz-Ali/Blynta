@@ -1,0 +1,51 @@
+.workspace {
+  container: studio / inline-size;
+}
+.split {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+}
+.preview,
+.chat {
+  display: none;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+.active {
+  display: flex;
+}
+.mobileTabs {
+  display: flex;
+}
+.sessionAside,
+.sessionCollapse {
+  display: none;
+}
+@container studio (min-width: 880px) {
+  .split {
+    grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
+  }
+  .preview,
+  .chat {
+    display: flex;
+  }
+  .chat {
+    border-left: 1px solid var(--border);
+  }
+  .mobileTabs {
+    display: none;
+  }
+}
+@container studio (min-width: 1200px) {
+  .sessionAside {
+    display: block;
+    width: 192px;
+    flex-shrink: 0;
+  }
+  .sessionCollapse {
+    display: inline-flex;
+  }
+}

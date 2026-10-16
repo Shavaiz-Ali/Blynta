@@ -117,12 +117,25 @@ export interface AgentSession {
   selectedModelId?: string;
 }
 export interface StudioClip {
+  projectId?: string | null;
   _id: string;
   jobId: string;
   title: string;
   thumbnailUrl?: string;
   duration: number;
   createdAt: string;
+}
+export interface StudioProject {
+  _id: string;
+  sourceClipId: string;
+  sourceJobId: string;
+  clipTitle: string;
+  thumbnailUrl?: string;
+  outputDuration: number;
+  revision: number;
+  updatedAt: string;
+  createdAt: string;
+  latestPreview?: { status: RenderStatus; revision: number } | null;
 }
 export interface StudioState {
   session: AgentSession | null;

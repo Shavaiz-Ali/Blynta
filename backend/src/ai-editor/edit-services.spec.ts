@@ -529,7 +529,7 @@ describe('Studio clip search', () => {
       .mockResolvedValue([{ items: [], total: [{ count: 25 }] }]);
     const service = new EditPlansService(
       ...([
-        {},
+        { collection: { name: 'editplans' } },
         {},
         { aggregate },
         {},
@@ -558,9 +558,95 @@ describe('Studio clip search', () => {
     });
     expect(pipeline).toContainEqual({
       $facet: {
-        items: [{ $skip: 12 }, { $limit: 12 }],
+        items: expect.arrayContaining([
+          { $skip: 12 },
+          { $limit: 12 },
+        ]) as unknown,
         total: [{ $count: 'count' }],
       },
     });
+  });
+});
+
+describe('Studio project library', () => {
+  const owner = '111111111111111111111111';
+  function setup() {
+    const aggregate = jest
+      .fn()
+      .mockResolvedValue([
+        { items: [{ _id: 'project' }], total: [{ count: 37 }] },
+      ]);
+    const service = new EditPlansService(
+      ...([
+        { aggregate },
+        { collection: { name: 'editversions' } },
+        { collection: { name: 'jobs' } },
+        {},
+        {},
+        {},
+        {},
+      ] as unknown as ConstructorParameters<typeof EditPlansService>),
+    );
+    return { service, aggregate };
+  }
+  it('scopes, resolves legacy duplicates and searches before paginating the full library', async () => {
+    const { service, aggregate } = setup();
+    await expect(
+      service.listProjects(owner, {
+        search: '[idea]',
+        sort: 'oldest',
+        page: '3',
+      }),
+    ).resolves.toMatchObject({ total: 37, totalPages: 4, page: 3 });
+    const pipeline = (aggregate.mock.calls as unknown[][])[0][0] as Record<
+      string,
+      unknown
+    >[];
+    expect(pipeline[0]).toEqual({ $match: { userId: owner } });
+    expect(pipeline[1]).toEqual({ $sort: { updatedAt: -1, _id: -1 } });
+    expect(pipeline[2]).toEqual({
+      $group: { _id: '$sourceClipId', project: { $first: '$$ROOT' } },
+    });
+    const lookup = pipeline.find((stage) => stage.$lookup)?.$lookup as {
+      pipeline: object[];
+    };
+    expect(lookup.pipeline[0]).toMatchObject({
+      $match: {
+        userId: new Types.ObjectId(owner),
+        deletionRequested: { $ne: true },
+      },
+    });
+    expect(lookup.pipeline).toContainEqual(
+      expect.objectContaining({
+        $match: expect.objectContaining({
+          'clips.status': 'completed',
+        }) as unknown,
+      }),
+    );
+    const searchIndex = pipeline.findIndex((stage) =>
+      JSON.stringify(stage).includes('$regex'),
+    );
+    const facetIndex = pipeline.findIndex((stage) => '$facet' in stage);
+    expect(searchIndex).toBeGreaterThan(0);
+    expect(searchIndex).toBeLessThan(facetIndex);
+    expect(pipeline[searchIndex]).toEqual({
+      $match: { clipTitle: { $regex: '\\[idea\\]', $options: 'i' } },
+    });
+    const facet = pipeline[facetIndex].$facet as {
+      items: Record<string, unknown>[];
+    };
+    expect(facet.items.slice(0, 2)).toEqual([{ $skip: 24 }, { $limit: 12 }]);
+    expect(JSON.stringify(facet)).toContain('$$revision');
+    const projection = facet.items.at(-1)?.$project as Record<string, unknown>;
+    expect(projection).not.toHaveProperty('sourceMedia');
+    expect(projection).not.toHaveProperty('plan');
+  });
+  it('rejects unsupported sorting and invalid pages before querying', async () => {
+    const { service, aggregate } = setup();
+    await expect(
+      service.listProjects(owner, { sort: 'random' }),
+    ).rejects.toThrow();
+    await expect(service.listProjects(owner, { page: 0 })).rejects.toThrow();
+    expect(aggregate).not.toHaveBeenCalled();
   });
 });

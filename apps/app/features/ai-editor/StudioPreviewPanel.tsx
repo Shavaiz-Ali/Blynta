@@ -5,7 +5,7 @@ import {
   AppTabsTrigger,
   AppTabsContent,
   AppButton as Button,
-  AppSpinner,
+  AppSkeleton,
 } from "@blynta/ui";
 import { StudioVideoPlayer } from "@blynta/ui/player";
 import { Video } from "lucide-react";
@@ -34,6 +34,7 @@ export function StudioPreviewPanel({
   onRender,
   renderFeedback,
   tools,
+  downloadControl,
 }: {
   mode: "original" | "preview";
   onModeChange: (v: "original" | "preview") => void;
@@ -56,10 +57,11 @@ export function StudioPreviewPanel({
   onRender: () => void;
   renderFeedback?: React.ReactNode;
   tools?: React.ReactNode;
+  downloadControl?: React.ReactNode;
 }) {
   return (
     <section
-      className="flex h-full min-h-0 min-w-0 flex-col bg-muted/20"
+      className="flex h-full min-h-0 min-w-0 flex-col bg-muted/10"
       aria-label="Video preview"
     >
       <AppTabs
@@ -79,13 +81,7 @@ export function StudioPreviewPanel({
               Edited preview
             </AppTabsTrigger>
           </AppTabsList>
-          <span className="text-xs text-muted-foreground">
-            {mode === "preview" && version
-              ? version.status === "completed"
-                ? `Rendered revision ${version.revision}`
-                : `Revision ${version.revision} · preview pending`
-              : "Source clip"}
-          </span>
+          {tools}
         </div>
         <AppTabsContent value={mode} className="mt-0 min-h-0 flex-1">
           <div
@@ -95,6 +91,8 @@ export function StudioPreviewPanel({
             {url && !playbackFailed ? (
               <StudioVideoPlayer
                 src={url}
+                dockedControls
+                showTopBar={false}
                 onError={onPlaybackError}
                 ariaLabel={
                   mode === "original"
@@ -106,14 +104,16 @@ export function StudioPreviewPanel({
                     ? "Original"
                     : `Preview · r${version?.revision}`
                 }
-                className="h-full w-auto max-w-full rounded-md border-0 shadow-lg"
+                className="max-w-full rounded-lg"
               />
             ) : mode === "original" && sourcePending ? (
               <div
                 role="status"
-                className="flex items-center gap-2 text-sm text-muted-foreground"
+                aria-label="Loading source video"
+                className="flex h-full w-full flex-col items-center justify-center gap-3"
               >
-                <AppSpinner /> Loading source video…
+                <AppSkeleton className="aspect-[9/16] max-h-[50dvh] w-48 max-w-full" />
+                <AppSkeleton className="h-12 w-48 max-w-full" />
               </div>
             ) : (
               <div className="max-w-sm space-y-3 px-4 text-center text-sm leading-6 text-muted-foreground">
@@ -154,33 +154,35 @@ export function StudioPreviewPanel({
           </div>
         </AppTabsContent>
       </AppTabs>
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
-        <p className="text-xs text-muted-foreground">
-          <span role="status">
-            {mode === "original"
-              ? "Original clip"
-              : version?.status === "completed"
-                ? version.revision === plan?.revision
-                  ? "Preview ready"
-                  : "Preview outdated · newer edits are saved"
-                : version?.status === "failed"
-                  ? "Preview failed"
-                  : version?.status === "cancelled"
-                    ? "Preview cancelled"
-                    : version
-                      ? "Preview rendering"
-                      : "No edited preview yet"}
-          </span>{" "}
-          ·{" "}
-          {editTime(
-            mode === "original"
-              ? clipDuration
-              : (plan?.outputDuration ?? clipDuration),
-          )}
-          {plan && plan.revision > 1 && !currentRevisionRendered
-            ? " · Changes pending"
-            : ""}
-        </p>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/40 px-4 py-3 sm:px-6">
+        {renderFeedback || (
+          <p className="text-xs text-muted-foreground">
+            <span role="status">
+              {mode === "original"
+                ? "Original clip"
+                : version?.status === "completed"
+                  ? version.revision === plan?.revision
+                    ? `Preview ready · revision ${version.revision}`
+                    : `Revision ${version.revision} · newer edits are saved`
+                  : version?.status === "failed"
+                    ? "Preview failed"
+                    : version?.status === "cancelled"
+                      ? "Preview cancelled"
+                      : version
+                        ? "Preview rendering"
+                        : "No edited preview yet"}
+            </span>{" "}
+            ·{" "}
+            {editTime(
+              mode === "original"
+                ? clipDuration
+                : (plan?.outputDuration ?? clipDuration),
+            )}
+            {plan && plan.revision > 1 && !currentRevisionRendered
+              ? " · Changes pending"
+              : ""}
+          </p>
+        )}
         {!!plan &&
           plan.revision > 1 &&
           !currentRevisionRendered &&
@@ -208,9 +210,8 @@ export function StudioPreviewPanel({
                   : "Render preview"}
             </Button>
           )}
+        {downloadControl}
       </div>
-      {renderFeedback}
-      {tools}
     </section>
   );
 }

@@ -10,6 +10,7 @@ export function ProposalCard({
   onApply,
   onReject,
   onRevise,
+  onRespond,
   assets = [],
 }: {
   proposal: Proposal;
@@ -18,35 +19,77 @@ export function ProposalCard({
   onApply: () => void;
   onReject: () => void;
   onRevise?: () => void;
+  onRespond?: () => void;
   assets?: StudioAsset[];
 }) {
   const stale = !!plan && proposal.baseRevision !== plan.revision;
+  if (proposal.status === "clarification")
+    return (
+      <article
+        aria-label="Clarification request"
+        className="space-y-2 border-l-2 border-primary/40 pl-3"
+      >
+        <h3 className="text-sm font-semibold">A quick question</h3>
+        <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">
+          {proposal.summary}
+        </p>
+        {onRespond && (
+          <Button variant="link" size="sm" className="px-0" onClick={onRespond}>
+            Answer in chat
+          </Button>
+        )}
+      </article>
+    );
+  if (
+    proposal.status === "applied" ||
+    proposal.status === "rejected" ||
+    proposal.status === "cancelled"
+  )
+    return (
+      <article aria-label="Editing proposal" className="space-y-2 py-1">
+        <p className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+          {proposal.status === "applied" && (
+            <Check className="size-3.5 text-primary" />
+          )}
+          {proposal.status === "applied"
+            ? proposal.noChanges
+              ? "No changes needed"
+              : "Changes saved"
+            : proposal.status === "rejected"
+              ? "Suggestion rejected"
+              : "Suggestion canceled"}
+        </p>
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground">
+            View suggestion
+          </summary>
+          <p className="mt-2 whitespace-pre-wrap break-words leading-6">
+            {proposal.summary}
+          </p>
+        </details>
+      </article>
+    );
   return (
     <article
-      className="rounded-lg border border-border/70 p-3.5"
+      className={
+        proposal.status === "pending" || proposal.status === "applying"
+          ? "rounded-lg border border-border/70 bg-card p-3.5"
+          : "space-y-2 border-l-2 border-border py-1 pl-3"
+      }
       aria-label="Editing proposal"
+      role={proposal.status === "failed" ? "alert" : undefined}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           {proposal.status === "pending"
             ? "Suggested edit"
-            : proposal.status === "applied"
-              ? proposal.noChanges
-                ? "No changes needed"
-                : "Changes saved"
-              : proposal.status === "clarification"
-                ? "A quick question"
-                : proposal.status === "unsupported"
-                  ? "Edit unavailable"
-                  : proposal.status === "rejected"
-                    ? "Suggestion rejected"
-                    : proposal.status === "cancelled"
-                      ? "Suggestion canceled"
-                      : proposal.status === "failed"
-                        ? "Suggestion failed"
-                        : proposal.status === "applying"
-                          ? "Saving changes"
-                          : "Preparing your suggestion"}
+            : proposal.status === "unsupported"
+              ? "Edit unavailable"
+              : proposal.status === "failed"
+                ? "Suggestion failed"
+                : proposal.status === "applying"
+                  ? "Saving changes"
+                  : "Preparing your suggestion"}
         </h3>
         <span className="text-[11px] text-muted-foreground">
           {proposal.patch
@@ -57,6 +100,12 @@ export function ProposalCard({
       <p className="mb-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
         {proposal.summary}
       </p>
+      {(proposal.status === "failed" || proposal.status === "unsupported") &&
+        onRespond && (
+          <Button variant="link" size="sm" className="px-0" onClick={onRespond}>
+            Continue in chat
+          </Button>
+        )}
       {proposal.patch && (
         <ol className="space-y-2">
           {proposal.patch.changes.map((change, index) => {

@@ -11,8 +11,10 @@ import {
   SheetHeader,
   SheetTitle,
   SheetDescription,
+  AppSkeleton,
 } from "@blynta/ui";
 import type { AgentSession } from "./contracts";
+import layout from "./workspace.module.css";
 export function StudioSessionSidebar({
   sessions,
   selected,
@@ -67,7 +69,7 @@ export function StudioSessionSidebar({
           size="icon-sm"
           variant="ghost"
           aria-label="Collapse conversations"
-          className="hidden min-[1440px]:inline-flex"
+          className={layout.sessionCollapse}
           onClick={onCollapse}
         >
           <PanelLeftClose className="size-4" />
@@ -97,9 +99,15 @@ export function StudioSessionSidebar({
         className="min-h-0 flex-1 space-y-1 overflow-y-auto"
       >
         {loading && (
-          <p role="status" className="p-2 text-xs text-muted-foreground">
-            Loading conversations…
-          </p>
+          <div
+            role="status"
+            aria-label="Loading conversations"
+            className="space-y-2 p-1"
+          >
+            {[0, 1, 2].map((i) => (
+              <AppSkeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
         )}
         {error && (
           <div role="alert" className="p-2 text-xs">
@@ -123,7 +131,7 @@ export function StudioSessionSidebar({
           .map((s) => (
             <div
               key={s._id}
-              className={`group flex items-center rounded-md ${selected === s._id ? "bg-accent text-accent-foreground" : "hover:bg-muted/70"}`}
+              className={`group flex items-center rounded-lg ${selected === s._id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"}`}
             >
               <button
                 type="button"
@@ -182,7 +190,7 @@ export function StudioSessionSidebar({
       {!collapsed && (
         <aside
           aria-label="Studio sessions"
-          className="hidden w-52 shrink-0 border-r border-border/50 bg-muted/20 min-[1440px]:block"
+          className={`${layout.sessionAside} border-r border-sidebar-border bg-sidebar text-sidebar-foreground`}
         >
           {content}
         </aside>

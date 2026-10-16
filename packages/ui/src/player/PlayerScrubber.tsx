@@ -4,6 +4,7 @@ import * as React from "react";
 import { formatTimestamp } from "./formatTimestamp";
 
 interface PlayerScrubberProps {
+  appearance?: "overlay" | "surface";
   duration: number;
   currentTime: number;
   bufferedEnd: number;
@@ -12,6 +13,7 @@ interface PlayerScrubberProps {
 }
 
 export function PlayerScrubber({
+  appearance = "overlay",
   duration,
   currentTime,
   bufferedEnd,
@@ -113,10 +115,12 @@ export function PlayerScrubber({
       )}
 
       {/* Rail Background */}
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-white/15 transition-all group-hover/progress:h-2">
+      <div
+        className={`relative h-1.5 w-full overflow-hidden rounded-full transition-all group-hover/progress:h-2 ${appearance === "surface" ? "bg-muted" : "bg-white/15"}`}
+      >
         {/* Buffered progress */}
         <div
-          className="absolute h-full bg-white/20 transition-all"
+          className={`absolute h-full transition-all ${appearance === "surface" ? "bg-foreground/15" : "bg-white/20"}`}
           style={{ width: `${bufferedPercent}%` }}
         />
         {/* Played progress */}

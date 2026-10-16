@@ -6,6 +6,7 @@ import {
   useQuery,
   useInfiniteQuery,
   useQueryClient,
+  keepPreviousData,
 } from "@tanstack/react-query";
 import { axiosClient, ApiError } from "@/config/axiosClient";
 import type {
@@ -18,6 +19,7 @@ import type {
   PromptSubmission,
   AgentSession,
   StudioClip,
+  StudioProject,
 } from "./contracts";
 import { renderPollInterval, proposalPollInterval } from "./presentation";
 export const studioKeys = {
@@ -26,6 +28,8 @@ export const studioKeys = {
   sessions: (clip: string, plan: string) =>
     ["ai-editor", "sessions", clip, plan] as const,
   recent: ["ai-editor", "recent"] as const,
+  projects: (search: string, sort: string, page: number) =>
+    ["ai-editor", "recent", search, sort, page] as const,
   plan: (id: string) => ["ai-editor", "plan", id] as const,
   versions: (id: string, page = 1) =>
     ["ai-editor", "versions", id, page] as const,
@@ -65,11 +69,29 @@ export function studioError(error: unknown) {
     ? error.message
     : "The request failed. Please try again.";
 }
-export function useRecentPlans() {
+export function useStudioProjects(
+  search: string,
+  sort: string,
+  page: number,
+  enabled = true,
+) {
   return useQuery({
-    queryKey: studioKeys.recent,
+    queryKey: studioKeys.projects(search, sort, page),
+    enabled,
     queryFn: ({ signal }) =>
-      get<{ items: EditingPlan[] }>(API_ENDPOINTS.editor.plans, signal),
+      get<{ items: StudioProject[]; totalPages: number; total: number }>(
+        `${API_ENDPOINTS.editor.plans}?${new URLSearchParams({ search, sort, page: String(page) })}`,
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+    refetchInterval: (q) =>
+      q.state.data?.items.some(
+        (p) =>
+          p.latestPreview?.status === "queued" ||
+          p.latestPreview?.status === "processing",
+      )
+        ? 2500
+        : false,
   });
 }
 export function useInitializePlan() {
@@ -86,6 +108,7 @@ export function useInitializePlan() {
     onSuccess: (plan) => {
       client.setQueryData(studioKeys.plan(plan._id), plan);
       void client.invalidateQueries({ queryKey: studioKeys.recent });
+      void client.invalidateQueries({ queryKey: ["ai-editor", "clips"] });
     },
   });
 }
@@ -257,18 +280,26 @@ export function useRenderAction(
       });
       void client.invalidateQueries({ queryKey: ["ai-editor", "version"] });
       void client.invalidateQueries({ queryKey: studioKeys.plan(plan) });
+      void client.invalidateQueries({ queryKey: studioKeys.recent });
     },
   });
 }
-export function useStudioClips(search: string, sort: string, page: number) {
+export function useStudioClips(
+  search: string,
+  sort: string,
+  page: number,
+  enabled = true,
+) {
   return useQuery({
     queryKey: studioKeys.clips(search, sort, page),
+    enabled,
     queryFn: ({ signal }) =>
       get<{ items: StudioClip[]; totalPages: number; total: number }>(
         `${API_ENDPOINTS.editor.clips}?${new URLSearchParams({ search, sort, page: String(page) })}`,
         signal,
       ),
     staleTime: 30000,
+    placeholderData: keepPreviousData,
   });
 }
 export function useStudioSessions(clip: string, plan: string) {

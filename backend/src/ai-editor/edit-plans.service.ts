@@ -117,7 +117,44 @@ export class EditPlansService {
       { $sort: { createdAt: input.sort === 'oldest' ? 1 : -1, _id: 1 } },
       {
         $facet: {
-          items: [{ $skip: (input.page - 1) * 12 }, { $limit: 12 }],
+          items: [
+            { $skip: (input.page - 1) * 12 },
+            { $limit: 12 },
+            {
+              $lookup: {
+                from: this.plans.collection.name,
+                let: {
+                  clipId: { $toString: '$_id' },
+                  jobId: { $toString: '$jobId' },
+                },
+                pipeline: [
+                  {
+                    $match: {
+                      userId,
+                      $expr: {
+                        $and: [
+                          { $eq: ['$sourceClipId', '$$clipId'] },
+                          { $eq: ['$sourceMedia.jobId', '$$jobId'] },
+                        ],
+                      },
+                    },
+                  },
+                  { $sort: { updatedAt: -1, _id: -1 } },
+                  { $limit: 1 },
+                  { $project: { _id: 1 } },
+                ],
+                as: 'projects',
+              },
+            },
+            {
+              $set: {
+                projectId: {
+                  $toString: { $arrayElemAt: ['$projects._id', 0] },
+                },
+              },
+            },
+            { $unset: 'projects' },
+          ],
           total: [{ $count: 'count' }],
         },
       },
@@ -177,6 +214,158 @@ export class EditPlansService {
       }
     }
     return { items: available };
+  }
+  async listProjects(userId: string, query: unknown) {
+    const input = parseEdit(
+      z
+        .object({
+          search: z.string().trim().max(100).default(''),
+          sort: z.enum(['updated', 'newest', 'oldest']).default('updated'),
+          page: z.coerce.number().int().min(1).max(10000).default(1),
+        })
+        .strict(),
+      query,
+    );
+    const pattern = input.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const [result] = await this.plans.aggregate<{
+      items: Record<string, unknown>[];
+      total: { count: number }[];
+    }>([
+      { $match: { userId } },
+      // Match initialize(): the latest existing plan is authoritative for legacy clips too.
+      { $sort: { updatedAt: -1, _id: -1 } },
+      { $group: { _id: '$sourceClipId', project: { $first: '$$ROOT' } } },
+      { $replaceRoot: { newRoot: '$project' } },
+      {
+        $lookup: {
+          from: this.jobs.collection.name,
+          let: { jobId: '$sourceMedia.jobId', clipId: '$sourceClipId' },
+          pipeline: [
+            {
+              $match: {
+                userId: new Types.ObjectId(userId),
+                deletionRequested: { $ne: true },
+                $expr: { $eq: [{ $toString: '$_id' }, '$$jobId'] },
+              },
+            },
+            { $unwind: '$clips' },
+            {
+              $match: {
+                'clips.status': JobStatus.COMPLETED,
+                $expr: { $eq: [{ $toString: '$clips._id' }, '$$clipId'] },
+              },
+            },
+            {
+              $project: {
+                videoTitle: 1,
+                thumbnailUrl: 1,
+                clips: 1,
+                highlights: 1,
+              },
+            },
+          ],
+          as: 'source',
+        },
+      },
+      { $unwind: '$source' },
+      {
+        $set: {
+          highlight: {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: { $ifNull: ['$source.highlights', []] },
+                  as: 'h',
+                  cond: {
+                    $and: [
+                      { $eq: ['$$h.startTime', '$source.clips.startTime'] },
+                      { $eq: ['$$h.endTime', '$source.clips.endTime'] },
+                    ],
+                  },
+                },
+              },
+              0,
+            ],
+          },
+        },
+      },
+      {
+        $set: {
+          clipTitle: {
+            $ifNull: [
+              '$highlight.clipTitle',
+              { $ifNull: ['$source.videoTitle', 'Untitled clip'] },
+            ],
+          },
+        },
+      },
+      ...(pattern
+        ? [{ $match: { clipTitle: { $regex: pattern, $options: 'i' } } }]
+        : []),
+      {
+        $sort:
+          input.sort === 'updated'
+            ? { updatedAt: -1, _id: -1 }
+            : { createdAt: input.sort === 'oldest' ? 1 : -1, _id: 1 },
+      },
+      {
+        $facet: {
+          items: [
+            { $skip: (input.page - 1) * 12 },
+            { $limit: 12 },
+            {
+              $lookup: {
+                from: this.versions.collection.name,
+                let: { planId: { $toString: '$_id' }, revision: '$revision' },
+                pipeline: [
+                  {
+                    $match: {
+                      userId,
+                      profile: 'preview',
+                      $expr: {
+                        $and: [
+                          { $eq: ['$planId', '$$planId'] },
+                          { $eq: ['$revision', '$$revision'] },
+                        ],
+                      },
+                    },
+                  },
+                  { $sort: { createdAt: -1, _id: -1 } },
+                  { $limit: 1 },
+                  { $project: { _id: 0, status: 1, revision: 1 } },
+                ],
+                as: 'previews',
+              },
+            },
+            // Explicit allowlist: never return source storage keys or execution data.
+            {
+              $project: {
+                _id: 1,
+                sourceClipId: 1,
+                sourceJobId: '$sourceMedia.jobId',
+                clipTitle: 1,
+                thumbnailUrl: '$source.thumbnailUrl',
+                revision: 1,
+                outputDuration: 1,
+                updatedAt: 1,
+                createdAt: 1,
+                latestPreview: {
+                  $ifNull: [{ $arrayElemAt: ['$previews', 0] }, null],
+                },
+              },
+            },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
+    ]);
+    const total = result?.total[0]?.count ?? 0;
+    return {
+      items: result?.items ?? [],
+      page: input.page,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / 12)),
+    };
   }
   async ownedAssets(userId: string) {
     if (!this.assets) return { items: [] };

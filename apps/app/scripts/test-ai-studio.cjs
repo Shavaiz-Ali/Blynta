@@ -94,6 +94,47 @@ function load(relative, mocks = {}) {
 const ui = {
   Skeleton: () => React.createElement("div", { "data-loading": true }),
 };
+test("project states use only previews matching the authoritative saved revision", () => {
+  const { projectStatus } = load("features/ai-editor/StudioClipCard.tsx", {
+    "next/navigation": { useRouter: () => ({ push() {} }) },
+  });
+  const project = { revision: 3 };
+  assert.equal(
+    projectStatus({
+      ...project,
+      latestPreview: { revision: 2, status: "completed" },
+    }),
+    "Changes pending",
+  );
+  assert.equal(
+    projectStatus({
+      ...project,
+      latestPreview: { revision: 2, status: "processing" },
+    }),
+    "Changes pending",
+  );
+  assert.equal(
+    projectStatus({
+      ...project,
+      latestPreview: { revision: 3, status: "completed" },
+    }),
+    "Preview ready",
+  );
+  assert.equal(
+    projectStatus({
+      ...project,
+      latestPreview: { revision: 3, status: "processing" },
+    }),
+    "Rendering",
+  );
+  assert.equal(
+    projectStatus({
+      ...project,
+      latestPreview: { revision: 3, status: "failed" },
+    }),
+    "Render failed",
+  );
+});
 const selector = load("features/ai-editor/ModelSelector.tsx", {
   "@/components/ui/skeleton": ui,
 });
@@ -691,6 +732,50 @@ test("conversation follows only readers near the bottom", () => {
   const { followsConversation } = load("features/ai-editor/conversation.ts");
   assert.equal(followsConversation(0, 300, 1600), false);
   assert.equal(followsConversation(1230, 300, 1600), true);
+});
+test("clarifications render once by proposal identity even when the assistant text differs", () => {
+  const { StudioConversation } = load(
+    "features/ai-editor/StudioConversation.tsx",
+  );
+  const messages = [
+    { _id: "u", role: "user", content: "Pause at the phrase" },
+    {
+      _id: "a",
+      role: "assistant",
+      proposalId: "p",
+      content: "An older version of this question",
+    },
+    {
+      _id: "a-copy",
+      role: "assistant",
+      proposalId: "p",
+      content: "An older version of this question",
+    },
+  ];
+  const html = renderToStaticMarkup(
+    React.createElement(StudioConversation, {
+      messages,
+      proposals: [
+        {
+          _id: "p",
+          status: "clarification",
+          summary: "Which phrase or timestamp should I use?",
+        },
+      ],
+      loading: false,
+      generating: false,
+      busy: false,
+      onApprove() {},
+      onSuggest() {},
+    }),
+  );
+  assert.equal(
+    (html.match(/Which phrase or timestamp should I use\?/g) || []).length,
+    1,
+  );
+  assert.doesNotMatch(html, /An older version/);
+  assert.match(html, /Pause at the phrase/);
+  assert.match(html, /Answer in chat/);
 });
 test("compact composer model state explains unavailable editing without claiming a model", () => {
   const html = renderToStaticMarkup(

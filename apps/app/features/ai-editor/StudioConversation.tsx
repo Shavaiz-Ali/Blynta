@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUpRight } from "lucide-react";
 import scrollbars from "./studio-scrollbars.module.css";
-import { AppButton, AppSpinner } from "@blynta/ui";
+import { AppButton, AppSpinner, AppSkeleton } from "@blynta/ui";
 import { AI_EDIT_STAGE_LABEL } from "@blynta/types/contracts";
 import { ProposalCard } from "./ProposalCard";
 import { ConversationMessage } from "./StudioPanels";
@@ -108,13 +108,19 @@ export function StudioConversation({
               : "Load earlier messages"}
           </AppButton>
         )}
-        {loading ? (
-          <p
+        {loading && !items.length ? (
+          <div
             role="status"
-            className="flex items-center gap-2 text-sm text-muted-foreground"
+            aria-label="Loading conversation"
+            className="space-y-5"
           >
-            <AppSpinner size="xs" /> Loading your conversation…
-          </p>
+            <AppSkeleton className="ml-auto h-16 w-4/5" />
+            <div className="space-y-2">
+              <AppSkeleton className="h-3 w-20" />
+              <AppSkeleton className="h-4 w-full" />
+              <AppSkeleton className="h-4 w-4/5" />
+            </div>
+          </div>
         ) : empty ? (
           <div className="w-full space-y-5 py-2">
             <div className="space-y-2">
@@ -153,7 +159,9 @@ export function StudioConversation({
                 !(
                   item.proposal &&
                   item.message.role === "assistant" &&
-                  item.message.content === item.proposal.summary
+                  (item.proposal.status === "clarification" ||
+                    item.message.content.trim() ===
+                      item.proposal.summary.trim())
                 ) && (
                   <ConversationMessage
                     role={item.message.role}
@@ -168,6 +176,9 @@ export function StudioConversation({
                   busy={busy}
                   onApply={() => onApprove(item.proposal!._id, "apply")}
                   onReject={() => onApprove(item.proposal!._id, "reject")}
+                  onRespond={() =>
+                    document.getElementById("studio-prompt")?.focus()
+                  }
                   onRevise={() =>
                     onSuggest(
                       `Revise this suggestion: ${
