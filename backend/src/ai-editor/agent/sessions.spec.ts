@@ -117,6 +117,45 @@ describe('Studio conversations share plans safely', () => {
       await s.service.createSession(owner, clip, { planId: plan, requestId }),
     ).toEqual(s.session);
   });
+  it('resumes the latest owned active conversation without creating or merging data', async () => {
+    const s = setup();
+    const sort = jest.fn().mockResolvedValue(s.session);
+    s.sessions.findOne.mockReturnValueOnce({ sort });
+    expect(
+      await s.service.createSession(owner, clip, {
+        planId: plan,
+        requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        resumeLatest: true,
+      }),
+    ).toEqual(s.session);
+    expect(s.sessions.findOne).toHaveBeenCalledWith({
+      userId: owner,
+      clipId: clip,
+      planId: plan,
+      status: 'active',
+    });
+    expect(sort).toHaveBeenCalledWith({ updatedAt: -1, _id: -1 });
+    expect(s.tools.owned).toHaveBeenCalledWith(owner, clip, plan);
+    expect(s.sessions.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+  it('initializes a retry-safe conversation only when no active conversation exists', async () => {
+    const s = setup();
+    s.sessions.findOne.mockReturnValueOnce({
+      sort: jest.fn().mockResolvedValue(null),
+    });
+    await s.service.createSession(owner, clip, {
+      planId: plan,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      resumeLatest: true,
+    });
+    expect(s.sessions.findOneAndUpdate).toHaveBeenCalledTimes(1);
+    const update = (
+      s.sessions.findOneAndUpdate.mock.calls as unknown[][]
+    )[0][1] as {
+      $setOnInsert: object;
+    };
+    expect(update.$setOnInsert).not.toHaveProperty('resumeLatest');
+  });
   it('archives and restores only the authorized session without removing shared edits or messages', async () => {
     const s = setup();
     await s.service.updateSession(owner, clip, sessionId, {

@@ -10,7 +10,7 @@ const { chromium } = require(
   ),
 );
 const { fixture, user, ids } = require("./ui-audit-data.cjs");
-const out = path.join(__dirname, "studio-listing-checkpoint-evidence");
+const out = path.join(__dirname, "studio-simplification-listing-evidence");
 fs.mkdirSync(out, { recursive: true });
 const date = "2026-10-16T08:00:00Z";
 const projects = [
@@ -40,7 +40,17 @@ const clips = projects.map((p, i) => ({
   thumbnailUrl: p.thumbnailUrl,
   duration: 58,
   createdAt: date,
-  projectId: i === 0 ? p._id : null,
+  sourcePlatform: "youtube",
+  uploader: "Samay Raina",
+  editing:
+    i === 0
+      ? {
+          planId: p._id,
+          revision: 2,
+          hasActivity: true,
+          latestPreview: p.latestPreview,
+        }
+      : { planId: p._id, revision: 1, hasActivity: false },
 }));
 (async () => {
   const browser = await chromium.launch({ headless: true, channel: "chrome" });
@@ -94,7 +104,10 @@ const clips = projects.map((p, i) => ({
         if (["/ai-editor/plans", "/ai-editor/clips"].includes(url.pathname)) {
           queries.push(url.pathname + url.search);
           if (delayed) await new Promise((resolve) => setTimeout(resolve, 500));
-          const data = url.pathname.endsWith("/plans") ? projects : clips;
+          const data =
+            url.searchParams.get("filter") === "edited"
+              ? clips.filter((c) => c.editing?.hasActivity)
+              : clips;
           const items = empty
             ? []
             : data.filter((item) =>
@@ -136,31 +149,73 @@ const clips = projects.map((p, i) => ({
           json: response.data,
         });
       });
-      await page.goto("http://127.0.0.1:4100/auth/studio-preview?view=listing");
-      await page
-        .getByRole("link", { name: "Open project: Opening scene", exact: true })
-        .waitFor();
+      await page.goto(
+        "http://127.0.0.1:4100/auth/studio-preview?view=listing",
+        { waitUntil: "networkidle" },
+      );
+      const opening = page.getByRole("link", {
+        name: "Edit with AI: Opening scene",
+        exact: true,
+      });
+      await opening.waitFor();
+      await page.addStyleTag({
+        content: "nextjs-portal,.tsqd-parent-container{display:none!important}",
+      });
+      await page.evaluate(() => document.fonts.ready);
+      assert.equal(
+        await page
+          .getByRole("tab", { name: "All Clips", exact: true })
+          .getAttribute("aria-selected"),
+        "true",
+      );
+      assert.equal(
+        await page
+          .getByRole("button", { name: "New AI Edit", exact: true })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await page.getByText("Ready to edit", { exact: true }).count(),
+        0,
+      );
+      assert.equal(
+        await page.getByText("AI project", { exact: true }).count(),
+        0,
+      );
+      assert.equal(
+        await opening.getAttribute("href"),
+        "/studio/" + clips[0]._id + "?jobId=" + ids.job,
+      );
+      const countBounds = await page
+        .getByText("28 clips", { exact: true })
+        .boundingBox();
+      const titleBounds = await page
+        .getByRole("heading", { name: "AI Studio", exact: true })
+        .boundingBox();
+      assert(countBounds.y < titleBounds.y, "Count must precede title");
       await page.screenshot({
-        path: path.join(out, `projects-grid-${width}.png`),
+        path: path.join(out, "listing-grid-" + width + ".png"),
         fullPage: true,
       });
       await page.getByRole("tab", { name: "List", exact: true }).click();
       await page.screenshot({
-        path: path.join(out, `projects-list-${width}.png`),
+        path: path.join(out, "listing-list-" + width + ".png"),
         fullPage: true,
       });
-      assert.equal(
-        await page.getByText("Continue editing", { exact: true }).count(),
-        0,
+      const editedResponse = page.waitForResponse((r) =>
+        r.url().includes("filter=edited"),
       );
+      await page.getByRole("tab", { name: "Edited", exact: true }).click();
+      await editedResponse;
+      await page
+        .getByRole("link", {
+          name: "Edit with AI: Quieter background music",
+          exact: true,
+        })
+        .waitFor({ state: "detached" });
       assert.equal(
-        await page
-          .getByRole("link", {
-            name: "Open project: Opening scene",
-            exact: true,
-          })
-          .getAttribute("href"),
-        `/studio/${ids.clip}?jobId=${ids.job}`,
+        await page.getByRole("link", { name: /Edit with AI:/ }).count(),
+        1,
       );
       await page.getByRole("tab", { name: "All Clips", exact: true }).click();
       await page
@@ -169,89 +224,43 @@ const clips = projects.map((p, i) => ({
           exact: true,
         })
         .waitFor();
-      await page.getByRole("tab", { name: "Grid", exact: true }).click();
-      await page.screenshot({
-        path: path.join(out, `clips-grid-${width}.png`),
-        fullPage: true,
-      });
       const overflow = await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
       );
-      assert.equal(overflow, false, `Overflow at ${width}`);
-      await page.getByRole("tab", { name: "List", exact: true }).click();
-      await page.screenshot({
-        path: path.join(out, `clips-list-${width}.png`),
-        fullPage: true,
-      });
+      assert.equal(overflow, false);
       if (width === 1440) {
-        await page
-          .getByRole("button", { name: "New AI Edit", exact: true })
-          .click();
-        await page.getByRole("dialog").waitFor();
-        await page
-          .getByRole("textbox", { name: "Search clips to edit" })
-          .fill("Quieter");
-        await page
-          .getByRole("dialog")
-          .getByRole("button", { name: /Quieter background music/ })
-          .waitFor();
-        await page.screenshot({ path: path.join(out, "clip-picker-1440.png") });
-        await page.keyboard.press("Escape");
-        await page
-          .getByRole("tab", { name: "My Projects", exact: true })
-          .click();
-        const nextPage = page.waitForResponse(
-          (res) =>
-            res.url().includes("/ai-editor/plans?") &&
-            res.url().includes("page=2"),
-        );
         await page.getByRole("button", { name: "Next", exact: true }).click();
         await page.getByText("Page 2 of 3", { exact: true }).waitFor();
-        await nextPage;
         assert(queries.some((q) => q.includes("page=2")));
         await page
-          .getByRole("textbox", { name: "Search projects", exact: true })
+          .getByRole("textbox", { name: "Search clips", exact: true })
           .fill("no such title");
-        await page.getByRole("heading", { name: "No matches found" }).waitFor();
+        await page
+          .getByRole("heading", { name: "No clips match your search" })
+          .waitFor();
         await page
           .getByRole("button", { name: "Clear search", exact: true })
           .click();
-        await page
-          .getByRole("link", {
-            name: "Open project: Opening scene",
-            exact: true,
-          })
-          .waitFor();
+        await opening.waitFor();
         empty = true;
         await page.reload();
         await page
-          .getByRole("heading", { name: "No AI projects yet" })
+          .getByRole("heading", { name: "No clips ready to edit" })
           .waitFor();
-        await page.screenshot({
-          path: path.join(out, "projects-empty-1440.png"),
-        });
         empty = false;
         offline = true;
         await page.reload();
         await page
-          .getByText("Projects couldn’t be loaded", { exact: true })
+          .getByText("Clips couldn’t be loaded", { exact: true })
           .waitFor({ timeout: 30000 });
         offline = false;
         delayed = true;
         await page.getByRole("button", { name: /Try again|Retry/ }).click();
-        await page
-          .getByRole("link", {
-            name: "Open project: Opening scene",
-            exact: true,
-          })
-          .waitFor();
+        await opening.waitFor();
         await page.goto(
           "http://127.0.0.1:4100/auth/studio-preview?view=reference",
         );
         await page.reload({ waitUntil: "networkidle" });
-        await page
-          .getByRole("heading", { name: "Clips Library.", exact: true })
-          .waitFor();
         await page
           .getByText("How a small creative habit changes your day", {
             exact: true,
@@ -259,15 +268,7 @@ const clips = projects.map((p, i) => ({
           .waitFor();
         await page.evaluate(() => document.fonts.ready);
         await page.screenshot({
-          path: path.join(out, "my-clips-grid-reference-1440.png"),
-          fullPage: true,
-        });
-        await page.getByRole("tab", { name: "List", exact: true }).click();
-        await page
-          .getByRole("button", { name: "View clips", exact: true })
-          .waitFor();
-        await page.screenshot({
-          path: path.join(out, "my-clips-list-reference-1440.png"),
+          path: path.join(out, "my-clips-reference-1440.png"),
           fullPage: true,
         });
       }
@@ -299,7 +300,7 @@ const clips = projects.map((p, i) => ({
       ),
     );
     console.log(
-      "Listing layouts, tabs, view modes, search, pagination, picker, empty/error/retry, and read-only browsing passed.",
+      "Listing layouts, All Clips/Edited, view modes, search, pagination, empty/error/retry, and read-only browsing passed.",
     );
   } finally {
     await browser.close();

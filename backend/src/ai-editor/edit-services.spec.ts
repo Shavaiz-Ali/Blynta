@@ -530,7 +530,7 @@ describe('Studio clip search', () => {
     const service = new EditPlansService(
       ...([
         { collection: { name: 'editplans' } },
-        {},
+        { collection: { name: 'editversions' } },
         { aggregate },
         {},
         {},
@@ -564,6 +564,67 @@ describe('Studio clip search', () => {
         ]) as unknown,
         total: [{ $count: 'count' }],
       },
+    });
+  });
+  it('filters meaningful activity before pagination and scopes plan, proposal and preview lookups', async () => {
+    const aggregate = jest.fn().mockResolvedValue([{ items: [], total: [] }]);
+    const owner = '111111111111111111111111';
+    const service = new EditPlansService(
+      ...([
+        { collection: { name: 'editplans' } },
+        { collection: { name: 'editversions' } },
+        { aggregate },
+        {},
+        {},
+        {},
+        {},
+      ] as unknown as ConstructorParameters<typeof EditPlansService>),
+    );
+    await service.listClips(owner, { filter: 'edited' });
+    type Stage = {
+      $match?: Record<string, unknown>;
+      $lookup?: { from: string; pipeline: Stage[] };
+      $project?: { hasActivity: { $or: unknown[] } };
+      $facet?: { items: Stage[] };
+    };
+    const pipeline = (aggregate.mock.calls as unknown[][])[0][0] as Stage[];
+    const filterIndex = pipeline.findIndex(
+      (s) => s.$match?.['editing.hasActivity'],
+    );
+    expect(filterIndex).toBeGreaterThan(0);
+    expect(filterIndex).toBeLessThan(pipeline.findIndex((s) => s.$facet));
+    const plans = pipeline.find((s) => s.$lookup)!.$lookup!;
+    expect(plans.pipeline[0].$match!.userId).toBe(owner);
+    expect(plans.pipeline[1]).toEqual({ $sort: { updatedAt: -1, _id: -1 } });
+    expect(plans.pipeline[2]).toEqual({ $limit: 1 });
+    const proposals = plans.pipeline.find((s) => s.$lookup)!.$lookup!;
+    expect(proposals.from).toBe('ai_edit_proposals');
+    expect(proposals.pipeline[0].$match!.userId).toBe(owner);
+    const activity = plans.pipeline.find((s) => s.$project)!.$project!
+      .hasActivity.$or;
+    expect(activity).toContainEqual({ $gt: ['$revision', 1] });
+    expect(activity).toContainEqual({ $gt: [{ $size: '$activity' }, 0] });
+    expect(activity).not.toContainEqual({
+      $ne: ['$outputDuration', '$sourceMedia.duration'],
+    });
+    expect(activity).toContainEqual({
+      $gt: [
+        { $abs: { $subtract: ['$outputDuration', '$sourceMedia.duration'] } },
+        { $divide: [1, { $ifNull: ['$plan.video.fps', 30] }] },
+      ],
+    });
+    expect(JSON.stringify(activity)).not.toMatch(/session|updatedAt|planId/);
+    const previews = pipeline
+      .find((s) => s.$facet)!
+      .$facet!.items.find((s) => s.$lookup)!.$lookup!;
+    expect(previews.pipeline[0].$match).toMatchObject({
+      userId: owner,
+      profile: 'preview',
+    });
+    expect(
+      (previews.pipeline[0].$match!.$expr as { $and: unknown[] }).$and,
+    ).toContainEqual({
+      $eq: ['$revision', '$$revision'],
     });
   });
 });

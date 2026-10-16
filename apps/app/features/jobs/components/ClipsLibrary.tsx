@@ -7,20 +7,20 @@ import { JobStatus, useJobs } from "@/features/jobs";
 import { PageContent } from "@/components/layout/PageContent";
 
 import { AppButton } from "@blynta/ui";
-import { AppTabs } from "@blynta/ui";
-import { AppInput } from "@blynta/ui";
-import { AppSelect } from "@blynta/ui";
 import { AppCard } from "@blynta/ui";
-import { ViewModeToggle } from "@/features/dashboard/components/ViewModeToggle";
+import {
+  LibraryCount,
+  LibraryHeading,
+  LibraryToolbar,
+  LibraryItems,
+  LibraryPagination,
+} from "./ClipLibraryLayout";
 import { SourceVideoCard } from "./SourceVideoCard";
 import { ClipsLibrarySkeleton } from "./ClipsLibrarySkeleton";
 import {
   FilmIcon,
-  SearchIcon,
   PlusIcon,
   AlertTriangleIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   YoutubeIcon,
   CheckCircleIcon,
   LightbulbIcon,
@@ -148,105 +148,58 @@ export function ClipsLibrary() {
     });
   }, [allJobs, statusFilter, searchQuery, sortBy]);
 
-  const contextualToolbar = (
-    <div className="flex items-center gap-2">
-      <span className="text-xs font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md">
-        {total} videos
-      </span>
-    </div>
-  );
+  const contextualToolbar = <LibraryCount count={total} label="videos" />;
 
   return (
     <PageContent toolbar={contextualToolbar}>
-      {/* ── Page Header Lockup ── */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-4 border-b border-border/60">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+      <LibraryHeading
+        title={
+          <>
             Clips Library<span className="text-primary">.</span>
-          </h1>
-          <p className="mt-1 text-xs sm:text-sm text-muted-foreground">
-            Turn your long-form videos into high-performing viral shorts.
-          </p>
-        </div>
-
-        {/* Primary Action Button */}
-        <AppButton
-          variant="default"
-          size="sm"
-          onClick={() => router.push("/dashboard")}
-          icon={<PlusIcon className="h-4 w-4" />}
-          className="self-start md:self-auto h-9 font-semibold shadow-sm"
-        >
-          Create New Clips
-        </AppButton>
-      </div>
-
-      {/* ── Filter, Search & View Controls Toolbar ── */}
-      <AppCard
-        className="py-0"
-        contentClassName="flex-col gap-4 lg:flex-row lg:items-center"
-        useDefaultClasses={true}
-      >
-        {/* Left: Status Filter Tabs using AppTabs */}
-        <div className="min-w-0 flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
-          <AppTabs
-            value={statusFilter}
-            onValueChange={(val) => {
-              setStatusFilter(val as StatusFilter);
-              setPage(1);
-            }}
-            tabs={[
-              { value: "all", label: "All Videos" },
-              { value: "processing", label: "Processing" },
-              { value: JobStatus.COMPLETED, label: "Completed" },
-              { value: JobStatus.FAILED, label: "Failed" },
-            ]}
+          </>
+        }
+        description="Turn your long-form videos into high-performing viral shorts."
+        action={
+          <AppButton
             variant="default"
-            size="default"
-          />
-        </div>
-
-        {/* Right: Search, Sort & View Mode */}
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Search bar */}
-          <div className="min-w-[200px] sm:min-w-[240px]">
-            <AppInput
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Search by title, creator, URL..."
-              size="default"
-              prefixIcon={<SearchIcon className="h-3.5 w-3.5" />}
-              className="bg-background/80"
-            />
-          </div>
-
-          {/* Sort dropdown */}
-          <div className="w-[140px]">
-            <AppSelect
-              value={sortBy}
-              onValueChange={(val) => setSortBy(val as SortOption)}
-              size="default"
-              placeholder="Sort by"
-              className="bg-background/80"
-              options={[
-                { value: "newest", label: "Newest" },
-                { value: "oldest", label: "Oldest" },
-                { value: "clips_desc", label: "Most Clips" },
-                { value: "duration_desc", label: "Duration" },
-              ]}
-            />
-          </div>
-
-          {/* Grid vs List View Toggle */}
-          {viewMode !== null && (
-            <ViewModeToggle mode={viewMode} onChange={handleViewModeChange} />
-          )}
-        </div>
-      </AppCard>
-
+            size="sm"
+            onClick={() => router.push("/dashboard")}
+            icon={<PlusIcon className="h-4 w-4" />}
+            className="self-start md:self-auto h-9 font-semibold shadow-sm"
+          >
+            Create New Clips
+          </AppButton>
+        }
+      />
+      <LibraryToolbar
+        filter={statusFilter}
+        onFilterChange={(val) => {
+          setStatusFilter(val as StatusFilter);
+          setPage(1);
+        }}
+        filters={[
+          { value: "all", label: "All Videos" },
+          { value: "processing", label: "Processing" },
+          { value: JobStatus.COMPLETED, label: "Completed" },
+          { value: JobStatus.FAILED, label: "Failed" },
+        ]}
+        search={searchQuery}
+        onSearchChange={(value) => {
+          setSearchQuery(value);
+          setPage(1);
+        }}
+        searchPlaceholder="Search by title, creator, URL..."
+        sort={sortBy}
+        onSortChange={(value) => setSortBy(value as SortOption)}
+        sortOptions={[
+          { value: "newest", label: "Newest" },
+          { value: "oldest", label: "Oldest" },
+          { value: "clips_desc", label: "Most Clips" },
+          { value: "duration_desc", label: "Duration" },
+        ]}
+        viewMode={viewMode}
+        onViewModeChange={handleViewModeChange}
+      />
       {/* ── Content Area ── */}
       {viewMode === null || (isLoading && !data) ? (
         <ClipsLibrarySkeleton viewMode={viewMode} showHeader={false} />
@@ -324,63 +277,20 @@ export function ClipsLibrary() {
       ) : (
         /* Render Videos */
         <div className="space-y-6">
-          {viewMode === "grid" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredJobs.map((job) => (
-                <SourceVideoCard
-                  key={job._id || job.id}
-                  job={job}
-                  viewMode="grid"
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2.5">
-              {filteredJobs.map((job) => (
-                <SourceVideoCard
-                  key={job._id || job.id}
-                  job={job}
-                  viewMode="list"
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between p-4 rounded-xl border border-border/70 bg-card/60 backdrop-blur-sm">
-              <p className="text-xs text-muted-foreground">
-                Page{" "}
-                <span className="font-semibold text-foreground">{page}</span> of{" "}
-                <span className="font-semibold text-foreground">
-                  {totalPages}
-                </span>
-              </p>
-              <div className="flex items-center gap-2">
-                <AppButton
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                  icon={<ChevronLeftIcon className="h-4 w-4" />}
-                  className="h-8 px-3"
-                >
-                  Prev
-                </AppButton>
-                <AppButton
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                  icon={<ChevronRightIcon className="h-4 w-4" />}
-                  iconPosition="right"
-                  className="h-8 px-3"
-                >
-                  Next
-                </AppButton>
-              </div>
-            </div>
-          )}
+          <LibraryItems viewMode={viewMode}>
+            {filteredJobs.map((job) => (
+              <SourceVideoCard
+                key={job._id || job.id}
+                job={job}
+                viewMode={viewMode}
+              />
+            ))}
+          </LibraryItems>
+          <LibraryPagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+          />
         </div>
       )}
     </PageContent>

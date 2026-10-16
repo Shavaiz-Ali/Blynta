@@ -1,30 +1,11 @@
 "use client";
-import { useSyncExternalStore } from "react";
 import scrollbars from "./studio-scrollbars.module.css";
-import {
-  AppButton as Button,
-  AppSheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  AppTabs,
-} from "@blynta/ui";
+import { AppButton as Button, AppDialog } from "@blynta/ui";
 import { RefreshCw } from "lucide-react";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { EditingPlan, Proposal } from "./contracts";
+import type { EditingPlan, Proposal, StudioAsset } from "./contracts";
 import { studioError, useEditingVersions, useEditingAssets } from "./queries";
 import { describeChange, editTime } from "./presentation";
-import type { StudioAsset } from "./contracts";
-const desktopQuery = "(min-width: 1024px)";
-const subscribeDesktop = (onChange: () => void) => {
-  const query = window.matchMedia(desktopQuery);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-};
-const desktopSnapshot = () => window.matchMedia(desktopQuery).matches;
-const serverSnapshot = () => false;
-export function StudioLibraryPanel({
+export function StudioToolDialog({
   versions,
   assets,
   page,
@@ -37,7 +18,6 @@ export function StudioLibraryPanel({
   open,
   onOpenChange,
   tab,
-  onTabChange,
   proposals,
   plan,
   onCancel,
@@ -51,26 +31,19 @@ export function StudioLibraryPanel({
   setPage: (fn: (p: number) => number) => void;
   versionId: string;
   onVersionSelect: (id: string) => void;
-  onAttach: (a: StudioAsset) => void;
+  onAttach: (asset: StudioAsset) => void;
   generating: boolean;
   unresolvedSubmission: boolean;
   open: boolean;
-  onOpenChange: (v: boolean) => void;
+  onOpenChange: (value: boolean) => void;
   tab: string;
-  onTabChange: (v: string) => void;
   proposals: Proposal[];
   plan?: EditingPlan;
-  onApprove: (id: string, action: "apply" | "reject") => void;
   onCancel: (id: string) => void;
   onRetry: (id: string) => void;
   renderBusy: boolean;
   attachedAssetIds?: string[];
 }) {
-  const desktop = useSyncExternalStore(
-    subscribeDesktop,
-    desktopSnapshot,
-    serverSnapshot,
-  );
   const usedAssets = new Set([
     ...attachedAssetIds,
     ...(plan?.plan.audio.tracks.map((t) => t.assetId) ?? []),
@@ -97,11 +70,10 @@ export function StudioLibraryPanel({
       </p>
       <div className="mt-3 space-y-2">
         {versions.isPending ? (
-          <>
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-          </>
-        ) : versions.isError ? (
+          <p role="status" className="py-4 text-sm text-muted-foreground">
+            Loading history…
+          </p>
+        ) : versions.isError && !versions.data ? (
           <div>
             <p role="alert" className="text-sm text-destructive">
               {studioError(versions.error)}
@@ -167,24 +139,28 @@ export function StudioLibraryPanel({
           ))
         )}
       </div>
-      <div className="mt-3 flex justify-end gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={page === 1}
-          onClick={() => setPage((p) => p - 1)}
-        >
-          Previous
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={(versions.data?.items.length ?? 0) < 25}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          Next
-        </Button>
-      </div>
+      {versions.data && (page > 1 || versions.data.items.length >= 25) && (
+        <div className="mt-3 flex justify-end gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={versions.isFetching || page === 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
+            Previous
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={
+              versions.isFetching || (versions.data?.items.length ?? 0) < 25
+            }
+            onClick={() => setPage((p) => p + 1)}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
   const media = (
@@ -194,8 +170,10 @@ export function StudioLibraryPanel({
         media from Attach in the composer.
       </p>
       {assets.isPending ? (
-        <Skeleton className="mt-3 h-10 w-full" />
-      ) : assets.isError ? (
+        <p role="status" className="mt-3 text-sm text-muted-foreground">
+          Loading media…
+        </p>
+      ) : assets.isError && !assets.data ? (
         <p role="alert" className="mt-2 text-xs text-destructive">
           {studioError(assets.error)}
         </p>
@@ -244,86 +222,69 @@ export function StudioLibraryPanel({
       </Button>
     </div>
   );
+  const changes = (
+    <div className="space-y-4">
+      {plan ? (
+        <>
+          <h3 className="text-sm font-medium">Saved edits</h3>
+          <p className="text-xs text-muted-foreground">
+            Original audio ·{" "}
+            {plan.plan.audio.original.enabled
+              ? `${Math.round(plan.plan.audio.original.gain * 100)}% volume`
+              : "Muted"}
+          </p>
+          {plan.plan.operations.map((op) => {
+            const text = describeChange({
+              action: "add",
+              operation: op,
+            });
+            return (
+              <div key={op.id} className="space-y-1">
+                <p className="text-sm font-medium">
+                  {text.title.replace(/^Add /, "")} ·{" "}
+                  {op.enabled ? "Enabled" : "Disabled"}
+                </p>
+                <p className="text-xs text-muted-foreground">{text.detail}</p>
+              </div>
+            );
+          })}
+          {plan.plan.audio.tracks.map((t) => (
+            <p key={t.id} className="text-sm">
+              {t.role.replaceAll("_", " ")} ·{" "}
+              {t.enabled ? `${Math.round(t.gain * 100)}% volume` : "Disabled"}
+            </p>
+          ))}
+          {!plan.plan.operations.length && !plan.plan.audio.tracks.length && (
+            <p className="text-xs text-muted-foreground">
+              No visual effects or additional audio tracks.
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Saved editing operations will appear here.
+        </p>
+      )}
+    </div>
+  );
   return (
-    <AppSheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side={desktop ? "right" : "bottom"}
-        className="max-h-[85dvh] rounded-t-2xl motion-reduce:transition-none motion-reduce:[&_*]:transition-none lg:h-full lg:max-h-dvh lg:rounded-none"
-      >
-        <SheetHeader>
-          <SheetTitle>Editing tools</SheetTitle>
-          <SheetDescription>
-            Preview versions, ready media and reviewed suggestions.
-          </SheetDescription>
-        </SheetHeader>
-        <AppTabs
-          value={tab}
-          onValueChange={onTabChange}
-          size="sm"
-          variant="default"
-          className="min-h-0 flex-1 gap-0 px-4 pb-5"
-          listClassName="w-full shrink-0 justify-start"
-          contentClassName={`${scrollbars.slim} min-h-0 overflow-y-auto py-4`}
-          tabs={[
-            { value: "history", label: "History", content: history },
-            { value: "media", label: "Media", content: media },
-            {
-              value: "changes",
-              label: "Changes",
-              content: (
-                <div className="space-y-4">
-                  {plan ? (
-                    <>
-                      <h3 className="text-sm font-medium">Saved edits</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Original audio ·{" "}
-                        {plan.plan.audio.original.enabled
-                          ? `${Math.round(plan.plan.audio.original.gain * 100)}% volume`
-                          : "Muted"}
-                      </p>
-                      {plan.plan.operations.map((op) => {
-                        const text = describeChange({
-                          action: "add",
-                          operation: op,
-                        });
-                        return (
-                          <div key={op.id} className="space-y-1">
-                            <p className="text-sm font-medium">
-                              {text.title.replace(/^Add /, "")} ·{" "}
-                              {op.enabled ? "Enabled" : "Disabled"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {text.detail}
-                            </p>
-                          </div>
-                        );
-                      })}
-                      {plan.plan.audio.tracks.map((t) => (
-                        <p key={t.id} className="text-sm">
-                          {t.role.replaceAll("_", " ")} ·{" "}
-                          {t.enabled
-                            ? `${Math.round(t.gain * 100)}% volume`
-                            : "Disabled"}
-                        </p>
-                      ))}
-                      {!plan.plan.operations.length &&
-                        !plan.plan.audio.tracks.length && (
-                          <p className="text-xs text-muted-foreground">
-                            No visual effects or additional audio tracks.
-                          </p>
-                        )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Saved editing operations will appear here.
-                    </p>
-                  )}
-                </div>
-              ),
-            },
-          ]}
-        />
-      </SheetContent>
-    </AppSheet>
+    <AppDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      size="lg"
+      contentClassName="sm:max-w-3xl max-h-[85dvh]"
+      title={
+        tab === "history" ? "History" : tab === "media" ? "Media" : "Changes"
+      }
+      description={
+        tab === "history"
+          ? "Preview versions for this clip."
+          : tab === "media"
+            ? "Media used in this clip’s edits."
+            : "Changes saved to this clip."
+      }
+    >
+      {tab === "history" ? history : tab === "media" ? media : changes}
+    </AppDialog>
   );
 }

@@ -23,8 +23,8 @@ import type {
 } from "./contracts";
 import { renderPollInterval, proposalPollInterval } from "./presentation";
 export const studioKeys = {
-  clips: (search: string, sort: string, page: number) =>
-    ["ai-editor", "clips", search, sort, page] as const,
+  clips: (search: string, sort: string, page: number, filter = "all") =>
+    ["ai-editor", "clips", search, sort, page, filter] as const,
   sessions: (clip: string, plan: string) =>
     ["ai-editor", "sessions", clip, plan] as const,
   recent: ["ai-editor", "recent"] as const,
@@ -200,6 +200,7 @@ export function useProposeEdit(clip: string, plan: string) {
       client.setQueryData(studioKeys.proposal(p._id), p);
     },
     onSettled: () => {
+      void client.invalidateQueries({ queryKey: ["ai-editor", "clips"] });
       void client.invalidateQueries({ queryKey: studioKeys.state(clip, plan) });
       void client.invalidateQueries({
         queryKey: studioKeys.sessions(clip, plan),
@@ -223,6 +224,7 @@ export function useProposalAction(
       ).data,
     retry: false,
     onSettled: () => {
+      void client.invalidateQueries({ queryKey: ["ai-editor", "clips"] });
       void client.invalidateQueries({ queryKey: studioKeys.plan(plan) });
       void client.invalidateQueries({ queryKey: studioKeys.state(clip, plan) });
       void client.invalidateQueries({ queryKey: ["ai-editor", "proposal"] });
@@ -275,6 +277,7 @@ export function useRenderAction(
     retry: false,
     onSuccess: (v) => client.setQueryData(studioKeys.version(v._id), v),
     onSettled: () => {
+      void client.invalidateQueries({ queryKey: ["ai-editor", "clips"] });
       void client.invalidateQueries({
         queryKey: ["ai-editor", "versions", plan],
       });
@@ -289,17 +292,26 @@ export function useStudioClips(
   sort: string,
   page: number,
   enabled = true,
+  filter = "all",
 ) {
   return useQuery({
-    queryKey: studioKeys.clips(search, sort, page),
+    queryKey: studioKeys.clips(search, sort, page, filter),
     enabled,
     queryFn: ({ signal }) =>
       get<{ items: StudioClip[]; totalPages: number; total: number }>(
-        `${API_ENDPOINTS.editor.clips}?${new URLSearchParams({ search, sort, page: String(page) })}`,
+        `${API_ENDPOINTS.editor.clips}?${new URLSearchParams({ search, sort, page: String(page), filter })}`,
         signal,
       ),
     staleTime: 30000,
     placeholderData: keepPreviousData,
+    refetchInterval: (q) =>
+      q.state.data?.items.some(
+        (clip) =>
+          clip.editing?.latestPreview?.status === "queued" ||
+          clip.editing?.latestPreview?.status === "processing",
+      )
+        ? 2500
+        : false,
   });
 }
 export function useStudioSessions(clip: string, plan: string) {
@@ -320,7 +332,7 @@ export function useSessionAction(clip: string, plan: string) {
     mutationFn: async (
       input:
         | { id: string; title?: string; status?: "active" | "archived" }
-        | { requestId: string },
+        | { requestId: string; resumeLatest?: boolean },
     ) => {
       if ("id" in input) {
         const { id, ...body } = input;

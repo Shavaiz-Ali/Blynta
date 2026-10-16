@@ -10,7 +10,7 @@ const { chromium } = require(
     "playwright",
   ),
 );
-const out = path.join(__dirname, "studio-editor-checkpoint-evidence");
+const out = path.join(__dirname, "studio-simplification-evidence");
 fs.mkdirSync(out, { recursive: true });
 const results = [];
 if (
@@ -34,20 +34,22 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
     failRender: !!options.failRender,
     newSessions: 0,
   };
-  const sessions = [
-    {
-      _id: ids.session,
-      planId: ids.plan,
-      title: "Opening zoom",
-      status: "active",
-    },
-    {
-      _id: "555555555555555555555555",
-      planId: ids.plan,
-      title: "Audio adjustments",
-      status: "active",
-    },
-  ];
+  const sessions = options.noSession
+    ? []
+    : [
+        {
+          _id: ids.session,
+          planId: ids.plan,
+          title: "Opening zoom",
+          status: "active",
+        },
+        {
+          _id: "555555555555555555555555",
+          planId: ids.plan,
+          title: "Audio adjustments",
+          status: "active",
+        },
+      ];
   const context = await browser.newContext({
     viewport: { width, height: 900 },
   });
@@ -116,6 +118,7 @@ async function open(browser, width = 1440, view = "workspace", options = {}) {
         title: "New conversation",
         status: "active",
       };
+      assert.equal(body.resumeLatest, true);
       sessions.push(session);
       state.newSessions++;
       response = ok(session);
@@ -323,6 +326,38 @@ async function record(c, label, width, theme) {
       await c.context.close();
       console.log(`layouts ${width} passed`);
     }
+    const fresh = await open(browser, 1440, "workspace", { noSession: true });
+    await fresh.page.waitForFunction(
+      () => !document.querySelector("#studio-prompt")?.disabled,
+    );
+    assert.equal(fresh.state.newSessions, 1);
+    await fresh.page.reload({ waitUntil: "networkidle" });
+    assert.equal(fresh.state.newSessions, 1);
+    await fresh.context.close();
+    const dialogs = await open(browser, 1440);
+    assert.equal(
+      await dialogs.page
+        .getByRole("button", { name: "New chat", exact: true })
+        .count(),
+      0,
+    );
+    assert.equal(
+      await dialogs.page
+        .getByRole("button", { name: "Open conversations", exact: true })
+        .count(),
+      0,
+    );
+    for (const name of ["History", "Media", "Changes"]) {
+      await dialogs.page.getByRole("button", { name, exact: true }).click();
+      const dialog = dialogs.page.getByRole("dialog");
+      await dialog.getByRole("heading", { name, exact: true }).waitFor();
+      assert.equal(await dialog.getByRole("tab").count(), 0);
+      await dialogs.page.screenshot({
+        path: path.join(out, name.toLowerCase() + "-dialog-1440.png"),
+      });
+      await dialogs.page.keyboard.press("Escape");
+    }
+    await dialogs.context.close();
     const clarification = await open(browser, 1440, "workspace", {
       clarification: true,
     });
@@ -370,21 +405,6 @@ async function record(c, label, width, theme) {
     await c.page
       .getByLabel("Describe your editing instructions")
       .fill("Keep this draft");
-    await c.page
-      .getByRole("button", { name: "Audio adjustments", exact: true })
-      .click();
-    await c.page
-      .getByLabel("Describe your editing instructions")
-      .fill("A separate audio draft");
-    await c.page
-      .getByRole("button", { name: "Opening zoom", exact: true })
-      .click();
-    assert.equal(
-      await c.page
-        .getByLabel("Describe your editing instructions")
-        .inputValue(),
-      "Keep this draft",
-    );
     await c.page.reload({ waitUntil: "networkidle" });
     await c.page.waitForFunction(
       () =>
@@ -414,16 +434,12 @@ async function record(c, label, width, theme) {
       ),
     );
     assert.equal(c.state.renderRequests.length, 1);
-    await c.page.getByRole("button", { name: "New chat", exact: true }).click();
-    await c.page
-      .getByRole("button", { name: "New conversation", exact: true })
-      .waitFor();
-    assert.equal(c.state.newSessions, 1);
+    assert.equal(c.state.newSessions, 0);
     assert.equal(c.state.applyRequests, 1);
     assert.deepEqual(c.errors, []);
     await c.context.close();
     console.log(
-      "drafts, refresh, sessions, apply → progress → completed preview passed",
+      "draft restoration, conversation resumption, apply → progress → completed preview passed",
     );
     const failure = await open(browser, 1440, "workspace", {
       failRender: true,
@@ -498,54 +514,10 @@ async function record(c, label, width, theme) {
       .getByRole("button", { name: "Reject", exact: true })
       .click();
     assert.equal(mobile.state.renderRequests.length, 0);
-    await mobile.page
-      .getByRole("button", { name: "Open conversations", exact: true })
-      .click();
-    await mobile.page
-      .getByRole("dialog")
-      .getByRole("button", { name: "Audio adjustments", exact: true })
-      .click();
-    await mobile.page
-      .getByRole("button", { name: "Open conversations", exact: true })
-      .click();
-    await mobile.page
-      .getByRole("dialog")
-      .getByRole("button", {
-        name: "Actions for Audio adjustments",
-        exact: true,
-      })
-      .click();
-    await mobile.page
-      .getByRole("button", { name: "Rename", exact: true })
-      .click();
-    await mobile.page
-      .getByLabel("Conversation title")
-      .fill("Quieter original audio");
-    await mobile.page
-      .getByRole("button", { name: "Save name", exact: true })
-      .click();
-    await mobile.page
-      .getByRole("button", { name: "Quieter original audio", exact: true })
-      .waitFor();
-    await mobile.page
-      .getByRole("button", {
-        name: "Actions for Quieter original audio",
-        exact: true,
-      })
-      .click();
-    await mobile.page
-      .getByRole("button", { name: "Archive conversation", exact: true })
-      .click();
-    await mobile.page
-      .getByRole("button", { name: "Archive", exact: true })
-      .click();
-    await mobile.page
-      .getByRole("button", { name: "Quieter original audio", exact: true })
-      .waitFor({ state: "detached" });
     assert.equal(mobile.state.applyRequests, 0);
     await mobile.context.close();
     console.log(
-      "failed/no-op applies, refresh recovery, IME, keyboard tabs, mobile sessions, rename and archive passed",
+      "failed/no-op applies, refresh recovery, IME, keyboard tabs and rejection passed",
     );
     fs.writeFileSync(
       path.join(out, "results.json"),
@@ -554,9 +526,9 @@ async function record(c, label, width, theme) {
           layouts: results,
           interactions: [
             "draft preservation",
-            "session switching",
+            "latest active conversation resumes",
             "refresh restoration",
-            "new chat shares plan",
+            "missing conversation initializes once and resumes on refresh",
             "automatic rendering",
             "encoding progress",
             "completion switches preview",
@@ -564,8 +536,8 @@ async function record(c, label, width, theme) {
             "no render after failed or no-op apply",
             "refresh recovers apply-render gap without reapply",
             "IME-safe Enter and Shift+Enter",
-            "keyboard tabs and mobile session drawer",
-            "rename and archive preserve the shared plan",
+            "keyboard preview/chat tabs",
+            "focused History, Media and Changes dialogs without tabs",
             "older completed renders do not replace the current preview",
             "rejected proposals do not render",
           ],

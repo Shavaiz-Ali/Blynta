@@ -607,11 +607,18 @@ export class ProposalsService {
           planId: objectId,
           title: z.string().trim().min(1).max(100).optional(),
           requestId: z.string().uuid(),
+          resumeLatest: z.boolean().optional(),
         })
         .strict(),
       body,
     );
     await this.tools.owned(userId, clipId, input.planId);
+    if (input.resumeLatest) {
+      const latest = await this.sessions
+        .findOne({ userId, clipId, planId: input.planId, status: 'active' })
+        .sort({ updatedAt: -1, _id: -1 });
+      if (latest) return latest;
+    }
     const identity = {
       userId,
       clipId,
@@ -623,7 +630,8 @@ export class ProposalsService {
         identity,
         {
           $setOnInsert: {
-            ...input,
+            planId: input.planId,
+            requestId: input.requestId,
             userId,
             clipId,
             status: 'active',

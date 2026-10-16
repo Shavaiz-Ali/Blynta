@@ -37,7 +37,7 @@ export function StudioPromptComposer({
     const input = inputRef.current;
     if (input) {
       input.style.height = "auto";
-      input.style.height = `${Math.min(128, Math.max(48, input.scrollHeight))}px`;
+      input.style.height = `${Math.min(112, Math.max(40, input.scrollHeight))}px`;
     }
   }, [prompt]);
   const [picker, setPicker] = useState(false),
@@ -132,11 +132,11 @@ export function StudioPromptComposer({
         id="studio-prompt"
         value={prompt}
         onChange={(e) => onChange(e.target.value)}
-        rows={2}
+        rows={1}
         maxLength={4000}
         disabled={disabled}
         placeholder="Ask Blynta to edit your video…"
-        className={`${scrollbars.slim} max-h-32 min-h-12 resize-none overflow-y-auto border-0 bg-transparent p-1 text-base leading-6 shadow-none focus-visible:ring-0 sm:text-sm`}
+        className={`${scrollbars.slim} max-h-28 min-h-10 resize-none overflow-y-auto border-0 bg-transparent p-1 text-base leading-6 shadow-none focus-visible:ring-0 sm:text-sm`}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();

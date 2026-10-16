@@ -1,6 +1,19 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { AgentSession } from "./contracts";
+export function latestStudioSession(sessions: AgentSession[]) {
+  return sessions
+    .filter((s) => !s.status || s.status === "active")
+    .reduce<AgentSession | undefined>(
+      (latest, session) =>
+        !latest ||
+        (session.updatedAt &&
+          (!latest.updatedAt || session.updatedAt > latest.updatedAt))
+          ? session
+          : latest,
+      undefined,
+    );
+}
 // Session storage keeps drafts private to this browser tab and scopes them to the account.
 export function useStudioPreferences(
   owner: string,
@@ -48,9 +61,7 @@ export function useStudioPreferences(
       /* Use defaults. */
     }
     memory.current = stored.drafts || {};
-    const id = sessions.some((s) => s._id === stored.selected)
-      ? stored.selected!
-      : sessions[0]?._id || "";
+    const id = latestStudioSession(sessions)?._id || "";
     setSelected(id);
     setPrompt(memory.current[id]?.prompt || "");
     setModelId(

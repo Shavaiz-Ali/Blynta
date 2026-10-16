@@ -5,7 +5,7 @@ import {
   AppTabsTrigger,
   AppTabsContent,
   AppButton as Button,
-  AppSkeleton,
+  AppSpinner,
 } from "@blynta/ui";
 import { StudioVideoPlayer } from "@blynta/ui/player";
 import { Video } from "lucide-react";
@@ -112,8 +112,10 @@ export function StudioPreviewPanel({
                 aria-label="Loading source video"
                 className="flex h-full w-full flex-col items-center justify-center gap-3"
               >
-                <AppSkeleton className="aspect-[9/16] max-h-[50dvh] w-48 max-w-full" />
-                <AppSkeleton className="h-12 w-48 max-w-full" />
+                <AppSpinner size="xs" />
+                <span className="text-sm text-muted-foreground">
+                  Loading video…
+                </span>
               </div>
             ) : (
               <div className="max-w-sm space-y-3 px-4 text-center text-sm leading-6 text-muted-foreground">

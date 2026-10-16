@@ -20,10 +20,6 @@
 .mobileTabs {
   display: flex;
 }
-.sessionAside,
-.sessionCollapse {
-  display: none;
-}
 @container studio (min-width: 880px) {
   .split {
     grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
@@ -37,15 +33,5 @@
   }
   .mobileTabs {
     display: none;
-  }
-}
-@container studio (min-width: 1200px) {
-  .sessionAside {
-    display: block;
-    width: 192px;
-    flex-shrink: 0;
-  }
-  .sessionCollapse {
-    display: inline-flex;
   }
 }

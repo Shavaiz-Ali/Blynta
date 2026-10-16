@@ -117,6 +117,15 @@ export interface AgentSession {
   selectedModelId?: string;
 }
 export interface StudioClip {
+  sourcePlatform?: import("@blynta/types/contracts").SourcePlatform;
+  uploader?: string;
+  editing?: {
+    planId: string;
+    revision: number;
+    updatedAt: string;
+    hasActivity: boolean;
+    latestPreview?: { status: RenderStatus; revision: number } | null;
+  } | null;
   projectId?: string | null;
   _id: string;
   jobId: string;

@@ -9,7 +9,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { HydratedDocument, Model, Types } from 'mongoose';
+import { HydratedDocument, Model, Types, PipelineStage } from 'mongoose';
 import { z } from 'zod';
 import { Job, JobStatus } from '../jobs/schemas/job.schema';
 import { clipMediaCandidates } from '../studio/clip-media';
@@ -51,6 +51,179 @@ export class EditPlansService {
     if (!plan) throw new NotFoundException('EditPlan not found');
     return plan;
   }
+  private clipEditingStages(
+    userId: string,
+  ): PipelineStage.FacetPipelineStage[] {
+    return [
+      {
+        $lookup: {
+          from: this.plans.collection.name,
+          let: {
+            clipId: { $toString: '$_id' },
+            jobId: { $toString: '$jobId' },
+          },
+          pipeline: [
+            {
+              $match: {
+                userId,
+                $expr: {
+                  $and: [
+                    { $eq: ['$sourceClipId', '$$clipId'] },
+                    { $eq: ['$sourceMedia.jobId', '$$jobId'] },
+                  ],
+                },
+              },
+            },
+            { $sort: { updatedAt: -1, _id: -1 } },
+            { $limit: 1 },
+            {
+              $lookup: {
+                from: 'ai_edit_proposals',
+                let: { planId: { $toString: '$_id' }, clipId: '$sourceClipId' },
+                pipeline: [
+                  {
+                    $match: {
+                      userId,
+                      $expr: {
+                        $and: [
+                          { $eq: ['$planId', '$$planId'] },
+                          { $eq: ['$clipId', '$$clipId'] },
+                        ],
+                      },
+                    },
+                  },
+                  { $limit: 1 },
+                  { $project: { _id: 1 } },
+                ],
+                as: 'activity',
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                planId: { $toString: '$_id' },
+                revision: 1,
+                updatedAt: 1,
+                hasActivity: {
+                  $or: [
+                    { $gt: ['$revision', 1] },
+                    { $gt: [{ $size: '$activity' }, 0] },
+                    {
+                      $gt: [
+                        { $size: { $ifNull: ['$plan.operations', []] } },
+                        0,
+                      ],
+                    },
+                    {
+                      $gt: [
+                        { $size: { $ifNull: ['$plan.audio.tracks', []] } },
+                        0,
+                      ],
+                    },
+                    { $ne: [{ $ifNull: ['$plan.audio.original.gain', 1] }, 1] },
+                    { $eq: ['$plan.audio.original.enabled', false] },
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $ifNull: ['$plan.audio.original.mutes', []],
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $ifNull: ['$plan.audio.original.automation', []],
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                    // Initialization rounds duration to an output frame; that is not an edit.
+                    {
+                      $gt: [
+                        {
+                          $abs: {
+                            $subtract: [
+                              '$outputDuration',
+                              '$sourceMedia.duration',
+                            ],
+                          },
+                        },
+                        { $divide: [1, { $ifNull: ['$plan.video.fps', 30] }] },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: 'editingPlans',
+        },
+      },
+      {
+        $set: {
+          editing: { $ifNull: [{ $arrayElemAt: ['$editingPlans', 0] }, null] },
+          projectId: { $arrayElemAt: ['$editingPlans.planId', 0] },
+        },
+      },
+      { $unset: 'editingPlans' },
+    ];
+  }
+  private clipPreviewStages(
+    userId: string,
+  ): PipelineStage.FacetPipelineStage[] {
+    return [
+      {
+        $lookup: {
+          from: this.versions.collection.name,
+          let: { planId: '$editing.planId', revision: '$editing.revision' },
+          pipeline: [
+            {
+              $match: {
+                userId,
+                profile: 'preview',
+                $expr: {
+                  $and: [
+                    { $eq: ['$planId', '$$planId'] },
+                    { $eq: ['$revision', '$$revision'] },
+                  ],
+                },
+              },
+            },
+            { $sort: { createdAt: -1, _id: -1 } },
+            { $limit: 1 },
+            { $project: { _id: 0, status: 1, revision: 1 } },
+          ],
+          as: 'previews',
+        },
+      },
+      {
+        $set: {
+          editing: {
+            $cond: [
+              { $ne: ['$editing', null] },
+              {
+                $mergeObjects: [
+                  '$editing',
+                  {
+                    latestPreview: {
+                      $ifNull: [{ $arrayElemAt: ['$previews', 0] }, null],
+                    },
+                  },
+                ],
+              },
+              null,
+            ],
+          },
+        },
+      },
+      { $unset: 'previews' },
+    ];
+  }
   async listClips(userId: string, query: unknown) {
     const input = parseEdit(
       z
@@ -58,6 +231,7 @@ export class EditPlansService {
           search: z.string().trim().max(100).default(''),
           sort: z.enum(['newest', 'oldest']).default('newest'),
           page: z.coerce.number().int().min(1).max(10000).default(1),
+          filter: z.enum(['all', 'edited']).default('all'),
         })
         .strict(),
       query,
@@ -107,6 +281,8 @@ export class EditPlansService {
             ],
           },
           thumbnailUrl: 1,
+          sourcePlatform: 1,
+          uploader: '$videoUploader',
           duration: { $subtract: ['$clips.endTime', '$clips.startTime'] },
           createdAt: { $ifNull: ['$clips.createdAt', '$createdAt'] },
         },
@@ -114,46 +290,20 @@ export class EditPlansService {
       ...(pattern
         ? [{ $match: { title: { $regex: pattern, $options: 'i' } } }]
         : []),
+      ...(input.filter === 'edited'
+        ? [
+            ...this.clipEditingStages(userId),
+            { $match: { 'editing.hasActivity': true } },
+          ]
+        : []),
       { $sort: { createdAt: input.sort === 'oldest' ? 1 : -1, _id: 1 } },
       {
         $facet: {
           items: [
             { $skip: (input.page - 1) * 12 },
             { $limit: 12 },
-            {
-              $lookup: {
-                from: this.plans.collection.name,
-                let: {
-                  clipId: { $toString: '$_id' },
-                  jobId: { $toString: '$jobId' },
-                },
-                pipeline: [
-                  {
-                    $match: {
-                      userId,
-                      $expr: {
-                        $and: [
-                          { $eq: ['$sourceClipId', '$$clipId'] },
-                          { $eq: ['$sourceMedia.jobId', '$$jobId'] },
-                        ],
-                      },
-                    },
-                  },
-                  { $sort: { updatedAt: -1, _id: -1 } },
-                  { $limit: 1 },
-                  { $project: { _id: 1 } },
-                ],
-                as: 'projects',
-              },
-            },
-            {
-              $set: {
-                projectId: {
-                  $toString: { $arrayElemAt: ['$projects._id', 0] },
-                },
-              },
-            },
-            { $unset: 'projects' },
+            ...(input.filter === 'all' ? this.clipEditingStages(userId) : []),
+            ...this.clipPreviewStages(userId),
           ],
           total: [{ $count: 'count' }],
         },

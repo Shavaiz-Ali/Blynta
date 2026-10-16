@@ -96,6 +96,7 @@ const ui = {
 };
 test("project states use only previews matching the authoritative saved revision", () => {
   const { projectStatus } = load("features/ai-editor/StudioClipCard.tsx", {
+    "@/features/dashboard/utils": { platformIcon: () => null },
     "next/navigation": { useRouter: () => ({ push() {} }) },
   });
   const project = { revision: 3 };
@@ -912,4 +913,19 @@ test("automatic preview transport carries the exact saved revision and never ret
   assert.equal(h.calls[0][0], "/ai-editor/plans/plan/preview");
   assert.deepEqual(h.calls[0][1], { expectedRevision: 7 });
   assert.equal(options.retry, false);
+});
+
+test("latest valid conversation ignores archived and older sessions", () => {
+  const { latestStudioSession } = load(
+    "features/ai-editor/useStudioPreferences.ts",
+  );
+  assert.equal(
+    latestStudioSession([
+      { _id: "old", status: "active", updatedAt: "2026-10-12" },
+      { _id: "latest", status: "active", updatedAt: "2026-10-15" },
+      { _id: "archived", status: "archived", updatedAt: "2026-10-16" },
+    ])._id,
+    "latest",
+  );
+  assert.equal(latestStudioSession([]), undefined);
 });

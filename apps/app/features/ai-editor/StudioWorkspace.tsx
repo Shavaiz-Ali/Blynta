@@ -9,19 +9,17 @@ import {
   Library,
   ListChecks,
   Check,
-  PanelLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AppButton as Button,
   AppQueryState,
-  AppSkeleton,
+  AppSpinner,
   AppTabs,
   AppTabsList,
   AppTabsTrigger,
 } from "@blynta/ui";
 import { useCurrentUser } from "@/features/auth/queries";
-import { StudioSessionSidebar } from "./StudioSessionSidebar";
 import layout from "./workspace.module.css";
 import { useStudioPreferences } from "./useStudioPreferences";
 import { StudioConversation } from "./StudioConversation";
@@ -32,7 +30,7 @@ import { useAvailableEditingModels } from "./models";
 import { ModelSelector, modelSelectionError } from "./ModelSelector";
 import { StudioVideoPlayer } from "@blynta/ui/player";
 import { StudioPreviewPanel } from "./StudioPreviewPanel";
-import { StudioLibraryPanel } from "./StudioLibraryPanel";
+import { StudioToolDialog } from "./StudioToolDialog";
 import { StudioPromptComposer } from "./StudioPromptComposer";
 import { useStudioAttachments } from "./attachments";
 import type { PromptSubmission } from "./contracts";
@@ -87,7 +85,6 @@ export function StudioWorkspace({
   );
   const sessionId = preferences.selected;
   const { prompt, setPrompt, modelId, setModelId } = preferences;
-  const [sessionsOpen, setSessionsOpen] = useState(false);
   const workspaceViewport = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -145,6 +142,7 @@ export function StudioWorkspace({
   const renderLock = useRef(false);
   const renderAttempts = useRef(new Set<number>());
   const newSessionRequest = useRef<string | null>(null);
+  const bootstrapStarted = useRef(false);
   const [renderError, setRenderError] = useState<{
     revision: number;
     message: string;
@@ -310,21 +308,31 @@ export function StudioWorkspace({
       void renderPreview(revision);
   });
 
-  async function newSession() {
-    if (sessionAction.isPending) return;
+  async function resumeConversation() {
+    if (
+      !planId ||
+      bootstrapStarted.current ||
+      !sessions.isSuccess ||
+      sessionId ||
+      !preferences.ready ||
+      sessionAction.isPending
+    )
+      return;
+    bootstrapStarted.current = true;
     try {
       newSessionRequest.current ??= crypto.randomUUID();
       const session = await sessionAction.mutateAsync({
         requestId: newSessionRequest.current,
+        resumeLatest: true,
       });
-      newSessionRequest.current = null;
       preferences.select(session._id);
-      setSessionsOpen(false);
-      preferences.setTab("chat");
     } catch (error) {
       toast.error(studioError(error));
     }
   }
+  useEffect(() => {
+    void resumeConversation();
+  });
   async function download() {
     if (!version.data || version.data.status !== "completed" || downloading)
       return;
@@ -379,7 +387,7 @@ export function StudioWorkspace({
   if (job.isPending)
     return (
       <PageContent workspace>
-        <WorkspaceSkeleton />
+        <WorkspaceLoading />
       </PageContent>
     );
   if (!ready)
@@ -435,62 +443,12 @@ export function StudioWorkspace({
         data-studio-workspace
         ref={workspaceViewport}
       >
-        <StudioSessionSidebar
-          sessions={sessions.data?.items ?? []}
-          selected={sessionId}
-          title={clipTitle}
-          open={sessionsOpen}
-          onOpenChange={setSessionsOpen}
-          collapsed={preferences.collapsed}
-          onCollapse={preferences.toggleCollapsed}
-          busy={generating || unresolvedSubmission || sessionAction.isPending}
-          loading={sessions.isPending}
-          error={sessions.isError}
-          onRetry={() => void sessions.refetch()}
-          onSelect={preferences.select}
-          onCreate={() => void newSession()}
-          onUpdate={async (id, patch) => {
-            await sessionAction.mutateAsync({ id, ...patch });
-            if (patch.status === "archived" && id === sessionId)
-              preferences.select(
-                sessions.data?.items.find((s) => s._id !== id)?._id || "",
-              );
-            if (patch.status === "archived")
-              toast("Conversation archived", {
-                action: {
-                  label: "Undo",
-                  onClick: () => {
-                    void sessionAction
-                      .mutateAsync({ id, status: "active" })
-                      .then(() => preferences.select(id))
-                      .catch((error) => toast.error(studioError(error)));
-                  },
-                },
-              });
-          }}
-        />
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header
             aria-label="Clip tools"
             className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/50 px-4 py-2 sm:px-6"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={
-                  preferences.collapsed
-                    ? "Expand conversations"
-                    : "Open conversations"
-                }
-                onClick={() => {
-                  if ((workspaceViewport.current?.clientWidth ?? 0) >= 1200)
-                    preferences.toggleCollapsed();
-                  else setSessionsOpen(true);
-                }}
-              >
-                <PanelLeft className="size-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -708,6 +666,7 @@ export function StudioWorkspace({
                 )}
               </header>
               <StudioConversation
+                onApprove={(id, action) => void approve(id, action)}
                 assets={assets.data?.items}
                 key={sessionId}
                 hasOlder={history.hasNextPage}
@@ -716,7 +675,12 @@ export function StudioWorkspace({
                 messages={history.data?.messages ?? []}
                 proposals={allProposals}
                 plan={plan.data}
-                loading={state.isPending || (!!sessionId && history.isPending)}
+                loading={
+                  state.isPending ||
+                  !preferences.ready ||
+                  sessionAction.isPending ||
+                  (!!sessionId && history.isPending)
+                }
                 generating={generating}
                 busy={
                   apply.isPending ||
@@ -725,7 +689,6 @@ export function StudioWorkspace({
                   generating ||
                   unresolvedSubmission
                 }
-                onApprove={(id, action) => void approve(id, action)}
                 onSuggest={(text) => {
                   setPrompt(text);
                   preferences.setTab("chat");
@@ -740,6 +703,25 @@ export function StudioWorkspace({
                     });
                 }}
               >
+                {(sessions.isError || sessionAction.isError) && (
+                  <p role="alert" className="text-sm text-muted-foreground">
+                    The conversation couldn’t be loaded.{" "}
+                    <Button
+                      size="sm"
+                      variant="link"
+                      disabled={sessions.isFetching || sessionAction.isPending}
+                      onClick={() => {
+                        if (sessions.isError) void sessions.refetch();
+                        else {
+                          bootstrapStarted.current = false;
+                          void resumeConversation();
+                        }
+                      }}
+                    >
+                      Retry conversation
+                    </Button>
+                  </p>
+                )}
                 {(state.isError || history.isError) && (
                   <div role="alert" className="text-sm text-destructive">
                     {studioError(state.error ?? history.error)}
@@ -776,11 +758,15 @@ export function StudioWorkspace({
                 onChange={setPrompt}
                 onSubmit={() => void submit()}
                 disabled={
-                  generating || unresolvedSubmission || !preferences.ready
+                  generating ||
+                  unresolvedSubmission ||
+                  !preferences.ready ||
+                  !sessionId
                 }
                 busy={generating}
                 sendDisabled={
                   !plan.data ||
+                  !sessionId ||
                   !preferences.ready ||
                   !prompt.trim() ||
                   generating ||
@@ -857,7 +843,7 @@ export function StudioWorkspace({
               />
             </section>
           </div>
-          <StudioLibraryPanel
+          <StudioToolDialog
             attachedAssetIds={attachments.selectedAssetIds}
             versions={versions}
             assets={assets}
@@ -867,10 +853,8 @@ export function StudioWorkspace({
             open={toolsOpen}
             onOpenChange={setToolsOpen}
             tab={toolsTab}
-            onTabChange={setToolsTab}
             proposals={allProposals}
             plan={plan.data}
-            onApprove={(id, action) => void approve(id, action)}
             renderBusy={cancel.isPending || retry.isPending}
             onCancel={(id) =>
               void cancel
@@ -914,36 +898,14 @@ function EmptyWorkspace({ message }: { message: string }) {
     </div>
   );
 }
-function WorkspaceSkeleton() {
+function WorkspaceLoading() {
   return (
     <div
       role="status"
-      aria-label="Loading editing workspace"
-      className={`${layout.workspace} flex h-full min-h-96 gap-4 p-4`}
+      className="flex h-full min-h-80 items-center justify-center gap-2 text-sm text-muted-foreground"
     >
-      <div className={`${layout.sessionAside} space-y-3`}>
-        <AppSkeleton className="h-9" />
-        {[0, 1, 2, 3].map((i) => (
-          <AppSkeleton key={i} className="h-8" />
-        ))}
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <AppSkeleton className="h-12 w-full" />
-        <div className={`${layout.split} gap-4`}>
-          <div className="flex min-h-0 items-center justify-center bg-muted/10 p-4">
-            <AppSkeleton className="aspect-[9/16] h-full w-auto max-w-full" />
-          </div>
-          <div className={`${layout.chat} gap-4`}>
-            <AppSkeleton className="h-4 w-28" />
-            <AppSkeleton className="ml-auto h-16 w-4/5" />
-            <div className="flex-1 space-y-2">
-              <AppSkeleton className="h-4 w-full" />
-              <AppSkeleton className="h-4 w-4/5" />
-            </div>
-            <AppSkeleton className="h-36 shrink-0" />
-          </div>
-        </div>
-      </div>
+      <AppSpinner size="xs" />
+      Loading editor…
     </div>
   );
 }
