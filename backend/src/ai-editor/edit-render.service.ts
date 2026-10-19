@@ -1,5 +1,8 @@
+import { BatchRenderService } from '../batch-render/batch-render.service';
+import { readdir } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { EDIT_LIMITS } from './edit.constants';
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { writeFile, stat, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -25,6 +28,7 @@ export class EditRenderService {
     private registry: ProcessRegistryService,
     private validator: EditPlanValidatorService,
     private config: ConfigService,
+    @Optional() private batch?: BatchRenderService,
   ) {}
   private async inspectMedia(path: string, format?: string) {
     try {
@@ -236,19 +240,71 @@ export class EditRenderService {
       await writeFile(file.path, file.text, 'utf8');
     await onPhase(EDIT_RENDER_PHASE.ENCODING);
     let lastEncoding = 0;
-    await runCommandWithProgress(
-      'ffmpeg',
-      spec.args,
-      (line) => {
-        const value = encodingProgress(line, spec.duration);
-        if (value !== undefined && value > lastEncoding) {
-          lastEncoding = value;
-          onProgress(value);
-        }
-      },
-      this.registry,
-      { cwd: directory },
-    );
+    if (this.batch?.enabled) {
+      const result = await this.batch.execute(
+        `edit/${version.planId}/${version.revision}/${version.profile}/${version.generation ?? 0}`,
+        async (prefix, deadline) => {
+          const files: {
+            name: string;
+            key: string;
+            size: number;
+            etag?: string;
+          }[] = [];
+          for (const name of await readdir(directory)) {
+            const path = join(directory, name);
+            const info = await stat(path);
+            if (!info.isFile() || name === 'output.mp4') continue;
+            const key = `${prefix}/inputs/${name}`;
+            await this.r2.uploadFile(path, key);
+            files.push({
+              name,
+              key,
+              size: info.size,
+              etag: (await this.r2.objectInfo(key)).etag,
+            });
+          }
+          return {
+            version: 1,
+            kind: 'edit',
+            outputKey: `${prefix}/output.mp4`,
+            deadline,
+            files,
+            duration: spec.duration,
+            args: spec.args.map((arg) =>
+              arg.startsWith(directory) ? basename(arg) : arg,
+            ),
+          };
+        },
+        async (_phase, value) => {
+          await Promise.resolve(onProgress(value));
+        },
+        {
+          planId: version.planId,
+          revision: version.revision,
+          generation: version.generation ?? 0,
+        },
+      );
+      assertNotCancelled();
+      await this.r2.downloadToLocal(
+        result.outputKey,
+        join(directory, 'output.mp4'),
+        { maxBytes: result.bytes },
+      );
+    } else {
+      await runCommandWithProgress(
+        'ffmpeg',
+        spec.args,
+        (line) => {
+          const value = encodingProgress(line, spec.duration);
+          if (value !== undefined && value > lastEncoding) {
+            lastEncoding = value;
+            onProgress(value);
+          }
+        },
+        this.registry,
+        { cwd: directory },
+      );
+    }
     assertNotCancelled();
     await onPhase(EDIT_RENDER_PHASE.VERIFYING);
     const outputPath = join(directory, 'output.mp4');

@@ -227,6 +227,57 @@ describe('independent clip processor lifecycle', () => {
     await processor.process(queueJob('a', a[1]));
     expect(parents.get('a')!.status).toBe(JobStatus.COMPLETED);
   });
+  it('uses Batch behind the flag and preserves completion, timing and progress', async () => {
+    const [clip] = create('remote');
+    const execute = jest.fn(async (_identity, prepare, progress) => {
+      const task = await prepare('job-sources/batch/test', Date.now() + 60000);
+      expect(task).toMatchObject({
+        kind: 'clip',
+        start: 0,
+        end: 10,
+        segments: [{ startTime: 0, endTime: 10, text: 'caption' }],
+      });
+      await progress('captioning', 50);
+      return {
+        outputKey: 'job-sources/batch/test/output.mp4',
+        bytes: 4,
+        cuttingSeconds: 2,
+        captioningSeconds: 3,
+      };
+    });
+    Object.assign(processor, { batch: { enabled: true, execute } });
+    const acquire = jest.spyOn(sources, 'acquire');
+    const bull = queueJob('remote', clip);
+    await processor.process(bull);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(acquire).not.toHaveBeenCalled();
+    expect(cutting.cutClip).not.toHaveBeenCalled();
+    expect(captions.burnCaptions).not.toHaveBeenCalled();
+    expect(clip).toMatchObject({
+      status: JobStatus.COMPLETED,
+      hasCaptions: true,
+      renderTiming: { cuttingSeconds: 2, captioningSeconds: 3 },
+    });
+    expect(completion.finalize).toHaveBeenCalledWith('remote');
+    expect(bull.updateProgress).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'ready' }),
+    );
+  });
+  it('does not publish or complete a clip after remote failure', async () => {
+    const [clip] = create('remote-failure');
+    Object.assign(processor, {
+      batch: {
+        enabled: true,
+        execute: jest.fn().mockRejectedValue(new Error('AWS task failed')),
+      },
+    });
+    await expect(
+      processor.process(queueJob('remote-failure', clip)),
+    ).rejects.toThrow('AWS task failed');
+    expect(clip.status).not.toBe(JobStatus.COMPLETED);
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+    expect(completion.finalize).not.toHaveBeenCalled();
+  });
   it('retries only a failed clip and skips durable successful output', async () => {
     const clips = create('a', 2);
     await processor.process(queueJob('a', clips[0]));

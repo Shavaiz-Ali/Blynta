@@ -1,3 +1,4 @@
+import { BatchRenderModule } from '../batch-render/batch-render.module';
 import { EDIT_QUEUE } from '../ai-editor/edit.constants';
 import { validateEnvironment } from '../common/configuration';
 import { CreditsModule } from '../billing/credits.module';
@@ -40,6 +41,7 @@ const logger = new Logger('JobsWorkerMongoose');
 
 @Module({
   imports: [
+    BatchRenderModule,
     CreditsModule,
     AIRegistryModule,
     ConfigModule.forRoot({

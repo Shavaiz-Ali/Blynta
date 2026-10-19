@@ -1,0 +1,28 @@
+version: 0.2
+env:
+  variables:
+    AWS_DEFAULT_REGION: ap-south-1
+    ECR_REGISTRY: 834897673310.dkr.ecr.ap-south-1.amazonaws.com
+    ECR_REPOSITORY: blynta/ffmpeg_renderer
+phases:
+  pre_build:
+    commands:
+      - set -eu
+      - test -n "$CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - IMAGE_TAG="$CODEBUILD_RESOLVED_SOURCE_VERSION"
+      - echo "$IMAGE_TAG" | grep -Eq '^[0-9a-f]{40}$'
+      - IMAGE_URI="$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+      - aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    commands:
+      - docker build --platform linux/amd64 -f backend/Dockerfile.renderer -t "$IMAGE_URI" .
+      - test "$(docker image inspect "$IMAGE_URI" --format '{{.Architecture}}')" = amd64
+      - docker run --rm "$IMAGE_URI" node dist/src/batch-render/renderer.main.js --self-test
+  post_build:
+    commands:
+      - test "$CODEBUILD_BUILD_SUCCEEDING" = 1
+      - docker push "$IMAGE_URI"
+      - printf '{"imageUri":"%s"}\n' "$IMAGE_URI" > renderer-image.json
+artifacts:
+  files:
+    - renderer-image.json

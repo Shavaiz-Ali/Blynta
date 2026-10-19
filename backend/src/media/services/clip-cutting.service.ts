@@ -24,7 +24,7 @@ export class ClipCuttingService {
     }
 
     this.logger.log(
-      `Cutting clip: ${sourceVideoPath} [${startTime}s - ${endTime}s] -> ${outputPath}`,
+      `Cutting clip: ${/^https?:/.test(sourceVideoPath) ? 'private R2 source' : sourceVideoPath} [${startTime}s - ${endTime}s] -> ${outputPath}`,
     );
     await this.cutAndCropWithFfmpeg(
       sourceVideoPath,

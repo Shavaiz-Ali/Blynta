@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "SubmitRendererOnly",
+      "Effect": "Allow",
+      "Action": "batch:SubmitJob",
+      "Resource": [
+        "arn:aws:batch:ap-south-1:834897673310:job-queue/blynta-render-queue",
+        "arn:aws:batch:ap-south-1:834897673310:job-definition/blynta-render-job:*"
+      ]
+    },
+    {
+      "Sid": "ReadBatchStatus",
+      "Effect": "Allow",
+      "Action": "batch:DescribeJobs",
+      "Resource": "*"
+    },
+    {
+      "Sid": "StopRendererJobs",
+      "Effect": "Allow",
+      "Action": ["batch:CancelJob", "batch:TerminateJob"],
+      "Resource": "arn:aws:batch:ap-south-1:834897673310:job/*"
+    }
+  ]
+}

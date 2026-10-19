@@ -1,0 +1,14 @@
+**
+!backend/
+!backend/package.json
+!backend/package-lock.json
+!backend/tsconfig*.json
+!backend/nest-cli.json
+!backend/vendor/
+!backend/vendor/**
+!backend/scripts/
+!backend/scripts/**
+!backend/src/
+!backend/src/**
+!backend/renderer-fonts/
+!backend/renderer-fonts/**

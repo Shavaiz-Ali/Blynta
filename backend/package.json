@@ -8,6 +8,7 @@
   "scripts": {
     "prebuild": "node scripts/check-contract-install.cjs",
     "build": "nest build",
+    "build:renderer": "npm run prebuild && nest build",
     "postbuild": "node scripts/write-build-info.cjs",
     "test:ai-routes:compiled": "node scripts/check-ai-routes.cjs",
     "smoke:ai-admin": "node scripts/smoke-ai-admin.cjs",
@@ -54,6 +55,7 @@
     "@ai-sdk/google": "^4.0.42",
     "@ai-sdk/groq": "^4.0.31",
     "@ai-sdk/openai": "^4.0.47",
+    "@aws-sdk/client-batch": "3.1109.0",
     "@aws-sdk/client-s3": "^3.1109.0",
     "@aws-sdk/s3-request-presigner": "^3.1109.0",
     "@langchain/core": "1.2.17",

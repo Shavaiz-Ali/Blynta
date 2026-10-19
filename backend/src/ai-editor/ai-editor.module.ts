@@ -1,3 +1,4 @@
+import { BatchRenderModule } from '../batch-render/batch-render.module';
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { MongooseModule } from '@nestjs/mongoose';
@@ -26,6 +27,7 @@ const database = MongooseModule.forFeature([
 ]);
 @Module({
   imports: [
+    BatchRenderModule,
     database,
     StorageModule,
     MediaRenderModule,

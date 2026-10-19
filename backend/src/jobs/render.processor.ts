@@ -1,7 +1,8 @@
+import { BatchRenderService } from '../batch-render/batch-render.service';
 import { MEDIA_WORKER_POLICY } from './jobs.constants';
 import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
-import { Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job as BullJob } from 'bullmq';
 import { mkdtemp, mkdir, rm, stat } from 'fs/promises';
@@ -44,6 +45,7 @@ export class RenderProcessor
     private r2: R2Service,
     private sources: RenderSourceService,
     private capacity: RenderCapacityService,
+    @Optional() private batch?: BatchRenderService,
   ) {
     super();
   }
@@ -229,26 +231,14 @@ export class RenderProcessor
       assertNotCancelled();
       await transition(ClipProcessingState.QUEUED);
       assertNotCancelled();
-      sourceLease = await this.sources.acquire(jobId, parent.sourceObjectKey);
+      if (!this.batch?.enabled)
+        sourceLease = await this.sources.acquire(jobId, parent.sourceObjectKey);
       assertNotCancelled();
       await transition(ClipProcessingState.CUTTING);
       const raw = join(directory, 'clip.mp4');
       ffmpegStarted = Date.now();
-      await this.cutting.cutClip(
-        sourceLease.path,
-        clip.startTime,
-        clip.endTime,
-        raw,
-        (sample) => {
-          if (state === ClipProcessingState.CUTTING) publish(sample);
-        },
-      );
-      ffmpegElapsedMs += Date.now() - ffmpegStarted;
-      cuttingSeconds = (Date.now() - ffmpegStarted) / 1000;
       let final = raw;
-      if (hasCaptions) {
-        assertNotCancelled();
-        await transition(ClipProcessingState.CAPTIONING);
+      if (this.batch?.enabled) {
         const preset = resolveStylePreset(parent.stylePreset);
         const highlight = parent.highlights.find(
           (h) => h.startTime === clip.startTime && h.endTime === clip.endTime,
@@ -257,20 +247,86 @@ export class RenderProcessor
           preset.key !== DEFAULT_STYLE_PRESET_KEY
             ? preset.captionStyle
             : resolveEditorStyle(highlight?.style).captionStyle;
-        final = join(directory, 'captioned.mp4');
-        ffmpegStarted = Date.now();
-        await this.captions.burnCaptions(
+        const result = await this.batch.execute(
+          `clip/${jobId}/${clipId}/${clip.retryCount ?? 0}/${clip.retryQueuedAt ? new Date(clip.retryQueuedAt).getTime() : 0}`,
+          (prefix, deadline) =>
+            Promise.resolve({
+              version: 1,
+              kind: 'clip',
+              outputKey: `${prefix}/output.mp4`,
+              deadline,
+              sourceKey: parent.sourceObjectKey!,
+              start: clip.startTime,
+              end: clip.endTime,
+              segments,
+              style,
+            }),
+          async (phase, percent) => {
+            const next =
+              phase === 'captioning'
+                ? ClipProcessingState.CAPTIONING
+                : phase === 'uploading'
+                  ? ClipProcessingState.UPLOADING
+                  : ClipProcessingState.CUTTING;
+            if (state !== next) await transition(next);
+            publish(
+              {
+                progress: percent,
+                processedSeconds: (duration * percent) / 100,
+                durationSeconds: duration,
+              },
+              true,
+            );
+            await publishing;
+          },
+          { jobId },
+        );
+        assertNotCancelled();
+        cuttingSeconds = result.cuttingSeconds ?? 0;
+        captioningSeconds = result.captioningSeconds ?? 0;
+        ffmpegElapsedMs = (cuttingSeconds + captioningSeconds) * 1000;
+        await this.r2.downloadToLocal(result.outputKey, final, {
+          maxBytes: result.bytes,
+        });
+      } else {
+        await this.cutting.cutClip(
+          sourceLease!.path,
+          clip.startTime,
+          clip.endTime,
           raw,
-          segments,
-          final,
-          style,
-          duration,
           (sample) => {
-            if (state === ClipProcessingState.CAPTIONING) publish(sample);
+            if (state === ClipProcessingState.CUTTING) publish(sample);
           },
         );
+        ffmpegElapsedMs += Date.now() - ffmpegStarted;
+        cuttingSeconds = (Date.now() - ffmpegStarted) / 1000;
+        final = raw;
+        if (hasCaptions) {
+          assertNotCancelled();
+          await transition(ClipProcessingState.CAPTIONING);
+          const preset = resolveStylePreset(parent.stylePreset);
+          const highlight = parent.highlights.find(
+            (h) => h.startTime === clip.startTime && h.endTime === clip.endTime,
+          );
+          const style =
+            preset.key !== DEFAULT_STYLE_PRESET_KEY
+              ? preset.captionStyle
+              : resolveEditorStyle(highlight?.style).captionStyle;
+          final = join(directory, 'captioned.mp4');
+          ffmpegStarted = Date.now();
+          await this.captions.burnCaptions(
+            raw,
+            segments,
+            final,
+            style,
+            duration,
+            (sample) => {
+              if (state === ClipProcessingState.CAPTIONING) publish(sample);
+            },
+          );
+        }
       }
-      if (hasCaptions) {
+      if (hasCaptions && !this.batch?.enabled) {
         captioningSeconds = (Date.now() - ffmpegStarted) / 1000;
         ffmpegElapsedMs += captioningSeconds * 1000;
       }
@@ -280,31 +336,38 @@ export class RenderProcessor
       assertNotCancelled();
       await transition(ClipProcessingState.UPLOADING);
       await this.r2.uploadFile(final, objectKey);
-      usageSample('storage', {
+      void usageSample('storage', {
         outputDurationSeconds: duration,
         codec: 'h264',
         storageBytes: (await stat(final)).size,
         objectKey,
       });
+      assertNotCancelled();
       const totalSeconds = (Date.now() - started) / 1000;
-      await this.jobs.updateClip(jobId, clipId, {
-        renderTiming: {
-          cuttingSeconds,
-          captioningSeconds,
-          overheadSeconds: Math.max(
-            0,
-            totalSeconds - cuttingSeconds - captioningSeconds,
-          ),
-          totalSeconds,
+      await this.jobs.updateClip(
+        jobId,
+        clipId,
+        {
+          renderTiming: {
+            cuttingSeconds,
+            captioningSeconds,
+            overheadSeconds: Math.max(
+              0,
+              totalSeconds - cuttingSeconds - captioningSeconds,
+            ),
+            totalSeconds,
+          },
+          status: JobStatus.COMPLETED,
+          processingState: ClipProcessingState.READY,
+          r2ObjectKey: objectKey,
+          outputUrl: objectKey,
+          hasCaptions,
+          errorMessage: '',
+          errorStage: '',
         },
-        status: JobStatus.COMPLETED,
-        processingState: ClipProcessingState.READY,
-        r2ObjectKey: objectKey,
-        outputUrl: objectKey,
-        hasCaptions,
-        errorMessage: '',
-        errorStage: '',
-      });
+        this.batch?.enabled === true,
+        clip.retryQueuedAt,
+      );
       state = ClipProcessingState.READY;
       publish(undefined, true);
       await publishing;

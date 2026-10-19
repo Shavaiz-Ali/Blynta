@@ -1,0 +1,39 @@
+# Build from repository root: docker build --platform linux/amd64 -f backend/Dockerfile.renderer .
+FROM --platform=linux/amd64 node:24-bookworm-slim AS build
+WORKDIR /app
+COPY backend/package.json backend/package-lock.json ./
+COPY backend/vendor ./vendor
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY backend/tsconfig*.json backend/nest-cli.json ./
+COPY backend/scripts ./scripts
+COPY backend/src ./src
+# The API postbuild stamp requires .git; the isolated renderer has no Git context.
+RUN npm run build:renderer
+
+FROM --platform=linux/amd64 node:24-bookworm-slim AS dependencies
+WORKDIR /app
+COPY backend/package.json backend/package-lock.json ./
+COPY backend/vendor ./vendor
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
+
+FROM --platform=linux/amd64 node:24-bookworm-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg fontconfig fonts-liberation2 fonts-dejavu-core fonts-noto-core \
+    fonts-noto-cjk fonts-noto-color-emoji fonts-crosextra-carlito \
+    bash util-linux coreutils ca-certificates tini \
+    && rm -rf /var/lib/apt/lists/* && fc-cache -f
+WORKDIR /app
+ENV NODE_ENV=production FFMPEG_THREADS=2 MEDIA_HOST_CONCURRENCY=1 \
+    MEDIA_COMMAND_TIMEOUT_SECONDS=3600
+COPY backend/renderer-fonts/*.ttf /usr/local/share/fonts/blynta/
+COPY backend/renderer-fonts/*-OFL.txt /usr/share/doc/blynta-fonts/
+COPY backend/renderer-fonts/99-blynta.conf /etc/fonts/conf.d/99-blynta.conf
+RUN fc-cache -f
+COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --from=dependencies --chown=node:node /app/vendor ./vendor
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/package.json ./package.json
+USER node
+RUN node dist/src/batch-render/renderer.main.js --self-test
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "dist/src/batch-render/renderer.main.js"]

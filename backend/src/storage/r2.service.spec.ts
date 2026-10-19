@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { S3Client } from '@aws-sdk/client-s3';
 import { R2Service } from './r2.service';
+import { Readable } from 'node:stream';
 
 describe('R2 object existence', () => {
   afterEach(() => jest.restoreAllMocks());
@@ -13,6 +14,16 @@ describe('R2 object existence', () => {
         R2_SECRET_ACCESS_KEY: 'test',
       }),
     );
+  it('bounds private renderer manifest buffers', async () => {
+    jest
+      .spyOn(S3Client.prototype, 'send')
+      .mockResolvedValue({
+        Body: Readable.from([Buffer.from('too large')]),
+      } as never);
+    await expect(
+      service().downloadToBuffer('job-sources/batch/task.json', 3),
+    ).rejects.toThrow('buffer budget');
+  });
   it('confirms a successful HEAD', async () => {
     jest.spyOn(S3Client.prototype, 'send').mockResolvedValue({} as never);
     await expect(service().fileExists('clips/owned/clip.mp4')).resolves.toBe(

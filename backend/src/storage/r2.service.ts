@@ -266,7 +266,10 @@ export class R2Service {
    * Downloads an R2 object into an in-memory Buffer.
    * Used by the YouTube processor to read a custom thumbnail before calling thumbnails.set.
    */
-  async downloadToBuffer(objectKey: string): Promise<Buffer> {
+  async downloadToBuffer(
+    objectKey: string,
+    maxBytes?: number,
+  ): Promise<Buffer> {
     const result = await this.client.send(
       new GetObjectCommand({
         Bucket: this.bucketFor(objectKey),
@@ -275,8 +278,17 @@ export class R2Service {
     );
     const stream = result.Body as Readable;
     const chunks: Buffer[] = [];
+    let bytes = 0;
     for await (const chunk of stream) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      const data = Buffer.isBuffer(chunk)
+        ? chunk
+        : Buffer.from(chunk as Uint8Array);
+      bytes += data.length;
+      if (maxBytes && bytes > maxBytes) {
+        stream.destroy();
+        throw new Error('Object exceeds buffer budget');
+      }
+      chunks.push(data);
     }
     return Buffer.concat(chunks);
   }

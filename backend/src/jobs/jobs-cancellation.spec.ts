@@ -24,6 +24,7 @@ import { runCommandWithProgress } from '../media/utils/run-command-with-progress
 import * as hostCommands from '../media/utils/host-command';
 
 interface TestFilter {
+  clips?: { $elemMatch: { _id: Types.ObjectId; retryQueuedAt: Date | null } };
   cancellationRequestedAt?: null;
   deletionRequested?: { $ne: boolean };
   status?: JobStatus | { $nin: JobStatus[] };
@@ -51,6 +52,16 @@ describe('durable cooperative cancellation', () => {
   };
   // Stateful fake checks the Mongo compare-and-set fences, rather than unconditional success.
   const matches = (filter: TestFilter): boolean => {
+    if (filter.clips) {
+      const expected = filter.clips.$elemMatch;
+      const clip = parent.clips.find((c) => c._id.equals(expected._id));
+      if (
+        !clip ||
+        (clip.retryQueuedAt?.getTime() ?? null) !==
+          (expected.retryQueuedAt?.getTime() ?? null)
+      )
+        return false;
+    }
     if (
       filter.cancellationRequestedAt === null &&
       parent.cancellationRequestedAt
@@ -160,6 +171,27 @@ describe('durable cooperative cancellation', () => {
   });
   const cancel = () =>
     jobs.cancelJob(parent.userId.toString(), parent._id.toString());
+
+  it('fences remote publication against cancellation and a newer clip retry', async () => {
+    const clip = parent.clips[1];
+    const publish = () =>
+      mediaExecution.run(
+        { signal: new AbortController().signal, children: new Set() },
+        () =>
+          jobs.updateClip(
+            String(parent._id),
+            String(clip._id),
+            { status: JobStatus.COMPLETED },
+            true,
+          ),
+      );
+    parent.cancellationRequestedAt = new Date();
+    await expect(publish()).rejects.toBeInstanceOf(ProcessingCancelled);
+    parent.cancellationRequestedAt = undefined;
+    clip.retryQueuedAt = new Date();
+    await expect(publish()).rejects.toBeInstanceOf(ProcessingCancelled);
+    expect(clip.status).toBe(JobStatus.PENDING);
+  });
 
   it('cancels queued work, preserves completed and failed clips, and records completed work below 100%', async () => {
     const pending = {

@@ -50,6 +50,7 @@ export function validateEnvironment(
     if (env[key] !== undefined && !['true', 'false'].includes(text(key)))
       fail(key);
   for (const [key, allowed] of Object.entries({
+    RENDER_EXECUTION_MODE: ['local', 'aws_batch'],
     MEDIA_WORKER_ROLE: ['all', 'pipeline', 'render', 'studio', 'editing'],
     PADDLE_ENV: ['sandbox', 'production'],
     LLM_PROVIDER: ['google', 'groq'],

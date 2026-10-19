@@ -755,7 +755,13 @@ export class JobsService {
         .exec();
   }
 
-  async updateClip(jobId: string, clipId: string, updates: Partial<Clip>) {
+  async updateClip(
+    jobId: string,
+    clipId: string,
+    updates: Partial<Clip>,
+    requireNotCancelled = false,
+    expectedRetryQueuedAt?: Date,
+  ) {
     const fields = Object.fromEntries(
       Object.entries(updates).map(([key, value]) => [`clips.$.${key}`, value]),
     );
@@ -763,11 +769,21 @@ export class JobsService {
       .updateOne(
         {
           _id: jobId,
-          ...(updates.status === JobStatus.COMPLETED
+          ...(updates.status === JobStatus.COMPLETED && !requireNotCancelled
             ? {}
             : { cancellationRequestedAt: null }),
           deletionRequested: { $ne: true },
           'clips._id': new Types.ObjectId(clipId),
+          ...(requireNotCancelled
+            ? {
+                clips: {
+                  $elemMatch: {
+                    _id: new Types.ObjectId(clipId),
+                    retryQueuedAt: expectedRetryQueuedAt ?? null,
+                  },
+                },
+              }
+            : {}),
         },
         { $set: fields },
       )
