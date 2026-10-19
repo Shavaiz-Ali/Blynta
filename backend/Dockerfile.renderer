@@ -1,7 +1,8 @@
 # Build from repository root: docker build --platform linux/amd64 -f backend/Dockerfile.renderer .
 FROM --platform=linux/amd64 node:24-bookworm-slim AS build
 WORKDIR /app
-COPY backend/package.json backend/package-lock.json ./
+# Keep local file: dependencies in the same packed layout as package-lock.json.
+COPY backend/package.json backend/package-lock.json backend/.npmrc ./
 COPY backend/vendor ./vendor
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY backend/tsconfig*.json backend/nest-cli.json ./
@@ -12,7 +13,7 @@ RUN npm run build:renderer
 
 FROM --platform=linux/amd64 node:24-bookworm-slim AS dependencies
 WORKDIR /app
-COPY backend/package.json backend/package-lock.json ./
+COPY backend/package.json backend/package-lock.json backend/.npmrc ./
 COPY backend/vendor ./vendor
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund && npm cache clean --force
 

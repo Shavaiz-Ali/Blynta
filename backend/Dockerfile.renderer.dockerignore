@@ -2,6 +2,7 @@
 !backend/
 !backend/package.json
 !backend/package-lock.json
+!backend/.npmrc
 !backend/tsconfig*.json
 !backend/nest-cli.json
 !backend/vendor/
