@@ -5,6 +5,7 @@ import { UnrecoverableError } from 'bullmq';
 import { VideoDownloadService } from './video-download.service';
 import { SourceAuthorizationError } from '../../billing/source-authorization';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
+import { MediaCommandError } from '../utils/media-command-error';
 jest.mock('../utils/run-command-with-progress', () => ({
   runCommandWithProgress: jest.fn(),
 }));
@@ -43,6 +44,28 @@ describe('download preflight authorization failure', () => {
     ).rejects.toBeInstanceOf(SourceAuthorizationError);
     expect(runCommandWithProgress).not.toHaveBeenCalled();
   });
+  it('preserves the existing authentication error translation with typed command evidence', async () => {
+    jest
+      .mocked(runCommandWithProgress)
+      .mockRejectedValue(
+        new MediaCommandError(
+          'yt-dlp',
+          1,
+          null,
+          'Sign in to confirm you are not a bot',
+        ),
+      );
+    await expect(
+      service(3233).downloadVideo(
+        'https://youtu.be/video',
+        root,
+        '240p',
+        undefined,
+        3233,
+      ),
+    ).rejects.toThrow('This video requires YouTube authentication');
+    expect(runCommandWithProgress).toHaveBeenCalledTimes(1);
+  });
   it.each([3233, 3233.461])(
     'metadata %s defers final authorization to the measured duration and saved pricing',
     async (duration) => {
@@ -78,15 +101,13 @@ describe('download preflight authorization failure', () => {
   );
   it('cannot use server cookies to authorize private media for an unrelated account', async () => {
     const downloader = service(3233);
-    jest
-      .mocked(downloader.fetchVideoMetadata)
-      .mockResolvedValue({
-        title: 'Private',
-        uploader: '',
-        thumbnailUrl: '',
-        duration: 3233,
-        availability: 'private',
-      });
+    jest.mocked(downloader.fetchVideoMetadata).mockResolvedValue({
+      title: 'Private',
+      uploader: '',
+      thumbnailUrl: '',
+      duration: 3233,
+      availability: 'private',
+    });
     await expect(
       downloader.downloadVideo(
         'https://youtu.be/video',

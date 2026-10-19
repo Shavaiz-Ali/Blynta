@@ -206,7 +206,7 @@ export class StudioService {
         $set: { name: input.document.name, document: input.document },
         $inc: { revision: 1 },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!p)
       throw new ConflictException(

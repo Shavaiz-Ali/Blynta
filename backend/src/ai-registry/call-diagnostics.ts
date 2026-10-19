@@ -1,5 +1,9 @@
 import { HttpException } from '@nestjs/common';
 import { AI_ERROR_CODES } from '@blynta/types/contracts';
+import {
+  classifyProviderFailure,
+  googleResponseFailure,
+} from './provider-errors';
 
 export const CALL_ERROR = {
   STRUCTURED_OUTPUT: 'AI_STRUCTURED_OUTPUT_INVALID',
@@ -181,4 +185,88 @@ export function safeGoogleCallMessage(message?: string): string | undefined {
     prefixes.find((prefix) => message.startsWith(prefix)) ??
     'Provider message omitted because it may contain request content; inspect status and reason.'
   );
+}
+
+/** SDK errors can wrap provider/validation errors. Inspect a bounded graph, never recurse. */
+export async function sdkCallFailure(
+  error: unknown,
+  secret: string,
+  aborted = false,
+): Promise<CallFailure> {
+  const queue: unknown[] = [error],
+    nodes: Record<string, unknown>[] = [];
+  const seen = new WeakSet<object>();
+  while (queue.length && nodes.length < 8) {
+    const next = queue.shift();
+    if (!next || typeof next !== 'object' || seen.has(next)) continue;
+    seen.add(next);
+    const node = next as Record<string, unknown>;
+    nodes.push(node);
+    queue.push(node.cause, node.lastError);
+    if (Array.isArray(node.errors))
+      queue.push(...(node.errors.slice(0, 3) as unknown[]));
+  }
+  const http = nodes.find(
+    (node) =>
+      Number(node.statusCode ?? node.status) >= 400 &&
+      Number(node.statusCode ?? node.status) <= 599,
+  );
+  const transport = nodes.find(
+    (node) =>
+      ['AbortError', 'TimeoutError', 'TypeError'].includes(String(node.name)) ||
+      ['ETIMEDOUT', 'ENOTFOUND', 'ECONNRESET', 'ECONNREFUSED'].includes(
+        String(node.code),
+      ),
+  );
+  const schema = nodes.some((node) =>
+    [
+      'ZodError',
+      'AI_NoObjectGeneratedError',
+      'AI_TypeValidationError',
+      'AI_JSONParseError',
+    ].includes(String(node.name)),
+  );
+  const limited = nodes.some((node) => node.finishReason === 'length');
+  const upstream = http
+    ? await googleResponseFailure(
+        new Response(
+          typeof http.responseBody === 'string' ? http.responseBody : '',
+          { status: Number(http.statusCode ?? http.status) },
+        ),
+        secret,
+      )
+    : undefined;
+  const code =
+    upstream?.code ??
+    (aborted
+      ? AI_ERROR_CODES.TIMEOUT
+      : limited
+        ? CALL_ERROR.TOKEN_LIMIT
+        : schema
+          ? CALL_ERROR.STRUCTURED_OUTPUT
+          : transport
+            ? classifyProviderFailure(transport).code
+            : CALL_ERROR.ADAPTER);
+  const category =
+    upstream?.upstreamStatus === 403 ? 'permission' : callCategory(code);
+  return {
+    code,
+    category,
+    retryable: callRetryable(category),
+    origin: upstream
+      ? 'provider_http'
+      : transport
+        ? 'transport'
+        : schema || limited
+          ? 'provider_response'
+          : 'adapter',
+    ...(upstream
+      ? {
+          upstreamStatus: upstream.upstreamStatus,
+          upstreamErrorStatus: upstream.upstreamErrorStatus,
+          upstreamReason: upstream.upstreamReason,
+          upstreamMessage: safeGoogleCallMessage(upstream.upstreamMessage),
+        }
+      : {}),
+  };
 }

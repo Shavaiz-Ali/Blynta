@@ -231,7 +231,7 @@ export class BillingService {
                 paddleCustomerId: existingPaddleCustomer.id,
               },
             },
-            { upsert: true, new: true },
+            { upsert: true, returnDocument: 'after' },
           );
         }
         this.logger.log(
@@ -254,7 +254,7 @@ export class BillingService {
         await this.customerModel.findOneAndUpdate(
           { userId: user._id },
           { $set: { userId: user._id, paddleCustomerId: newCustomer.id } },
-          { upsert: true, new: true },
+          { upsert: true, returnDocument: 'after' },
         );
       }
 
@@ -278,7 +278,7 @@ export class BillingService {
               await this.customerModel.findOneAndUpdate(
                 { userId: user._id },
                 { $set: { userId: user._id, paddleCustomerId: c.id } },
-                { upsert: true, new: true },
+                { upsert: true, returnDocument: 'after' },
               );
             }
             this.logger.log(`Recovered Paddle customer ${c.id} for ${email}`);
@@ -552,7 +552,7 @@ export class BillingService {
     await this.customerModel.findOneAndUpdate(
       { userId: user._id },
       { $set: { userId: user._id, ...customerUpdate } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     this.logger.log(
@@ -994,7 +994,7 @@ export class BillingService {
     await this.customerModel.findOneAndUpdate(
       { userId: targetUserId },
       { $set: { userId: targetUserId, paddleCustomerId: customerId } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     this.logger.log(

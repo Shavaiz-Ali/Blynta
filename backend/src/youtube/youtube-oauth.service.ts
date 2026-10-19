@@ -160,7 +160,7 @@ export class YouTubeOAuthService {
             scope: tokens.scope,
           },
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       )
       .exec();
 

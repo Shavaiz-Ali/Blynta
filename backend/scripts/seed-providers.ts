@@ -39,7 +39,7 @@ async function seed() {
     const result = await AuthProviderConfigModel.findOneAndUpdate(
       { provider: config.provider },
       config,
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     console.log(`Seeded: ${result.provider} -> isEnabled: ${result.isEnabled}`);
   }

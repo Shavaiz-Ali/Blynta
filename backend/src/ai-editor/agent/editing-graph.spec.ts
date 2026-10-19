@@ -179,7 +179,10 @@ function setup(outputs: unknown[] = [intent, answer]) {
     void _stage;
     return Promise.resolve();
   });
-  const run = (prompt = 'Add a zoom') =>
+  const run = (
+    prompt = 'Add a zoom',
+    options: { signal?: AbortSignal; deadlineAt?: number } = {},
+  ) =>
     graph.run({
       userId: id,
       clipId,
@@ -190,6 +193,7 @@ function setup(outputs: unknown[] = [intent, answer]) {
       signal: AbortSignal.timeout(10000),
       onTool,
       onStage,
+      ...options,
     });
   return {
     run,
@@ -540,13 +544,66 @@ describe('Bounded LangGraph proposal integration', () => {
       }),
     );
     await expect(s.run()).rejects.toBeInstanceOf(ServiceUnavailableException);
-    expect(s.google.structured).toHaveBeenCalledTimes(1);
+    expect(s.google.structured).toHaveBeenCalledTimes(2);
     expect(s.registry.recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'failed',
         errorCode: 'AI_TIMEOUT',
       }),
     );
+  });
+  it('retries only patch generation after a transient response, without replaying asset resolution', async () => {
+    const s = setup();
+    s.google.structured
+      .mockResolvedValueOnce({ parsed: intent })
+      .mockRejectedValueOnce(
+        new ServiceUnavailableException({
+          code: 'AI_PROVIDER_FAILED',
+          callFailure: {
+            code: 'AI_PROVIDER_FAILED',
+            category: 'provider',
+            origin: 'provider_http',
+            upstreamStatus: 503,
+            retryable: true,
+          },
+        }),
+      )
+      .mockResolvedValueOnce({ parsed: answer });
+    expect(await s.run()).toMatchObject({ status: 'pending', calls: 3 });
+    expect(
+      s.onStage.mock.calls.filter(([stage]) => stage === 'resolve_assets'),
+    ).toHaveLength(1);
+    expect(
+      s.onStage.mock.calls.filter(([stage]) => stage === 'generate_patch'),
+    ).toHaveLength(1);
+    expect(s.google.structured).toHaveBeenCalledTimes(3);
+  });
+  it('stops before a model call when the execution deadline is exhausted', async () => {
+    const s = setup();
+    await expect(
+      s.run('Add a zoom', { deadlineAt: Date.now() - 1 }),
+    ).rejects.toMatchObject({ response: { code: 'AI_TIMEOUT' } });
+    expect(s.google.structured).not.toHaveBeenCalled();
+  });
+  it('cancels retry backoff without another paid request', async () => {
+    const s = setup();
+    const controller = new AbortController();
+    s.google.structured.mockImplementation(async () => {
+      setTimeout(() => controller.abort(), 30);
+      throw new ServiceUnavailableException({
+        code: 'AI_TIMEOUT',
+        callFailure: {
+          code: 'AI_TIMEOUT',
+          category: 'timeout',
+          origin: 'transport',
+          retryable: true,
+        },
+      });
+    });
+    await expect(
+      s.run('Add a zoom', { signal: controller.signal }),
+    ).rejects.toThrow();
+    expect(s.google.structured).toHaveBeenCalledTimes(1);
   });
   it('does not retry database/tool failures through another paid model call', async () => {
     const s = setup();

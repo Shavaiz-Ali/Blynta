@@ -110,7 +110,7 @@ describe('Studio conversations share plans safely', () => {
           status: 'active',
         }) as unknown,
       }),
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
     s.sessions.findOneAndUpdate.mockRejectedValueOnce({ code: 11000 });
     expect(
@@ -165,7 +165,7 @@ describe('Studio conversations share plans safely', () => {
     expect(s.sessions.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: sessionId, userId: owner, clipId: clip },
       { $set: { status: 'archived' } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     await s.service.updateSession(owner, clip, sessionId, { status: 'active' });
     s.sessions.findOne.mockResolvedValueOnce(null);

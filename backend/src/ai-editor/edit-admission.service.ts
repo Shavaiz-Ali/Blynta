@@ -35,7 +35,7 @@ export class EditAdmissionService {
           ],
         },
         { $addToSet: { active: key } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (row) return;
     } catch (error) {

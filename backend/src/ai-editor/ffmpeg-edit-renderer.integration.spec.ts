@@ -127,7 +127,7 @@ integration('FFmpeg editing media integration', () => {
         '-v',
         'error',
         '-show_entries',
-        'format=duration',
+        'format=duration:stream=codec_type,r_frame_rate,nb_frames',
         '-of',
         'json',
         output,
@@ -138,6 +138,20 @@ integration('FFmpeg editing media integration', () => {
             .duration,
         ),
       ).toBeCloseTo(12, 1);
+      if (kind === 'zoom' || kind === 'combined') {
+        const metadata = JSON.parse(stdout) as {
+          streams: {
+            codec_type: string;
+            r_frame_rate: string;
+            nb_frames: string;
+          }[];
+        };
+        const video = metadata.streams.find(
+          (stream) => stream.codec_type === 'video',
+        );
+        expect(video?.r_frame_rate).toBe('24/1');
+        expect(Number(video?.nb_frames)).toBe(288);
+      }
       if (kind === 'gain' || kind === 'combined') {
         const level = async (path: string) => {
           const { stderr } = await exec(

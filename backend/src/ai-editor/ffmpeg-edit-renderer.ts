@@ -238,7 +238,12 @@ export function buildRenderSpec(
     }
     video = out;
   });
-  filters.push(`[${video}]fps=${fps},format=yuv420p[video]`);
+  // zoompan already emits CFR frames. A second fps filter can stall at EOF
+  // on FFmpeg 6.1.1; the output -r below retains the requested encoder rate.
+  const rateFilter = operations.some((op) => op.enabled && op.type === 'zoom')
+    ? ''
+    : `fps=${fps},`;
+  filters.push(`[${video}]${rateFilter}format=yuv420p[video]`);
   args.push(
     '-filter_complex_script',
     join(directory, 'filters.txt'),

@@ -37,6 +37,7 @@ export interface EditVersion {
   outputKey?: string;
   error?: string;
   errorCode?: string;
+  failureDetails?: Record<string, unknown>;
   retryable?: boolean;
   renderStats?: {
     duration: number;
@@ -120,6 +121,7 @@ export const EditVersionSchema = new Schema<EditVersion>(
     outputKey: String,
     error: String,
     errorCode: String,
+    failureDetails: Schema.Types.Mixed,
     retryable: Boolean,
     renderStats: { type: Object },
     completedAt: Date,

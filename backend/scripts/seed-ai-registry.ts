@@ -61,7 +61,7 @@ async function main() {
         enabled: true,
       },
     },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   );
   let credential = await credentials.findOne({
     providerId: String(provider._id),
@@ -93,7 +93,7 @@ async function main() {
             $set: { ...encrypted, lastValidationStatus: 'unknown' },
             $inc: { revision: 1 },
           },
-          { new: true },
+          { returnDocument: 'after' },
         )
       : await credentials.findOneAndUpdate(
           { providerId: String(provider._id), label: 'Environment bootstrap' },
@@ -107,7 +107,7 @@ async function main() {
               ...encrypted,
             },
           },
-          { upsert: true, new: true },
+          { upsert: true, returnDocument: 'after' },
         );
     await providers.updateOne(
       { _id: provider._id, defaultCredentialId: { $exists: false } },
@@ -134,7 +134,7 @@ async function main() {
   const model = await models.findOneAndUpdate(
     { providerId: String(provider._id), modelId },
     { $setOnInsert: { ...spec, archived: false, lastTestStatus: 'unknown' } },
-    { upsert: true, new: true },
+    { upsert: true, returnDocument: 'after' },
   );
   await routing.updateOne(
     { _id: AI_ROUTING.LEGACY_DEFAULT },

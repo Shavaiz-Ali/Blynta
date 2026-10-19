@@ -1,4 +1,5 @@
 import { AGENT_LIMITS } from './agent.constants';
+import { EXECUTION_DEADLINE_MS } from './transient-retry';
 import { AI_ERROR_CODES, AI_EDIT_STAGE_LABEL } from '@blynta/types/contracts';
 import {
   BadRequestException,
@@ -191,7 +192,7 @@ export class ProposalsService {
         .find({ userId, sessionId: String(session._id), status: 'applied' })
         .sort({ createdAt: -1, _id: -1 })
         .limit(2)
-        .select('patch beforePlan appliedRevision -_id')
+        .select('patch appliedRevision -_id')
         .lean();
       await this.messages.create({
         userId,
@@ -201,6 +202,7 @@ export class ProposalsService {
         modelId: proposal.modelId,
         executionId: proposal.executionId,
       });
+      const deadlineAt = Date.now() + EXECUTION_DEADLINE_MS;
       const result = await this.graph.run({
         userId,
         clipId,
@@ -210,7 +212,11 @@ export class ProposalsService {
         modelId: input.modelId,
         task: input.sessionId ? 'edit_refinement' : 'edit_planning',
         executionId: proposal.executionId,
-        signal: AbortSignal.any([abort.signal, AbortSignal.timeout(90000)]),
+        signal: AbortSignal.any([
+          abort.signal,
+          AbortSignal.timeout(Math.max(1, deadlineAt - Date.now())),
+        ]),
+        deadlineAt,
         priorEdits,
         history: history
           .reverse()
@@ -248,7 +254,7 @@ export class ProposalsService {
       const saved = await this.proposals.findOneAndUpdate(
         { _id: proposal._id, status: 'generating' },
         { $set: { ...result } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!saved) return this.get(userId, clipId, String(proposal._id));
       await this.messages.create({
@@ -322,7 +328,7 @@ export class ProposalsService {
           retryable: false,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!cancelled)
       throw new ConflictException(
@@ -479,7 +485,7 @@ export class ProposalsService {
       const claimed = await this.proposals.findOneAndUpdate(
         { _id: id, userId, status: 'pending' },
         { $set: { status: 'applying' } },
-        { new: true },
+        { returnDocument: 'after' },
       );
       if (!claimed)
         throw new ConflictException(
@@ -528,7 +534,7 @@ export class ProposalsService {
     const updated = await this.proposals.findOneAndUpdate(
       { _id: id, userId, status: 'pending' },
       { $set: { status: 'rejected' } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!updated)
       throw new ConflictException(
@@ -640,7 +646,7 @@ export class ProposalsService {
             title: input.title || 'New conversation',
           },
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     } catch (error) {
       if ((error as { code?: number }).code !== 11000) throw error;
@@ -679,7 +685,7 @@ export class ProposalsService {
     return this.sessions.findOneAndUpdate(
       { _id: sessionId, userId, clipId },
       { $set: input },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
 }

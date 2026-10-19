@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { MediaCommandError } from '../media/utils/media-command-error';
 import { Model, Types } from 'mongoose';
 import { Job as QueueJob, Queue } from 'bullmq';
 import { Job as MediaJob } from '../jobs/schemas/job.schema';
@@ -341,6 +342,28 @@ describe('editing worker publication and retries', () => {
     expect(s.r2.uploadFile).toHaveBeenCalledTimes(1);
     expect(String((s.r2.uploadFile.mock.calls as unknown[][])[0][1])).toContain(
       'job-sources/edits/owner/clip/',
+    );
+    expect(existsSync(s.directory()!)).toBe(false);
+  });
+  it('stops a deterministic FFmpeg failure on the first attempt without uploading', async () => {
+    const s = setup();
+    s.renderer.render.mockRejectedValueOnce(
+      new MediaCommandError('ffmpeg', 1, null, 'Invalid argument'),
+    );
+    await expect(s.processor.process(s.job)).rejects.toThrow(
+      'Editing failed permanently',
+    );
+    expect(s.state.status).toBe('failed');
+    expect(s.r2.uploadFile).not.toHaveBeenCalled();
+    expect(s.versions.updateOne).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          errorCode: 'EDIT_FFMPEG_FAILED',
+          retryable: false,
+          failureDetails: expect.objectContaining({ exitCode: 1 }),
+        }),
+      }),
     );
     expect(existsSync(s.directory()!)).toBe(false);
   });

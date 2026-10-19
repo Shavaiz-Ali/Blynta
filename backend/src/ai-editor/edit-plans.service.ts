@@ -689,7 +689,7 @@ export class EditPlansService {
         },
         $inc: { revision: 1 },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!result)
       throw new ConflictException(
@@ -746,7 +746,7 @@ export class EditPlansService {
             progress: 0,
           },
         },
-        { upsert: true, new: true },
+        { upsert: true, returnDocument: 'after' },
       );
     } catch (error) {
       if ((error as { code?: number }).code !== 11000) throw error;
@@ -893,7 +893,7 @@ export class EditPlansService {
           executionExpiresAt: '',
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!v)
       throw new ConflictException(
@@ -920,7 +920,7 @@ export class EditPlansService {
           progress: 0,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!v) {
       const existing = await this.getVersion(userId, id);

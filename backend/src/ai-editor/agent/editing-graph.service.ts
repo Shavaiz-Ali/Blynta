@@ -12,7 +12,14 @@ import { ModelRegistry } from '../../ai-registry/model-registry.service';
 import { AgentTools } from './agent-tools.service';
 import { editPatchSchema, modelPatchSchema } from './edit-patch';
 import type { EditPatch } from './edit-patch';
-import { editingCapabilities } from './edit-capabilities';
+import { editingCapabilities, planningCapabilities } from './edit-capabilities';
+import { ConfigService } from '@nestjs/config';
+import { setTimeout as abortableDelay } from 'node:timers/promises';
+import {
+  EXECUTION_DEADLINE_MS,
+  MODEL_CALL_LIMIT,
+  transientRetryDelay,
+} from './transient-retry';
 import { callFailure } from '../../ai-registry/call-diagnostics';
 import { providerEndpoint } from '../../ai-registry/provider-policy';
 import {
@@ -74,6 +81,7 @@ export class EditingGraph {
     private tools: AgentTools,
     private registry: ModelRegistry,
     private adapters: ProviderAdapterRegistry,
+    private config: ConfigService = new ConfigService(),
   ) {}
   async run(input: {
     userId: string;
@@ -87,6 +95,7 @@ export class EditingGraph {
     task?: 'edit_planning' | 'edit_refinement';
     executionId: string;
     signal: AbortSignal;
+    deadlineAt?: number;
     onTool: (name: string, result: unknown) => Promise<void>;
     onStage?: (stage: string) => Promise<void>;
     onDiagnostic?: (event: AgentDiagnostic) => Promise<void>;
@@ -97,6 +106,10 @@ export class EditingGraph {
       input.task ?? 'edit_planning',
     );
     const modelId = String(resolved.model._id);
+    const deadlineAt = Math.min(
+      input.deadlineAt ?? Infinity,
+      Date.now() + EXECUTION_DEADLINE_MS,
+    );
     let calls = 0,
       toolCalls = 0,
       totalTokens = 0;
@@ -137,9 +150,12 @@ export class EditingGraph {
       await diagnose({ event: 'node_enter' });
       await input.onStage?.(node);
     };
-    const modelCall = async <T>(schema: z.ZodType<T>, payload: unknown) => {
+    const performModelCall = async <T>(
+      schema: z.ZodType<T>,
+      payload: unknown,
+    ) => {
       input.signal.throwIfAborted();
-      if (++calls > 3 || totalTokens > 32000)
+      if (++calls > MODEL_CALL_LIMIT || totalTokens > 32000)
         throw new BadRequestException('AI model budget exceeded');
       // Recheck credentials, configuration and entitlements before every call.
       const fresh = await this.registry.resolveUserModel(
@@ -162,6 +178,26 @@ export class EditingGraph {
         );
       const started = Date.now();
       const call = calls;
+      const configuredTimeout = Number(
+        [AGENT_NODE.GENERATE_PATCH, AGENT_NODE.CORRECT].some(
+          (node) => node === currentNode,
+        )
+          ? this.config.get(
+              'AI_EDIT_PATCH_TIMEOUT_MS',
+              fresh.model.settings.timeoutMs,
+            )
+          : fresh.model.settings.timeoutMs,
+      );
+      if (
+        !Number.isInteger(configuredTimeout) ||
+        configuredTimeout < 1000 ||
+        configuredTimeout > EXECUTION_DEADLINE_MS
+      )
+        throw new BadRequestException('Invalid AI editing model timeout');
+      const timeoutMs = Math.max(
+        1,
+        Math.min(configuredTimeout, deadlineAt - Date.now()),
+      );
       let phase: 'adapter' | 'execution' = 'adapter';
       try {
         await diagnose({
@@ -175,12 +211,12 @@ export class EditingGraph {
           structuredOutputMethod: 'functionCalling',
           maxOutputTokens: fresh.model.settings.maxOutputTokens,
           temperature: fresh.model.settings.temperature,
-          timeoutMs: fresh.model.settings.timeoutMs,
+          timeoutMs,
           promptBytes: Buffer.byteLength(encoded) + Buffer.byteLength(SYSTEM),
         });
         const signal = AbortSignal.any([
           input.signal,
-          AbortSignal.timeout(fresh.model.settings.timeoutMs),
+          AbortSignal.timeout(timeoutMs),
         ]);
         const result = await this.adapters
           .get(fresh.provider.adapter)
@@ -290,6 +326,42 @@ export class EditingGraph {
         throw error;
       }
     };
+    const modelCall = async <T>(
+      schema: z.ZodType<T>,
+      payload: unknown,
+    ): Promise<T> => {
+      for (let attempt = 0; ; attempt++) {
+        input.signal.throwIfAborted();
+        if (Date.now() >= deadlineAt)
+          throw new HttpException(
+            {
+              code: 'AI_TIMEOUT',
+              message: 'AI execution deadline exceeded',
+              issues: [],
+            },
+            503,
+          );
+        try {
+          return await performModelCall(schema, payload);
+        } catch (error) {
+          const failure = callFailure(error, input.signal.aborted);
+          const delay = transientRetryDelay(failure, {
+            calls,
+            reserveCalls: currentNode === AGENT_NODE.INTERPRET ? 1 : 0,
+            attempt,
+            deadlineAt,
+          });
+          if (delay === undefined || input.signal.aborted) throw error;
+          await diagnose({
+            event: 'model_retry',
+            call: calls,
+            backoffMs: delay,
+            failure,
+          });
+          await abortableDelay(delay, undefined, { signal: input.signal });
+        }
+      }
+    };
     const graph = new StateGraph(State)
       .addNode(AGENT_NODE.LOAD_CONTEXT, async () => {
         await stage(AGENT_NODE.LOAD_CONTEXT);
@@ -307,7 +379,7 @@ export class EditingGraph {
             selectedAssetIds: input.selectedAssetIds ?? [],
             history: input.history,
             priorApprovedEdits: input.priorEdits ?? [],
-            capabilities: editingCapabilities,
+            capabilities: planningCapabilities,
           }),
           calls: 0,
           corrections: 0,

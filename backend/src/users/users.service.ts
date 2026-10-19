@@ -453,7 +453,7 @@ export class UsersService {
           successfulReferralCount: 1,
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!accounting)
       await this.userModel.updateOne(

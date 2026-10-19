@@ -122,7 +122,7 @@ describe('Studio persistence and ownership', () => {
     expect(projects.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: projectId, userId: 'alice', revision: 2 },
       expect.objectContaining({ $inc: { revision: 1 } }),
-      { new: true },
+      { returnDocument: 'after' },
     );
     await expect(
       service.save('alice', projectId, { version: 1, revision: 1, document }),

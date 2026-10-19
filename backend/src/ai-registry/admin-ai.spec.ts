@@ -49,13 +49,11 @@ function setup() {
             settings: { maxOutputTokens: 4096 },
           }),
           {
-            sort: jest
-              .fn()
-              .mockResolvedValue({
-                modelId: 'gemini-3.5-flash-lite',
-                credentialId: id,
-                settings: { maxOutputTokens: 4096 },
-              }),
+            sort: jest.fn().mockResolvedValue({
+              modelId: 'gemini-3.5-flash-lite',
+              credentialId: id,
+              settings: { maxOutputTokens: 4096 },
+            }),
           },
         ),
       ),
@@ -198,7 +196,7 @@ describe('Administrator credential and provider boundaries', () => {
           apiVersion: 'v1beta',
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(s.activities.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -231,7 +229,7 @@ describe('Administrator credential and provider boundaries', () => {
         },
         $inc: { revision: 1 },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(s.registry.providers.updateOne).toHaveBeenCalledWith(
       { _id: providerId, revision: { $exists: false } },

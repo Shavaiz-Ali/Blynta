@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { Document } from 'mongoose';
 import { transcriptIssue } from './transcript-validation';
 
 export const DETECTION_VERSION = 'quality-discovery-v3';
@@ -11,14 +12,38 @@ export function normalizeInstructions(prompt?: string): string {
 
 /** Explicit sorting makes identity independent of object property insertion order. */
 export function artifactHash(value: unknown): string {
-  const canonical = (input: unknown): unknown => {
-    if (Array.isArray(input)) return input.map(canonical);
-    if (input && typeof input === 'object')
-      return Object.fromEntries(
-        Object.entries(input)
-          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-          .map(([key, v]) => [key, canonical(v)]),
+  const ancestors = new WeakSet<object>();
+  const canonical = (input: unknown, depth = 0): unknown => {
+    if (depth > 64)
+      throw new TypeError('Artifact identity exceeds nesting budget');
+    // Saved transcript rows are hydrated subdocuments on resume. Their enumerable
+    // $__parent references are internal cycles, not part of the transcript.
+    if (input instanceof Document)
+      return canonical(
+        input.toObject({
+          getters: false,
+          virtuals: false,
+          transform: false,
+          depopulate: true,
+        }),
+        depth + 1,
       );
+    if (input && typeof input === 'object') {
+      if (ancestors.has(input))
+        throw new TypeError('Artifact identity contains a cycle');
+      ancestors.add(input);
+      try {
+        if (Array.isArray(input))
+          return input.map((item) => canonical(item, depth + 1));
+        return Object.fromEntries(
+          Object.entries(input)
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+            .map(([key, v]) => [key, canonical(v, depth + 1)]),
+        );
+      } finally {
+        ancestors.delete(input);
+      }
+    }
     return input;
   };
   return createHash('sha256')

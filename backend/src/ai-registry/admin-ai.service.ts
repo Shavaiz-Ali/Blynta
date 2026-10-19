@@ -238,7 +238,7 @@ export class AdminAIService {
             $set: { ...input, ...endpointFields },
             ...(providerRevisionChanged ? { $inc: { revision: 1 } } : {}),
           },
-          { new: true },
+          { returnDocument: 'after' },
         )
       : this.registry.providers.create({ ...input, ...endpointFields });
   }
@@ -295,7 +295,7 @@ export class AdminAIService {
       .findOneAndUpdate(
         { _id: id, revision: c.revision },
         { $set: changes, $inc: { revision: 1 } },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .orFail(
         () =>
@@ -370,7 +370,7 @@ export class AdminAIService {
               ...(invalidatesTest ? { lastTestStatus: 'unknown' } : {}),
             },
           },
-          { new: true },
+          { returnDocument: 'after' },
         )
       : this.registry.models.create({
           ...input,
@@ -391,7 +391,7 @@ export class AdminAIService {
     return this.registry.models.findByIdAndUpdate(
       id,
       { $set: { archived: true, enabled: false } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   }
   async setDefault(actor: string, id: string) {
@@ -403,7 +403,7 @@ export class AdminAIService {
     return this.registry.routing.findOneAndUpdate(
       { _id: AI_ROUTING.LEGACY_DEFAULT },
       { $set: { modelId: id }, $inc: { revision: 1 } },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
   }
   async test(actor: string, id: string) {

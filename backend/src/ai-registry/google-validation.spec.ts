@@ -9,7 +9,10 @@ import type { AIProvider } from './registry.schemas';
 
 const secret = 'synthetic-private-secret';
 const modelId = 'gemini-3.5-flash-lite';
-const model = { modelId, settings: { maxOutputTokens: 4096 } };
+const model = {
+  modelId,
+  settings: { maxOutputTokens: 4096, timeoutMs: 30000, maxRetries: 0 as const },
+};
 const generationSuccess = JSON.stringify({
   candidates: [{ content: { parts: [{ text: 'OK' }] } }],
 });
@@ -182,7 +185,9 @@ describe('Google credential request and safe diagnostics', () => {
       secret,
       true,
     );
-    expect(result.code).toBe('AI_REQUEST_FAILED');
+    expect('code' in result ? result.code : undefined).toBe(
+      'AI_REQUEST_FAILED',
+    );
     expect(result.upstreamMessage).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain(secret);
   });
@@ -242,7 +247,7 @@ describe('Google credential request and safe diagnostics', () => {
       const result = await testGoogleAdapter({
         fetch: jest.fn().mockRejectedValue(error),
       }).validateCredential(provider, secret, AbortSignal.timeout(1000), model);
-      expect(result.code).toBe(
+      expect('code' in result ? result.code : undefined).toBe(
         code === 'ETIMEDOUT' ? 'AI_TIMEOUT' : 'AI_NETWORK_FAILED',
       );
       expect(credentialWasRejected(result)).toBe(false);

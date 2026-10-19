@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
 import { hostCommand } from './host-command';
+import { MediaCommandError } from './media-command-error';
 import { usageExecution, usageSample } from '../../billing/usage-context';
 import {
   cancellationSignal,
@@ -56,10 +57,19 @@ export function runCommandWithProgress(
     });
 
     proc.on('error', (err) => {
-      reject(new Error(`Failed to spawn ${command}: ${err.message}`));
+      const code = (err as NodeJS.ErrnoException).code;
+      reject(
+        new MediaCommandError(
+          command,
+          null,
+          null,
+          '',
+          code && /^[A-Z_]+$/.test(code) ? code : 'SPAWN_FAILED',
+        ),
+      );
     });
 
-    proc.on('close', (code) => {
+    proc.on('close', (code, closeSignal) => {
       if (command === 'ffmpeg') {
         const cpu = fullStderr.match(/utime=([\d.]+)s stime=([\d.]+)s/);
         void usageSample('ffmpeg', {
@@ -76,11 +86,7 @@ export function runCommandWithProgress(
       }
       if (code === 0) resolve();
       else
-        reject(
-          new Error(
-            `${command} exited with code ${code}: ${fullStderr.slice(-500)}`,
-          ),
-        );
+        reject(new MediaCommandError(command, code, closeSignal, fullStderr));
     });
   });
 }

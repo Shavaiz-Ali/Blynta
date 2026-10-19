@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { ServiceUnavailableException } from '@nestjs/common';
 
 class MockNoObjectGeneratedError extends Error {
   readonly text?: string;
@@ -810,8 +811,53 @@ describe('registry highlight adapter integration', () => {
     expect(s.registry.recordUsage).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'failed',
-        errorCode: 'HIGHLIGHT_PROVIDER_FAILED',
+        errorCode: 'AI_ADAPTER_FAILED',
       }),
     );
   });
+  it.each([
+    [403, 'AI_AUTH_FAILED'],
+    [429, 'AI_QUOTA_OR_RATE_LIMIT'],
+    [503, 'AI_PROVIDER_FAILED'],
+  ])(
+    'preserves registered highlight HTTP %s failures',
+    async (status, code) => {
+      const s = registryFixture();
+      mockGenerateObject.mockReset().mockRejectedValue(
+        Object.assign(new Error('synthetic-registry-key private prompt'), {
+          statusCode: status,
+          responseBody: JSON.stringify({
+            error: { message: 'private prompt synthetic-registry-key' },
+          }),
+        }),
+      );
+      let failure: unknown;
+      try {
+        await s.service.detectHighlightsWithMetadata(
+          [
+            {
+              startTime: 0,
+              endTime: 30,
+              text: 'A transcript excerpt about a surprising idea.',
+            },
+          ],
+          {
+            videoDuration: 30,
+            registeredModel: { userId: 'owner', selection },
+          },
+        );
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(ServiceUnavailableException);
+      const response = (failure as ServiceUnavailableException).getResponse();
+      expect(response).toMatchObject({
+        code,
+        callFailure: expect.objectContaining({ upstreamStatus: status }),
+      });
+      expect(JSON.stringify(response)).not.toContain('synthetic-registry-key');
+      expect(JSON.stringify(response)).not.toContain('private prompt');
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+    },
+  );
 });

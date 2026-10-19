@@ -75,7 +75,7 @@ export class AuthProviderConfigService implements OnModuleInit {
     return this.configModel.findOneAndUpdate(
       { provider },
       { isEnabled, disabledReason: isEnabled ? undefined : disabledReason },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
   }
 }

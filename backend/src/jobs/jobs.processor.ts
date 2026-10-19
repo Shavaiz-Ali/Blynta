@@ -6,6 +6,8 @@ import {
   transcriptIssue,
   TranscriptValidationError,
 } from '../media/transcript-validation';
+import { safeErrorFrames } from '../common/safe-error-frames';
+import { callFailure } from '../ai-registry/call-diagnostics';
 import {
   artifactHash,
   highlightIdentity,
@@ -1028,6 +1030,10 @@ export class JobsProcessor
           retryCount: bullJob.attemptsMade,
           stage: latest?.status,
           message,
+          stackFrames: safeErrorFrames(err),
+          ...(latest?.status === JobStatus.DETECTING_HIGHLIGHTS
+            ? { failure: callFailure(err) }
+            : {}),
           ...(err instanceof TranscriptValidationError
             ? { validation: { code: err.code, ...err.details } }
             : {}),

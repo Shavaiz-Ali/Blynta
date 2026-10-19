@@ -21,7 +21,7 @@ import { R2Service } from '../storage/r2.service';
 import { EditRenderService } from './edit-render.service';
 import type { EditVersion, StoredEditPlan } from './edit.schemas';
 import { EditAdmissionService, editJobId } from './edit-admission.service';
-import { HttpException } from '@nestjs/common';
+import { renderFailure } from './render-failure';
 import { EDIT_QUEUE } from './edit-plans.service';
 import {
   EDIT_RENDER_PHASE,
@@ -255,9 +255,9 @@ export class EditRenderProcessor
           executionToken,
           executionExpiresAt: new Date(Date.now() + 60000),
         },
-        $unset: { error: '', errorCode: '', retryable: '' },
+        $unset: { error: '', errorCode: '', retryable: '', failureDetails: '' },
       },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!v) {
       const existing = await this.versions.findById(job.data.versionId);
@@ -464,21 +464,9 @@ export class EditRenderProcessor
           );
         }
       }
-      const storageFailure = error as {
-        name?: string;
-        $metadata?: { httpStatusCode?: number };
-      };
-      const permanent =
-        (error instanceof HttpException && error.getStatus() < 500) ||
-        ['NoSuchKey', 'NotFound', 'PreconditionFailed'].includes(
-          storageFailure?.name ?? '',
-        ) ||
-        [404, 412].includes(storageFailure?.$metadata?.httpStatusCode ?? 0);
-      const errorCode = permanent
-        ? 'EDIT_VALIDATION'
-        : abort.signal.aborted
-          ? 'EDIT_INTERRUPTED'
-          : 'EDIT_RENDER_FAILURE';
+      const diagnostic = renderFailure(error, abort.signal.aborted);
+      const permanent = diagnostic.permanent;
+      const errorCode = diagnostic.code;
       const final =
         permanent || job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
       const status =
@@ -501,6 +489,7 @@ export class EditRenderProcessor
             failedPhase: phase,
             progress: 0,
             errorCode,
+            failureDetails: diagnostic,
             retryable: !permanent && status !== 'cancelled',
             error:
               status === 'cancelled'
@@ -531,13 +520,22 @@ export class EditRenderProcessor
           revision: v.revision,
           attempt: job.attemptsMade + 1,
           errorCode,
+          failedPhase: phase,
+          failure: diagnostic,
+          operations: v.plan.operations
+            .filter((operation) => operation.enabled)
+            .map((operation) => operation.type),
           retryable: !permanent,
           wallSeconds: (Date.now() - startedAt) / 1000,
         }),
       );
       if (status === 'cancelled') return;
       if (permanent)
-        throw new UnrecoverableError('Edit plan or asset validation failed');
+        throw new UnrecoverableError(
+          errorCode === 'EDIT_VALIDATION'
+            ? 'Edit plan or asset validation failed'
+            : 'Editing failed permanently; inspect the safe render diagnostic',
+        );
       throw error;
     } finally {
       clearTimeout(deadline);

@@ -34,3 +34,11 @@ export const editingCapabilities = {
       'Select an owned PNG/audio asset or upload the requested media. Ask which asset when multiple names match. Never substitute unrelated media.',
   },
 } as const;
+
+/** Intent needs capability names/dependencies, not duplicate copies of every schema. */
+export const planningCapabilities = {
+  operations: editingCapabilities.operations,
+  overlayCoordinates: editingCapabilities.overlayCoordinates,
+  unavailableCapabilities: editingCapabilities.unavailableCapabilities,
+  assets: editingCapabilities.assets,
+} as const;

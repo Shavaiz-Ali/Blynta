@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
+import { MediaCommandError } from '../utils/media-command-error';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
 import { UnrecoverableError } from 'bullmq';
 import { SourceAuthorizationError } from '../../billing/source-authorization';
@@ -120,7 +121,12 @@ export class VideoDownloadService {
         this.processRegistry,
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message =
+        err instanceof MediaCommandError
+          ? err.stderr
+          : err instanceof Error
+            ? err.message
+            : String(err);
       if (/sign in to confirm|not a bot/i.test(message)) {
         throw new Error(
           'This video requires YouTube authentication cookies, which are missing or expired. ' +

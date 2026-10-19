@@ -13,10 +13,12 @@ export interface AgentDiagnostic {
     | 'model_result'
     | 'model_started'
     | 'model_failed'
+    | 'model_retry'
     | 'validation'
     | 'route'
     | 'asset_resolution';
   call?: number;
+  backoffMs?: number;
   modelId?: string;
   providerModelId?: string;
   credentialRevision?: number;

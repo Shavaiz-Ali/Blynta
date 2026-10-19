@@ -197,7 +197,7 @@ export class CreditsService implements OnModuleInit {
           totalCreditsUsed: type === 'charge' ? amount : 0,
         },
       },
-      { session, new: true },
+      { session, returnDocument: 'after' },
     );
     if (!user) {
       const account = await this.users.findById(op.userId).session(session);
@@ -422,7 +422,7 @@ export class CreditsService implements OnModuleInit {
       const user = await this.users.findOneAndUpdate(
         { _id: userId, creditsBalance: { $gte: Math.max(0, -amount) } },
         { $inc: { creditsBalance: amount } },
-        { session, new: true },
+        { session, returnDocument: 'after' },
       );
       if (!user)
         throw new ConflictException(
@@ -694,7 +694,7 @@ export class CreditsService implements OnModuleInit {
     const claimed = await this.operations.findOneAndUpdate(
       { operationId, status: 'reserved', executionStartedAt: null },
       { $set: { executionStartedAt: new Date(), executionToken } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!claimed)
       throw new ConflictException(
@@ -717,7 +717,7 @@ export class CreditsService implements OnModuleInit {
         executionToken,
       },
       { $set: { result } },
-      { new: true, runValidators: true },
+      { returnDocument: 'after', runValidators: true },
     );
     if (!published)
       throw new ConflictException(

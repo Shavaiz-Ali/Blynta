@@ -19,6 +19,7 @@ import {
 } from '../../ai-registry/highlight-routing.service';
 import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.registry';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
+import { sdkCallFailure, CALL_ERROR } from '../../ai-registry/call-diagnostics';
 import { ConfigService } from '@nestjs/config';
 import { NoObjectGeneratedError, type LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -343,9 +344,11 @@ export class HighlightDetectionService {
         latencyMs: 0,
         status: 'failed',
       };
+      let signal: AbortSignal | undefined;
+      let phase: 'generation' | 'usage' = 'generation';
       try {
         const timeout = AbortSignal.timeout(resolved.model.settings.timeoutMs);
-        const signal = args[0].abortSignal
+        signal = args[0].abortSignal
           ? AbortSignal.any([args[0].abortSignal, timeout])
           : timeout;
         const result = await meteredGenerateObject({
@@ -362,9 +365,11 @@ export class HighlightDetectionService {
           maxRetries: 0,
           abortSignal: signal,
         });
+        HighlightsResponseSchema.parse(result.object);
         const inputTokens = result.usage.inputTokens,
           outputTokens = result.usage.outputTokens;
         const pricing = resolved.model.pricing;
+        phase = 'usage';
         await this.registry.recordUsage({
           ...usage,
           latencyMs: Date.now() - started,
@@ -382,15 +387,38 @@ export class HighlightDetectionService {
             : {}),
         });
         return result;
-      } catch {
-        await this.registry.recordUsage({
-          ...usage,
-          latencyMs: Date.now() - started,
-          errorCode: 'HIGHLIGHT_PROVIDER_FAILED',
+      } catch (error) {
+        const failure =
+          phase === 'usage'
+            ? {
+                code: CALL_ERROR.EXECUTION,
+                category: 'execution',
+                origin: 'execution',
+                retryable: false,
+              }
+            : await sdkCallFailure(error, resolved.secret, signal?.aborted);
+        this.logger.error({
+          event: 'highlights.registered.failed',
+          modelId: usage.modelId,
+          providerModelId: usage.providerModelId,
+          durationMs: Date.now() - started,
+          failure,
         });
-        throw new ServiceUnavailableException(
-          'Selected AI model could not generate highlights',
-        );
+        await this.registry
+          .recordUsage({
+            ...usage,
+            latencyMs: Date.now() - started,
+            errorCode: failure.code,
+          })
+          .catch(() =>
+            this.logger.error('Highlight failure usage persistence failed'),
+          );
+        throw new ServiceUnavailableException({
+          message: 'Selected AI model could not generate highlights',
+          code: failure.code,
+          callFailure: failure,
+          issues: [failure],
+        });
       }
     }) as typeof meteredGenerateObject;
   }
@@ -417,7 +445,8 @@ export class HighlightDetectionService {
     options?: HighlightDetectionOptions,
   ): HighlightDto[] {
     const duration =
-      options?.videoDuration ?? Math.max(...segments.map((s) => s.endTime));
+      options?.videoDuration ??
+      segments.reduce((end, segment) => Math.max(end, segment.endTime), 0);
     const rejected: Record<string, number> = {};
     const valid = this.validateCandidates(
       candidates,
@@ -485,7 +514,10 @@ export class HighlightDetectionService {
 
     const duration =
       options?.videoDuration ||
-      Math.max(...usableSegments.map((s) => s.endTime));
+      usableSegments.reduce(
+        (end, segment) => Math.max(end, segment.endTime),
+        0,
+      );
     // Discovery is plan-independent: the same complete pool serves Free and paid jobs.
     const max = Math.min(24, Math.max(12, Math.ceil(duration / 600) * 4));
     const min = 0;

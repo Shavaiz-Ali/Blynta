@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { Model, Types } from 'mongoose';
+import { Model, Types, model as mongooseModel } from 'mongoose';
 import { Queue } from 'bullmq';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,12 @@ import { cacheFixture } from '../../test/pipeline-cache.fixture';
 import { JobsProcessor } from './jobs.processor';
 import { JobsService } from './jobs.service';
 import { JOBS_TYPES } from './jobs.constants';
-import { JobDocument, JobStatus, SourcePlatform } from './schemas/job.schema';
+import {
+  JobDocument,
+  JobStatus,
+  SourcePlatform,
+  JobSchema,
+} from './schemas/job.schema';
 import { SourceVideoDocument } from './schemas/source-video.schema';
 import { SourceVideoService } from '../media/services/source-video.service';
 import { HighlightDetectionService } from '../media/services/highlight-detection.service';
@@ -359,6 +364,25 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
     await f.processor.process(bull as never);
     expect(f.transcribe.transcribe).not.toHaveBeenCalled();
     expect(f.download.downloadVideo).not.toHaveBeenCalled();
+  });
+  test('resume hashes a hydrated saved transcript without recursion, re-download or re-transcription', async () => {
+    const f = fixture();
+    const { parent, bull } = await f.run({ defer: true });
+    const SavedJob = mongooseModel(
+      'PipelineHydratedResumeRegression',
+      JobSchema,
+    );
+    parent.localVideoPath = join(root, 'hydrated-resume.mp4');
+    parent.localAudioPath = join(root, 'hydrated-resume.wav');
+    await writeFile(parent.localVideoPath, 'video-bytes');
+    await writeFile(parent.localAudioPath, 'audio-bytes');
+    parent.transcript = new SavedJob({ transcript: f.transcript }).transcript;
+    parent.transcriptSignature = 'whisper-settings-v1';
+    await f.processor.process(bull as never);
+    expect(f.transcribe.transcribe).not.toHaveBeenCalled();
+    expect(f.download.downloadVideo).not.toHaveBeenCalled();
+    expect(f.download.extractAudio).not.toHaveBeenCalled();
+    expect(f.discover).toHaveBeenCalledTimes(1);
   });
   test('resume repairs a readable but checksum-invalid local video from its durable source', async () => {
     const f = fixture();

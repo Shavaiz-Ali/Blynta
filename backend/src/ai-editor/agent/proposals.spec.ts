@@ -55,14 +55,12 @@ describe('Persisted model-call failures', () => {
       const proposals = {
         findOne: jest.fn().mockResolvedValue(null),
         find: jest.fn().mockReturnValue(query),
-        create: jest
-          .fn()
-          .mockResolvedValue({
-            _id: id,
-            executionId: 'synthetic-execution',
-            status: 'generating',
-            baseRevision: 1,
-          }),
+        create: jest.fn().mockResolvedValue({
+          _id: id,
+          executionId: 'synthetic-execution',
+          status: 'generating',
+          baseRevision: 1,
+        }),
         updateOne: jest.fn().mockResolvedValue({}),
       };
       const exception = new ServiceUnavailableException({
@@ -94,11 +92,9 @@ describe('Persisted model-call failures', () => {
               .mockResolvedValue({ model: { _id: id } }),
           },
           {
-            owned: jest
-              .fn()
-              .mockResolvedValue({
-                plan: { revision: 1, plan: examplePlan() },
-              }),
+            owned: jest.fn().mockResolvedValue({
+              plan: { revision: 1, plan: examplePlan() },
+            }),
           },
           graph,
           {},
@@ -201,7 +197,7 @@ describe('Proposal approval delegates to existing optimistic updates', () => {
     expect(s.proposals.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: id, userId: id, status: 'pending' },
       { $set: { status: 'applying' } },
-      { new: true },
+      { returnDocument: 'after' },
     );
   });
   it('rejects only owned pending proposals and blocks rejection during approval', async () => {
@@ -210,7 +206,7 @@ describe('Proposal approval delegates to existing optimistic updates', () => {
     expect(s.proposals.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: id, userId: id, status: 'pending' },
       { $set: { status: 'rejected' } },
-      { new: true },
+      { returnDocument: 'after' },
     );
     s.proposal.status = 'applying';
     await expect(s.service.reject(id, clipId, id)).rejects.toBeInstanceOf(
@@ -414,7 +410,7 @@ describe('Generation cancellation ownership and races', () => {
     expect(s.proposals.findOneAndUpdate).toHaveBeenCalledWith(
       { _id: id, userId: id, clipId, status: 'generating' },
       expect.anything(),
-      { new: true },
+      { returnDocument: 'after' },
     );
     expect(s.redis.set).toHaveBeenCalledWith(
       `ai:cancel:${id}:owned-execution`,

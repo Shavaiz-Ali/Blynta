@@ -71,7 +71,10 @@ async function run(secondResponse, failUsage = false) {
         url: request.url,
         key: request.headers.get('x-goog-api-key'),
       });
-      if (requests.length === 2 && secondResponse) return secondResponse();
+      if (requests.length >= 2 && secondResponse) {
+        const overridden = secondResponse(requests.length);
+        if (overridden) return overridden;
+      }
       const args = requests.length === 1 ? intent : answer;
       return new Response(
         JSON.stringify({
@@ -235,7 +238,7 @@ async function main() {
     });
     assert.equal(envelope.error.code, expected);
     assert.equal(envelope.error.details[0].upstreamStatus, status);
-    assert.equal(failed.requests.length, 2); // No hidden SDK retry or graph replay.
+    assert.equal(failed.requests.length, retryable ? 3 : 2); // Bounded graph retry; SDK retries remain disabled.
     for (const sensitive of [
       secret,
       'Private provider echo',
@@ -246,6 +249,22 @@ async function main() {
         false,
       );
   }
+  const recovered = await run((call) =>
+    call === 2
+      ? response(503, { error: { code: 503, status: 'UNAVAILABLE' } })
+      : undefined,
+  );
+  assert.equal(recovered.error, undefined);
+  assert.equal(recovered.result.status, 'pending');
+  assert.equal(recovered.requests.length, 3);
+  assert.equal(
+    recovered.diagnostics.filter((d) => d.event === 'asset_resolution').length,
+    1,
+  );
+  assert.equal(
+    recovered.diagnostics.filter((d) => d.event === 'model_retry').length,
+    1,
+  );
   const malformed = await run(() =>
     response(200, {
       candidates: [
