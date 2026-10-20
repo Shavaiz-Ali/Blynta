@@ -1,3 +1,4 @@
+import { mediaExecution } from '../../jobs/cancellation-context';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { ServiceUnavailableException } from '@nestjs/common';
@@ -703,7 +704,7 @@ describe('registry highlight adapter integration', () => {
     configurationHash: 'synthetic-hash',
     auto: false,
   };
-  function registryFixture() {
+  function registryFixture(config: Record<string, unknown> = {}) {
     const model = {
       modelId: 'gemini-registered',
       providerId: selection.providerId,
@@ -736,6 +737,8 @@ describe('registry highlight adapter integration', () => {
         LLM_PROVIDER: 'google',
         LLM_MODEL_NAME: 'gemini-environment',
         LLM_API_KEY: 'synthetic-env-key',
+        HIGHLIGHT_PROVIDER_MAX_RETRIES: 0,
+        ...config,
       }),
       routing as never,
       registry as never,
@@ -745,8 +748,173 @@ describe('registry highlight adapter integration', () => {
         }),
       } as never,
     );
-    return { service, routing, registry, languageModel };
+    return { service, routing, registry, languageModel, model };
   }
+  const success = () => ({
+    object: HighlightsResponseSchema.parse({ highlights: [] }),
+    usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120 },
+  });
+  const transcript = [
+    {
+      startTime: 0,
+      endTime: 30,
+      text: 'A transcript excerpt about a surprising idea.',
+    },
+  ];
+  const registeredOptions = (videoDuration = 30) => ({
+    videoDuration,
+    registeredModel: { userId: 'owner', selection },
+  });
+  it('allows long requests past 30 seconds, then retries a real timeout with a fresh signal and pinned model', async () => {
+    jest.useFakeTimers();
+    const signals: AbortSignal[] = [];
+    const timeout = jest
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms) => {
+        const controller = new AbortController();
+        setTimeout(
+          () => controller.abort(new DOMException('Timed out', 'TimeoutError')),
+          ms,
+        );
+        return controller.signal;
+      });
+    try {
+      const s = registryFixture({ HIGHLIGHT_PROVIDER_MAX_RETRIES: 2 });
+      s.model.modelId = 'gemini-flash-latest';
+      mockGenerateObject
+        .mockReset()
+        .mockImplementationOnce(({ abortSignal }) => {
+          signals.push(abortSignal);
+          return new Promise((_resolve, reject) =>
+            abortSignal.addEventListener('abort', () =>
+              reject(abortSignal.reason),
+            ),
+          );
+        })
+        .mockImplementationOnce(({ abortSignal }) => {
+          signals.push(abortSignal);
+          return Promise.resolve(success());
+        });
+      const pending = s.service.detectHighlightsWithMetadata(
+        transcript,
+        registeredOptions(4860.881),
+      );
+      await jest.advanceTimersByTimeAsync(30190);
+      expect(signals[0].aborted).toBe(false);
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(120000 - 30190);
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(1000);
+      await pending;
+      expect(timeout).toHaveBeenCalledWith(120000);
+      expect(signals[1]).not.toBe(signals[0]);
+      expect(signals[1].aborted).toBe(false);
+      expect(mockGenerateObject).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model: 'google-model:gemini-flash-latest',
+          maxRetries: 0,
+        }),
+      );
+      expect(
+        s.registry.recordUsage.mock.calls.map(([call]) => [
+          call.call,
+          call.status,
+        ]),
+      ).toEqual([
+        [1, 'failed'],
+        [2, 'success'],
+      ]);
+    } finally {
+      timeout.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+  it('uses exponential backoff and stops after exhausted retryable provider attempts', async () => {
+    const delay = jest.spyOn(
+      jest.requireActual<typeof import('node:timers/promises')>(
+        'node:timers/promises',
+      ),
+      'setTimeout',
+    );
+    try {
+      const s = registryFixture({ HIGHLIGHT_PROVIDER_MAX_RETRIES: 2 });
+      mockGenerateObject
+        .mockReset()
+        .mockRejectedValue(
+          Object.assign(new Error('Unavailable'), { statusCode: 503 }),
+        );
+      await expect(
+        s.service.detectHighlightsWithMetadata(transcript, registeredOptions()),
+      ).rejects.toThrow('Selected AI model could not generate highlights');
+      expect(delay.mock.calls.map(([milliseconds]) => milliseconds)).toEqual([
+        1000, 2000,
+      ]);
+      expect(mockGenerateObject).toHaveBeenCalledTimes(3);
+      expect(s.registry.recordUsage).toHaveBeenCalledTimes(3);
+    } finally {
+      delay.mockRestore();
+    }
+  });
+  it('does not retry usage persistence failures or permanent authentication failures', async () => {
+    const s = registryFixture({ HIGHLIGHT_PROVIDER_MAX_RETRIES: 2 });
+    mockGenerateObject.mockReset().mockResolvedValue(success());
+    s.registry.recordUsage.mockRejectedValue(new Error('DB unavailable'));
+    await expect(
+      s.service.detectHighlightsWithMetadata(transcript, registeredOptions()),
+    ).rejects.toThrow();
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+    s.registry.recordUsage.mockResolvedValue(undefined);
+    mockGenerateObject
+      .mockReset()
+      .mockRejectedValue(
+        Object.assign(new Error('Denied'), { statusCode: 403 }),
+      );
+    await expect(
+      s.service.detectHighlightsWithMetadata(transcript, registeredOptions()),
+    ).rejects.toThrow();
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+  });
+  it('preserves short request timeout and does not retry cancellation', async () => {
+    const s = registryFixture({ HIGHLIGHT_PROVIDER_MAX_RETRIES: 2 });
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    const abort = new AbortController();
+    mockGenerateObject.mockReset().mockImplementation(() => {
+      abort.abort();
+      return Promise.reject(new DOMException('Cancelled', 'AbortError'));
+    });
+    try {
+      await expect(
+        mediaExecution.run({ signal: abort.signal, children: new Set() }, () =>
+          s.service.detectHighlightsWithMetadata(
+            transcript,
+            registeredOptions(),
+          ),
+        ),
+      ).rejects.toThrow();
+      expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+      expect(timeout).toHaveBeenCalledWith(1000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+  it('cancels retry backoff without submitting another provider call', async () => {
+    const s = registryFixture({ HIGHLIGHT_PROVIDER_MAX_RETRIES: 2 });
+    const abort = new AbortController();
+    mockGenerateObject
+      .mockReset()
+      .mockRejectedValue(
+        Object.assign(new Error('Unavailable'), { statusCode: 503 }),
+      );
+    s.registry.recordUsage.mockImplementation(async () => {
+      abort.abort();
+    });
+    await expect(
+      mediaExecution.run({ signal: abort.signal, children: new Set() }, () =>
+        s.service.detectHighlightsWithMetadata(transcript, registeredOptions()),
+      ),
+    ).rejects.toThrow();
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+  });
   it('uses the database-selected adapter/settings and records measured tokens with existing metering', async () => {
     const s = registryFixture();
     mockGenerateObject.mockReset().mockResolvedValue({

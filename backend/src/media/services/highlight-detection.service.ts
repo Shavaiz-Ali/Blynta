@@ -181,7 +181,7 @@ export class HighlightDetectionService {
     }
 
     this.logger.log(
-      `HighlightDetectionService initialized — provider=${this.provider}, model=${this.resolvedModelName}`,
+      `HighlightDetectionService legacy environment initialized — provider=${this.provider}, model=${this.resolvedModelName}`,
     );
   }
 
@@ -344,82 +344,156 @@ export class HighlightDetectionService {
         latencyMs: 0,
         status: 'failed',
       };
-      let signal: AbortSignal | undefined;
-      let phase: 'generation' | 'usage' = 'generation';
-      try {
-        const timeout = AbortSignal.timeout(resolved.model.settings.timeoutMs);
-        signal = args[0].abortSignal
-          ? AbortSignal.any([args[0].abortSignal, timeout])
-          : timeout;
-        const result = await meteredGenerateObject({
-          ...args[0],
-          model: await this.adapters
-            .get(resolved.provider.adapter)
-            .languageModel(resolved.model, resolved.provider, resolved.secret),
-          temperature:
-            resolved.model.settings.temperature ?? args[0].temperature,
-          maxOutputTokens: Math.min(
-            args[0].maxOutputTokens ?? 8192,
-            resolved.model.settings.maxOutputTokens,
-          ),
-          maxRetries: 0,
-          abortSignal: signal,
-        });
-        HighlightsResponseSchema.parse(result.object);
-        const inputTokens = result.usage.inputTokens,
-          outputTokens = result.usage.outputTokens;
-        const pricing = resolved.model.pricing;
-        phase = 'usage';
-        await this.registry.recordUsage({
-          ...usage,
-          latencyMs: Date.now() - started,
-          status: 'success',
-          inputTokens,
-          outputTokens,
-          totalTokens: result.usage.totalTokens,
-          ...(pricing && inputTokens !== undefined && outputTokens !== undefined
-            ? {
-                estimatedCostUsd:
-                  (inputTokens * pricing.inputCostPerMillionTokens +
-                    outputTokens * pricing.outputCostPerMillionTokens) /
-                  1e6,
-              }
-            : {}),
-        });
-        return result;
-      } catch (error) {
-        const failure =
-          phase === 'usage'
-            ? {
-                code: CALL_ERROR.EXECUTION,
-                category: 'execution',
-                origin: 'execution',
-                retryable: false,
-              }
-            : await sdkCallFailure(error, resolved.secret, signal?.aborted);
-        this.logger.error({
-          event: 'highlights.registered.failed',
+      // Keep registry settings/hashes intact; long highlight inference has its own bounded budget.
+      const longRequest =
+        (options?.videoDuration ?? 0) >= 1800 ||
+        String(args[0].prompt ?? '').length >= 12000;
+      const longTimeoutMs = Number(
+        this.configService.get('HIGHLIGHT_LONG_REQUEST_TIMEOUT_MS', 120000),
+      );
+      const maxRetries = Number(
+        this.configService.get('HIGHLIGHT_PROVIDER_MAX_RETRIES', 2),
+      );
+      if (
+        !Number.isInteger(longTimeoutMs) ||
+        longTimeoutMs < 1000 ||
+        longTimeoutMs > 300000 ||
+        !Number.isInteger(maxRetries) ||
+        maxRetries < 0 ||
+        maxRetries > 3
+      )
+        throw new Error(
+          'Invalid highlight request timeout or retry configuration',
+        );
+      const timeoutMs = longRequest
+        ? Math.max(resolved.model.settings.timeoutMs, longTimeoutMs)
+        : resolved.model.settings.timeoutMs;
+      const parentSignal = args[0].abortSignal;
+      for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+        assertNotCancelled();
+        parentSignal?.throwIfAborted();
+        const attemptStarted = Date.now();
+        const attemptUsage = { ...usage, call: attempt };
+        const requestLog = {
+          jobId: options?.jobId,
           modelId: usage.modelId,
+          providerId: usage.providerId,
+          provider: resolved.provider.adapter,
           providerModelId: usage.providerModelId,
-          durationMs: Date.now() - started,
-          failure,
+          timeoutMs,
+          attempt,
+          maxAttempts: maxRetries + 1,
+        };
+        this.logger.log({
+          event: 'highlights.registered.request',
+          ...requestLog,
         });
-        await this.registry
-          .recordUsage({
-            ...usage,
-            latencyMs: Date.now() - started,
-            errorCode: failure.code,
-          })
-          .catch(() =>
-            this.logger.error('Highlight failure usage persistence failed'),
-          );
-        throw new ServiceUnavailableException({
-          message: 'Selected AI model could not generate highlights',
-          code: failure.code,
-          callFailure: failure,
-          issues: [failure],
-        });
+        let signal: AbortSignal | undefined;
+        let phase: 'generation' | 'usage' = 'generation';
+        try {
+          const timeout = AbortSignal.timeout(timeoutMs);
+          signal = args[0].abortSignal
+            ? AbortSignal.any([args[0].abortSignal, timeout])
+            : timeout;
+          const result = await meteredGenerateObject({
+            ...args[0],
+            model: await this.adapters
+              .get(resolved.provider.adapter)
+              .languageModel(
+                resolved.model,
+                resolved.provider,
+                resolved.secret,
+              ),
+            temperature:
+              resolved.model.settings.temperature ?? args[0].temperature,
+            maxOutputTokens: Math.min(
+              args[0].maxOutputTokens ?? 8192,
+              resolved.model.settings.maxOutputTokens,
+            ),
+            maxRetries: 0,
+            abortSignal: signal,
+          });
+          HighlightsResponseSchema.parse(result.object);
+          const inputTokens = result.usage.inputTokens,
+            outputTokens = result.usage.outputTokens;
+          const pricing = resolved.model.pricing;
+          phase = 'usage';
+          await this.registry.recordUsage({
+            ...attemptUsage,
+            latencyMs: Date.now() - attemptStarted,
+            status: 'success',
+            inputTokens,
+            outputTokens,
+            totalTokens: result.usage.totalTokens,
+            ...(pricing &&
+            inputTokens !== undefined &&
+            outputTokens !== undefined
+              ? {
+                  estimatedCostUsd:
+                    (inputTokens * pricing.inputCostPerMillionTokens +
+                      outputTokens * pricing.outputCostPerMillionTokens) /
+                    1e6,
+                }
+              : {}),
+          });
+          this.logger.log({
+            event: 'highlights.registered.succeeded',
+            ...requestLog,
+            durationMs: Date.now() - attemptStarted,
+            totalDurationMs: Date.now() - started,
+          });
+          return result;
+        } catch (error) {
+          assertNotCancelled();
+          parentSignal?.throwIfAborted();
+          const failure =
+            phase === 'usage'
+              ? {
+                  code: CALL_ERROR.EXECUTION,
+                  category: 'execution',
+                  origin: 'execution',
+                  retryable: false,
+                }
+              : await sdkCallFailure(error, resolved.secret, signal?.aborted);
+          this.logger.error({
+            event: 'highlights.registered.failed',
+            ...requestLog,
+            durationMs: Date.now() - attemptStarted,
+            totalDurationMs: Date.now() - started,
+            failure,
+          });
+          await this.registry
+            .recordUsage({
+              ...attemptUsage,
+              latencyMs: Date.now() - attemptStarted,
+              errorCode: failure.code,
+            })
+            .catch(() =>
+              this.logger.error('Highlight failure usage persistence failed'),
+            );
+          if (failure.retryable && attempt <= maxRetries) {
+            const delayMs = Math.min(8000, 1000 * 2 ** (attempt - 1));
+            this.logger.warn({
+              event: 'highlights.registered.retry',
+              ...requestLog,
+              durationMs: Date.now() - attemptStarted,
+              delayMs,
+              code: failure.code,
+            });
+            await abortableDelay(delayMs, undefined, {
+              signal: parentSignal ?? cancellationSignal(),
+            });
+            continue;
+          }
+          throw new ServiceUnavailableException({
+            message: 'Selected AI model could not generate highlights',
+            code: failure.code,
+            callFailure: failure,
+            issues: [failure],
+          });
+        }
       }
+      throw new Error('Highlight attempts exhausted');
     }) as typeof meteredGenerateObject;
   }
   private configuredModel(model?: string): LanguageModel {
@@ -760,9 +834,17 @@ export class HighlightDetectionService {
     segments: TranscriptSegmentDto[],
     options?: HighlightDetectionOptions,
   ): Promise<HighlightDetectionResult> {
-    this.logger.log(
-      `Detecting highlights for full transcript in a single call (${segments.length} segments) — provider=${this.provider}, model=${this.resolvedModelName}`,
-    );
+    this.logger.log({
+      event: 'highlights.full_transcript',
+      segmentCount: segments.length,
+      videoDurationSeconds: options?.videoDuration,
+      routing: options?.registeredModel ? 'registry' : 'legacy_environment',
+      providerId: options?.registeredModel?.selection.providerId,
+      providerModelId:
+        options?.registeredModel?.selection.modelId ??
+        options?.model ??
+        this.resolvedModelName,
+    });
 
     const transcriptText = segments
       .map(

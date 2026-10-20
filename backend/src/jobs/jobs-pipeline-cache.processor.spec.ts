@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Model, Types, model as mongooseModel } from 'mongoose';
 import { Queue } from 'bullmq';
@@ -401,6 +402,34 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
       createHash('sha256').update('video-bytes').digest('hex'),
     );
     expect(parent.transcript.length).toBeGreaterThan(0);
+  });
+  test('exhausted highlight timeout preserves media/transcript and retries discovery without new source charges', async () => {
+    const f = fixture();
+    const { parent, bull, op } = await f.run({ defer: true });
+    f.discover.mockRejectedValueOnce(
+      new ServiceUnavailableException({
+        code: 'AI_TIMEOUT',
+        callFailure: {
+          code: 'AI_TIMEOUT',
+          category: 'timeout',
+          retryable: true,
+          origin: 'transport',
+        },
+      }),
+    );
+    await expect(f.processor.process(bull as never)).rejects.toThrow();
+    expect(parent.errorStage).toBe(JobStatus.DETECTING_HIGHLIGHTS);
+    const transcript = JSON.stringify(parent.transcript);
+    expect(parent.transcript.length).toBeGreaterThan(0);
+    expect(await readFile(parent.localVideoPath, 'utf8')).toBe('video-bytes');
+    expect(await readFile(parent.localAudioPath, 'utf8')).toBe('audio-bytes');
+    const charged = op.charged;
+    await f.processor.process({ ...bull, attemptsMade: 1 } as never);
+    expect(JSON.stringify(parent.transcript)).toBe(transcript);
+    expect(f.download.downloadVideo).toHaveBeenCalledTimes(1);
+    expect(f.transcribe.transcribe).toHaveBeenCalledTimes(1);
+    expect(f.discover).toHaveBeenCalledTimes(2);
+    expect(op.charged).toBe(charged);
   });
   test('resume replaces a partial audio file and reports the ASR stage accurately', async () => {
     const f = fixture();

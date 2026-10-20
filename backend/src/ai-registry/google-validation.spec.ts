@@ -55,6 +55,20 @@ describe('Google credential request and safe diagnostics', () => {
       .mockImplementation(() => {});
   });
   afterEach(() => jest.restoreAllMocks());
+  it('sends the registered Gemini alias unchanged to the Google generation endpoint', async () => {
+    const fetch = jest
+      .fn<Promise<Response>, [AIProvider, Request]>()
+      .mockResolvedValue(new Response(generationSuccess, { status: 200 }));
+    await testGoogleAdapter({ fetch }).validateCredential(
+      provider,
+      secret,
+      AbortSignal.timeout(1000),
+      { ...model, modelId: 'gemini-flash-latest' },
+    );
+    expect(fetch.mock.calls[0][1].url).toBe(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+    );
+  });
 
   it.each(['v1', 'v1beta'])(
     'uses the configured %s generation endpoint, model, POST and key header',
