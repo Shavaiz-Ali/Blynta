@@ -1,6 +1,7 @@
 import { ClipRenderProgress } from './render-progress';
 import { ConfigService } from '@nestjs/config';
-import { Job as BullJob } from 'bullmq';
+import { Job as BullJob, UnrecoverableError } from 'bullmq';
+import { assertBatchStorage } from '../batch-render/render-task';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -158,7 +159,12 @@ describe('independent clip processor lifecycle', () => {
     parents.clear();
     jest.clearAllMocks();
     directory = await mkdtemp(join(tmpdir(), 'blynta-render-test-'));
-    const config = new ConfigService({ STORAGE_ROOT: directory });
+    const config = new ConfigService({
+      STORAGE_ROOT: directory,
+      R2_BUCKET_NAME: 'blynta',
+      R2_SOURCE_BUCKET_NAME: 'blynta',
+      R2_ENDPOINT: 'https://r2.invalid',
+    });
     sources = new RenderSourceService(config, r2 as unknown as R2Service);
     processor = new RenderProcessor(
       jobs as unknown as JobsService,
@@ -278,6 +284,69 @@ describe('independent clip processor lifecycle', () => {
     expect(r2.uploadFile).not.toHaveBeenCalled();
     expect(completion.finalize).not.toHaveBeenCalled();
   });
+  it('propagates deterministic configuration failure without automatic Bull retries and finalizes only the failed clip', async () => {
+    const [clip] = create('invalid-config');
+    const execute = jest.fn(async () =>
+      assertBatchStorage(
+        new ConfigService({
+          R2_BUCKET_NAME: 'blynta',
+          R2_SOURCE_BUCKET_NAME: 'blynta',
+          R2_ENDPOINT: 'http://r2.invalid',
+        }),
+      ),
+    );
+    Object.assign(processor, { batch: { enabled: true, execute } });
+    const bull = queueJob('invalid-config', clip);
+    let failure: Error | undefined;
+    try {
+      await processor.process(bull);
+    } catch (error) {
+      failure = error as Error;
+    }
+    expect(failure).toBeInstanceOf(UnrecoverableError);
+    expect(bull.opts.attempts).toBe(3);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+    await processor.onFailed(bull, failure!);
+    expect(clip.status).toBe(JobStatus.FAILED);
+    expect(completion.finalize).toHaveBeenCalledWith('invalid-config');
+  });
+  it('rejects insecure Batch storage before any R2 request, including output recovery', async () => {
+    const [clip] = create('http');
+    Object.assign(processor, {
+      batch: { enabled: true },
+      config: new ConfigService({
+        R2_BUCKET_NAME: 'blynta',
+        R2_SOURCE_BUCKET_NAME: 'blynta',
+        R2_ENDPOINT: 'http://r2.invalid',
+      }),
+    });
+    await expect(
+      processor.process(queueJob('http', clip)),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(r2.fileExists).not.toHaveBeenCalled();
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+  });
+  it.each([
+    new Error('AWS unavailable'),
+    Object.assign(new Error('R2 unavailable'), {
+      $metadata: { httpStatusCode: 503 },
+    }),
+  ])(
+    'retains Bull retry eligibility for temporary AWS/storage failures',
+    async (error) => {
+      const [clip] = create('temporary');
+      Object.assign(processor, {
+        batch: { enabled: true, execute: jest.fn().mockRejectedValue(error) },
+      });
+      await expect(processor.process(queueJob('temporary', clip))).rejects.toBe(
+        error,
+      );
+      expect(error).not.toBeInstanceOf(UnrecoverableError);
+      expect(clip.status).toBe(JobStatus.PENDING);
+      expect(completion.finalize).not.toHaveBeenCalled();
+    },
+  );
   it('retries only a failed clip and skips durable successful output', async () => {
     const clips = create('a', 2);
     await processor.process(queueJob('a', clips[0]));

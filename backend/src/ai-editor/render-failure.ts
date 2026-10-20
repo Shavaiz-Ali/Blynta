@@ -1,4 +1,5 @@
 import { HttpException } from '@nestjs/common';
+import { UnrecoverableError } from 'bullmq';
 import {
   MediaCommandError,
   safeMediaStderr,
@@ -32,7 +33,8 @@ export function renderFailure(error: unknown, aborted = false) {
   );
   const permanent =
     !aborted &&
-    (deterministicCommand ||
+    (error instanceof UnrecoverableError ||
+      deterministicCommand ||
       storagePermanent ||
       localPermanent ||
       (error instanceof HttpException &&

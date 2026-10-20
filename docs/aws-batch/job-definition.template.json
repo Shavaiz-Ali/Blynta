@@ -2,7 +2,10 @@
   "jobDefinitionName": "blynta-render-job",
   "type": "container",
   "platformCapabilities": ["FARGATE"],
-  "retryStrategy": { "attempts": 2 },
+  "retryStrategy": {
+    "attempts": 2,
+    "evaluateOnExit": [{ "onExitCode": "2", "action": "EXIT" }]
+  },
   "timeout": { "attemptDurationSeconds": 3600 },
   "containerProperties": {
     "image": "834897673310.dkr.ecr.ap-south-1.amazonaws.com/blynta/ffmpeg_renderer:REPLACE_GIT_SHA",
@@ -12,21 +15,36 @@
       { "type": "VCPU", "value": "2" },
       { "type": "MEMORY", "value": "4096" }
     ],
-    "runtimePlatform": { "operatingSystemFamily": "LINUX", "cpuArchitecture": "X86_64" },
+    "runtimePlatform": {
+      "operatingSystemFamily": "LINUX",
+      "cpuArchitecture": "X86_64"
+    },
     "networkConfiguration": { "assignPublicIp": "ENABLED" },
     "fargatePlatformConfiguration": { "platformVersion": "1.4.0" },
     "readonlyRootFilesystem": false,
     "environment": [
-      { "name": "R2_ENDPOINT", "value": "https://REPLACE_ACCOUNT_ID.r2.cloudflarestorage.com" },
+      {
+        "name": "R2_ENDPOINT",
+        "value": "https://REPLACE_ACCOUNT_ID.r2.cloudflarestorage.com"
+      },
       { "name": "R2_BUCKET_NAME", "value": "REPLACE_OUTPUT_BUCKET" },
-      { "name": "R2_SOURCE_BUCKET_NAME", "value": "REPLACE_PRIVATE_SOURCE_BUCKET" },
+      {
+        "name": "R2_SOURCE_BUCKET_NAME",
+        "value": "REPLACE_PRIVATE_SOURCE_BUCKET"
+      },
       { "name": "FFMPEG_THREADS", "value": "2" },
       { "name": "MEDIA_HOST_CONCURRENCY", "value": "1" },
       { "name": "MEDIA_COMMAND_TIMEOUT_SECONDS", "value": "3600" }
     ],
     "secrets": [
-      { "name": "R2_ACCESS_KEY_ID", "valueFrom": "REPLACE_R2_SECRET_ARN:R2_ACCESS_KEY_ID::" },
-      { "name": "R2_SECRET_ACCESS_KEY", "valueFrom": "REPLACE_R2_SECRET_ARN:R2_SECRET_ACCESS_KEY::" }
+      {
+        "name": "R2_ACCESS_KEY_ID",
+        "valueFrom": "REPLACE_R2_SECRET_ARN:R2_ACCESS_KEY_ID::"
+      },
+      {
+        "name": "R2_SECRET_ACCESS_KEY",
+        "valueFrom": "REPLACE_R2_SECRET_ARN:R2_SECRET_ACCESS_KEY::"
+      }
     ],
     "logConfiguration": {
       "logDriver": "awslogs",

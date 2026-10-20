@@ -69,7 +69,9 @@ integration(
             await copyFile(path, output);
             return task.outputKey;
           },
-          objectInfo: async () => ({ size: (await stat(output)).size }),
+          objectInfo: async (key: string) => ({
+            size: (await stat(key === task.sourceKey ? source : output)).size,
+          }),
           uploadBuffer: (body: Buffer, key: string) => {
             markers.push({
               key,
@@ -82,8 +84,8 @@ integration(
           `${prefix}/task.json`,
           'fixture-job',
           new ConfigService({
-            R2_BUCKET_NAME: 'output',
-            R2_SOURCE_BUCKET_NAME: 'private',
+            R2_BUCKET_NAME: 'blynta',
+            R2_SOURCE_BUCKET_NAME: 'blynta',
             R2_ENDPOINT: 'https://r2.invalid',
           }),
           r2 as never,

@@ -3,9 +3,14 @@
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { SubmitJobCommand } from '@aws-sdk/client-batch';
+import { UnrecoverableError } from 'bullmq';
 import { BatchRenderService } from './batch-render.service';
 import { mediaExecution } from '../jobs/cancellation-context';
-import { assertBatchStorage, renderMode } from './render-task';
+import {
+  assertBatchStorage,
+  assertBatchTaskKeys,
+  renderMode,
+} from './render-task';
 
 describe('AWS Batch durable execution', () => {
   let service: BatchRenderService;
@@ -20,6 +25,7 @@ describe('AWS Batch durable execution', () => {
       ({
         version: 1,
         kind: 'clip',
+        sourceKey: 'source-videos/existing/video.mp4',
         outputKey: `${prefix}/output.mp4`,
         deadline: Date.now() + 60000,
       }) as any,
@@ -91,9 +97,9 @@ describe('AWS Batch durable execution', () => {
       new BatchRenderService(new ConfigService(), r2, {} as any).enabled,
     ).toBe(false);
   });
-  it('rejects missing or shared private storage before submission', () => {
+  it('rejects missing storage before submission', () => {
     expect(() => assertBatchStorage(new ConfigService())).toThrow(
-      'separate private',
+      UnrecoverableError,
     );
     expect(() =>
       assertBatchStorage(
@@ -103,8 +109,150 @@ describe('AWS Batch durable execution', () => {
           R2_ENDPOINT: 'https://r2.invalid',
         }),
       ),
-    ).toThrow('separate private');
+    ).not.toThrow();
     expect(send).not.toHaveBeenCalled();
+  });
+  it.each([
+    'http://r2.invalid',
+    'https://',
+    'invalid',
+    'https://user:secret@r2.invalid',
+    'https://r2.invalid?secret=value',
+    'https://r2.invalid/#fragment',
+  ])(
+    'rejects invalid or non-HTTPS endpoint without submitting: %s',
+    async (endpoint) => {
+      Object.assign(service, {
+        config: new ConfigService({
+          R2_SOURCE_BUCKET_NAME: 'blynta',
+          R2_BUCKET_NAME: 'blynta',
+          R2_ENDPOINT: endpoint,
+        }),
+      });
+      await expect(
+        service.execute(identity, prepare, tick),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(prepare).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      expect(records.size).toBe(0);
+    },
+  );
+  it('rejects shared public storage while retaining private same-bucket support', () => {
+    expect(() =>
+      assertBatchStorage(
+        new ConfigService({
+          R2_BUCKET_NAME: 'blynta',
+          R2_SOURCE_BUCKET_NAME: 'blynta',
+          R2_ENDPOINT: 'https://r2.invalid',
+          R2_PUBLIC_DOMAIN: 'https://public.invalid',
+        }),
+      ),
+    ).toThrow(UnrecoverableError);
+  });
+  it.each([
+    ['blynta', 'blynta'],
+    ['output', 'private'],
+  ])(
+    'submits consistent storage overrides and a private manifest for buckets %s/%s',
+    async (output, source) => {
+      Object.assign(service, {
+        config: new ConfigService({
+          RENDER_EXECUTION_MODE: 'aws_batch',
+          BATCH_POLL_INTERVAL_MS: 100,
+          R2_BUCKET_NAME: output,
+          R2_SOURCE_BUCKET_NAME: source,
+          R2_ENDPOINT: 'https://r2.invalid',
+        }),
+      });
+      await service.execute(identity, prepare, tick);
+      expect(r2.uploadBuffer).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        `${prefix}/task.json`,
+        'application/json',
+      );
+      const task = JSON.parse(r2.uploadBuffer.mock.calls[0][0].toString());
+      expect(task.sourceKey).toBe('source-videos/existing/video.mp4');
+      expect(task.outputKey).toBe(`${prefix}/output.mp4`);
+      expect(task).not.toHaveProperty('R2_SECRET_ACCESS_KEY');
+      expect(
+        send.mock.calls[0][0].input.containerOverrides.environment,
+      ).toEqual([
+        { name: 'R2_BUCKET_NAME', value: output },
+        { name: 'R2_SOURCE_BUCKET_NAME', value: source },
+        { name: 'R2_ENDPOINT', value: 'https://r2.invalid' },
+      ]);
+      expect(send.mock.calls[0][0].input.retryStrategy.evaluateOnExit).toEqual([
+        { onExitCode: '2', action: 'EXIT' },
+      ]);
+    },
+  );
+  it('rejects source collisions before uploading the manifest or submitting', async () => {
+    const unsafe = jest.fn(async () => ({
+      ...(await prepare()),
+      sourceKey: `${prefix}/task.json`,
+    }));
+    await expect(
+      service.execute(identity, unsafe, tick),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(send).not.toHaveBeenCalled();
+    expect(r2.uploadBuffer).not.toHaveBeenCalled();
+    expect(records.get(id)).toMatchObject({
+      state: 'FAILED',
+      retryable: false,
+    });
+    await expect(
+      service.execute(identity, unsafe, tick),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(unsafe).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    'source-videos/legacy-id/video.mp4',
+    'job-sources/parent/existing-video.mp4',
+  ])('retains existing source keys unchanged: %s', async (sourceKey) => {
+    const task = { ...(await prepare()), sourceKey };
+    expect(() => assertBatchTaskKeys(task, prefix)).not.toThrow();
+  });
+  it.each(['output.mp4', 'task.json', 'progress.json', 'result.json'])(
+    'prevents writes from overwriting a source at %s',
+    async (name) => {
+      const task = { ...(await prepare()), sourceKey: `${prefix}/${name}` };
+      expect(() => assertBatchTaskKeys(task, prefix)).toThrow(
+        UnrecoverableError,
+      );
+    },
+  );
+  it.each([
+    'source-videos/../escape.mp4',
+    'job-sources//source.mp4',
+    'job-sources/./source.mp4',
+    'job-sources/parent\\source.mp4',
+    '/job-sources/source.mp4',
+    'https://private.invalid/source',
+    `source-videos/${'a'.repeat(1024)}`,
+  ])(
+    'rejects unsafe source keys without rewriting them: %s',
+    async (sourceKey) => {
+      const task = { ...(await prepare()), sourceKey };
+      expect(() => assertBatchTaskKeys(task, prefix)).toThrow(
+        UnrecoverableError,
+      );
+    },
+  );
+  it('does not retry deterministic container configuration/input failures or consume result markers', async () => {
+    jest
+      .mocked(service.status)
+      .mockResolvedValue({
+        status: 'FAILED',
+        container: { exitCode: 2 },
+      } as any);
+    await expect(
+      service.execute(identity, prepare, tick),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    await expect(
+      service.execute(identity, prepare, tick),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(r2.downloadToBuffer).not.toHaveBeenCalled();
   });
   it('submits once for concurrent callers and persists the AWS ID', async () => {
     const results = await Promise.all([

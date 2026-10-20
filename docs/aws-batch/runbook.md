@@ -8,33 +8,40 @@ The legacy `apps/studio` and backend Studio processors are not routed to Batch.
 
 On backend render/edit workers (not the image build):
 
-| Variable | Default / purpose |
-| --- | --- |
-| `RENDER_EXECUTION_MODE` | `local`; opt in with `aws_batch` |
-| `AWS_REGION` | `ap-south-1` |
-| `BATCH_RENDER_QUEUE` | `blynta-render-queue` |
-| `BATCH_RENDER_JOB_DEFINITION` | `blynta-render-job`; deploy with a pinned `:revision` |
-| `BATCH_RENDER_VCPU` | `2`; supported Fargate value |
-| `BATCH_RENDER_MEMORY_MIB` | `4096`; must be compatible with vCPU |
-| `BATCH_RENDER_ATTEMPTS` | `2`, allowed 1–3, retries belong to Batch |
-| `BATCH_RENDER_TIMEOUT_SECONDS` | `3600`, 60–86400, each running attempt |
-| `BATCH_TOTAL_TIMEOUT_SECONDS` | `7200`, 60–86400, preparation + queue + all attempts |
-| `BATCH_POLL_INTERVAL_MS` | `5000`, 100–60000; prefer >=5000 in deployment |
+| Variable                       | Default / purpose                                     |
+| ------------------------------ | ----------------------------------------------------- |
+| `RENDER_EXECUTION_MODE`        | `local`; opt in with `aws_batch`                      |
+| `AWS_REGION`                   | `ap-south-1`                                          |
+| `BATCH_RENDER_QUEUE`           | `blynta-render-queue`                                 |
+| `BATCH_RENDER_JOB_DEFINITION`  | `blynta-render-job`; deploy with a pinned `:revision` |
+| `BATCH_RENDER_VCPU`            | `2`; supported Fargate value                          |
+| `BATCH_RENDER_MEMORY_MIB`      | `4096`; must be compatible with vCPU                  |
+| `BATCH_RENDER_ATTEMPTS`        | `2`, allowed 1–3, retries belong to Batch             |
+| `BATCH_RENDER_TIMEOUT_SECONDS` | `3600`, 60–86400, each running attempt                |
+| `BATCH_TOTAL_TIMEOUT_SECONDS`  | `7200`, 60–86400, preparation + queue + all attempts  |
+| `BATCH_POLL_INTERVAL_MS`       | `5000`, 100–60000; prefer >=5000 in deployment        |
 
 Existing `MONGO_URI`, Redis, R2 and storage settings stay on the backend. The AWS
 SDK uses the EC2 instance profile/default credential chain: do not set static AWS
 keys. Existing render concurrency/global capacity limits still apply to remote
 in-flight clip jobs. Increase them only after measuring queue and account quotas.
-`EDIT_RENDER_TIMEOUT_SECONDS` still bounds the *entire* edited-video workflow;
+`EDIT_RENDER_TIMEOUT_SECONDS` still bounds the _entire_ edited-video workflow;
 increase it on staging if Batch queue wait exceeds the existing edit timeout.
 
 The task needs only `R2_ENDPOINT`, `R2_BUCKET_NAME`, `R2_SOURCE_BUCKET_NAME`,
 `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`; optional `FFMPEG_THREADS`,
 `MEDIA_HOST_CONCURRENCY`, `MEDIA_COMMAND_TIMEOUT_SECONDS`, `CAPTION_FONTS_DIR`.
-Use a separate private source bucket with no public custom domain. Use a scoped
+Source and output may share one private bucket (`R2_BUCKET_NAME=blynta` and
+`R2_SOURCE_BUCKET_NAME=blynta`) or use separate buckets. For a shared bucket leave
+`R2_PUBLIC_DOMAIN` unset and disable public bucket access; source files, manifests
+and outputs use signed access. Keep the R2 endpoint HTTPS. Use a scoped
 Cloudflare R2 object-read/write token for these buckets, injected at runtime from
 Secrets Manager via the Batch job definition. R2 credentials are Cloudflare
 credentials, not AWS IAM keys. The image needs no Mongo, Redis, AI or AWS secrets.
+
+For the existing PM2 worker and `blynta-render-job:3` rollout, follow
+[single-bucket-deployment.md](single-bucket-deployment.md). Both the worker and
+renderer image require this fix; the old image embeds the same rejected-equality check.
 
 ## IAM and network prerequisites
 
@@ -52,10 +59,30 @@ and queue. The application does not register definitions or pass arbitrary roles
 {
   "Version": "2012-10-17",
   "Statement": [
-    {"Effect":"Allow","Action":"ecr:GetAuthorizationToken","Resource":"*"},
-    {"Effect":"Allow","Action":["ecr:BatchCheckLayerAvailability","ecr:GetDownloadUrlForLayer","ecr:BatchGetImage"],"Resource":"arn:aws:ecr:ap-south-1:834897673310:repository/blynta/ffmpeg_renderer"},
-    {"Effect":"Allow","Action":["logs:CreateLogStream","logs:PutLogEvents"],"Resource":"arn:aws:logs:ap-south-1:834897673310:log-group:/aws/batch/blynta-renderer:*"},
-    {"Effect":"Allow","Action":"secretsmanager:GetSecretValue","Resource":"REPLACE_R2_SECRET_ARN"}
+    {
+      "Effect": "Allow",
+      "Action": "ecr:GetAuthorizationToken",
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage"
+      ],
+      "Resource": "arn:aws:ecr:ap-south-1:834897673310:repository/blynta/ffmpeg_renderer"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:ap-south-1:834897673310:log-group:/aws/batch/blynta-renderer:*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetSecretValue",
+      "Resource": "REPLACE_R2_SECRET_ARN"
+    }
   ]
 }
 ```

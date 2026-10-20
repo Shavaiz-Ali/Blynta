@@ -7,6 +7,7 @@ export interface BatchExecution {
   jobId?: string;
   deadline: Date;
   error?: string;
+  retryable?: boolean;
   owner?: {
     jobId?: string;
     planId?: string;
@@ -24,6 +25,7 @@ export const BatchExecutionSchema = new Schema<BatchExecution>(
     jobId: String,
     deadline: { type: Date, required: true, index: true },
     error: String,
+    retryable: Boolean,
     owner: { type: Schema.Types.Mixed },
   },
   { timestamps: true },

@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { UnrecoverableError } from 'bullmq';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,7 +15,11 @@ import {
   mediaExecution,
 } from '../jobs/cancellation-context';
 import { R2Service } from '../storage/r2.service';
-import { assertBatchStorage, RenderTask } from './render-task';
+import {
+  assertBatchStorage,
+  assertBatchTaskKeys,
+  RenderTask,
+} from './render-task';
 
 /** Trusted backend manifests only; this is not a public FFmpeg command API. */
 export async function runRenderer(
@@ -25,19 +30,20 @@ export async function runRenderer(
   registry = new ProcessRegistryService(),
 ) {
   if (!/^job-sources\/batch\/[a-f0-9]{64}\/task\.json$/.test(key) || !jobId)
-    throw new Error('Invalid renderer task identity');
+    throw new UnrecoverableError('Invalid renderer task identity');
   assertBatchStorage(config);
   const prefix = key.slice(0, -'/task.json'.length);
   const task = JSON.parse(
     (await r2.downloadToBuffer(key, 2 * 1024 * 1024)).toString(),
   ) as RenderTask;
+  assertBatchTaskKeys(task, prefix);
   if (
     task.version !== 1 ||
     task.outputKey !== `${prefix}/output.mp4` ||
     !Number.isFinite(task.deadline) ||
     task.deadline <= Date.now()
   )
-    throw new Error('Invalid or expired task');
+    throw new UnrecoverableError('Invalid or expired task');
   const directory = await mkdtemp(join(tmpdir(), 'blynta-batch-'));
   const abort = new AbortController();
   const stop = () => abort.abort();
@@ -73,6 +79,22 @@ export async function runRenderer(
           let cuttingSeconds = 0;
           let captioningSeconds = 0;
           if (task.kind === 'clip') {
+            try {
+              await r2.objectInfo(task.sourceKey);
+            } catch (error) {
+              const failure = error as {
+                name?: string;
+                $metadata?: { httpStatusCode?: number };
+              };
+              if (
+                failure.$metadata?.httpStatusCode === 404 ||
+                ['NotFound', 'NoSuchKey'].includes(failure.name ?? '')
+              )
+                throw new UnrecoverableError(
+                  'Renderer source object is missing; restore the durable source before retrying',
+                );
+              throw error;
+            }
             duration = task.end - task.start;
             if (
               !Number.isFinite(duration) ||

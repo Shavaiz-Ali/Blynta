@@ -1,4 +1,5 @@
 import { BadRequestException, HttpException } from '@nestjs/common';
+import { UnrecoverableError } from 'bullmq';
 import {
   MediaCommandError,
   safeMediaStderr,
@@ -6,6 +7,12 @@ import {
 import { renderFailure } from './render-failure';
 
 describe('Editing failure evidence and retry safety', () => {
+  it('preserves permanent Batch configuration/input failures', () => {
+    expect(
+      renderFailure(new UnrecoverableError('Invalid HTTPS R2 endpoint'))
+        .permanent,
+    ).toBe(true);
+  });
   it.each([124, 137])(
     'keeps supervisor timeout or kill exit %s retryable',
     (code) => {

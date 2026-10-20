@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { execFileSync } from 'node:child_process';
 import { runRenderer } from './renderer';
+import { UnrecoverableError } from 'bullmq';
 import {
   MediaCommandError,
   safeMediaStderr,
@@ -36,5 +37,6 @@ void main().catch((error: unknown) => {
           : undefined,
     }),
   );
-  process.exitCode = 1;
+  // Exit 2 is reserved for deterministic configuration/input failures; Batch must not retry it.
+  process.exitCode = error instanceof UnrecoverableError ? 2 : 1;
 });

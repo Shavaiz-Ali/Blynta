@@ -5,6 +5,7 @@ import { Interval } from '@nestjs/schedule';
 import { Connection, Model, Types } from 'mongoose';
 import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { UnrecoverableError } from 'bullmq';
 import {
   BatchClient,
   SubmitJobCommand,
@@ -24,6 +25,7 @@ import {
   RenderTask,
   RenderResult,
   assertBatchStorage,
+  assertBatchTaskKeys,
 } from './render-task';
 
 @Injectable()
@@ -116,6 +118,7 @@ export class BatchRenderService {
           try {
             const deadline = new Date(record.deadline).getTime();
             const task = await prepare(prefix, deadline);
+            assertBatchTaskKeys(task, prefix);
             await this.r2.uploadBuffer(
               Buffer.from(JSON.stringify(task)),
               `${prefix}/task.json`,
@@ -143,7 +146,7 @@ export class BatchRenderService {
               ),
             );
             if (!['0.25', '0.5', '1', '2', '4', '8', '16'].includes(vcpu))
-              throw new Error('Invalid Fargate vCPU');
+              throw new UnrecoverableError('Invalid Fargate vCPU');
             const jobQueue = this.config.get<string>(
               'BATCH_RENDER_QUEUE',
               'blynta-render-queue',
@@ -158,9 +161,22 @@ export class BatchRenderService {
                 jobName: `blynta-${id}`,
                 jobQueue,
                 jobDefinition,
-                retryStrategy: { attempts },
+                retryStrategy: {
+                  attempts,
+                  evaluateOnExit: [{ onExitCode: '2', action: 'EXIT' }],
+                },
                 timeout: { attemptDurationSeconds: runtime },
                 containerOverrides: {
+                  // Keep storage routing consistent with the submitting worker. Secrets
+                  // stay in the job definition and never enter manifests or overrides.
+                  environment: [
+                    'R2_BUCKET_NAME',
+                    'R2_SOURCE_BUCKET_NAME',
+                    'R2_ENDPOINT',
+                  ].map((name) => ({
+                    name,
+                    value: this.config.get<string>(name)!,
+                  })),
                   command: [
                     'node',
                     'dist/src/batch-render/renderer.main.js',
@@ -188,6 +204,9 @@ export class BatchRenderService {
                   error: submitted
                     ? 'Ambiguous AWS submission; inspect job name before manual recovery'
                     : 'Task preparation failed',
+                  ...(error instanceof UnrecoverableError
+                    ? { retryable: false }
+                    : {}),
                 },
               },
             );
@@ -204,6 +223,10 @@ export class BatchRenderService {
     for (;;) {
       record = await this.executions.findById(id).lean();
       if (!record) throw new Error('Batch execution record missing');
+      if (record.state === 'FAILED' && record.retryable === false)
+        throw new UnrecoverableError(
+          record.error || 'Invalid Batch task configuration or input',
+        );
       if (['UNKNOWN', 'FAILED', 'CANCELLED'].includes(record.state))
         throw new Error(record.error || `Batch render ${record.state}`);
       if (
@@ -225,16 +248,22 @@ export class BatchRenderService {
       if (record.jobId) {
         const job = await this.status(record.jobId);
         if (job.status === 'FAILED') {
+          const permanent = job.container?.exitCode === 2;
+          const message = permanent
+            ? 'AWS Batch configuration or source input is invalid; inspect CloudWatch logs'
+            : 'AWS Batch task failed; inspect CloudWatch logs';
           await this.executions.updateOne(
             { _id: id },
             {
               $set: {
                 state: 'FAILED',
-                error: 'AWS Batch task failed; inspect CloudWatch logs',
+                error: message,
+                ...(permanent ? { retryable: false } : {}),
               },
             },
           );
-          throw new Error('AWS Batch task failed; inspect CloudWatch logs');
+          if (permanent) throw new UnrecoverableError(message);
+          throw new Error(message);
         }
         if (job.status === 'SUCCEEDED') {
           const result = JSON.parse(

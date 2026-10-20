@@ -21,7 +21,8 @@ size budgets. `buildRenderSpec` handles trims, speed, freeze, crop, zoom, transi
 text/image overlays, captions, audio mixing and timing. FFprobe plus a full decode
 verify output before upload. These checks and publication remain in place.
 
-`R2Service` selects private source vs output buckets, streams bounded downloads,
+`R2Service` selects buckets by existing object prefixes, supporting one private
+bucket or separate source/output buckets. It streams bounded downloads,
 supports signed URLs and checks object metadata. FFmpeg processes already use
 cancellation context, a process registry and host thread/concurrency limits.
 Legacy Studio has a separate renderer/processor and is outside this change.

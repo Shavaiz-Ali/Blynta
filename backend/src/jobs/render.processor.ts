@@ -1,10 +1,11 @@
 import { BatchRenderService } from '../batch-render/batch-render.service';
+import { assertBatchStorage } from '../batch-render/render-task';
 import { MEDIA_WORKER_POLICY } from './jobs.constants';
 import { assertNotCancelled, drainMediaChildren } from './cancellation-context';
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Logger, OnApplicationBootstrap, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Job as BullJob } from 'bullmq';
+import { Job as BullJob, UnrecoverableError } from 'bullmq';
 import { mkdtemp, mkdir, rm, stat } from 'fs/promises';
 import { usageSample } from '../billing/usage-context';
 import { join } from 'path';
@@ -190,6 +191,8 @@ export class RenderProcessor
       publish(undefined, true);
     };
     try {
+      // Validate before the first storage HEAD, including the durable-output recovery path.
+      if (this.batch?.enabled) assertBatchStorage(this.config);
       await this.jobs.updateClip(jobId, clipId, {
         attemptCount: (clip.attemptCount ?? 0) + 1,
       });
@@ -409,6 +412,7 @@ export class RenderProcessor
           stage: failureStage,
           message,
           retryCount: bullJob.attemptsMade,
+          retryable: !(error instanceof UnrecoverableError),
         }),
       );
       throw error;

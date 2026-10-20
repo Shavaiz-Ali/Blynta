@@ -6,6 +6,7 @@ import {
 import { pipeline } from 'node:stream/promises';
 import { Injectable, Logger, HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { UnrecoverableError } from 'bullmq';
 import {
   S3Client,
   PutObjectCommand,
@@ -62,7 +63,7 @@ export class R2Service {
       this.configService.get<string>('R2_PUBLIC_DOMAIN') &&
       !this.sourceBucket
     )
-      throw new Error(
+      throw new UnrecoverableError(
         'Private source storage requires R2_SOURCE_BUCKET_NAME when R2_PUBLIC_DOMAIN is configured',
       );
     if (
@@ -70,7 +71,7 @@ export class R2Service {
       this.sourceBucket === this.bucket &&
       this.configService.get<string>('R2_PUBLIC_DOMAIN')
     )
-      throw new Error(
+      throw new UnrecoverableError(
         'R2_SOURCE_BUCKET_NAME must be a separate private bucket',
       );
     return this.sourceBucket || this.bucket;

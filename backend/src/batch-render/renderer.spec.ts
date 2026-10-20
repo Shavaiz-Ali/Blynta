@@ -8,6 +8,7 @@ import { CaptionBurningService } from '../media/services/caption-burning.service
 import { MediaInspectionService } from '../media/services/media-inspection.service';
 import { runCommandWithProgress } from '../media/utils/run-command-with-progress';
 import { join } from 'node:path';
+import { UnrecoverableError } from 'bullmq';
 
 jest.mock('../media/utils/run-command-with-progress');
 describe('one-shot renderer', () => {
@@ -39,7 +40,9 @@ describe('one-shot renderer', () => {
         uploaded = await readFile(path);
       }),
       uploadBuffer: jest.fn(async () => {}),
-      objectInfo: jest.fn(async () => ({ size: uploaded.length })),
+      objectInfo: jest.fn(async (key) => ({
+        size: key === task.sourceKey ? 123 : uploaded.length,
+      })),
     };
     jest
       .spyOn(ClipCuttingService.prototype, 'cutClip')
@@ -65,7 +68,7 @@ describe('one-shot renderer', () => {
       });
   });
   afterEach(() => jest.restoreAllMocks());
-  const run = () =>
+  const run = (buckets: Record<string, string> = {}) =>
     runRenderer(
       `${prefix}/task.json`,
       'aws-1',
@@ -73,9 +76,71 @@ describe('one-shot renderer', () => {
         R2_BUCKET_NAME: 'output',
         R2_SOURCE_BUCKET_NAME: 'private',
         R2_ENDPOINT: 'https://r2.invalid',
+        ...buckets,
       }),
       r2,
     );
+  it('runs a single-bucket clip using existing source keys and private task/output paths', async () => {
+    task.sourceKey = 'source-videos/existing/video.mp4';
+    await run({ R2_BUCKET_NAME: 'blynta', R2_SOURCE_BUCKET_NAME: 'blynta' });
+    expect(r2.objectInfo).toHaveBeenCalledWith(task.sourceKey);
+    expect(r2.getSignedDownloadUrl).toHaveBeenCalledWith(
+      task.sourceKey,
+      expect.any(Number),
+    );
+    expect(r2.uploadFile).toHaveBeenCalledWith(
+      expect.any(String),
+      `${prefix}/output.mp4`,
+    );
+    expect(r2.uploadBuffer.mock.calls.map((call) => call[1])).toEqual(
+      expect.arrayContaining([
+        `${prefix}/progress.json`,
+        `${prefix}/result.json`,
+      ]),
+    );
+    expect(
+      r2.uploadBuffer.mock.calls.some((call) => call[1] === task.sourceKey),
+    ).toBe(false);
+  });
+  it('rejects unsafe endpoints before downloading a manifest', async () => {
+    await expect(
+      run({ R2_ENDPOINT: 'http://r2.invalid' }),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(r2.downloadToBuffer).not.toHaveBeenCalled();
+  });
+  it.each(['output.mp4', 'task.json', 'progress.json', 'result.json'])(
+    'rejects a source collision with %s inside the container before writes',
+    async (name) => {
+      task.sourceKey = `${prefix}/${name}`;
+      await expect(run()).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(r2.getSignedDownloadUrl).not.toHaveBeenCalled();
+      expect(r2.uploadFile).not.toHaveBeenCalled();
+      expect(r2.uploadBuffer).not.toHaveBeenCalled();
+    },
+  );
+  it('treats missing source objects as permanent and never publishes a result', async () => {
+    r2.objectInfo.mockRejectedValueOnce(
+      Object.assign(new Error('missing'), {
+        name: 'NoSuchKey',
+        $metadata: { httpStatusCode: 404 },
+      }),
+    );
+    await expect(run()).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(ClipCuttingService.prototype.cutClip).not.toHaveBeenCalled();
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+    expect(r2.uploadBuffer).not.toHaveBeenCalled();
+  });
+  it.each([
+    new Error('network timeout'),
+    Object.assign(new Error('R2 unavailable'), {
+      $metadata: { httpStatusCode: 503 },
+    }),
+  ])('keeps temporary storage failures retryable', async (error) => {
+    r2.objectInfo.mockRejectedValueOnce(error);
+    await expect(run()).rejects.toBe(error);
+    expect(error).not.toBeInstanceOf(UnrecoverableError);
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+  });
   it('reuses cutting/caption services and seeks a signed source without downloading the full video', async () => {
     await run();
     expect(ClipCuttingService.prototype.cutClip).toHaveBeenCalledWith(
