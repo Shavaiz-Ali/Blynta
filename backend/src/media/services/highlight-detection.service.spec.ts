@@ -1,7 +1,9 @@
 import { mediaExecution } from '../../jobs/cancellation-context';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { ServiceUnavailableException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
+import { cacheFixture } from '../../../test/pipeline-cache.fixture';
+import { PipelineCacheService } from './pipeline-cache.service';
 
 class MockNoObjectGeneratedError extends Error {
   readonly text?: string;
@@ -26,7 +28,7 @@ class MockNoObjectGeneratedError extends Error {
     response?: unknown;
   }) {
     super(message);
-    this.name = 'NoObjectGeneratedError';
+    this.name = 'AI_NoObjectGeneratedError';
     this.cause = cause;
     this.text = text;
     this.finishReason = finishReason;
@@ -131,8 +133,8 @@ describe('HighlightDetectionService & Schemas', () => {
         expect(result.highlights).toHaveLength(1);
         expect(mockGenerateObject).toHaveBeenCalledTimes(2);
         expect(mockGenerateObject.mock.calls[1][0]).toMatchObject({
-          temperature: 0.1,
-          maxOutputTokens: finishReason === 'length' ? 16384 : 8192,
+          temperature: finishReason === 'length' ? 0.3 : 0.1,
+          maxOutputTokens: 8192,
         });
       },
     );
@@ -145,9 +147,21 @@ describe('HighlightDetectionService & Schemas', () => {
         }),
       );
       await expect(service.detectHighlights(segments)).rejects.toThrow(
-        'Highlight detection failed',
+        'recovery exhausted',
       );
-      expect(mockGenerateObject).toHaveBeenCalledTimes(2);
+      expect(mockGenerateObject).toHaveBeenCalledTimes(4);
+    });
+
+    it('rejects length-limited JSON even on the stricter legacy JSON retry', async () => {
+      mockGenerateObject
+        .mockRejectedValueOnce(
+          new MockNoObjectGeneratedError({ text: '{', finishReason: 'stop' }),
+        )
+        .mockResolvedValueOnce({ object: response, finishReason: 'length' })
+        .mockResolvedValueOnce({ object: response, finishReason: 'stop' });
+      const result = await service.detectHighlightsWithMetadata(segments);
+      expect(result.highlights).toHaveLength(1);
+      expect(mockGenerateObject).toHaveBeenCalledTimes(3);
     });
 
     it('propagates API errors without a JSON retry', async () => {
@@ -704,7 +718,10 @@ describe('registry highlight adapter integration', () => {
     configurationHash: 'synthetic-hash',
     auto: false,
   };
-  function registryFixture(config: Record<string, unknown> = {}) {
+  function registryFixture(
+    config: Record<string, unknown> = {},
+    cache?: PipelineCacheService,
+  ) {
     const model = {
       modelId: 'gemini-registered',
       providerId: selection.providerId,
@@ -747,6 +764,7 @@ describe('registry highlight adapter integration', () => {
           languageModel,
         }),
       } as never,
+      cache,
     );
     return { service, routing, registry, languageModel, model };
   }
@@ -764,6 +782,276 @@ describe('registry highlight adapter integration', () => {
   const registeredOptions = (videoDuration = 30) => ({
     videoDuration,
     registeredModel: { userId: 'owner', selection },
+  });
+  const windowSegments = Array.from({ length: 6 }, (_, index) => ({
+    startTime: index * 500,
+    endTime: index * 500 + 60,
+    text: `Source moment ${index} has a special lesson about topic ${index}`,
+  }));
+  const candidateFor = (segment: (typeof windowSegments)[number]) => ({
+    startTime: segment.startTime,
+    endTime: segment.startTime + 50,
+    reason: 'A complete useful insight',
+    score: 0.9,
+    contextComplete: true,
+    presetRelevant: true,
+    groundedQuote: segment.text,
+    clipTitle: 'Useful insight',
+    clipDescription: 'A complete useful insight',
+    tags: [],
+    style: 'curiosity-hook',
+    hookText: '',
+    emojis: [],
+  });
+  const windowResponse = (segments: typeof windowSegments) => ({
+    ...success(),
+    finishReason: 'stop',
+    object: HighlightsResponseSchema.parse({
+      highlights: segments.map(candidateFor),
+    }),
+  });
+  const limited = () =>
+    new MockNoObjectGeneratedError({
+      message: 'Length cutoff',
+      text: '{"highlights":[',
+      finishReason: 'length',
+      usage: {
+        inputTokens: 500,
+        outputTokens: 4096,
+        outputTokenDetails: { reasoningTokens: 2000 },
+      },
+    });
+  const requestedSegments = (prompt: string) =>
+    [...prompt.matchAll(/\[(\d+\.\d+)s - (\d+\.\d+)s\]/g)].map((range) =>
+      windowSegments.find((s) => s.startTime === Number(range[1]))!,
+    );
+  it('sizes the rich candidate response to the registered output budget without raising the cap', async () => {
+    const s = registryFixture();
+    s.model.settings.maxOutputTokens = 4096;
+    mockGenerateObject
+      .mockReset()
+      .mockResolvedValue(windowResponse(windowSegments.slice(0, 1)));
+    await s.service.discoverCandidatesWithMetadata(
+      windowSegments.slice(0, 1),
+      registeredOptions(4860.881),
+    );
+    const request = mockGenerateObject.mock.calls[0][0];
+    expect(request.maxOutputTokens).toBe(4096);
+    expect(request.prompt).toContain('return at most 5 candidates');
+    expect(
+      request.schema.safeParse({
+        highlights: Array.from({ length: 6 }, () =>
+          candidateFor(windowSegments[0]),
+        ),
+      }).success,
+    ).toBe(false);
+    expect(mockGenerateObject).toHaveBeenCalledTimes(1);
+  });
+  it('logs token usage, finish reason, budget and recovery without response text or credentials', async () => {
+    const errorLog = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
+    const warnLog = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => {});
+    try {
+      const s = registryFixture();
+      s.model.settings.maxOutputTokens = 4096;
+      mockGenerateObject
+        .mockReset()
+        .mockRejectedValueOnce(limited())
+        .mockResolvedValueOnce(windowResponse(windowSegments.slice(0, 1)));
+      await s.service.discoverCandidatesWithMetadata(
+        windowSegments.slice(0, 1),
+        registeredOptions(4860.881),
+      );
+      expect(errorLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'highlights.registered.failed',
+          providerModelId: 'gemini-registered',
+          maxOutputTokens: 4096,
+          finishReason: 'length',
+          inputTokens: 500,
+          outputTokens: 4096,
+          reasoningTokens: 2000,
+          chunk: expect.objectContaining({ index: 1, segments: 1 }),
+        }),
+      );
+      expect(warnLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: 'highlights.window.recovery',
+          strategy: 'reduce_candidates',
+          reason: 'AI_OUTPUT_TOKEN_LIMIT',
+        }),
+      );
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+        'synthetic-registry-key',
+      );
+      expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+        'Source moment',
+      );
+    } finally {
+      errorLog.mockRestore();
+      warnLog.mockRestore();
+    }
+  });
+  it('completes a 246-segment 81-minute transcript after one window exceeds its output budget', async () => {
+    const s = registryFixture();
+    s.model.settings.maxOutputTokens = 4096;
+    const duration = 4860.881;
+    const segments = Array.from({ length: 246 }, (_, index) => ({
+      startTime: (index * duration) / 246,
+      endTime: ((index + 1) * duration) / 246,
+      text: `Source moment ${index} has a special lesson about topic ${index}`,
+    }));
+    let failed = false;
+    mockGenerateObject.mockReset().mockImplementation(async ({ prompt }) => {
+      const ranges = [...prompt.matchAll(/\[(\d+\.\d+)s - (\d+\.\d+)s\]/g)];
+      if (!failed && Number(ranges[0][1]) > 0) {
+        failed = true;
+        throw limited();
+      }
+      const first = segments.find(
+        (segment) => segment.startTime.toFixed(1) === ranges[0][1],
+      )!;
+      return windowResponse(first.startTime + 50 <= duration ? [first] : []);
+    });
+    const result = await s.service.detectHighlightsWithMetadata(segments, {
+      ...registeredOptions(duration),
+      maxHighlights: 9,
+      maxOutputSeconds: 540,
+    });
+    expect(failed).toBe(true);
+    expect(result.highlights.length).toBeGreaterThan(1);
+    expect(result.highlights.length).toBeLessThanOrEqual(9);
+    expect(
+      result.highlights.every(
+        (h) =>
+          h.endTime - h.startTime === 50 &&
+          h.endTime <= duration &&
+          h.contextComplete &&
+          h.presetRelevant,
+      ),
+    ).toBe(true);
+    expect(mockGenerateObject.mock.calls.length).toBeLessThanOrEqual(12);
+    expect(
+      s.registry.recordUsage.mock.calls.filter(
+        ([usage]) => usage.status === 'failed',
+      ),
+    ).toHaveLength(1);
+  });
+  it('rejects a parseable but length-limited object and splits only that window with source timestamps intact', async () => {
+    const s = registryFixture();
+    s.model.settings.maxOutputTokens = 4096;
+    mockGenerateObject
+      .mockReset()
+      .mockResolvedValueOnce({
+        ...windowResponse(windowSegments.slice(0, 1)),
+        finishReason: 'length',
+      })
+      .mockResolvedValueOnce(windowResponse(windowSegments.slice(0, 1)))
+      .mockResolvedValueOnce(windowResponse(windowSegments.slice(1, 2)));
+    const result = await s.service.discoverCandidatesWithMetadata(
+      windowSegments.slice(0, 2),
+      registeredOptions(4860.881),
+    );
+    expect(result.candidates?.map((h) => h.startTime)).toEqual([0, 500]);
+    expect(result.cacheable).toBe(true);
+    expect(mockGenerateObject).toHaveBeenCalledTimes(3);
+    expect(mockGenerateObject.mock.calls[1][0].prompt).toContain(
+      '[0.0s - 60.0s]',
+    );
+    expect(mockGenerateObject.mock.calls[2][0].prompt).toContain(
+      '[500.0s - 560.0s]',
+    );
+    expect(
+      s.registry.recordUsage.mock.calls.map(([usage]) => usage.status),
+    ).toEqual(['failed', 'success', 'success']);
+  });
+  it('checkpoints completed windows and split children across a service restart after a later output failure', async () => {
+    const f = cacheFixture();
+    const first = registryFixture({}, f.cache);
+    first.model.settings.maxOutputTokens = 4096;
+    const options = { ...registeredOptions(4860.881), jobId: 'retry-job' };
+    mockGenerateObject.mockReset().mockImplementation(async ({ prompt }) => {
+      const excerpt = requestedSegments(prompt);
+      if (
+        (excerpt.length === 2 && excerpt[0].startTime === 500) ||
+        (excerpt.length === 1 && excerpt[0].startTime === 1000)
+      )
+        throw limited();
+      return windowResponse(excerpt);
+    });
+    await expect(
+      first.service.discoverCandidatesWithMetadata(windowSegments, options),
+    ).rejects.toThrow('recovery exhausted');
+    expect(f.rows.size).toBe(2);
+    expect(f.locks.size).toBe(0);
+    const resumed = registryFixture({}, f.cache);
+    resumed.model.settings.maxOutputTokens = 4096;
+    mockGenerateObject.mockReset().mockImplementation(async ({ prompt }) => {
+      const excerpt = requestedSegments(prompt);
+      if (excerpt.length === 2 && excerpt[0].startTime === 500) throw limited();
+      return windowResponse(excerpt);
+    });
+    const result = await resumed.service.discoverCandidatesWithMetadata(
+      windowSegments,
+      options,
+    );
+    expect(result.candidates?.map((h) => h.startTime)).toEqual([
+      0, 500, 1000, 1500, 2000, 2500,
+    ]);
+    expect(mockGenerateObject).toHaveBeenCalledTimes(5);
+    expect(f.locks.size).toBe(0);
+    // Completed leaf and parent artifacts remain usable on a second retry with no provider calls.
+    mockGenerateObject.mockClear();
+    await resumed.service.discoverCandidatesWithMetadata(
+      windowSegments,
+      options,
+    );
+    expect(mockGenerateObject).not.toHaveBeenCalled();
+  });
+  it.each(['length', 'stop'])(
+    'never caches malformed output and bounds recovery for finishReason=%s',
+    async (finishReason) => {
+      const f = cacheFixture();
+      const s = registryFixture({ HIGHLIGHT_PROVIDER_MAX_RETRIES: 2 }, f.cache);
+      mockGenerateObject.mockReset().mockRejectedValue(
+        new MockNoObjectGeneratedError({
+          text: '{"highlights":[',
+          finishReason,
+        }),
+      );
+      await expect(
+        s.service.discoverCandidatesWithMetadata(windowSegments.slice(0, 2), {
+          ...registeredOptions(4860.881),
+          jobId: 'malformed-job',
+        }),
+      ).rejects.toThrow('recovery exhausted');
+      expect(mockGenerateObject).toHaveBeenCalledTimes(3);
+      expect(f.rows.size).toBe(0);
+      expect(f.locks.size).toBe(0);
+    },
+  );
+  it('fails actionably when the smallest request cannot fit, preserving the token limit code', async () => {
+    const s = registryFixture();
+    mockGenerateObject.mockReset().mockRejectedValue(limited());
+    let failure: unknown;
+    try {
+      await s.service.discoverCandidatesWithMetadata(
+        windowSegments.slice(0, 1),
+        registeredOptions(4860.881),
+      );
+    } catch (error) {
+      failure = error;
+    }
+    expect(
+      (failure as ServiceUnavailableException).getResponse(),
+    ).toMatchObject({
+      code: 'AI_OUTPUT_TOKEN_LIMIT',
+      callFailure: { code: 'AI_OUTPUT_TOKEN_LIMIT', retryable: false },
+    });
+    expect(mockGenerateObject).toHaveBeenCalledTimes(2);
   });
   it('allows long requests past 30 seconds, then retries a real timeout with a fresh signal and pinned model', async () => {
     jest.useFakeTimers();

@@ -11,6 +11,7 @@ import {
   Logger,
   Optional,
   ServiceUnavailableException,
+  HttpException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
@@ -19,7 +20,11 @@ import {
 } from '../../ai-registry/highlight-routing.service';
 import { ProviderAdapterRegistry } from '../../ai-registry/provider-adapter.registry';
 import { ModelRegistry } from '../../ai-registry/model-registry.service';
-import { sdkCallFailure, CALL_ERROR } from '../../ai-registry/call-diagnostics';
+import {
+  sdkCallFailure,
+  callFailure,
+  CALL_ERROR,
+} from '../../ai-registry/call-diagnostics';
 import { ConfigService } from '@nestjs/config';
 import { NoObjectGeneratedError, type LanguageModel } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
@@ -36,10 +41,15 @@ import { highlightDurationSeconds } from '../highlight-duration';
 import {
   DETECTION_VERSION,
   MIN_HIGHLIGHT_SCORE,
+  artifactHash,
 } from '../pipeline-cache-identity';
+import { PipelineCacheService } from './pipeline-cache.service';
 import { strongestCombination } from '../highlight-selection';
 
-import { HighlightsResponseSchema } from '../highlight-result.contract';
+import {
+  HighlightSchema,
+  HighlightsResponseSchema,
+} from '../highlight-result.contract';
 export {
   HighlightSchema,
   HighlightsResponseSchema,
@@ -62,6 +72,14 @@ export interface HighlightDto {
 }
 
 export interface HighlightDetectionOptions {
+  /** Internal discovery diagnostics; timestamps always remain source-relative. */
+  chunk?: {
+    index: number;
+    total: number;
+    depth: number;
+    segments: number;
+    chars: number;
+  };
   customPrompt?: string;
   model?: string;
   videoDuration?: number;
@@ -90,6 +108,77 @@ export interface HighlightDetectionResult {
 
 const SDK_MAX_RETRIES = 0;
 const DIRECT_MAX_OUTPUT_TOKENS = 8192;
+const OUTPUT_RECOVERY_DEPTH = 2;
+const WINDOW_RECOVERY_VERSION = 'bounded-output-v1';
+
+/** Only allowlisted measurements: never log response text, prompts or provider bodies. */
+function outputDiagnostics(value: unknown) {
+  const queue: unknown[] = [value];
+  const seen = new Set<unknown>();
+  let finishReason: string | undefined;
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  let reasoningTokens: number | undefined;
+  const count = (n: unknown) =>
+    typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : undefined;
+  while (queue.length && seen.size < 8) {
+    const next = queue.shift();
+    if (!next || typeof next !== 'object' || seen.has(next)) continue;
+    seen.add(next);
+    const node = next as Record<string, unknown>;
+    const reason = node.finishReason;
+    const knownReason =
+      typeof reason === 'string'
+        ? reason
+        : reason && typeof reason === 'object'
+          ? (reason as { unified?: unknown }).unified
+          : undefined;
+    if (
+      typeof knownReason === 'string' &&
+      [
+        'stop',
+        'length',
+        'MAX_TOKENS',
+        'content-filter',
+        'error',
+        'other',
+        'unknown',
+      ].includes(knownReason)
+    )
+      finishReason ??= knownReason;
+    const usage = node.usage as
+      | {
+          inputTokens?: unknown;
+          outputTokens?: unknown;
+          reasoningTokens?: unknown;
+          outputTokenDetails?: { reasoningTokens?: unknown };
+        }
+      | undefined;
+    inputTokens ??= count(usage?.inputTokens);
+    outputTokens ??= count(usage?.outputTokens);
+    reasoningTokens ??= count(
+      usage?.outputTokenDetails?.reasoningTokens ?? usage?.reasoningTokens,
+    );
+    queue.push(node.cause, node.lastError);
+    if (Array.isArray(node.errors)) queue.push(...node.errors.slice(0, 3));
+  }
+  return { finishReason, inputTokens, outputTokens, reasoningTokens };
+}
+
+function completeHighlightObject(result: {
+  object: unknown;
+  usage?: unknown;
+  finishReason?: unknown;
+}) {
+  const { finishReason } = outputDiagnostics(result);
+  if (finishReason === 'length' || finishReason === 'MAX_TOKENS')
+    throw Object.assign(new Error('Highlight output reached its token limit'), {
+      name: 'AI_NoObjectGeneratedError',
+      finishReason: 'length',
+      usage: result.usage,
+    });
+  return HighlightsResponseSchema.parse(result.object);
+}
 
 const CHUNK_CHAR_BUDGET = 3000; // ~750 tokens of transcript text per chunk
 const CHUNK_MAX_OUTPUT_TOKENS = 2500; // generous room for hidden reasoning + final JSON
@@ -149,6 +238,7 @@ export class HighlightDetectionService {
     @Optional() private routing?: HighlightRouting,
     @Optional() private registry?: ModelRegistry,
     @Optional() private adapters?: ProviderAdapterRegistry,
+    @Optional() private windowCache?: PipelineCacheService,
   ) {
     this.provider = this.configService
       .get<string>('LLM_PROVIDER', 'google')
@@ -266,6 +356,7 @@ export class HighlightDetectionService {
       minScore: MIN_HIGHLIGHT_SCORE,
       temperature: 0.3,
       outputTokens: DIRECT_MAX_OUTPUT_TOKENS,
+      windowRecovery: WINDOW_RECOVERY_VERSION,
       windowSeconds: 900,
       overlapSeconds: 45,
       windowChars: 18000,
@@ -369,6 +460,16 @@ export class HighlightDetectionService {
         ? Math.max(resolved.model.settings.timeoutMs, longTimeoutMs)
         : resolved.model.settings.timeoutMs;
       const parentSignal = args[0].abortSignal;
+      const maxOutputTokens = Math.min(
+        args[0].maxOutputTokens ?? DIRECT_MAX_OUTPUT_TOKENS,
+        resolved.model.settings.maxOutputTokens,
+      );
+      // Reserve metadata/reasoning headroom and budget for the full rich candidate schema.
+      // The registered cap stays authoritative; recovery reduces work rather than raising it.
+      const candidateLimit = Math.min(
+        options.maxHighlights ?? FINAL_HIGHLIGHT_COUNT,
+        Math.max(1, Math.floor((maxOutputTokens - 768) / 640)),
+      );
       for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
         assertNotCancelled();
         parentSignal?.throwIfAborted();
@@ -383,6 +484,9 @@ export class HighlightDetectionService {
           timeoutMs,
           attempt,
           maxAttempts: maxRetries + 1,
+          maxOutputTokens,
+          candidateLimit,
+          chunk: options.chunk,
         };
         this.logger.log({
           event: 'highlights.registered.request',
@@ -406,14 +510,16 @@ export class HighlightDetectionService {
               ),
             temperature:
               resolved.model.settings.temperature ?? args[0].temperature,
-            maxOutputTokens: Math.min(
-              args[0].maxOutputTokens ?? 8192,
-              resolved.model.settings.maxOutputTokens,
-            ),
+            maxOutputTokens,
+            schema: HighlightsResponseSchema.extend({
+              highlights: z.array(HighlightSchema).max(candidateLimit),
+            }),
+            prompt: `${args[0].prompt ?? ''}\nResponse budget: return at most ${candidateLimit} candidates. Keep metadata, reasons and descriptions to one short sentence, quotes short and verbatim, tags to 3 and emojis to 1. Return one complete JSON object; never fill a quota.`,
             maxRetries: 0,
             abortSignal: signal,
-          });
-          HighlightsResponseSchema.parse(result.object);
+          } as Parameters<typeof meteredGenerateObject>[0]);
+          const diagnostics = outputDiagnostics(result);
+          completeHighlightObject(result);
           const inputTokens = result.usage.inputTokens,
             outputTokens = result.usage.outputTokens;
           const pricing = resolved.model.pricing;
@@ -441,6 +547,7 @@ export class HighlightDetectionService {
             ...requestLog,
             durationMs: Date.now() - attemptStarted,
             totalDurationMs: Date.now() - started,
+            ...diagnostics,
           });
           return result;
         } catch (error) {
@@ -461,6 +568,7 @@ export class HighlightDetectionService {
             durationMs: Date.now() - attemptStarted,
             totalDurationMs: Date.now() - started,
             failure,
+            ...outputDiagnostics(error),
           });
           await this.registry
             .recordUsage({
@@ -471,7 +579,11 @@ export class HighlightDetectionService {
             .catch(() =>
               this.logger.error('Highlight failure usage persistence failed'),
             );
-          if (failure.retryable && attempt <= maxRetries) {
+          if (
+            failure.retryable &&
+            failure.category !== 'structured_output' &&
+            attempt <= maxRetries
+          ) {
             const delayMs = Math.min(8000, 1000 * 2 ** (attempt - 1));
             this.logger.warn({
               event: 'highlights.registered.retry',
@@ -784,13 +896,22 @@ export class HighlightDetectionService {
     for (let i = 0; i < windows.length; i++) {
       try {
         assertNotCancelled();
-        const part = await this.detectHighlightsDirectWithMetadata(windows[i], {
+        const part = await this.detectWindowWithRecovery(windows[i], {
           ...options,
+          chunk: {
+            index: i + 1,
+            total: windows.length,
+            depth: 0,
+            segments: windows[i].length,
+            chars: windows[i].reduce((sum, s) => sum + s.text.length, 0),
+          },
           maxHighlights:
             windows.length > 1
               ? Math.min(options.maxHighlights ?? 12, 8)
               : options.maxHighlights,
         });
+        for (const [reason, count] of Object.entries(part.rejected ?? {}))
+          rejected[reason] = (rejected[reason] ?? 0) + count;
         candidateCount += part.highlights.length;
         successfulWindows++;
         analyzedRegions.push({
@@ -815,7 +936,14 @@ export class HighlightDetectionService {
         };
       } catch (error) {
         assertNotCancelled();
-        if (options.registeredModel || windows.length === 1) throw error;
+        if (
+          options.registeredModel ||
+          windows.length === 1 ||
+          ['token_limit', 'structured_output'].includes(
+            callFailure(error).category,
+          )
+        )
+          throw error;
         result.cacheable = false;
       }
     }
@@ -828,6 +956,176 @@ export class HighlightDetectionService {
       sourceDuration: options.videoDuration,
     });
     return { ...result, rejected, candidateCount, analyzedRegions };
+  }
+
+  private async detectWindowWithRecovery(
+    segments: TranscriptSegmentDto[],
+    options: HighlightDetectionOptions,
+  ): Promise<HighlightDetectionResult> {
+    const depth = options.chunk?.depth ?? 0;
+    const sourceVersion = artifactHash(segments);
+    const key = artifactHash({
+      kind: 'highlight-window',
+      version: WINDOW_RECOVERY_VERSION,
+      sourceVersion,
+      owner: options.registeredModel?.userId ?? options.jobId,
+      configuration: this.cacheConfiguration(
+        options.model,
+        options.registeredModel?.selection,
+      ),
+      prompt: options.customPrompt ?? '',
+      template: buildHighlightSystemPrompt(
+        options.videoDuration ?? 0,
+        options.maxHighlights,
+      ),
+      duration: options.videoDuration,
+      maxHighlights: options.maxHighlights,
+      depth,
+    });
+    const create = async (): Promise<HighlightDetectionResult> => {
+      try {
+        assertNotCancelled();
+        this.logger.log({
+          event: 'highlights.window.request',
+          jobId: options.jobId,
+          providerModelId:
+            options.registeredModel?.selection.modelId ??
+            options.model ??
+            this.resolvedModelName,
+          chunk: options.chunk,
+          requestedMaxOutputTokens: DIRECT_MAX_OUTPUT_TOKENS,
+        });
+        const part = await this.detectHighlightsDirectWithMetadata(
+          segments,
+          options,
+        );
+        const rejected: Record<string, number> = {};
+        const valid = this.validateCandidates(
+          part.highlights,
+          segments,
+          options.videoDuration ?? segments.at(-1)!.endTime,
+          Infinity,
+          Infinity,
+          [],
+          rejected,
+          true,
+        );
+        this.logger.log({
+          event: 'highlights.window.completed',
+          jobId: options.jobId,
+          chunk: options.chunk,
+          parsed: part.highlights.length,
+          accepted: valid.length,
+          rejected,
+        });
+        return { ...part, highlights: valid, candidates: valid, rejected };
+      } catch (error) {
+        assertNotCancelled();
+        const failure =
+          error instanceof HttpException
+            ? callFailure(error)
+            : await sdkCallFailure(error, '');
+        if (
+          failure.code !== CALL_ERROR.TOKEN_LIMIT &&
+          failure.code !== CALL_ERROR.STRUCTURED_OUTPUT
+        )
+          throw error;
+        const limit = options.maxHighlights ?? FINAL_HIGHLIGHT_COUNT;
+        if (
+          depth >= OUTPUT_RECOVERY_DEPTH ||
+          (segments.length < 2 && limit <= 1)
+        )
+          throw new ServiceUnavailableException({
+            message: `Highlight output recovery exhausted for window ${options.chunk?.index ?? 1}. The provider could not return complete valid JSON within its registered output budget. Review this model's output-token setting or select a model with a suitable budget; completed windows are retained.`,
+            code: failure.code,
+            callFailure: failure,
+            issues: [failure],
+            chunk: options.chunk,
+          });
+        const midpoint = Math.floor(segments.length / 2);
+        const parts: TranscriptSegmentDto[][] = [];
+        if (midpoint > 0) {
+          const left = segments.slice(0, midpoint);
+          // Keep up to 45 seconds of context, while guaranteeing strictly smaller children.
+          const overlapStart = segments.findIndex(
+            (s) => s.endTime > left.at(-1)!.endTime - CHUNK_OVERLAP_SECONDS,
+          );
+          parts.push(left, segments.slice(Math.max(1, overlapStart)));
+        } else parts.push(segments);
+        const nextLimit =
+          parts.length === 1 ? 1 : Math.max(1, Math.floor(limit / 2));
+        this.logger.warn({
+          event: 'highlights.window.recovery',
+          jobId: options.jobId,
+          providerModelId:
+            options.registeredModel?.selection.modelId ??
+            options.model ??
+            this.resolvedModelName,
+          chunk: options.chunk,
+          reason: failure.code,
+          strategy: parts.length > 1 ? 'split' : 'reduce_candidates',
+          nextCandidateLimit: nextLimit,
+          maxDepth: OUTPUT_RECOVERY_DEPTH,
+        });
+        let combined: HighlightDetectionResult | undefined;
+        const rejected: Record<string, number> = {};
+        for (const part of parts) {
+          const result = await this.detectWindowWithRecovery(part, {
+            ...options,
+            maxHighlights: nextLimit,
+            customPrompt: `${options.customPrompt ?? ''}\nOutput recovery: return at most ${nextLimit} strong complete candidates, with compact metadata. Preserve source timestamps; do not bridge transcript gaps.`,
+            chunk: {
+              index: options.chunk?.index ?? 1,
+              total: options.chunk?.total ?? 1,
+              depth: depth + 1,
+              segments: part.length,
+              chars: part.reduce((sum, s) => sum + s.text.length, 0),
+            },
+          });
+          for (const [reason, count] of Object.entries(result.rejected ?? {}))
+            rejected[reason] = (rejected[reason] ?? 0) + count;
+          combined = {
+            ...result,
+            highlights: [...(combined?.highlights ?? []), ...result.highlights],
+            llmCalls: (combined?.llmCalls ?? 0) + (result.llmCalls ?? 0),
+            cacheable:
+              combined?.cacheable !== false && result.cacheable !== false,
+          };
+        }
+        const valid = this.validateCandidates(
+          combined!.highlights,
+          segments,
+          options.videoDuration ?? segments.at(-1)!.endTime,
+          Infinity,
+          Infinity,
+          [],
+          rejected,
+          true,
+        );
+        return {
+          ...combined!,
+          highlights: valid,
+          candidates: valid,
+          rejected,
+          llmCalls: (combined!.llmCalls ?? 0) + 1,
+        };
+      }
+    };
+    if (!this.windowCache || !options.jobId) return create();
+    return this.windowCache.getOrCreate<HighlightDetectionResult>({
+      key,
+      kind: 'highlights',
+      sourceVersion,
+      jobId: options.jobId,
+      metadata: {
+        layer: 'highlight-window',
+        algorithmVersion: WINDOW_RECOVERY_VERSION,
+      },
+      validate: (value): value is HighlightDetectionResult =>
+        this.candidateArtifactIsValid(value, segments, options),
+      cacheable: (value) => value.cacheable !== false,
+      create,
+    });
   }
 
   private async detectHighlightsDirectWithMetadata(
@@ -884,9 +1182,27 @@ export class HighlightDetectionService {
       let parsedObj: z.infer<typeof HighlightsResponseSchema>;
       try {
         llmCalls++;
-        parsedObj = (await this.generateFor(options)(request)).object;
+        const generated = await this.generateFor(options)(request);
+        const diagnostics = outputDiagnostics(generated);
+        if (!options?.registeredModel)
+          this.logger.log({
+            event: 'highlights.output',
+            jobId: options?.jobId,
+            providerModelId: options?.model ?? this.resolvedModelName,
+            maxOutputTokens: request.maxOutputTokens,
+            chunk: options?.chunk,
+            ...diagnostics,
+          });
+        parsedObj = completeHighlightObject(generated);
       } catch (error) {
         assertNotCancelled();
+        // Window recovery owns registered failures and explicit truncation. Never salvage
+        // a length-limited response, even if its partial text happens to parse.
+        if (
+          options?.registeredModel ||
+          (await sdkCallFailure(error, '')).code === CALL_ERROR.TOKEN_LIMIT
+        )
+          throw error;
         if (!NoObjectGeneratedError.isInstance(error)) throw error;
 
         this.logger.warn(
@@ -903,17 +1219,14 @@ export class HighlightDetectionService {
             'Retrying highlight generation once with stricter JSON instructions',
           );
           llmCalls++;
-          parsedObj = (
+          parsedObj = completeHighlightObject(
             await this.generateFor(options)({
               ...request,
               temperature: 0.1,
-              maxOutputTokens:
-                error.finishReason === 'length'
-                  ? DIRECT_MAX_OUTPUT_TOKENS * 2
-                  : DIRECT_MAX_OUTPUT_TOKENS,
+              maxOutputTokens: DIRECT_MAX_OUTPUT_TOKENS,
               prompt: `${userPrompt}\n\nReturn only one complete JSON object matching the schema, without Markdown or commentary. Return at most ${options?.maxHighlights || FINAL_HIGHLIGHT_COUNT} highlights and keep descriptions concise.`,
-            })
-          ).object;
+            }),
+          );
         }
       }
 
