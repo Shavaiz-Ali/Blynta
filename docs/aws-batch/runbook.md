@@ -132,6 +132,7 @@ pushing. Local equivalent if Docker is installed:
 ```bash
 docker build --platform linux/amd64 -f backend/Dockerfile.renderer -t blynta-renderer:test .
 docker run --rm blynta-renderer:test node dist/src/batch-render/renderer.main.js --self-test
+docker run --rm blynta-renderer:test node scripts/check-renderer-storage.cjs
 ```
 
 Copy `job-definition.template.json` to an untracked deployment file. Replace the

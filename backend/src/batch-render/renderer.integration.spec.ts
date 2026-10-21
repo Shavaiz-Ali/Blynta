@@ -42,9 +42,14 @@ integration(
     afterAll(async () => {
       await rm(directory, { recursive: true, force: true });
     });
-    it.each([false, true])(
-      'cuts, crops, retains audio and verifies output; captions=%s',
-      async (captions) => {
+    it.each([
+      ['blynta', 'blynta', false],
+      ['blynta', 'blynta', true],
+      ['output', 'private', false],
+      ['output', 'private', true],
+    ] as const)(
+      'cuts, crops, retains audio and verifies output; buckets=%s/%s captions=%s',
+      async (outputBucket, sourceBucket, captions) => {
         const prefix = `job-sources/batch/${'b'.repeat(64)}`;
         const task = {
           version: 1,
@@ -84,8 +89,8 @@ integration(
           `${prefix}/task.json`,
           'fixture-job',
           new ConfigService({
-            R2_BUCKET_NAME: 'blynta',
-            R2_SOURCE_BUCKET_NAME: 'blynta',
+            R2_BUCKET_NAME: outputBucket,
+            R2_SOURCE_BUCKET_NAME: sourceBucket,
             R2_ENDPOINT: 'https://r2.invalid',
           }),
           r2 as never,

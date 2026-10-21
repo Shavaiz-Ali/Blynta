@@ -68,13 +68,18 @@ FIX_SHA=$(git rev-parse HEAD)
 BUILD_ID=$(aws codebuild start-build --project-name blynta-renderer-build \
   --source-version "$FIX_SHA" --query build.id --output text)
 aws codebuild batch-get-builds --ids "$BUILD_ID" \
-  --query 'builds[0].{status:buildStatus,logs:logs.deepLink}'
+  --query 'builds[0].{status:buildStatus,source:resolvedSourceVersion,logs:logs.deepLink}'
 ```
 
 Repeat the status command until `SUCCEEDED`; stop on failure. The existing root
 buildspec builds Linux AMD64 with `backend/Dockerfile.renderer`, validates FFmpeg,
-FFprobe, filters and fonts, and pushes the commit-SHA image. No Dockerfile change
-is needed, but rebuilding is mandatory because compiled renderer code changed.
+FFprobe, filters and fonts, and pushes the commit-SHA image. Verify the resolved
+source equals `FIX_SHA`. The Dockerfile and CodeBuild both run
+`node scripts/check-renderer-storage.cjs` against the compiled module inside the
+image. Require `renderer_storage_preflight_passed` in the build log before using
+the image. This offline guard accepts single/separate private buckets and checks
+HTTPS, privacy and collision protection; an old compiled module fails the build.
+Rebuilding is mandatory; updating the EC2 checkout does not update Fargate images.
 
 Clone the existing revision to preserve execution/task roles, secret references,
 network/public-IP configuration, logging, CPU, RAM and disk settings:
@@ -104,11 +109,46 @@ jq --arg image "$IMAGE" '
 NEW_REV=$(aws batch register-job-definition \
   --cli-input-json "file://$DEPLOY_DIR/next.json" --query revision --output text)
 printf 'Pin BATCH_RENDER_JOB_DEFINITION=blynta-render-job:%s\n' "$NEW_REV"
+aws batch describe-job-definitions --job-definitions "blynta-render-job:$NEW_REV" \
+  --query 'jobDefinitions[0]' > "$DEPLOY_DIR/registered.json"
+jq -e --arg image "$IMAGE" '
+  .containerProperties.image == $image and
+  any(.containerProperties.environment[]; .name == "R2_BUCKET_NAME" and .value == "blynta") and
+  any(.containerProperties.environment[]; .name == "R2_SOURCE_BUCKET_NAME" and .value == "blynta") and
+  (all(.containerProperties.environment[]; .name != "R2_PUBLIC_DOMAIN" or .value == ""))
+' "$DEPLOY_DIR/registered.json"
+aws batch describe-job-definitions --job-definitions "blynta-render-job:$NEW_REV" \
+  --query "jobDefinitions[0].{revision:revision,image:containerProperties.image,storage:containerProperties.environment[?name=='R2_BUCKET_NAME'||name=='R2_SOURCE_BUCKET_NAME'||name=='R2_ENDPOINT'||name=='R2_PUBLIC_DOMAIN']}" \
+  --output json
 ```
 
 Do not print credential values. Keep the previous image/revision for reference;
 do not deregister or terminate running production jobs as part of this rollout.
 Registration alone does not change which revision the worker submits.
+
+Before changing the running PM2 worker, test the new definition in an isolated
+smoke process using the already-updated EC2 backend. From its backend directory,
+set `NEW_DEF` to the returned definition and `SOURCE_KEY` to an existing video you
+own (at least five seconds, with audio). These overrides affect only this process:
+
+```bash
+NEW_DEF="blynta-render-job:$NEW_REV"
+SOURCE_KEY='source-videos/REPLACE_OWN_TEST_SOURCE/video.mp4'
+BATCH_RENDER_JOB_DEFINITION="$NEW_DEF" \
+BATCH_SMOKE_ID="single-bucket-$FIX_SHA-$(date +%s)" \
+RENDER_EXECUTION_MODE=aws_batch BATCH_RENDER_ATTEMPTS=1 \
+node -r dotenv/config scripts/batch-render-smoke.cjs "$SOURCE_KEY"
+```
+
+Copy the actual `NEW_REV`/`FIX_SHA` values from CloudShell when using a separate
+EC2 shell. The smoke command requires the existing EC2 R2/Mongo runtime environment
+and EC2 instance role. It does not restart PM2, modify product clips, rerun AI, or
+delete source objects. It writes only a unique Batch execution and its temporary
+R2 prefix. It must report an AWS job ID, output key and positive byte count after
+Batch `SUCCEEDED`, matching result identity, and R2 HEAD size verification. Retain
+that output as live-test evidence; a local FFmpeg fixture is not a live Batch test.
+Do not change the production worker pin until this canary succeeds. A test job
+uses normal shared Fargate capacity but does not stop or alter existing jobs.
 
 ## EC2 build, compiled-code check and PM2 deployment
 

@@ -17,6 +17,7 @@ phases:
     commands:
       - docker build --platform linux/amd64 -f backend/Dockerfile.renderer -t "$IMAGE_URI" .
       - test "$(docker image inspect "$IMAGE_URI" --format '{{.Architecture}}')" = amd64
+      - docker run --rm "$IMAGE_URI" node scripts/check-renderer-storage.cjs
       - docker run --rm "$IMAGE_URI" node dist/src/batch-render/renderer.main.js --self-test
   post_build:
     commands:
