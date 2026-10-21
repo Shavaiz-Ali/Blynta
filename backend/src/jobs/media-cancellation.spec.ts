@@ -22,7 +22,11 @@ describe('provider cancellation closes source file readers', () => {
   });
   it('passes the execution signal to R2 and waits for the upload file reader to close', async () => {
     const service = new R2Service(
-      new ConfigService({ R2_BUCKET_NAME: 'test' }),
+      new ConfigService({
+        R2_BUCKET_NAME: 'test',
+        R2_ACCESS_KEY_ID: 'test',
+        R2_SECRET_ACCESS_KEY: 'test',
+      }),
     );
     const controller = new AbortController();
     let reader: ReadStream | undefined;

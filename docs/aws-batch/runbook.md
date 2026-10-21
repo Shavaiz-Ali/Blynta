@@ -39,6 +39,9 @@ Cloudflare R2 object-read/write token for these buckets, injected at runtime fro
 Secrets Manager via the Batch job definition. R2 credentials are Cloudflare
 credentials, not AWS IAM keys. The image needs no Mongo, Redis, AI or AWS secrets.
 
+For missing/empty R2 credentials, see [r2-credentials.md](r2-credentials.md) for
+the exact Secrets Manager JSON-key mappings and value-free verification commands.
+
 For the existing PM2 worker and `blynta-render-job:3` rollout, follow
 [single-bucket-deployment.md](single-bucket-deployment.md). Both the worker and
 renderer image require this fix; the old image embeds the same rejected-equality check.

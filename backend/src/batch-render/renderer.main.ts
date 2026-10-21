@@ -22,6 +22,17 @@ async function main() {
   await runRenderer(process.argv[2] || '', process.env.AWS_BATCH_JOB_ID || '');
 }
 void main().catch((error: unknown) => {
+  const safeDiagnostic = (text: string) =>
+    safeMediaStderr(
+      [process.env.R2_SECRET_ACCESS_KEY, process.env.R2_ACCESS_KEY_ID]
+        .filter((value): value is string => !!value)
+        .sort((a, b) => b.length - a.length)
+        .reduce(
+          (message, credential) =>
+            message.split(credential).join('[CREDENTIAL]'),
+          text,
+        ),
+    );
   // Media diagnostics may contain signed URLs. Never print raw errors or manifests.
   console.error(
     'Renderer task failed; inspect Batch status and validate media/configuration',
@@ -30,10 +41,10 @@ void main().catch((error: unknown) => {
     JSON.stringify({
       exceptionType: error instanceof Error ? error.name : 'UnknownError',
       message:
-        error instanceof Error ? safeMediaStderr(error.message) : undefined,
+        error instanceof Error ? safeDiagnostic(error.message) : undefined,
       stderr:
         error instanceof MediaCommandError
-          ? safeMediaStderr(error.stderr)
+          ? safeDiagnostic(error.stderr)
           : undefined,
     }),
   );

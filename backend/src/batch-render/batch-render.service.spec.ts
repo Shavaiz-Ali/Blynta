@@ -174,6 +174,7 @@ describe('AWS Batch durable execution', () => {
       expect(task.sourceKey).toBe('source-videos/existing/video.mp4');
       expect(task.outputKey).toBe(`${prefix}/output.mp4`);
       expect(task).not.toHaveProperty('R2_SECRET_ACCESS_KEY');
+      expect(task).not.toHaveProperty('R2_ACCESS_KEY_ID');
       expect(
         send.mock.calls[0][0].input.containerOverrides.environment,
       ).toEqual([
@@ -239,12 +240,10 @@ describe('AWS Batch durable execution', () => {
     },
   );
   it('does not retry deterministic container configuration/input failures or consume result markers', async () => {
-    jest
-      .mocked(service.status)
-      .mockResolvedValue({
-        status: 'FAILED',
-        container: { exitCode: 2 },
-      } as any);
+    jest.mocked(service.status).mockResolvedValue({
+      status: 'FAILED',
+      container: { exitCode: 2 },
+    } as any);
     await expect(
       service.execute(identity, prepare, tick),
     ).rejects.toBeInstanceOf(UnrecoverableError);

@@ -32,11 +32,9 @@ export class R2Service {
       '',
     );
     const endpoint = this.configService.get<string>('R2_ENDPOINT', '');
-    const accessKeyId = this.configService.get<string>('R2_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.configService.get<string>(
-      'R2_SECRET_ACCESS_KEY',
-      '',
-    );
+    // R2 uses Cloudflare credentials, never the AWS instance/task role credential chain.
+    const accessKeyId = this.credential('R2_ACCESS_KEY_ID');
+    const secretAccessKey = this.credential('R2_SECRET_ACCESS_KEY');
 
     this.client = new S3Client({
       region: 'auto', // R2 uses 'auto', not a real AWS region
@@ -49,6 +47,18 @@ export class R2Service {
       responseChecksumValidation: 'WHEN_REQUIRED',
       requestHandler: { connectionTimeout: 10000, socketTimeout: 120000 },
     });
+  }
+
+  private credential(
+    name: 'R2_ACCESS_KEY_ID' | 'R2_SECRET_ACCESS_KEY',
+  ): string {
+    const value = this.configService.get<unknown>(name);
+    if (typeof value !== 'string' || !value.trim() || value !== value.trim())
+      // Keep values out of exceptions: the standalone renderer logs this message.
+      throw new UnrecoverableError(
+        `Missing or invalid ${name}; configure the Cloudflare R2 credential environment variable. For Batch, verify the job-definition secret mapping and JSON field name.`,
+      );
+    return value;
   }
 
   private isSource(key: string): boolean {

@@ -108,6 +108,23 @@ describe('one-shot renderer', () => {
     ).rejects.toBeInstanceOf(UnrecoverableError);
     expect(r2.downloadToBuffer).not.toHaveBeenCalled();
   });
+  it.each(['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'])(
+    'rejects empty injected %s at startup before creating a real R2 client',
+    async (name) => {
+      const config = new ConfigService({
+        R2_BUCKET_NAME: 'blynta',
+        R2_SOURCE_BUCKET_NAME: 'blynta',
+        R2_ENDPOINT: 'https://r2.invalid',
+        R2_ACCESS_KEY_ID: 'test-access',
+        R2_SECRET_ACCESS_KEY: 'test-secret',
+        [name]: '',
+      });
+      await expect(
+        runRenderer(`${prefix}/task.json`, 'aws-1', config),
+      ).rejects.toThrow(name);
+      expect(r2.downloadToBuffer).not.toHaveBeenCalled();
+    },
+  );
   it.each(['output.mp4', 'task.json', 'progress.json', 'result.json'])(
     'rejects a source collision with %s inside the container before writes',
     async (name) => {

@@ -7,6 +7,7 @@ const {
   assertBatchStorage,
   assertBatchTaskKeys,
 } = require('../dist/src/batch-render/render-task');
+const { R2Service } = require('../dist/src/storage/r2.service');
 
 const storage = {
   R2_BUCKET_NAME: 'blynta',
@@ -14,6 +15,29 @@ const storage = {
   R2_ENDPOINT: 'https://offline-preflight.r2.cloudflarestorage.com',
   R2_PUBLIC_DOMAIN: '',
 };
+// Deliberately empty overrides isolate this offline test from any host credentials.
+assert.throws(
+  () =>
+    new R2Service(
+      new ConfigService({
+        ...storage,
+        R2_ACCESS_KEY_ID: '',
+        R2_SECRET_ACCESS_KEY: '',
+      }),
+    ),
+  UnrecoverableError,
+);
+assert.throws(
+  () =>
+    new R2Service(
+      new ConfigService({
+        ...storage,
+        R2_ACCESS_KEY_ID: 'offline-test',
+        R2_SECRET_ACCESS_KEY: '',
+      }),
+    ),
+  UnrecoverableError,
+);
 assert.doesNotThrow(() => assertBatchStorage(new ConfigService(storage)));
 assert.doesNotThrow(() =>
   assertBatchStorage(
@@ -75,5 +99,6 @@ console.log(
     privateStorageEnforced: true,
     sourceKeysPreserved: true,
     collisionsRejected: true,
+    missingCredentialsRejected: true,
   }),
 );

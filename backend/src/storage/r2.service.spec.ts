@@ -4,6 +4,108 @@ import { R2Service } from './r2.service';
 import { Readable } from 'node:stream';
 import { UnrecoverableError } from 'bullmq';
 
+describe('R2 credential configuration', () => {
+  const valid = {
+    R2_ACCESS_KEY_ID: '1'.repeat(32),
+    R2_SECRET_ACCESS_KEY: '2'.repeat(64),
+  };
+  const storage = {
+    R2_BUCKET_NAME: 'blynta',
+    R2_SOURCE_BUCKET_NAME: 'blynta',
+    R2_ENDPOINT: 'https://storage.invalid',
+  };
+  const names = [
+    'R2_ACCESS_KEY_ID',
+    'R2_SECRET_ACCESS_KEY',
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_SESSION_TOKEN',
+  ] as const;
+  let previous: Record<string, string | undefined>;
+  beforeEach(() => {
+    previous = Object.fromEntries(
+      names.map((name) => [name, process.env[name]]),
+    );
+    for (const name of names) delete process.env[name];
+  });
+  afterEach(() => {
+    for (const name of names) {
+      if (previous[name] === undefined) delete process.env[name];
+      else process.env[name] = previous[name];
+    }
+    jest.restoreAllMocks();
+  });
+  it.each(['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'] as const)(
+    'rejects missing, empty and invalid %s before any S3 operation without exposing values',
+    (name) => {
+      const send = jest.spyOn(S3Client.prototype, 'send');
+      for (const invalid of [
+        undefined,
+        '',
+        '   ',
+        null,
+        123,
+        ' confidential-value ',
+      ]) {
+        let failure: unknown;
+        try {
+          new R2Service(
+            new ConfigService({ ...storage, ...valid, [name]: invalid }),
+          );
+        } catch (error) {
+          failure = error;
+        }
+        expect(failure).toBeInstanceOf(UnrecoverableError);
+        const message = (failure as Error).message;
+        expect(message).toContain(name);
+        for (const value of [
+          valid.R2_ACCESS_KEY_ID,
+          valid.R2_SECRET_ACCESS_KEY,
+          'confidential-value',
+        ])
+          expect(message).not.toContain(value);
+      }
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+  it('uses injected R2 environment credentials unchanged, independently of AWS role credentials', async () => {
+    Object.assign(process.env, valid, {
+      AWS_ACCESS_KEY_ID: 'AWS_TEST_ACCESS_KEY',
+      AWS_SECRET_ACCESS_KEY: 'aws-test-secret',
+      AWS_SESSION_TOKEN: 'aws-test-session',
+    });
+    const r2 = new R2Service(new ConfigService(storage));
+    const client = Reflect.get(r2, 'client') as S3Client;
+    try {
+      const credentials = await client.config.credentials();
+      expect(credentials.accessKeyId).toBe(valid.R2_ACCESS_KEY_ID);
+      expect(credentials.secretAccessKey).toBe(valid.R2_SECRET_ACCESS_KEY);
+      expect(credentials.sessionToken).toBeUndefined();
+      expect(process.env.AWS_ACCESS_KEY_ID).toBe('AWS_TEST_ACCESS_KEY');
+      expect(process.env.AWS_SESSION_TOKEN).toBe('aws-test-session');
+      expect(await client.config.region()).toBe('auto');
+    } finally {
+      client.destroy();
+    }
+  });
+  it('does not fall back to AWS credentials when R2 variables are absent', () => {
+    Object.assign(process.env, {
+      AWS_ACCESS_KEY_ID: 'AWS_TEST_ACCESS_KEY',
+      AWS_SECRET_ACCESS_KEY: 'aws-test-secret',
+    });
+    expect(() => new R2Service(new ConfigService(storage))).toThrow(
+      'R2_ACCESS_KEY_ID',
+    );
+  });
+  it('does not replace an explicitly empty R2 setting with another credential source', () => {
+    Object.assign(process.env, valid);
+    expect(
+      () =>
+        new R2Service(new ConfigService({ ...storage, R2_ACCESS_KEY_ID: '' })),
+    ).toThrow('R2_ACCESS_KEY_ID');
+  });
+});
+
 describe('R2 object existence', () => {
   afterEach(() => jest.restoreAllMocks());
   const service = () =>
@@ -73,7 +175,9 @@ describe('R2 object existence', () => {
     await storage.fileExists('source-videos/hash/video.mp4');
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
-        input: expect.objectContaining({ Bucket: 'private-sources' }),
+        input: expect.objectContaining({
+          Bucket: 'private-sources',
+        }) as unknown,
       }),
     );
     const sign = jest
@@ -93,14 +197,12 @@ describe('R2 object existence', () => {
   ])(
     'routes existing keys and Batch artifacts consistently for %s/%s',
     async (output, source) => {
-      const send = jest
-        .spyOn(S3Client.prototype, 'send')
-        .mockImplementation(
-          () =>
-            Promise.resolve({
-              Body: Readable.from([Buffer.from('source')]),
-            }) as never,
-        );
+      const send = jest.spyOn(S3Client.prototype, 'send').mockImplementation(
+        () =>
+          Promise.resolve({
+            Body: Readable.from([Buffer.from('source')]),
+          }) as never,
+      );
       const storage = new R2Service(
         new ConfigService({
           R2_BUCKET_NAME: output,
@@ -133,7 +235,7 @@ describe('R2 object existence', () => {
             input: expect.objectContaining({
               Bucket: key.startsWith('clips/') ? output : source,
               Key: key,
-            }),
+            }) as unknown,
           }),
         );
       }
@@ -152,6 +254,8 @@ describe('R2 object existence', () => {
         R2_SOURCE_BUCKET_NAME: 'blynta',
         R2_PUBLIC_DOMAIN: 'https://public.invalid',
         R2_ENDPOINT: 'https://storage.invalid',
+        R2_ACCESS_KEY_ID: 'test',
+        R2_SECRET_ACCESS_KEY: 'test',
       }),
     );
     await expect(
