@@ -9,6 +9,7 @@ import { MediaInspectionService } from '../media/services/media-inspection.servi
 import { runCommandWithProgress } from '../media/utils/run-command-with-progress';
 import { join } from 'node:path';
 import { UnrecoverableError } from 'bullmq';
+import { Logger } from '@nestjs/common';
 
 jest.mock('../media/utils/run-command-with-progress');
 describe('one-shot renderer', () => {
@@ -201,6 +202,88 @@ describe('one-shot renderer', () => {
     expect(
       r2.uploadBuffer.mock.calls.some((c) => c[1].endsWith('/result.json')),
     ).toBe(false);
+  });
+  it.each([
+    ['downloadToBuffer', 'manifest_download', 'GetObject'],
+    ['objectInfo', 'source_check', 'HeadObject'],
+    ['getSignedDownloadUrl', 'source_signing', 'PresignGetObject'],
+    ['uploadFile', 'output_upload', 'PutObject'],
+  ])(
+    'identifies %s failures without publishing a success marker',
+    async (method, stage, operation) => {
+      const logs = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      const failure = Object.assign(new Error('Please use AWS4-HMAC-SHA256'), {
+        name: 'InvalidRequest',
+        $metadata: { httpStatusCode: 400, requestId: 'request-test' },
+      });
+      r2[method].mockRejectedValueOnce(failure);
+      await expect(run()).rejects.toBe(failure);
+      expect(logs).toHaveBeenCalledWith(
+        expect.stringContaining(`"stage":"${stage}"`),
+      );
+      const log = logs.mock.calls
+        .map(([entry]) => JSON.parse(entry))
+        .find((entry) => entry.stage === stage);
+      expect(log).toMatchObject({
+        event: 'renderer_stage_failed',
+        jobId: 'aws-1',
+        operation,
+        exceptionType: 'InvalidRequest',
+        httpStatusCode: 400,
+        requestId: 'request-test',
+      });
+      expect(
+        r2.uploadBuffer.mock.calls.some((call) =>
+          call[1].endsWith('/result.json'),
+        ),
+      ).toBe(false);
+    },
+  );
+  it('identifies progress upload failures and withholds the completion marker', async () => {
+    const logs = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    r2.uploadBuffer.mockRejectedValueOnce(new Error('progress unavailable'));
+    await expect(run()).rejects.toThrow();
+    expect(logs).toHaveBeenCalledWith(
+      expect.stringContaining('"operation":"PutProgress"'),
+    );
+    expect(
+      r2.uploadBuffer.mock.calls.some((call) =>
+        call[1].endsWith('/result.json'),
+      ),
+    ).toBe(false);
+  });
+  it('identifies output HEAD failures and never publishes a completion marker', async () => {
+    const logs = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    r2.objectInfo
+      .mockResolvedValueOnce({ size: 123 })
+      .mockRejectedValueOnce(new Error('output HEAD failed'));
+    await expect(run()).rejects.toThrow('output HEAD failed');
+    expect(logs).toHaveBeenCalledWith(
+      expect.stringContaining('"stage":"output_verification"'),
+    );
+    expect(
+      r2.uploadBuffer.mock.calls.some((call) =>
+        call[1].endsWith('/result.json'),
+      ),
+    ).toBe(false);
+  });
+  it('identifies result upload failures and propagates them instead of succeeding', async () => {
+    const logs = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    r2.uploadBuffer.mockImplementation(async (_body, key) => {
+      if (key.endsWith('/result.json')) throw new Error('result PUT failed');
+    });
+    await expect(run()).rejects.toThrow('result PUT failed');
+    expect(logs).toHaveBeenCalledWith(
+      expect.stringContaining('"stage":"result_upload"'),
+    );
   });
   it('never publishes invalid media', async () => {
     jest

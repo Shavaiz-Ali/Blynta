@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { execFileSync } from 'node:child_process';
 import { runRenderer } from './renderer';
 import { UnrecoverableError } from 'bullmq';
+import { r2FailureDetails } from '../storage/r2-diagnostics';
 import {
   MediaCommandError,
   safeMediaStderr,
@@ -39,9 +40,7 @@ void main().catch((error: unknown) => {
   );
   console.error(
     JSON.stringify({
-      exceptionType: error instanceof Error ? error.name : 'UnknownError',
-      message:
-        error instanceof Error ? safeDiagnostic(error.message) : undefined,
+      ...r2FailureDetails(error),
       stderr:
         error instanceof MediaCommandError
           ? safeDiagnostic(error.stderr)

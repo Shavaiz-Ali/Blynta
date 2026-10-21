@@ -42,6 +42,9 @@ credentials, not AWS IAM keys. The image needs no Mongo, Redis, AI or AWS secret
 For missing/empty R2 credentials, see [r2-credentials.md](r2-credentials.md) for
 the exact Secrets Manager JSON-key mappings and value-free verification commands.
 
+For `InvalidRequest: Please use AWS4-HMAC-SHA256`, see
+[r2-signing.md](r2-signing.md) for signing evidence, safe diagnostics and canary deployment.
+
 For the existing PM2 worker and `blynta-render-job:3` rollout, follow
 [single-bucket-deployment.md](single-bucket-deployment.md). Both the worker and
 renderer image require this fix; the old image embeds the same rejected-equality check.

@@ -13,10 +13,19 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  type ServiceInputTypes,
+  type ServiceOutputTypes,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as fs from 'fs';
 import { Readable, Transform } from 'stream';
+import { r2FailureDetails } from './r2-diagnostics';
+import type { FinalizeRequestMiddleware } from '@smithy/types';
+
+interface SigningDiagnostics {
+  r2RequestSignedWithV4?: boolean;
+  r2RequestUsesConfiguredEndpoint?: boolean;
+}
 
 @Injectable()
 export class R2Service {
@@ -43,9 +52,77 @@ export class R2Service {
         accessKeyId,
         secretAccessKey,
       },
+      // Keep the account endpoint unchanged for both SDK calls and presigned FFmpeg reads.
+      forcePathStyle: true,
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
       requestHandler: { connectionTimeout: 10000, socketTimeout: 120000 },
+    });
+    let endpointHttps = false;
+    let endpointIsR2 = false;
+    let endpointHostname = '';
+    try {
+      const url = new URL(endpoint);
+      endpointHostname = url.hostname;
+      endpointHttps = url.protocol === 'https:';
+      endpointIsR2 =
+        /^[a-f0-9]{32}(?:\.(?:eu|fedramp))?\.r2\.cloudflarestorage\.com$/.test(
+          url.hostname,
+        ) &&
+        !url.username &&
+        !url.password &&
+        !url.search &&
+        !url.hash &&
+        url.pathname === '/';
+    } catch {
+      /* Report booleans only, never untrusted endpoint contents. */
+    }
+    this.client.middlewareStack.add(
+      (next, context) => async (args) => {
+        try {
+          return await next(args);
+        } catch (error) {
+          this.logger.error(
+            JSON.stringify({
+              event: 'r2_operation_failed',
+              operation: context.commandName,
+              endpointHttps,
+              endpointIsR2,
+              region: 'auto',
+              forcePathStyle: true,
+              requestSignedWithV4: (context as SigningDiagnostics)
+                .r2RequestSignedWithV4,
+              requestUsesConfiguredEndpoint: (context as SigningDiagnostics)
+                .r2RequestUsesConfiguredEndpoint,
+              ...r2FailureDetails(error, [accessKeyId, secretAccessKey]),
+            }),
+          );
+          throw error;
+        }
+      },
+      { step: 'initialize', name: 'r2FailureDiagnostics' },
+    );
+    // Observe booleans after signing, without retaining/logging the signed request.
+    const observeSigning: FinalizeRequestMiddleware<
+      ServiceInputTypes,
+      ServiceOutputTypes
+    > = (next, context) => (args) => {
+      const request = args.request as {
+        headers?: Record<string, string>;
+        hostname?: string;
+      };
+      const diagnostics = context as SigningDiagnostics;
+      diagnostics.r2RequestSignedWithV4 =
+        request.headers?.authorization?.startsWith('AWS4-HMAC-SHA256 ') ===
+        true;
+      diagnostics.r2RequestUsesConfiguredEndpoint =
+        request.hostname === endpointHostname;
+      return next(args);
+    };
+    this.client.middlewareStack.addRelativeTo(observeSigning, {
+      name: 'r2SigningDiagnostics',
+      relation: 'after',
+      toMiddleware: 'httpSigningMiddleware',
     });
   }
 

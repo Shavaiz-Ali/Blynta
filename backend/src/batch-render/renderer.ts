@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '@nestjs/common';
 import { UnrecoverableError } from 'bullmq';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -15,6 +16,7 @@ import {
   mediaExecution,
 } from '../jobs/cancellation-context';
 import { R2Service } from '../storage/r2.service';
+import { r2FailureDetails } from '../storage/r2-diagnostics';
 import {
   assertBatchStorage,
   assertBatchTaskKeys,
@@ -32,9 +34,37 @@ export async function runRenderer(
   if (!/^job-sources\/batch\/[a-f0-9]{64}\/task\.json$/.test(key) || !jobId)
     throw new UnrecoverableError('Invalid renderer task identity');
   assertBatchStorage(config);
+  const logger = new Logger('BatchRenderer');
+  const atStage = async <T>(
+    stage: string,
+    operation: string,
+    work: () => Promise<T>,
+  ): Promise<T> => {
+    try {
+      return await work();
+    } catch (error) {
+      logger.error(
+        JSON.stringify({
+          event: 'renderer_stage_failed',
+          jobId,
+          stage,
+          operation,
+          ...r2FailureDetails(error, [
+            config.get<string>('R2_ACCESS_KEY_ID', ''),
+            config.get<string>('R2_SECRET_ACCESS_KEY', ''),
+          ]),
+        }),
+      );
+      throw error;
+    }
+  };
   const prefix = key.slice(0, -'/task.json'.length);
   const task = JSON.parse(
-    (await r2.downloadToBuffer(key, 2 * 1024 * 1024)).toString(),
+    (
+      await atStage('manifest_download', 'GetObject', () =>
+        r2.downloadToBuffer(key, 2 * 1024 * 1024),
+      )
+    ).toString(),
   ) as RenderTask;
   assertBatchTaskKeys(task, prefix);
   if (
@@ -60,10 +90,12 @@ export async function runRenderer(
     lastTick = Date.now();
     writes = writes.then(async () => {
       assertNotCancelled();
-      await r2.uploadBuffer(
-        Buffer.from(JSON.stringify({ jobId, phase, percent })),
-        `${prefix}/progress.json`,
-        'application/json',
+      await atStage(phase, 'PutProgress', () =>
+        r2.uploadBuffer(
+          Buffer.from(JSON.stringify({ jobId, phase, percent })),
+          `${prefix}/progress.json`,
+          'application/json',
+        ),
       );
     });
     // Observe immediately; await again before publishing any successful result.
@@ -80,7 +112,9 @@ export async function runRenderer(
           let captioningSeconds = 0;
           if (task.kind === 'clip') {
             try {
-              await r2.objectInfo(task.sourceKey);
+              await atStage('source_check', 'HeadObject', () =>
+                r2.objectInfo(task.sourceKey),
+              );
             } catch (error) {
               const failure = error as {
                 name?: string;
@@ -106,22 +140,29 @@ export async function runRenderer(
             )
               throw new Error('Invalid clip task');
             // Generate at execution time, so time in the Batch queue does not expire it.
-            const source = await r2.getSignedDownloadUrl(
-              task.sourceKey,
-              Math.min(
-                86400,
-                Math.ceil((task.deadline - Date.now()) / 1000) + 60,
-              ),
+            const source = await atStage(
+              'source_signing',
+              'PresignGetObject',
+              () =>
+                r2.getSignedDownloadUrl(
+                  task.sourceKey,
+                  Math.min(
+                    86400,
+                    Math.ceil((task.deadline - Date.now()) / 1000) + 60,
+                  ),
+                ),
             );
             progress('cutting', 0, true);
             const raw = join(directory, 'clip.mp4');
             const cutStarted = Date.now();
-            await new ClipCuttingService(registry).cutClip(
-              source,
-              task.start,
-              task.end,
-              raw,
-              (p) => progress('cutting', p.progress),
+            await atStage('cutting', 'FFmpegSignedSourceRead', () =>
+              new ClipCuttingService(registry).cutClip(
+                source,
+                task.start,
+                task.end,
+                raw,
+                (p) => progress('cutting', p.progress),
+              ),
             );
             cuttingSeconds = (Date.now() - cutStarted) / 1000;
             output = raw;
@@ -129,13 +170,15 @@ export async function runRenderer(
               progress('captioning', 0, true);
               output = join(directory, 'output.mp4');
               const captionStarted = Date.now();
-              await new CaptionBurningService(registry).burnCaptions(
-                raw,
-                task.segments,
-                output,
-                task.style,
-                duration,
-                (p) => progress('captioning', p.progress),
+              await atStage('captioning', 'FFmpeg', () =>
+                new CaptionBurningService(registry).burnCaptions(
+                  raw,
+                  task.segments,
+                  output,
+                  task.style,
+                  duration,
+                  (p) => progress('captioning', p.progress),
+                ),
               );
               captioningSeconds = (Date.now() - captionStarted) / 1000;
             }
@@ -159,10 +202,12 @@ export async function runRenderer(
               total += file.size;
               if (total > 8 * 1024 ** 3)
                 throw new Error('Staged inputs exceed task disk budget');
-              await r2.downloadToLocal(file.key, join(directory, file.name), {
-                maxBytes: file.size,
-                etag: file.etag,
-              });
+              await atStage('input_download', 'GetObject', () =>
+                r2.downloadToLocal(file.key, join(directory, file.name), {
+                  maxBytes: file.size,
+                  etag: file.etag,
+                }),
+              );
             }
             if (
               !task.args.length ||
@@ -172,21 +217,22 @@ export async function runRenderer(
             )
               throw new Error('Invalid editing task');
             // Paths have been made workspace-relative by the backend compiler adapter.
-            await runCommandWithProgress(
-              'ffmpeg',
-              task.args,
-              (line) => {
-                const value = encodingProgress(line, duration);
-                if (value !== undefined) progress('encoding', value);
-              },
-              registry,
-              { cwd: directory },
+            await atStage('encoding', 'FFmpeg', () =>
+              runCommandWithProgress(
+                'ffmpeg',
+                task.args,
+                (line) => {
+                  const value = encodingProgress(line, duration);
+                  if (value !== undefined) progress('encoding', value);
+                },
+                registry,
+                { cwd: directory },
+              ),
             );
           } else throw new Error('Unknown task kind');
           assertNotCancelled();
-          const probe = await new MediaInspectionService(registry).inspect(
-            output,
-            true,
+          const probe = await atStage('media_verification', 'FFprobe', () =>
+            new MediaInspectionService(registry).inspect(output, true),
           );
           if (
             !probe.hasVideo ||
@@ -195,24 +241,35 @@ export async function runRenderer(
             throw new Error('Remote render failed media verification');
           progress('uploading', 99, true);
           await writes;
-          await r2.uploadFile(output, task.outputKey);
+          await atStage('output_upload', 'PutObject', () =>
+            r2.uploadFile(output, task.outputKey),
+          );
           const bytes = (await stat(output)).size;
-          if (!bytes || (await r2.objectInfo(task.outputKey)).size !== bytes)
+          if (
+            !bytes ||
+            (
+              await atStage('output_verification', 'HeadObject', () =>
+                r2.objectInfo(task.outputKey),
+              )
+            ).size !== bytes
+          )
             throw new Error('Remote upload verification failed');
           assertNotCancelled();
           // This marker alone never authorizes backend completion: Batch must SUCCEED.
-          await r2.uploadBuffer(
-            Buffer.from(
-              JSON.stringify({
-                jobId,
-                outputKey: task.outputKey,
-                bytes,
-                cuttingSeconds,
-                captioningSeconds,
-              }),
+          await atStage('result_upload', 'PutObject', () =>
+            r2.uploadBuffer(
+              Buffer.from(
+                JSON.stringify({
+                  jobId,
+                  outputKey: task.outputKey,
+                  bytes,
+                  cuttingSeconds,
+                  captioningSeconds,
+                }),
+              ),
+              `${prefix}/result.json`,
+              'application/json',
             ),
-            `${prefix}/result.json`,
-            'application/json',
           );
         } finally {
           await drainMediaChildren();

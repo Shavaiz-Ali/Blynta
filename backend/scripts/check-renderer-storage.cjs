@@ -1,6 +1,7 @@
 // Offline preflight against the compiled module that the renderer actually loads.
 // Run inside the image: no R2 credentials, AWS access or network calls are needed.
 const assert = require('node:assert/strict');
+const { Readable } = require('node:stream');
 const { ConfigService } = require('@nestjs/config');
 const { UnrecoverableError } = require('bullmq');
 const {
@@ -90,15 +91,76 @@ for (const sourceKey of [
     UnrecoverableError,
   );
 }
-console.log(
-  JSON.stringify({
-    event: 'renderer_storage_preflight_passed',
-    singlePrivateBucket: true,
-    separateBuckets: true,
-    httpsEnforced: true,
-    privateStorageEnforced: true,
-    sourceKeysPreserved: true,
-    collisionsRejected: true,
-    missingCredentialsRejected: true,
-  }),
-);
+async function checkSigning() {
+  for (const source of ['blynta', 'private-sources']) {
+    const r2 = new R2Service(
+      new ConfigService({
+        ...storage,
+        R2_SOURCE_BUCKET_NAME: source,
+        R2_ACCESS_KEY_ID: '1'.repeat(32),
+        R2_SECRET_ACCESS_KEY: '2'.repeat(64),
+      }),
+    );
+    // This script deliberately exercises the compiled SDK signer with an offline transport.
+    const client = r2.client;
+    let requests = 0;
+    client.config.requestHandler = {
+      handle: async (request) => {
+        requests++;
+        assert.equal(request.hostname, new URL(storage.R2_ENDPOINT).hostname);
+        assert(request.path.startsWith(`/${source}/`));
+        assert(request.headers.authorization.startsWith('AWS4-HMAC-SHA256 '));
+        assert(request.headers.authorization.includes('/auto/s3/aws4_request'));
+        return {
+          response: {
+            statusCode: 200,
+            headers: {},
+            body: Readable.from([Buffer.from('{}')]),
+          },
+        };
+      },
+    };
+    try {
+      await r2.downloadToBuffer(`${prefix}/task.json`);
+      await r2.objectInfo('source-videos/existing/video.mp4');
+      await r2.uploadBuffer(
+        Buffer.from('{}'),
+        `${prefix}/progress.json`,
+        'application/json',
+      );
+      const signed = new URL(
+        await r2.getSignedDownloadUrl('source-videos/existing/video.mp4'),
+      );
+      assert.equal(signed.hostname, new URL(storage.R2_ENDPOINT).hostname);
+      assert(signed.pathname.startsWith(`/${source}/`));
+      assert.equal(
+        signed.searchParams.get('X-Amz-Algorithm'),
+        'AWS4-HMAC-SHA256',
+      );
+      assert.equal(requests, 3);
+    } finally {
+      client.destroy();
+    }
+  }
+  console.log(
+    JSON.stringify({
+      event: 'renderer_storage_preflight_passed',
+      singlePrivateBucket: true,
+      separateBuckets: true,
+      httpsEnforced: true,
+      privateStorageEnforced: true,
+      sourceKeysPreserved: true,
+      collisionsRejected: true,
+      missingCredentialsRejected: true,
+      sigV4Verified: true,
+      accountEndpointPreserved: true,
+    }),
+  );
+}
+checkSigning().catch(() => {
+  // Assertion errors could include signed headers: never print the raw failure.
+  console.error(
+    'Renderer compiled R2 signing preflight failed; credentials and requests omitted',
+  );
+  process.exitCode = 1;
+});
