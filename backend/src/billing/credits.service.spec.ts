@@ -28,14 +28,19 @@ function fixture(balance = 20, initialized = true) {
     p.lean = () => p;
     return p;
   };
-  const userDoc = (): any => ({
-    ...state.user,
-    save: async function () {
-      const { save, ...data } = this;
-      state.user = structuredClone(data);
-      return this;
-    },
-  });
+  const userDoc = (): any =>
+    Object.defineProperty(
+      {
+        ...state.user,
+        save: async function () {
+          const { save, ...data } = this;
+          state.user = structuredClone(data);
+          return this;
+        },
+      },
+      '$session',
+      { value: () => undefined },
+    );
   const opDoc = (op: any): any =>
     op
       ? {
@@ -50,6 +55,12 @@ function fixture(balance = 20, initialized = true) {
         }
       : null;
   const users: any = {
+    create: async ([data]: any) => {
+      if (state.user)
+        throw Object.assign(new Error('Duplicate account'), { code: 11000 });
+      state.user = structuredClone(data);
+      return [userDoc()];
+    },
     findById: () => query(userDoc()),
     findOneAndUpdate: (filter: any, update: any) => {
       if (
@@ -103,9 +114,32 @@ function fixture(balance = 20, initialized = true) {
         ),
       );
       return query(
-        rows.length
-          ? [{ amount: rows.reduce((n: number, e: any) => n + e.amount, 0) }]
-          : [],
+        pipeline[1].$group.granted
+          ? [
+              {
+                granted: rows
+                  .filter((e: any) => ['grant', 'opening'].includes(e.type))
+                  .reduce((n: number, e: any) => n + e.amount, 0),
+                consumed: rows
+                  .filter((e: any) => e.type === 'charge')
+                  .reduce((n: number, e: any) => n + e.amount, 0),
+              },
+            ]
+          : rows.length
+            ? [
+                {
+                  amount: rows.reduce(
+                    (n: number, e: any) =>
+                      n +
+                      (pipeline[1].$group.amount?.$sum ===
+                      '$metadata.reversedCredits'
+                        ? e.metadata.reversedCredits
+                        : (e.metadata?.legacyAllocation ?? e.amount)),
+                    0,
+                  ),
+                },
+              ]
+            : [],
       );
     },
     create: async ([value]: any) => {
@@ -175,6 +209,168 @@ function fixture(balance = 20, initialized = true) {
 }
 
 describe('authoritative credit operations', () => {
+  test('signup commits the account and 30-credit ledger grant together, and a repeated account cannot grant again', async () => {
+    const f = fixture(30, false);
+    const data = {
+      ...f.state().user,
+      plan: 'free',
+      freeCreditPolicy: 'one-time-v1',
+    };
+    f.state().user = null;
+    const signup = { toObject: () => data } as any;
+    const created = await f.service.createAccount(signup);
+    expect(created.creditsBalance).toBe(30);
+    await expect(f.service.createAccount(signup)).rejects.toThrow(
+      'Duplicate account',
+    );
+    expect(f.state().user.creditLedgerInitialized).toBe(true);
+    expect(f.state().entries).toHaveLength(1);
+  });
+  test('a failed signup ledger write rolls back the new account and allows a clean retry', async () => {
+    const f = fixture(30, false);
+    const data = {
+      ...f.state().user,
+      plan: 'free',
+      freeCreditPolicy: 'one-time-v1',
+    };
+    f.state().user = null;
+    const signup = { toObject: () => data } as any;
+    const createEntry = f.service.entries.create.bind(f.service.entries);
+    f.service.entries.create = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('Ledger unavailable'))
+      .mockImplementation(createEntry);
+    await expect(f.service.createAccount(signup)).rejects.toThrow(
+      'Ledger unavailable',
+    );
+    expect(f.state().user).toBeNull();
+    expect(f.state().entries).toHaveLength(0);
+    await f.service.createAccount(signup);
+    expect(f.state().user.creditsBalance).toBe(30);
+    expect(f.state().entries).toHaveLength(1);
+  });
+  test('new Free credits are recorded once even under concurrent initialization', async () => {
+    const f = fixture(30, false);
+    f.state().user.plan = 'free';
+    f.state().user.freeCreditPolicy = 'one-time-v1';
+    await Promise.all([
+      f.service.migrate(f.userId),
+      f.service.migrate(f.userId),
+    ]);
+    expect(f.state().user.creditsBalance).toBe(30);
+    expect(f.state().entries).toHaveLength(1);
+    expect(f.state().entries[0]).toMatchObject({
+      type: 'grant',
+      amount: 30,
+      metadata: { source: 'free' },
+    });
+    expect(f.state().user.freeCreditGrantAt).toBeUndefined();
+  });
+  test('legacy Free migration preserves consumed credits and does not top up to 30', async () => {
+    const f = fixture(2, false);
+    f.state().user.plan = 'free';
+    f.state().user.totalCreditsUsed = 18;
+    f.state().user.freeCreditGrantAt = new Date(0);
+    await f.service.migrate(f.userId);
+    await f.service.migrate(f.userId);
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 2,
+      totalCreditsUsed: 18,
+    });
+    expect(f.state().entries).toHaveLength(1);
+    expect(f.state().entries[0]).toMatchObject({ type: 'opening', amount: 2 });
+    expect(f.state().user.freeCreditGrantAt).toBeUndefined();
+  });
+  test('opening preserves any preexisting reserved balance', async () => {
+    const f = fixture(2, false);
+    f.state().user.creditsReserved = 4;
+    await f.service.migrate(f.userId);
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 2,
+      creditsReserved: 4,
+    });
+    expect(f.state().entries[0]).toMatchObject({
+      amount: 6,
+      availableDelta: 2,
+      reservedDelta: 4,
+    });
+  });
+  test('81 minute source uses original rates and reports insufficient spendable credits', async () => {
+    const f = fixture(30);
+    const estimate = await f.service.estimate(f.userId, 81 * 60, 6 * 60);
+    expect(estimate).toMatchObject({
+      availableCredits: 30,
+      reservedCredits: 0,
+      estimatedSourceCredits: 17,
+      estimatedOutputCredits: 6,
+      maximumReservation: 23,
+      remainingAfterReservation: 7,
+      hasEnoughCredits: true,
+      creditsNeeded: 0,
+    });
+    await f.reserve('another', 25);
+    expect(await f.service.estimate(f.userId, 81 * 60, 6 * 60)).toMatchObject({
+      availableCredits: 5,
+      reservedCredits: 25,
+      maximumReservation: 23,
+      creditsNeeded: 18,
+      hasEnoughCredits: false,
+      canProceed: false,
+    });
+  });
+  test('duplicate pack payments, refunds, partial refunds and chargebacks cannot double debit', async () => {
+    const f = fixture(0);
+    await Promise.all([
+      f.service.adjust(f.userId, 25, 'payment:pack', 'Pack'),
+      f.service.adjust(f.userId, 25, 'payment:pack', 'Pack'),
+    ]);
+    await f.service.reversePayment('pack', 'partial', 0.4, 'refund');
+    expect(f.state().user.creditsBalance).toBe(15);
+    await Promise.all([
+      f.service.reversePayment('pack', 'partial', 0.4, 'refund'),
+      f.service.reversePayment('pack', 'partial', 0.4, 'refund'),
+    ]);
+    expect(f.state().user.creditsBalance).toBe(15);
+    await f.service.reversePayment('pack', 'full', 1, 'chargeback');
+    await f.service.reversePayment('pack', 'another-full', 1, 'chargeback');
+    expect(f.state().user.creditsBalance).toBe(0);
+    expect(f.state().user.creditDebt).toBe(0);
+  });
+  test('chargebacks retain running holds, prevent new work and recover debt on release', async () => {
+    const f = fixture(0);
+    await f.service.adjust(f.userId, 25, 'payment:pack', 'Pack');
+    await f.reserve('running', 20);
+    await f.service.reversePayment('pack', 'chargeback', 1, 'chargeback');
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 0,
+      creditsReserved: 20,
+      creditDebt: 20,
+    });
+    await expect(f.reserve('blocked', 1)).rejects.toThrow('repaid');
+    await f.service.settle('running', 10);
+    expect(f.state().user).toMatchObject({
+      creditsBalance: 0,
+      creditsReserved: 0,
+      creditDebt: 10,
+    });
+    await f.service.adjust(f.userId, 25, 'payment:next-pack', 'Pack');
+    expect(f.state().user).toMatchObject({ creditsBalance: 15, creditDebt: 0 });
+    await f.reserve('unblocked', 1);
+  });
+  test('a contested chargeback restores credits exactly once and clears debt first', async () => {
+    const f = fixture(0);
+    await f.service.adjust(f.userId, 25, 'payment:pack', 'Pack');
+    await f.reserve('spent', 20);
+    await f.service.settle('spent', 20);
+    await f.service.reversePayment('pack', 'chargeback', 1, 'chargeback');
+    await Promise.all([
+      f.service.restorePaymentAdjustment('chargeback', 'reverse'),
+      f.service.restorePaymentAdjustment('chargeback', 'reverse'),
+    ]);
+    expect(f.state().user).toMatchObject({ creditsBalance: 5, creditDebt: 0 });
+    await f.service.reversePayment('pack', 'subsequent-refund', 1, 'refund');
+    expect(f.state().user).toMatchObject({ creditsBalance: 0, creditDebt: 20 });
+  });
   async function incidentReservation(sourceSeconds = 3233) {
     const f = fixture();
     const amount = clipPrice(sourceSeconds, 540).totalCredits;
@@ -431,6 +627,60 @@ describe('authoritative credit operations', () => {
 });
 
 describe('subscription allocations and validated refunds', () => {
+  test('historical payment adoption never grants again, preserves cycle allocation, and supports refunds', async () => {
+    const f = fixture(2, false);
+    await f.service.migrate(f.userId);
+    await f.service.adoptLegacyPayment(
+      f.userId,
+      'old-payment',
+      50,
+      'old-cycle',
+    );
+    await f.service.adoptLegacyPayment(
+      f.userId,
+      'old-payment',
+      50,
+      'old-cycle',
+    );
+    expect(f.state().user.creditsBalance).toBe(2);
+    expect(
+      await f.service.grantSubscriptionCycle(
+        f.userId,
+        50,
+        'old-cycle',
+        'old-payment',
+        'pro',
+      ),
+    ).toBe(0);
+    expect(
+      await f.service.grantSubscriptionCycle(
+        f.userId,
+        50,
+        'old-cycle',
+        'same-cycle',
+        'pro',
+      ),
+    ).toBe(0);
+    expect(f.state().user.creditsBalance).toBe(2);
+    await f.service.reversePayment('old-payment', 'old-refund', 1, 'refund');
+    expect(f.state().user).toMatchObject({ creditsBalance: 0, creditDebt: 48 });
+  });
+  test('a pre-ledger payment without historical audit evidence cannot silently regrant credits', async () => {
+    const f = fixture(2, false);
+    await f.service.migrate(f.userId);
+    f.state().entries[0].createdAt = new Date('2026-10-22T00:00:00Z');
+    await expect(
+      f.service.grantSubscriptionCycle(
+        f.userId,
+        50,
+        'old-cycle',
+        'unknown-old-payment',
+        'pro',
+        new Date('2026-09-01T00:00:00Z'),
+      ),
+    ).rejects.toThrow('historical audit');
+    expect(f.state().user.creditsBalance).toBe(2);
+  });
   test('completed payments grant once per cycle and upgrades top up only the difference', async () => {
     const f = fixture(23);
     await Promise.all([

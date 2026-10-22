@@ -2,6 +2,7 @@ import * as React from "react";
 import type { UserProfile } from "@/features/auth/types";
 import { cn } from "@/lib/utils";
 import { CoinsIcon, FilmIcon, CrownIcon } from "../icons";
+import { useCreditBalance } from "@/features/billing/queries";
 
 interface StatItemProps {
   icon: React.ReactNode;
@@ -45,6 +46,7 @@ export function StatsBar({
   totalClips,
   creditsResetText,
 }: StatsBarProps) {
+  const balance = useCreditBalance();
   const planLabel =
     profile?.plan === "free"
       ? "Free"
@@ -56,10 +58,12 @@ export function StatsBar({
     <div className="grid grid-cols-1 gap-3 rounded-xl border border-border/60 bg-muted/20 px-4 py-3 sm:grid-cols-3 sm:gap-0">
       <StatItem
         icon={<CoinsIcon className="h-4 w-4" />}
-        label="Credits"
+        label="Credits available"
         value={
           <>
-            <span>{profile?.creditsBalance ?? 0}</span>
+            <span>
+              {balance.data?.available ?? profile?.creditsBalance ?? 0}
+            </span>
             <span className="ml-1 text-[10px] font-normal text-muted-foreground">
               {creditsResetText}
             </span>

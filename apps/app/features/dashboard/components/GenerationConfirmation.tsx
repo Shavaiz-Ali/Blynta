@@ -63,7 +63,13 @@ export function GenerationConfirmation({
           <AppButton
             className="h-10"
             isLoading={busy}
-            disabled={busy || !estimate || !enabled || insufficient}
+            disabled={
+              busy ||
+              !estimate ||
+              !enabled ||
+              insufficient ||
+              estimate.canProceed === false
+            }
             onClick={onApprove}
           >
             {checking ? (
@@ -128,6 +134,18 @@ export function GenerationConfirmation({
                 </dd>
               </div>
             </dl>
+            <p className="mt-4 text-sm text-muted-foreground">
+              Remaining spendable credits after reservation:{" "}
+              <strong className="tabular-nums text-foreground">
+                {Math.max(0, available - estimate.totalCredits)}
+              </strong>
+            </p>
+            {estimate.reservedCredits !== undefined &&
+              estimate.reservedCredits > 0 && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {estimate.reservedCredits} credits are held for other work.
+                </p>
+              )}
           </div>
           <p className="text-sm leading-relaxed text-muted-foreground">
             Blynta selects the best moments
@@ -155,6 +173,12 @@ export function GenerationConfirmation({
               billingUrl="/billing"
               billingLabel="View plans & upgrade"
             />
+          )}
+          {!insufficient && estimate.canProceed === false && enabled && (
+            <p role="alert" className="text-sm text-destructive">
+              Generation is unavailable. Check Billing &amp; Plan for payment
+              credits owed.
+            </p>
           )}
         </div>
       )}

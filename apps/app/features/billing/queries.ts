@@ -1,5 +1,6 @@
+"use client";
+
 import {
-  QueryClient,
   useMutation,
   UseMutationOptions,
   UseMutationResult,
@@ -9,15 +10,38 @@ import {
 import { axiosClient } from "@/config/axiosClient";
 import { userQueryKeys } from "@/features/auth/queries";
 import type { CreditBalance, CreditHistoryPage } from "@blynta/types";
+import { useEffect, useRef } from "react";
+import { usePaddle, type CheckoutPayload } from "./paddle-context";
+export { invalidateCurrentUser } from "./cache";
 
 export function useCreditBalance() {
-  return useQuery({
+  const client = useQueryClient();
+  const previous = useRef<string | undefined>(undefined);
+  const result = useQuery({
     queryKey: ["billing", "credits"],
     queryFn: async () =>
       (await axiosClient.get<CreditBalance>("/billing/credits")).data,
-    refetchInterval: 15000,
+    refetchInterval: (query) => (query.state.data?.reserved ? 5000 : 30000),
     staleTime: 5000,
   });
+  const signature = result.data
+    ? JSON.stringify([
+        result.data.available,
+        result.data.reserved,
+        result.data.plan,
+        result.data.totalGranted,
+        result.data.totalConsumed,
+        result.data.paymentCreditsOwed,
+      ])
+    : undefined;
+  useEffect(() => {
+    if (previous.current !== undefined && signature !== previous.current) {
+      void client.invalidateQueries({ queryKey: userQueryKeys.me() });
+      void client.invalidateQueries({ queryKey: ["billing", "history"] });
+    }
+    previous.current = signature;
+  }, [client, signature]);
+  return result;
 }
 export function useCreditHistory(page: number, product: string, type: string) {
   return useQuery({
@@ -33,7 +57,6 @@ export function useCreditHistory(page: number, product: string, type: string) {
           },
         })
       ).data,
-    refetchInterval: 15000,
   });
 }
 
@@ -47,9 +70,7 @@ export type CreateCheckoutSessionInput = {
   plan: BillingPlanTier;
 };
 
-export type CheckoutSessionResult = {
-  checkoutUrl: string;
-};
+export type CheckoutSessionResult = CheckoutPayload;
 
 /* -------------------------------------------------------------------------- */
 /*              useCreateCheckoutSession — POST /billing/checkout-session     */
@@ -68,30 +89,21 @@ type CreateCheckoutOpts = Omit<
 export function useCreateCheckoutSession(
   opts: CreateCheckoutOpts = {},
 ): UseMutationResult<CheckoutSessionResult, Error, CreateCheckoutSessionInput> {
-  const queryClient = useQueryClient();
+  const checkout = usePaddle();
   const { onSuccess: userOnSuccess, ...restOpts } = opts;
 
   return useMutation({
     mutationFn: async (input) => {
+      await checkout.prepare();
       const { data } = await axiosClient.post<CheckoutSessionResult>(
         "/billing/checkout-session",
         input,
       );
+      await checkout.openCheckout(data);
       return data;
     },
-    onSuccess: async (data, vars, ctx) => {
-      // Invalidate current user so any plan/credits updates show immediately
-      // once the user returns from Paddle (and the browser refetches).
-      invalidateCurrentUser(queryClient);
-
-      if (data?.checkoutUrl) {
-        // Full page navigation to Paddle hosted checkout — NOT client-side.
-        if (typeof window !== "undefined") {
-          window.location.href = data.checkoutUrl;
-        }
-      }
-
-      if (userOnSuccess) (userOnSuccess as any)(data, vars, ctx);
+    onSuccess: async (data, vars, ctx, mutationContext) => {
+      if (userOnSuccess) userOnSuccess(data, vars, ctx, mutationContext);
     },
     ...restOpts,
   });
@@ -117,7 +129,34 @@ export function useCustomerPortal() {
   });
 }
 
-export function invalidateCurrentUser(queryClient: QueryClient) {
-  queryClient.invalidateQueries({ queryKey: userQueryKeys.me() });
-  queryClient.invalidateQueries({ queryKey: ["billing"] });
+export interface CreditPack {
+  id: string;
+  credits: number;
+  enabled: boolean;
+  configurationError: string | null;
+  price?: { amount: string; currencyCode: string };
+}
+
+export function useCreditPacks() {
+  return useQuery({
+    queryKey: ["billing", "packs"],
+    queryFn: async () =>
+      (await axiosClient.get<CreditPack[]>("/billing/credit-packs")).data,
+    staleTime: 60000,
+  });
+}
+
+export function useCreditPackCheckout() {
+  const checkout = usePaddle();
+  return useMutation({
+    mutationFn: async (packId: string) => {
+      await checkout.prepare();
+      const { data } = await axiosClient.post<CheckoutPayload>(
+        "/billing/credit-packs/checkout",
+        { packId },
+      );
+      await checkout.openCheckout(data);
+      return data;
+    },
+  });
 }

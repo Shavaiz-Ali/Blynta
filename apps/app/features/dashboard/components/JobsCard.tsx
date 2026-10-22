@@ -25,7 +25,7 @@ function EmptyStateTips() {
     {
       icon: <CheckCircleIcon className="h-4 w-4" />,
       title: "Each job uses 1 credit",
-      desc: "Free accounts get 5 credits/month. Upgrade for more + HD exports.",
+      desc: "Free credits are granted once. View your balance, buy credits, or upgrade in Billing & Plan.",
     },
     {
       icon: <LightbulbIcon className="h-4 w-4" />,

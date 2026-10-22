@@ -2,164 +2,309 @@
 
 import * as React from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  initializePaddle,
-  type Paddle,
-  type Environments,
-  type PaddleEventData,
-} from "@paddle/paddle-js";
+import { useTheme } from "next-themes";
 import { useQueryClient } from "@tanstack/react-query";
-import { invalidateCurrentUser } from "@/features/billing/queries";
+import type { PaddleEventData, Paddle } from "@paddle/paddle-js";
 import { toast } from "sonner";
+import { axiosClient } from "@/config/axiosClient";
+import { invalidateCurrentUser } from "../cache";
+import {
+  PaddleContext,
+  type CheckoutPayload,
+  type PaddleCheckoutContext,
+  type PaddleEnvironment,
+} from "../paddle-context";
+import { checkoutEnvironment, createPaddleLoader } from "../paddle-client";
+export { usePaddle } from "../paddle-context";
 
-interface PaddleContextValue {
-  paddle: Paddle | undefined;
-  isReady: boolean;
-  openCheckout: (options: { transactionId: string }) => void;
-}
-
-const PaddleContext = React.createContext<PaddleContextValue>({
-  paddle: undefined,
-  isReady: false,
-  openCheckout: () => {},
-});
-
-export function usePaddle() {
-  return React.useContext(PaddleContext);
-}
-
-let paddlePromise: Promise<Paddle | undefined> | null = null;
-
-function getOrInitPaddle(
-  token: string,
-  environment: Environments,
-  eventCallback?: (event: PaddleEventData) => void,
-): Promise<Paddle | undefined> {
-  if (!paddlePromise) {
-    paddlePromise = initializePaddle({
-      environment,
-      token,
-      eventCallback,
-    });
-  }
-  return paddlePromise;
-}
+const loadPaddle = createPaddleLoader();
+let currentListener: ((event: PaddleEventData) => void) | undefined;
+const dispatch = (event: PaddleEventData) => currentListener?.(event);
 
 export function PaddleProvider({ children }: { children: React.ReactNode }) {
-  const [paddle, setPaddle] = React.useState<Paddle | undefined>(undefined);
-  const [isReady, setIsReady] = React.useState(false);
-  const searchParams = useSearchParams();
+  const [status, setStatus] =
+    React.useState<PaddleCheckoutContext["status"]>("loading");
+  const [error, setError] = React.useState<string>();
   const queryClient = useQueryClient();
-  const openedTxnRef = React.useRef<string | null>(null);
+  const params = useSearchParams();
+  const { resolvedTheme } = useTheme();
+  const instance = React.useRef<Paddle | undefined>(undefined);
+  const environment = React.useRef<PaddleEnvironment | undefined>(undefined);
+  const transaction = React.useRef<string | null>(null);
+  const paymentCompleted = React.useRef(false);
+  const opening = React.useRef<{
+    resolve: () => void;
+    reject: (error: Error) => void;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const verificationTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
+  const resumeAttempted = React.useRef<string | null>(null);
 
-  const clientToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
-  const environment: Environments =
-    process.env.NEXT_PUBLIC_PADDLE_ENV === "production" ||
-    (clientToken && !clientToken.startsWith("test_"))
-      ? "production"
-      : "sandbox";
+  const clearUrl = React.useCallback(() => {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("_ptxn");
+    url.searchParams.delete("success");
+    url.searchParams.delete("canceled");
+    window.history.replaceState(null, "", url.toString());
+  }, []);
 
-  // Event handler for Paddle checkout events
-  const handlePaddleEvent = React.useCallback(
-    (event: PaddleEventData) => {
-      if (event.name === "checkout.completed") {
-        toast.success("Payment completed! Updating your subscription...");
-        invalidateCurrentUser(queryClient);
+  const fail = React.useCallback((message: string) => {
+    setError(message);
+    setStatus("error");
+    if (opening.current) {
+      clearTimeout(opening.current.timer);
+      opening.current.reject(new Error(message));
+      opening.current = null;
+    }
+    console.warn("[Billing checkout]", { event: "checkout_failed" });
+  }, []);
 
-        // Schedule periodic refetches to catch the background webhook sync
-        const timers = [1500, 3500, 6000].map((delay) =>
-          setTimeout(() => {
-            invalidateCurrentUser(queryClient);
-          }, delay),
-        );
-
-        return () => timers.forEach(clearTimeout);
-      }
-
-      if (event.name === "checkout.closed") {
-        if (typeof window !== "undefined") {
-          const url = new URL(window.location.href);
-          if (url.searchParams.has("_ptxn")) {
-            url.searchParams.delete("_ptxn");
-            window.history.replaceState({}, "", url.toString());
+  const confirm = React.useCallback(
+    (id: string) => {
+      paymentCompleted.current = true;
+      setStatus("confirming");
+      setError(undefined);
+      verificationTimers.current.forEach(clearTimeout);
+      const check = async (attempt = 0) => {
+        try {
+          const { data } = await axiosClient.get<{ verified: boolean }>(
+            `/billing/checkout-status/${id}`,
+          );
+          invalidateCurrentUser(queryClient);
+          if (data.verified) {
+            setStatus("verified");
+            transaction.current = null;
+            clearUrl();
+            toast.success(
+              "Payment verified. Your billing balance has been refreshed.",
+            );
+            return;
           }
+        } catch {
+          // A checkout callback does not prove payment. Keep the authoritative retry bounded.
         }
-      }
+        if (attempt < 9)
+          verificationTimers.current.push(
+            setTimeout(() => void check(attempt + 1), 2000),
+          );
+        else
+          fail(
+            "Payment verification is still pending. Retry verification shortly; do not pay again.",
+          );
+      };
+      void check();
     },
-    [queryClient],
+    [clearUrl, fail, queryClient],
   );
 
-  React.useEffect(() => {
-    if (typeof window === "undefined" || !clientToken) {
-      return;
-    }
-
-    let isMounted = true;
-
-    getOrInitPaddle(clientToken, environment, handlePaddleEvent)
-      .then((instance) => {
-        if (!isMounted) return;
-        if (instance) {
-          setPaddle(instance);
-          setIsReady(true);
+  const handleEvent = React.useCallback(
+    (event: PaddleEventData) => {
+      if (event.name === "checkout.loaded") {
+        setStatus("ready");
+        if (opening.current) {
+          clearTimeout(opening.current.timer);
+          opening.current.resolve();
+          opening.current = null;
         }
-      })
-      .catch((err) => {
-        console.error("[Paddle] Initialization error:", err);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [clientToken, environment, handlePaddleEvent]);
-
-  // Handle _ptxn transaction query parameter from backend
-  const ptxn = searchParams?.get("_ptxn");
-
-  React.useEffect(() => {
-    if (!paddle || !ptxn) return;
-
-    // Avoid reopening if already opened for this transaction ID
-    if (openedTxnRef.current === ptxn) return;
-    openedTxnRef.current = ptxn;
-
-    try {
-      paddle.Checkout.open({
-        transactionId: ptxn,
-        settings: {
-          displayMode: "overlay",
-          theme: "dark",
-          successUrl: `${window.location.origin}/billing?success=true`,
-        },
-      });
-    } catch (err) {
-      console.error("[Paddle] Failed to open checkout for transaction:", err);
-    }
-  }, [paddle, ptxn]);
-
-  // Helper to open checkout explicitly
-  const openCheckout = React.useCallback(
-    (options: { transactionId: string }) => {
-      if (!paddle) {
-        toast.error(
-          "Payment system is still initializing. Please try again in a moment.",
+      } else if (event.name === "checkout.completed") {
+        if (opening.current) {
+          clearTimeout(opening.current.timer);
+          opening.current.resolve();
+          opening.current = null;
+        }
+        const id = event.data?.transaction_id || transaction.current;
+        if (id) confirm(id);
+      } else if (event.name === "checkout.closed") {
+        if (opening.current) {
+          clearTimeout(opening.current.timer);
+          opening.current.reject(
+            new Error("Checkout was closed. You can try again."),
+          );
+          opening.current = null;
+        }
+        if (!paymentCompleted.current) {
+          setStatus("closed");
+          clearUrl();
+        }
+      } else if (
+        [
+          "checkout.error",
+          "checkout.failed",
+          "checkout.payment.error",
+          "checkout.payment.failed",
+        ].includes(event.name || "")
+      ) {
+        console.warn("[Billing checkout]", {
+          event: "paddle_error",
+          code:
+            event.code && /^[a-z0-9_.-]{1,80}$/i.test(event.code)
+              ? event.code
+              : "unknown",
+        });
+        fail(
+          "Paddle could not complete checkout. Check your payment details or retry.",
         );
-        return;
+        toast.error(
+          "Checkout failed. You can retry without changing your subscription.",
+        );
       }
-      paddle.Checkout.open({
-        transactionId: options.transactionId,
-        settings: {
-          displayMode: "overlay",
-          theme: "dark",
-          successUrl: `${window.location.origin}/billing?success=true`,
-        },
-      });
     },
-    [paddle],
+    [clearUrl, confirm, fail],
   );
 
+  const prepare = React.useCallback(async () => {
+    try {
+      if (instance.current && environment.current) return environment.current;
+      const { data } = await axiosClient.get<{
+        environment: PaddleEnvironment;
+      }>("/billing/checkout-config");
+      const token = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+      const expected = checkoutEnvironment(
+        token,
+        data.environment,
+        process.env.NEXT_PUBLIC_PADDLE_ENV,
+      );
+      instance.current = await loadPaddle(token!, expected, dispatch);
+      environment.current = expected;
+      setError(undefined);
+      setStatus("ready");
+      return expected;
+    } catch (cause) {
+      const message =
+        cause instanceof Error
+          ? cause.message
+          : "Checkout could not initialize.";
+      fail(message);
+      throw new Error(message);
+    }
+  }, [fail]);
+
+  const openCheckout = React.useCallback(
+    async (payload: CheckoutPayload) => {
+      const expected = await prepare();
+      if (payload.environment !== expected) {
+        const message =
+          "Checkout environment does not match this transaction. Check Paddle configuration.";
+        fail(message);
+        throw new Error(message);
+      }
+      if (!/^txn_[a-z0-9]{26}$/.test(payload.transactionId))
+        throw new Error(
+          "The server returned an invalid Paddle transaction ID.",
+        );
+      if (opening.current) throw new Error("Checkout is already opening.");
+      transaction.current = payload.transactionId;
+      paymentCompleted.current = false;
+      // Next's search params react to replaceState; this open already owns the resume link.
+      resumeAttempted.current = payload.transactionId;
+      setStatus("opening");
+      setError(undefined);
+      const url = new URL(window.location.href);
+      url.searchParams.set("_ptxn", payload.transactionId);
+      window.history.replaceState(null, "", url.toString());
+      await new Promise<void>((resolve, reject) => {
+        opening.current = {
+          resolve,
+          reject,
+          timer: setTimeout(
+            () =>
+              fail(
+                "Paddle checkout did not open. Check script blocking, CSP and checkout domain configuration, then retry.",
+              ),
+            20000,
+          ),
+        };
+        try {
+          instance.current!.Checkout.open({
+            transactionId: payload.transactionId,
+            settings: {
+              displayMode: "overlay",
+              theme: resolvedTheme === "light" ? "light" : "dark",
+            },
+          });
+        } catch {
+          fail(
+            "Paddle checkout could not open. Check its environment and checkout domain, then retry.",
+          );
+        }
+      });
+    },
+    [fail, prepare, resolvedTheme],
+  );
+
+  const resume = React.useCallback(
+    async (id: string) => {
+      const { data } = await axiosClient.get<{
+        environment: PaddleEnvironment;
+        status: string;
+        verified: boolean;
+      }>(`/billing/checkout-status/${id}`);
+      if (
+        data.verified ||
+        ["paid", "completed", "billed"].includes(data.status)
+      )
+        confirm(id);
+      else if (["draft", "ready"].includes(data.status))
+        await openCheckout({
+          transactionId: id,
+          environment: data.environment,
+        });
+      else
+        throw new Error(
+          "This checkout has ended. Choose a plan or credit pack to start again.",
+        );
+    },
+    [confirm, openCheckout],
+  );
+
+  React.useEffect(() => {
+    currentListener = handleEvent;
+    return () => {
+      if (currentListener === handleEvent) currentListener = undefined;
+    };
+  }, [handleEvent]);
+
+  React.useEffect(() => {
+    const id = params?.get("_ptxn");
+    // Paddle.js also auto-opens _ptxn. Capture/remove it BEFORE initialization to avoid two opens.
+    if (id && resumeAttempted.current !== id) {
+      resumeAttempted.current = id;
+      transaction.current = id;
+      clearUrl();
+      if (/^txn_[a-z0-9]{26}$/.test(id))
+        void Promise.resolve()
+          .then(() => resume(id))
+          .catch((cause: Error) => fail(cause.message));
+      else
+        queueMicrotask(() =>
+          fail("This checkout link has an invalid transaction ID."),
+        );
+    } else if (!id && !resumeAttempted.current)
+      void Promise.resolve()
+        .then(() => prepare())
+        .catch(() => {});
+  }, [clearUrl, fail, params, prepare, resume]);
+
+  React.useEffect(
+    () => () => {
+      verificationTimers.current.forEach(clearTimeout);
+      if (opening.current) clearTimeout(opening.current.timer);
+    },
+    [],
+  );
+
+  const retry = async () => {
+    if (transaction.current)
+      await resume(transaction.current).catch((cause: Error) => {
+        fail(cause.message);
+        throw cause;
+      });
+    else await prepare();
+  };
   return (
-    <PaddleContext.Provider value={{ paddle, isReady, openCheckout }}>
+    <PaddleContext.Provider
+      value={{ status, error, prepare, openCheckout, retry }}
+    >
       {children}
     </PaddleContext.Provider>
   );

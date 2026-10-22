@@ -7,6 +7,7 @@ import { AppButton } from "@blynta/ui";
 import { cn } from "@/lib/utils";
 import { ZapIcon } from "@/features/dashboard/icons";
 import type { UserProfile } from "@/features/auth/types";
+import { useCreditBalance } from "@/features/billing/queries";
 
 interface Props {
   profile: UserProfile;
@@ -26,10 +27,13 @@ function formatResetDate(dateStr?: string | null): string {
 }
 
 export function ProfilePlanCard({ profile }: Props) {
+  const balance = useCreditBalance();
   const planLabel = (profile.plan ?? "free").toLowerCase();
   const isPro = planLabel === "pro" || planLabel === "business";
-  const credits = profile.creditsBalance ?? 0;
-  const maxCredits = planLabel === "business" ? 200 : isPro ? 50 : 5;
+  const credits = balance.data?.available ?? profile.creditsBalance ?? 0;
+  const maxCredits =
+    balance.data?.planAllocations?.[profile.plan ?? "free"] ??
+    (planLabel === "business" ? 200 : isPro ? 50 : 30);
 
   return (
     <div className="rounded-xl border border-border/80 bg-card shadow-xs overflow-hidden">
@@ -93,20 +97,23 @@ export function ProfilePlanCard({ profile }: Props) {
             </span>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {profile.creditsReserved ?? 0} held · {maxCredits} included monthly
+            {balance.data?.reserved ?? profile.creditsReserved ?? 0} held ·{" "}
+            {maxCredits} {isPro ? "included monthly" : "one-time credits"}
           </p>
         </div>
 
         {/* Reset Date */}
         <div className="rounded-lg bg-muted/40 border border-border/50 px-4 py-3 space-y-1.5">
           <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/70">
-            Resets On
+            Next allocation
           </p>
           <p className="text-sm font-bold text-foreground">
-            {formatResetDate(profile.creditsResetAt)}
+            {isPro ? formatResetDate(balance.data?.nextRenewal) : "No renewal"}
           </p>
           <p className="text-[11px] text-muted-foreground">
-            Quota refreshes automatically
+            {isPro
+              ? "Credits granted after verified payment"
+              : "Free credits are granted once"}
           </p>
         </div>
       </div>

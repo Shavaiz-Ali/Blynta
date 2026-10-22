@@ -1,21 +1,21 @@
 import { CreditsService } from './credits.service';
+import { randomUUID } from 'node:crypto';
+import { creditPacks, planCredits } from './credit-config';
 import { Optional } from '@nestjs/common';
 import {
   Injectable,
   BadRequestException,
   InternalServerErrorException,
   Logger,
+  ServiceUnavailableException,
+  ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaddleService } from '../paddle/paddle.service';
-import {
-  User,
-  UserDocument,
-  UserPlan,
-  PLAN_CREDITS,
-} from '../users/schemas/user.schema';
+import { User, UserDocument, UserPlan } from '../users/schemas/user.schema';
 import {
   NotificationCategory,
   NotificationType,
@@ -40,6 +40,33 @@ import {
   SubscriptionEvent,
   SubscriptionEventDocument,
 } from './schemas/subscription-event.schema';
+
+interface CreditPayment {
+  id?: string;
+  customerId?: string;
+  customer_id?: string;
+  subscriptionId?: string | null;
+  subscription_id?: string | null;
+  customData?: { purchaseKind?: string; blyntaUserId?: string };
+  custom_data?: { purchaseKind?: string; blyntaUserId?: string };
+  items?: {
+    quantity?: number;
+    priceId?: string;
+    price_id?: string;
+    price?: { id?: string; billingCycle?: unknown; billing_cycle?: unknown };
+  }[];
+}
+interface CreditAdjustment {
+  id?: string;
+  status?: string;
+  action?: string;
+  type?: string | null;
+  transactionId?: string;
+  transaction_id?: string;
+  originalAdjustmentId?: string | null;
+  original_adjustment_id?: string | null;
+  totals?: { total?: string | null } | null;
+}
 
 @Injectable()
 export class BillingService {
@@ -306,16 +333,32 @@ export class BillingService {
   async createCheckoutSession(
     user: UserDocument,
     dto: CreateCheckoutSessionDto,
-  ): Promise<{ checkoutUrl: string }> {
+  ) {
     if (user.plan === dto.plan) {
       throw new BadRequestException(`You are already on the ${dto.plan} plan.`);
     }
 
     const customerId = await this.getOrCreatePaddleCustomer(user);
     const priceId = this.paddleService.getPriceIdForPlan(dto.plan);
-
-    try {
-      const transaction = await this.paddleService.paddle.transactions.create({
+    const price = await this.paddleService.paddle.prices.get(priceId);
+    if (
+      price.status !== 'active' ||
+      price.billingCycle?.interval !== 'month' ||
+      price.billingCycle.frequency !== 1
+    )
+      throw new ServiceUnavailableException(
+        'The configured subscription price must be active and monthly. Check Paddle price configuration.',
+      );
+    return this.checkout(user, `plan:${dto.plan}`, async () => {
+      const current = await this.customerModel.findOne({ userId: user._id });
+      if (
+        current?.paddleSubscriptionId &&
+        current.paddleSubscriptionStatus !== 'canceled'
+      )
+        throw new ConflictException(
+          'Manage your existing subscription to change plans. A second subscription will not be created.',
+        );
+      return this.paddleService.paddle.transactions.create({
         customerId,
         items: [{ priceId, quantity: 1 }],
         customData: {
@@ -323,43 +366,355 @@ export class BillingService {
           requestedPlan: dto.plan,
         },
       });
+    });
+  }
 
-      let checkoutUrl = transaction.checkout?.url;
-      if (!checkoutUrl) {
-        throw new InternalServerErrorException(
-          'Paddle transaction did not return a checkout URL.',
-        );
-      }
-
-      // Dev URL normalisation
-      if (
-        checkoutUrl.startsWith('https://localhost:3000') &&
-        this.frontendUrl.startsWith('http://localhost:3000')
-      ) {
-        checkoutUrl = checkoutUrl.replace(
-          'https://localhost:3000',
-          'http://localhost:3000',
-        );
-      } else if (
-        checkoutUrl.startsWith('https://127.0.0.1:3000') &&
-        this.frontendUrl.startsWith('http://127.0.0.1:3000')
-      ) {
-        checkoutUrl = checkoutUrl.replace(
-          'https://127.0.0.1:3000',
-          'http://127.0.0.1:3000',
-        );
-      }
-
-      this.logger.log(
-        `Created Paddle transaction ${transaction.id} for user ${user._id}`,
+  private checkoutPayload(transaction: {
+    id: string;
+    status: string;
+    checkout?: { url?: string | null } | null;
+  }) {
+    if (!['draft', 'ready'].includes(transaction.status))
+      throw new ConflictException(
+        'This payment is already processing or completed. Wait for verification before starting another checkout.',
       );
-      return { checkoutUrl };
-    } catch (err: any) {
-      this.logger.error(`Failed to create Paddle transaction: ${err?.message}`);
-      throw new InternalServerErrorException(
-        `Failed to create Paddle checkout session: ${err?.message ?? 'unknown error'}`,
+    return {
+      transactionId: transaction.id,
+      environment: this.paddleService.environment,
+      checkoutUrl: transaction.checkout?.url || undefined,
+    };
+  }
+
+  async checkoutStatus(userId: string, transactionId: string) {
+    const owner = await this.customerModel.findOne({ userId });
+    const transaction =
+      await this.paddleService.paddle.transactions.get(transactionId);
+    if (!owner || transaction.customerId !== owner.paddleCustomerId)
+      throw new NotFoundException('Checkout not found');
+    const verified =
+      transaction.status === 'completed' &&
+      !!(await this.credits?.entries.exists({
+        userId,
+        key: `payment:${transactionId}`,
+      }));
+    return {
+      transactionId,
+      environment: this.paddleService.environment,
+      status: transaction.status,
+      verified,
+    };
+  }
+
+  /** A short durable lease serializes checkout creation; retry reuses an unpaid transaction. */
+  private async checkout(
+    user: UserDocument,
+    key: string,
+    create: () => ReturnType<PaddleService['paddle']['transactions']['create']>,
+  ) {
+    const lease = randomUUID();
+    const owner = await this.customerModel.findOneAndUpdate(
+      {
+        userId: user._id,
+        $or: [
+          { checkoutLeaseUntil: { $exists: false } },
+          { checkoutLeaseUntil: null },
+          { checkoutLeaseUntil: { $lt: new Date() } },
+        ],
+      },
+      {
+        $set: {
+          checkoutLeaseToken: lease,
+          checkoutLeaseUntil: new Date(Date.now() + 5 * 60_000),
+        },
+      },
+      { returnDocument: 'after' },
+    );
+    if (!owner)
+      throw new ConflictException(
+        'Checkout is already being prepared. Please retry shortly.',
+      );
+    try {
+      const pack = key.startsWith('pack:');
+      if (
+        !pack &&
+        owner.paddleSubscriptionId &&
+        owner.paddleSubscriptionStatus !== 'canceled'
+      )
+        throw new ConflictException(
+          'Manage your existing subscription to change plans. A second subscription will not be created.',
+        );
+      const pendingId = pack
+        ? owner.pendingCreditCheckoutId
+        : owner.pendingCheckoutId;
+      const pendingKey = pack
+        ? owner.pendingCreditCheckoutKey
+        : owner.pendingCheckoutKey;
+      if (
+        pendingId &&
+        (pendingKey === key ||
+          (key.startsWith('plan:') && pendingKey?.startsWith('plan:')))
+      ) {
+        const pending =
+          await this.paddleService.paddle.transactions.get(pendingId);
+        if (pending.customerId !== owner.paddleCustomerId)
+          throw new ConflictException('Checkout customer mismatch');
+        const resubscribing =
+          !pack &&
+          owner.paddleSubscriptionStatus === 'canceled' &&
+          pending.status === 'completed';
+        if (pendingKey !== key && ['draft', 'ready'].includes(pending.status))
+          await this.paddleService.paddle.transactions.update(pending.id, {
+            status: 'canceled',
+          });
+        else if (
+          pendingKey !== key &&
+          !resubscribing &&
+          ['paid', 'completed', 'billed'].includes(pending.status)
+        )
+          return this.checkoutPayload(pending);
+        if (
+          pendingKey === key &&
+          !resubscribing &&
+          ['draft', 'ready', 'paid', 'completed', 'billed'].includes(
+            pending.status,
+          )
+        ) {
+          if (
+            key.startsWith('pack:') &&
+            pending.status === 'completed' &&
+            (await this.credits?.entries.exists({
+              key: `payment:${pending.id}`,
+            }))
+          ) {
+            // A verified pack purchase may be followed by another intentional purchase.
+          } else return this.checkoutPayload(pending);
+        }
+      }
+      const transaction = await create();
+      const payload = this.checkoutPayload(transaction);
+      const saved = await this.customerModel.updateOne(
+        { userId: user._id, checkoutLeaseToken: lease },
+        {
+          $set: pack
+            ? {
+                pendingCreditCheckoutId: transaction.id,
+                pendingCreditCheckoutKey: key,
+              }
+            : { pendingCheckoutId: transaction.id, pendingCheckoutKey: key },
+        },
+      );
+      if (!saved.matchedCount)
+        throw new ConflictException(
+          'Checkout preparation expired. Please retry.',
+        );
+      return payload;
+    } catch (error) {
+      if (
+        error instanceof ConflictException ||
+        error instanceof ServiceUnavailableException
+      )
+        throw error;
+      this.logger.error({
+        event: 'billing.checkout.failed',
+        kind: key.startsWith('plan:') ? 'subscription' : 'credit-pack',
+      });
+      throw new ServiceUnavailableException(
+        'Paddle checkout could not be prepared. Check the configured environment, price and payment-link domain, then retry.',
+      );
+    } finally {
+      await this.customerModel.updateOne(
+        { userId: user._id, checkoutLeaseToken: lease },
+        { $unset: { checkoutLeaseToken: 1, checkoutLeaseUntil: 1 } },
       );
     }
+  }
+
+  async listCreditPacks() {
+    return Promise.all(
+      creditPacks(this.configService).map(async ({ priceId, ...pack }) => {
+        if (!priceId || !this.credits?.enabled)
+          return {
+            ...pack,
+            enabled: false,
+            configurationError: !this.credits?.enabled
+              ? 'Credit purchases are currently unavailable.'
+              : pack.configurationError,
+          };
+        try {
+          const price = await this.paddleService.paddle.prices.get(priceId);
+          if (
+            price.status !== 'active' ||
+            price.billingCycle ||
+            this.paddleService.mapPriceIdToPlan(priceId)
+          )
+            throw new Error('Invalid pack price');
+          return { ...pack, enabled: true, price: price.unitPrice };
+        } catch {
+          return {
+            ...pack,
+            enabled: false,
+            configurationError:
+              'This credit pack price is unavailable. Check Paddle configuration.',
+          };
+        }
+      }),
+    );
+  }
+
+  async createCreditPackCheckout(user: UserDocument, packId: string) {
+    if (!this.credits?.enabled)
+      throw new ServiceUnavailableException(
+        'BILLING_CREDITS_V2 must be enabled for credit purchases',
+      );
+    const pack = creditPacks(this.configService).find((p) => p.id === packId);
+    if (!pack) throw new BadRequestException('Unknown credit pack');
+    if (!pack.priceId)
+      throw new ServiceUnavailableException(pack.configurationError!);
+    const priceId = pack.priceId;
+    const price = await this.paddleService.paddle.prices.get(priceId);
+    if (price.status !== 'active' || price.billingCycle)
+      throw new ServiceUnavailableException(
+        'Credit pack Paddle price must be active and one-time',
+      );
+    if (this.paddleService.mapPriceIdToPlan(pack.priceId))
+      throw new ServiceUnavailableException(
+        'Credit pack price cannot be a subscription price',
+      );
+    const customerId = await this.getOrCreatePaddleCustomer(user);
+    return this.checkout(user, `pack:${pack.id}`, () =>
+      this.paddleService.paddle.transactions.create({
+        customerId,
+        items: [{ priceId, quantity: 1 }],
+        customData: {
+          blyntaUserId: String(user._id),
+          purchaseKind: 'credit-pack',
+          creditPackId: pack.id,
+        },
+      }),
+    );
+  }
+
+  private async handleCreditPackPayment(
+    transaction: CreditPayment,
+    eventType?: string,
+  ): Promise<boolean> {
+    const custom = transaction?.customData || transaction?.custom_data || {};
+    const items = transaction?.items || [];
+    const packs = creditPacks(this.configService);
+    const getPrice = (item: NonNullable<CreditPayment['items']>[number]) =>
+      item?.price?.id || item?.priceId || item?.price_id;
+    const pack = packs.find(
+      (p) => p.priceId && p.priceId === getPrice(items[0]),
+    );
+    if (!pack && custom.purchaseKind !== 'credit-pack') return false;
+    if (!pack)
+      throw new ServiceUnavailableException(
+        'Payment credit pack price is not configured',
+      );
+    if (eventType !== 'transaction.completed') return true;
+    if (!this.credits?.enabled)
+      throw new ServiceUnavailableException(
+        'Credit purchases are paused; retry payment webhook',
+      );
+    if (
+      !transaction.id ||
+      transaction.subscriptionId ||
+      transaction.subscription_id ||
+      items.length !== 1 ||
+      items[0].quantity !== 1 ||
+      items[0].price?.billingCycle ||
+      items[0].price?.billing_cycle
+    )
+      throw new BadRequestException(
+        'Credit pack must contain exactly one non-recurring pack',
+      );
+    const user = await this.resolveUser({
+      paddleCustomerId: transaction.customerId || transaction.customer_id,
+    });
+    if (!user)
+      throw new BadRequestException(
+        'Credit pack payment customer has no linked account',
+      );
+    if (custom.blyntaUserId && custom.blyntaUserId !== String(user._id))
+      throw new BadRequestException('Credit pack payment owner mismatch');
+    await this.credits.adjust(
+      String(user._id),
+      pack.credits,
+      `payment:${transaction.id}`,
+      `${pack.credits} purchased credits`,
+      'grant',
+      {
+        source: 'credit-pack',
+        paymentId: transaction.id,
+        priceId: pack.priceId,
+        packId: pack.id,
+      },
+    );
+    return true;
+  }
+
+  async handlePaymentAdjustment(adjustment: CreditAdjustment) {
+    if (adjustment?.status !== 'approved') return;
+    const action = adjustment.action;
+    if (action && ['chargeback_reverse', 'credit_reverse'].includes(action)) {
+      if (!this.credits)
+        throw new ServiceUnavailableException('Credit ledger unavailable');
+      const originalId =
+        adjustment.originalAdjustmentId || adjustment.original_adjustment_id;
+      if (!originalId || !adjustment.id)
+        throw new BadRequestException(
+          'Reversal requires original adjustment ID',
+        );
+      await this.credits.restorePaymentAdjustment(originalId, adjustment.id);
+      return;
+    }
+    if (!action || !['refund', 'chargeback', 'credit'].includes(action)) return;
+    if (!this.credits)
+      throw new ServiceUnavailableException('Credit ledger unavailable');
+    const paymentId = adjustment.transactionId || adjustment.transaction_id;
+    if (!paymentId || !adjustment.id)
+      throw new BadRequestException(
+        'Adjustment requires payment and adjustment IDs',
+      );
+    // Fetch authoritative totals. Never fabricate a missing historical payment grant.
+    const transaction =
+      await this.paddleService.paddle.transactions.get(paymentId);
+    const payment = await this.credits.entries.findOne({
+      key: `payment:${paymentId}`,
+    });
+    if (!payment) {
+      const items = transaction.items || [];
+      const knownPrice = items.some(
+        (item) =>
+          this.paddleService.mapPriceIdToPlan(item.price?.id || '') ||
+          creditPacks(this.configService).some(
+            (p) => p.priceId && p.priceId === item.price?.id,
+          ),
+      );
+      if (knownPrice)
+        throw new ServiceUnavailableException(
+          'Payment grant not recorded; await the completed payment webhook or reconcile the legacy payment audit',
+        );
+      return; // An unrelated Paddle product has no credits to reverse.
+    }
+    const total = Number(transaction.details?.totals?.total);
+    const adjusted = Number(adjustment.totals?.total);
+    const fraction = adjustment.type === 'full' ? 1 : adjusted / total;
+    if (
+      !Number.isSafeInteger(total) ||
+      total <= 0 ||
+      (adjustment.type !== 'full' &&
+        (!Number.isSafeInteger(adjusted) || adjusted <= 0))
+    )
+      throw new BadRequestException(
+        'Verified payment adjustment totals missing',
+      );
+    await this.credits.reversePayment(
+      paymentId,
+      adjustment.id,
+      Math.min(1, fraction),
+      action,
+    );
   }
 
   /* =========================================================================
@@ -435,6 +790,7 @@ export class BillingService {
     paddleEventId?: string;
     eventType?: string;
     rawPayload?: Record<string, any>;
+    paymentOccurredAt?: Date;
   }): Promise<void> {
     const {
       paddleCustomerId,
@@ -466,7 +822,16 @@ export class BillingService {
       this.logger.warn(
         `[applyPaddleSubscription] User not found. paddleCustomerId=${paddleCustomerId} paddleSubscriptionId=${paddleSubscriptionId} userId=${userId} email=${userEmail}`,
       );
+      if (this.credits)
+        throw new ServiceUnavailableException(
+          'Payment account not linked yet; retry webhook',
+        );
       return;
+    }
+    if (this.credits && paddleCustomerId) {
+      const owner = await this.findCustomerByPaddleIds({ paddleCustomerId });
+      if (owner && String(owner.userId) !== String(user._id))
+        throw new BadRequestException('Subscription payment owner mismatch');
     }
 
     // --- Snapshot current state for audit log ---
@@ -478,8 +843,7 @@ export class BillingService {
     const previousPriceId = customerDoc?.paddlePriceId;
 
     // --- Update User (only plan + credits — no Paddle IDs) ---
-    const accounting =
-      !!this.credits && (this.credits.enabled || user.creditLedgerInitialized);
+    const accounting = !!this.credits;
     const shouldGrant = accounting
       ? grantCredits && eventType === 'transaction.completed'
       : grantCredits;
@@ -487,7 +851,7 @@ export class BillingService {
     let actualCreditsGranted = accounting
       ? 0
       : shouldGrant
-        ? PLAN_CREDITS[plan]
+        ? planCredits(this.configService)[plan]
         : 0;
     if (
       accounting &&
@@ -523,12 +887,13 @@ export class BillingService {
         const cycleKey = `cycle:${paddleSubscriptionId}:${new Date(endsAt).toISOString()}`;
         actualCreditsGranted = await this.credits!.grantSubscriptionCycle(
           String(user._id),
-          PLAN_CREDITS[plan],
+          planCredits(this.configService)[plan],
           cycleKey,
           transactionId,
           plan,
+          params.paymentOccurredAt,
         );
-      } else userUpdate.creditsBalance = PLAN_CREDITS[plan];
+      } else userUpdate.creditsBalance = planCredits(this.configService)[plan];
       userUpdate.creditsResetAt = resetAt;
     }
     await this.userModel
@@ -705,13 +1070,9 @@ export class BillingService {
       .findByIdAndUpdate(user._id, {
         $set: {
           plan: UserPlan.FREE,
-          ...(this.credits?.enabled || user.creditLedgerInitialized
-            ? { creditsResetAt: null, freeCreditGrantAt: this.nextMonth() }
-            : {
-                creditsBalance: PLAN_CREDITS[UserPlan.FREE],
-                creditsResetAt: this.nextMonth(),
-              }),
+          creditsResetAt: null,
         },
+        $unset: { freeCreditGrantAt: 1 },
       })
       .exec();
 
@@ -879,7 +1240,7 @@ export class BillingService {
       const planStr = this.paddleService.mapPriceIdToPlan(priceId);
       if (planStr && planStr !== 'free') mappedPlan = planStr as UserPlan;
     }
-    if (!mappedPlan && customData?.requestedPlan) {
+    if (!this.credits && !mappedPlan && customData?.requestedPlan) {
       mappedPlan =
         customData.requestedPlan === 'pro'
           ? UserPlan.PRO
@@ -944,7 +1305,7 @@ export class BillingService {
       scheduledChangeAction,
       scheduledChangeAt,
       billingPeriodEndsAt,
-      grantCredits: this.credits?.enabled ? false : isRealPlanChange,
+      grantCredits: this.credits ? false : isRealPlanChange,
       paddleEventId,
       eventType: originalEventType,
       rawPayload: subscription,
@@ -1014,7 +1375,11 @@ export class BillingService {
     transaction: any,
     paddleEventId?: string,
     originalEventType?: string,
+    occurredAt?: string,
   ): Promise<void> {
+    if (await this.handleCreditPackPayment(transaction, originalEventType))
+      return;
+    if (this.credits && originalEventType !== 'transaction.completed') return;
     const transactionId = transaction?.id;
     const subscriptionId =
       transaction?.subscriptionId || transaction?.subscription_id;
@@ -1056,7 +1421,7 @@ export class BillingService {
       const mapped = this.paddleService.mapPriceIdToPlan(priceId);
       if (mapped && mapped !== 'free') targetPlan = mapped as UserPlan;
     }
-    if (!targetPlan && customData?.requestedPlan) {
+    if (!this.credits && !targetPlan && customData?.requestedPlan) {
       targetPlan =
         customData.requestedPlan === 'pro'
           ? UserPlan.PRO
@@ -1085,12 +1450,13 @@ export class BillingService {
           ? new Date(verifiedPeriodEnd)
           : undefined,
         // A real payment always grants credits — renewal or new subscription
-        grantCredits: this.credits?.enabled
+        grantCredits: this.credits
           ? originalEventType === 'transaction.completed'
           : true,
         paddleEventId,
         eventType: originalEventType,
         rawPayload: transaction,
+        paymentOccurredAt: occurredAt ? new Date(occurredAt) : undefined,
       });
     }
   }

@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { DEFAULT_PLAN_CREDITS } from '../../billing/credit-config';
 
 export type UserDocument = User & Document;
 
@@ -21,9 +22,7 @@ export enum AuthProvider {
 }
 
 export const PLAN_CREDITS: Record<UserPlan, number> = {
-  [UserPlan.FREE]: 5,
-  [UserPlan.PRO]: 50,
-  [UserPlan.BUSINESS]: 200,
+  ...DEFAULT_PLAN_CREDITS,
 };
 
 // One linked external account — a user can have many of these, one per provider
@@ -87,6 +86,14 @@ export class User {
 
   @Prop({ default: false })
   creditLedgerInitialized: boolean;
+
+  // Only new accounts carry this marker. Legacy balances are preserved as opening entries.
+  @Prop()
+  freeCreditPolicy?: string;
+
+  // Refunded credits already spent/held are recovered from future available credits.
+  @Prop({ default: 0, min: 0, validate: Number.isSafeInteger })
+  creditDebt: number;
 
   @Prop()
   freeCreditGrantAt?: Date;

@@ -106,7 +106,11 @@ describe('BillingService', () => {
         { provide: PaddleService, useValue: paddleService },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
+          useValue: {
+            get: jest.fn((key: string, fallback?: unknown) =>
+              key === 'FRONTEND_URL' ? 'http://localhost:3000' : fallback,
+            ),
+          },
         },
         { provide: NotificationsService, useValue: notificationsService },
         { provide: MailService, useValue: mailService },

@@ -7,6 +7,15 @@ export class PaddleService implements OnModuleInit {
   private readonly logger = new Logger(PaddleService.name);
   public paddle: Paddle;
 
+  get environment(): 'sandbox' | 'production' {
+    const value = this.configService
+      .get<string>('PADDLE_ENV', 'sandbox')
+      .toLowerCase();
+    if (value !== 'sandbox' && value !== 'production')
+      throw new Error('PADDLE_ENV must be sandbox or production');
+    return value;
+  }
+
   constructor(private configService: ConfigService) {}
 
   onModuleInit() {
@@ -18,7 +27,7 @@ export class PaddleService implements OnModuleInit {
       );
     }
 
-    const env = this.configService.get<string>('PADDLE_ENV', 'sandbox');
+    const env = this.environment;
     const environment =
       env.toLowerCase() === 'production'
         ? Environment.production

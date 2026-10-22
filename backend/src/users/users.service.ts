@@ -1,4 +1,5 @@
 import { CreditsService } from '../billing/credits.service';
+import { planCredits } from '../billing/credit-config';
 import { Optional } from '@nestjs/common';
 import {
   BadRequestException,
@@ -15,7 +16,6 @@ import {
   User,
   UserDocument,
   UserPlan,
-  PLAN_CREDITS,
   AuthProvider,
 } from './schemas/user.schema';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -100,21 +100,19 @@ export class UsersService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    const nextReset = new Date();
-    nextReset.setMonth(nextReset.getMonth() + 1);
-
     const user = new this.userModel({
       email: dto.email,
       password: hashedPassword,
       name: dto.name,
       plan: UserPlan.FREE,
-      creditsBalance: PLAN_CREDITS[UserPlan.FREE],
-      creditsResetAt: nextReset,
+      creditsBalance: planCredits(this.configService).free,
+      freeCreditPolicy: 'one-time-v1',
+      creditsResetAt: null,
       linkedAccounts: [{ provider: AuthProvider.LOCAL, providerId: dto.email }],
       referralCode,
       referredBy,
     });
-    return user.save();
+    return this.credits ? this.credits.createAccount(user) : user.save();
   }
 
   async findByEmailWithPassword(email: string) {
@@ -157,9 +155,6 @@ export class UsersService {
     }
 
     const referralCode = await this.generateUniqueReferralCode();
-    const nextReset = new Date();
-    nextReset.setMonth(nextReset.getMonth() + 1);
-
     const newUser = new this.userModel({
       email,
       name,
@@ -167,11 +162,12 @@ export class UsersService {
       emailVerified: true,
       linkedAccounts: [{ provider, providerId, linkedAt: new Date() }],
       plan: UserPlan.FREE,
-      creditsBalance: PLAN_CREDITS[UserPlan.FREE],
-      creditsResetAt: nextReset,
+      creditsBalance: planCredits(this.configService).free,
+      freeCreditPolicy: 'one-time-v1',
+      creditsResetAt: null,
       referralCode,
     });
-    return newUser.save();
+    return this.credits ? this.credits.createAccount(newUser) : newUser.save();
   }
 
   /** @deprecated No new job calls this; retained only for pre-ledger compatibility. */

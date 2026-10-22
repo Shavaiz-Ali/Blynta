@@ -270,6 +270,7 @@ export function HeroInput({
       isPending ||
       !balance.data?.enabled ||
       balance.error ||
+      confirmation.estimate.canProceed === false ||
       confirmation.estimate.totalCredits > balance.data.available
     )
       return;
@@ -318,14 +319,19 @@ export function HeroInput({
         );
         return;
       }
-      if (latest.totalCredits > latest.available) {
+      if (
+        latest.totalCredits > latest.available ||
+        latest.canProceed === false
+      ) {
         setVerifiedAvailable({
           available: latest.available,
           prior: balance.data.available,
         });
         setConfirmation({ ...confirmation, estimate: latest });
         setConfirmationError(
-          "Your balance changed. Refresh your balance or view plans to add credits.",
+          latest.totalCredits > latest.available
+            ? "Your balance changed. Refresh your balance or view plans to add credits."
+            : "Generation is unavailable. Check Billing & Plan for payment credits owed.",
         );
         void balance.refetch();
         return;

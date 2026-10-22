@@ -35,7 +35,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "sync:paddle": "ts-node -r tsconfig-paths/register scripts/sync-paddle-customers.ts",
     "migrate:billing": "ts-node -r tsconfig-paths/register scripts/migrate-billing-to-customer.ts",
-    "migrate:credit-ledger": "ts-node -r tsconfig-paths/register scripts/migrate-credit-ledger.ts",
+    "migrate:credit-ledger": "ts-node --prefer-ts-exts -r tsconfig-paths/register scripts/migrate-credit-ledger.ts",
     "test:billing": "jest --runInBand billing",
     "seed:admin": "ts-node -r tsconfig-paths/register scripts/create-admin.ts",
     "typecheck": "tsc --noEmit",

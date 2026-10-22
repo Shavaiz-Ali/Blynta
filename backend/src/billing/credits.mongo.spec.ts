@@ -48,6 +48,7 @@ const uri = process.env.BILLING_TEST_MONGO_URI;
       );
       const user = await users.create({
         email: 'integration@example.invalid',
+        referralCode: 'integration-credit-test',
         creditsBalance: 20,
       });
       userId = String(user._id);

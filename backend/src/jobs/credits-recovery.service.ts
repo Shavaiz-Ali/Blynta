@@ -10,7 +10,7 @@ import { JobsService } from './jobs.service';
 import { JobStatus } from './schemas/job.schema';
 import { StudioRender, StudioAsset } from '../studio/studio.schemas';
 import { studioPrice } from '../billing/credit-pricing';
-import { User, UserDocument, UserPlan } from '../users/schemas/user.schema';
+import { User, UserDocument } from '../users/schemas/user.schema';
 
 /** Reconcile based on durable job state and queue locks, never elapsed time alone. */
 @Injectable()
@@ -33,26 +33,6 @@ export class CreditsRecoveryService {
         error: String(error),
       }),
     );
-    if (this.credits.enabled) {
-      const freeUsers = await this.users
-        .find({
-          plan: UserPlan.FREE,
-          creditLedgerInitialized: true,
-          freeCreditGrantAt: { $lte: new Date() },
-        })
-        .limit(100);
-      for (const user of freeUsers) {
-        try {
-          await this.credits.grantFreeCycle(String(user._id));
-        } catch (error) {
-          this.logger.error({
-            event: 'billing.free-grant.failed',
-            userId: String(user._id),
-            error: String(error),
-          });
-        }
-      }
-    }
     // Snapshot marker controls reconciliation even when new V2 admission is disabled.
     const operations = await this.credits.operations
       .find({

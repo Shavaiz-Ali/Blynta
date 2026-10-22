@@ -23,6 +23,39 @@ function load(relative, mocks = {}) {
   const fixtureModule = { exports: {} };
   new Function("require", "module", "exports", source)(
     (id) => {
+      if (id === "@blynta/ui" && mocks[id]) {
+        const wrapper = ({ children }) =>
+          React.createElement("div", null, children);
+        const defaults = {
+          AppCardRoot: wrapper,
+          AppCardHeader: wrapper,
+          AppCardTitle: wrapper,
+          AppCardDescription: wrapper,
+          AppCardContent: wrapper,
+          AppCardFooter: wrapper,
+          AppBadge: wrapper,
+          AppSkeleton: wrapper,
+          Table: ({ children }) => React.createElement("table", null, children),
+          TableBody: "tbody",
+          TableCell: "td",
+          TableHead: "th",
+          TableHeader: "thead",
+          TableRow: "tr",
+          TableCaption: "caption",
+          AppSelect: ({ "aria-label": label, value, options }) =>
+            React.createElement(
+              "span",
+              { "aria-label": label },
+              options.find((o) => o.value === value)?.label,
+            ),
+          AppPagination: ({ page, totalPages }) =>
+            React.createElement("nav", null, `Page ${page} of ${totalPages}`),
+        };
+        return new Proxy(
+          {},
+          { get: (_, key) => mocks[id][key] ?? defaults[key] },
+        );
+      }
       if (id === "@/features/ai-editor/models")
         return {
           useAvailableEditingModels: () => ({
@@ -82,6 +115,207 @@ function history(query) {
   );
   return renderToStaticMarkup(React.createElement(CreditHistory));
 }
+
+test("Paddle environment rejects missing, secret and mismatched tokens", () => {
+  const { checkoutEnvironment } = load(
+    "apps/app/features/billing/paddle-client.ts",
+  );
+  assert.equal(checkoutEnvironment("test_fixture", "sandbox"), "sandbox");
+  assert.equal(checkoutEnvironment("live_fixture", "production"), "production");
+  assert.throws(() => checkoutEnvironment(undefined, "sandbox"), /missing/);
+  assert.throws(
+    () => checkoutEnvironment("pdl_apikey_private", "sandbox"),
+    /client-side token/,
+  );
+  assert.throws(
+    () => checkoutEnvironment("test_fixture", "production"),
+    /mismatch/,
+  );
+  assert.throws(
+    () => checkoutEnvironment("test_fixture", "sandbox", "production"),
+    /mismatch/,
+  );
+});
+
+test("Paddle initialization is shared, retryable after failure, and has a bounded timeout", async () => {
+  const { createPaddleLoader } = load(
+    "apps/app/features/billing/paddle-client.ts",
+  );
+  let calls = 0;
+  const paddle = { Checkout: { open() {} } };
+  const loader = createPaddleLoader(async () => {
+    calls++;
+    if (calls === 1) throw new Error("Script blocked");
+    return paddle;
+  });
+  await assert.rejects(
+    loader("test_fixture", "sandbox", () => {}),
+    /Could not load/,
+  );
+  const results = await Promise.all([
+    loader("test_fixture", "sandbox", () => {}),
+    loader("test_fixture", "sandbox", () => {}),
+  ]);
+  assert.equal(calls, 2);
+  assert.equal(results[0], paddle);
+  await assert.rejects(
+    loader("live_other", "production", () => {}),
+    /configuration changed/,
+  );
+  const hung = createPaddleLoader(() => new Promise(() => {}), 5);
+  await assert.rejects(
+    hung("test_fixture", "sandbox", () => {}),
+    /Could not load/,
+  );
+});
+
+test("subscriptions and credit packs initialize first and explicitly open the server transaction without redirecting", async () => {
+  const calls = [];
+  let rejectOpen = false;
+  const payload = {
+    transactionId: "txn_01234567890123456789012345",
+    environment: "sandbox",
+  };
+  const queries = load("apps/app/features/billing/queries.ts", {
+    "@tanstack/react-query": { useMutation: (options) => options },
+    "@/config/axiosClient": {
+      axiosClient: {
+        post: async (url) => {
+          calls.push(url);
+          return { data: payload };
+        },
+      },
+    },
+    "@/features/auth/queries": { userQueryKeys: { me: () => ["user"] } },
+    "./cache": { invalidateCurrentUser() {} },
+    "./paddle-context": {
+      usePaddle: () => ({
+        prepare: async () => calls.push("prepare"),
+        openCheckout: async (data) => {
+          calls.push(data);
+          if (rejectOpen) throw new Error("Overlay blocked");
+        },
+      }),
+    },
+  });
+  await queries.useCreateCheckoutSession().mutationFn({ plan: "pro" });
+  await queries.useCreditPackCheckout().mutationFn("25");
+  assert.deepEqual(calls, [
+    "prepare",
+    "/billing/checkout-session",
+    payload,
+    "prepare",
+    "/billing/credit-packs/checkout",
+    payload,
+  ]);
+  rejectOpen = true;
+  await assert.rejects(
+    queries.useCreateCheckoutSession().mutationFn({ plan: "business" }),
+    /Overlay blocked/,
+  );
+});
+
+test("Free billing overview retains the server balance and hides even an erroneous Free renewal date", () => {
+  const { BillingPage } = load(
+    "apps/app/features/billing/components/BillingPage.tsx",
+    {
+      "@blynta/ui": {
+        AppButton: ({ children }) =>
+          React.createElement("button", null, children),
+      },
+      "@/components/layout/PageContent": {
+        PageContent: ({ children }) =>
+          React.createElement("main", null, children),
+      },
+      "@/features/auth/queries": {
+        useCurrentUser: () => ({ data: { plan: "free" } }),
+      },
+      "../queries": {
+        useCreditBalance: () => ({
+          data: {
+            plan: "free",
+            available: 2,
+            reserved: 0,
+            monthlyCredits: 0,
+            nextRenewal: "2026-11-01",
+            planAllocations: { free: 30, pro: 50, business: 200 },
+          },
+        }),
+        useCreateCheckoutSession: () => ({ isPending: false }),
+        useCustomerPortal: () => ({ isPending: false }),
+      },
+      "../paddle-context": { usePaddle: () => ({ status: "ready" }) },
+      "./CreditHistory": { CreditHistory: () => null },
+      "./CreditPacks": { CreditPacks: () => null },
+      "./HowCreditsWork": { HowCreditsWork: () => null },
+    },
+  );
+  const html = renderToStaticMarkup(React.createElement(BillingPage));
+  assert.match(html, /30 one-time credits/);
+  assert.match(html, /no renewal/);
+  assert.match(html, />2<\/dd>/);
+  assert.doesNotMatch(html, /Next credit allocation|2026-11-01|5 credits/);
+  assert.match(html, /\$12/);
+  assert.match(html, /\$39/);
+});
+
+test("credit packs explain missing configuration and configured buttons initiate checkout", () => {
+  const previousToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+  process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN = "test_fixture";
+  try {
+    const calls = [];
+    const AppButton = ({ children, isLoading, ...props }) => {
+      void isLoading;
+      return React.createElement("button", props, children);
+    };
+    const { CreditPacks } = load(
+      "apps/app/features/billing/components/CreditPacks.tsx",
+      {
+        "@blynta/ui": { AppButton },
+        "../paddle-context": { usePaddle: () => ({ status: "ready" }) },
+        "../queries": {
+          useCreditPacks: () => ({
+            data: [
+              {
+                id: "25",
+                credits: 25,
+                enabled: true,
+                configurationError: null,
+                price: { amount: "500", currencyCode: "USD" },
+              },
+              {
+                id: "50",
+                credits: 50,
+                enabled: false,
+                configurationError: "Missing PADDLE_PRICE_ID_CREDITS_50",
+              },
+            ],
+          }),
+          useCreditPackCheckout: () => ({
+            isPending: false,
+            mutate: (id) => calls.push(id),
+          }),
+        },
+      },
+    );
+    const tree = CreditPacks();
+    const buttons = elements(tree, (e) => e.type === AppButton);
+    assert.equal(buttons.length, 2);
+    assert.equal(buttons[0].props.disabled, false);
+    assert.equal(buttons[1].props.disabled, true);
+    buttons[0].props.onClick();
+    assert.deepEqual(calls, ["25"]);
+    const html = renderToStaticMarkup(tree);
+    assert.match(html, /This credit pack is temporarily unavailable/);
+    assert.doesNotMatch(html, /PADDLE_PRICE_ID/);
+    assert.match(html, /5\.00/);
+    assert.match(html, /id="buy-credits"/);
+  } finally {
+    if (previousToken === undefined)
+      delete process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+    else process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN = previousToken;
+  }
+});
 test("insufficient credits communicates required, available, and supported upgrade route", () => {
   const { InsufficientCredits } = load(
     "packages/ui/src/components/InsufficientCredits.tsx",
@@ -95,6 +329,8 @@ test("insufficient credits communicates required, available, and supported upgra
   );
   assert.match(html, /18 credits/);
   assert.match(html, /5 available/);
+  assert.match(html, /13 additional credits/);
+  assert.match(html, /href="\/billing#buy-credits"/);
   assert.match(html, /href="\/billing"/);
   assert.match(html, /role="alert"/);
 });
@@ -193,6 +429,110 @@ function hookHarness() {
     },
   };
 }
+test("checkout resume does not reopen an explicit overlay and completion waits for the verified ledger", async () => {
+  const hooks = hookHarness();
+  const effects = [],
+    cleanups = [],
+    successes = [];
+  let callback,
+    opens = 0,
+    verified = false,
+    paid = false;
+  const id = "txn_01234567890123456789012345";
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    location: { href: "http://localhost/billing" },
+    history: {
+      replaceState(_a, _b, url) {
+        globalThis.window.location.href = String(url);
+      },
+    },
+  };
+  const flush = async () => {
+    for (let i = 0; i < 15; i++) await Promise.resolve();
+  };
+  try {
+    const { PaddleProvider } = load(
+      "apps/app/features/billing/components/PaddleProvider.tsx",
+      {
+        react: {
+          ...hooks.react,
+          useCallback: (fn) => fn,
+          useEffect: (fn) => effects.push(fn),
+        },
+        "next/navigation": {
+          useSearchParams: () => ({
+            get: (name) => new URL(window.location.href).searchParams.get(name),
+          }),
+        },
+        "next-themes": { useTheme: () => ({ resolvedTheme: "light" }) },
+        "@tanstack/react-query": { useQueryClient: () => ({}) },
+        "@/config/axiosClient": {
+          axiosClient: {
+            get: async (url) => ({
+              data: url.endsWith("checkout-config")
+                ? { environment: "sandbox" }
+                : {
+                    environment: "sandbox",
+                    status: paid ? "completed" : "draft",
+                    verified,
+                  },
+            }),
+          },
+        },
+        "../cache": { invalidateCurrentUser() {} },
+        "../paddle-client": {
+          checkoutEnvironment: () => "sandbox",
+          createPaddleLoader: () => async (_token, _env, listener) => {
+            callback = listener;
+            return {
+              Checkout: {
+                open() {
+                  opens++;
+                  callback({ name: "checkout.loaded" });
+                },
+              },
+            };
+          },
+        },
+        sonner: {
+          toast: { success: (message) => successes.push(message), error() {} },
+        },
+      },
+    );
+    let context = hooks.render(PaddleProvider).props.value;
+    effects.slice().forEach((fn) => {
+      const cleanup = fn();
+      if (cleanup) cleanups.push(cleanup);
+    });
+    await flush();
+    await context.openCheckout({ transactionId: id, environment: "sandbox" });
+    effects[1](); // Simulate Next's search-param update after replaceState.
+    await flush();
+    assert.equal(opens, 1);
+    paid = true;
+    callback({ name: "checkout.completed", data: { transaction_id: id } });
+    await flush();
+    callback({ name: "checkout.closed" });
+    context = hooks.render(PaddleProvider).props.value;
+    assert.equal(context.status, "confirming");
+    assert.match(window.location.href, /_ptxn=/);
+    assert.equal(successes.length, 0);
+    verified = true;
+    await context.retry();
+    await flush();
+    context = hooks.render(PaddleProvider).props.value;
+    assert.equal(context.status, "verified");
+    assert.equal(successes.length, 1);
+    assert.doesNotMatch(window.location.href, /_ptxn=/);
+    assert.equal(opens, 1);
+  } finally {
+    cleanups.forEach((fn) => fn());
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 function elements(root, predicate) {
   if (!root || typeof root !== "object") return [];
   if (Array.isArray(root))
@@ -207,7 +547,8 @@ test("history dropdown selections reset pagination and preserve both query filte
   let latest;
   const ui = {
     AppButton: function Button() {},
-    AppDropdown: function Dropdown() {},
+    AppSelect: function Select() {},
+    AppPagination: function Pagination() {},
   };
   const { CreditHistory } = load(
     "apps/app/features/billing/components/CreditHistory.tsx",
@@ -223,27 +564,22 @@ test("history dropdown selections reset pagination and preserve both query filte
     },
   );
   let tree = hooks.render(CreditHistory);
-  elements(
-    tree,
-    (e) => e.type === ui.AppButton && e.props.children === "Next",
-  )[0].props.onClick();
+  elements(tree, (e) => e.type === ui.AppPagination)[0].props.onPageChange(2);
   tree = hooks.render(CreditHistory);
   assert.equal(latest.page, 2);
-  elements(tree, (e) => e.type === ui.AppDropdown)[0]
-    .props.items.find((i) => i.key === "Studio")
-    .onClick();
+  elements(tree, (e) => e.type === ui.AppSelect)[0].props.onValueChange(
+    "studio",
+  );
   tree = hooks.render(CreditHistory);
   assert.deepEqual(latest, { page: 1, product: "studio", type: "" });
-  elements(tree, (e) => e.type === ui.AppDropdown)[1]
-    .props.items.find((i) => i.key === "Refunds")
-    .onClick();
+  elements(tree, (e) => e.type === ui.AppSelect)[1].props.onValueChange(
+    "refund",
+  );
   tree = hooks.render(CreditHistory);
   assert.deepEqual(latest, { page: 1, product: "studio", type: "refund" });
-  assert.match(
-    elements(tree, (e) => e.type === ui.AppDropdown)[1].props.trigger.props[
-      "aria-label"
-    ],
-    /Refunds/,
+  assert.equal(
+    elements(tree, (e) => e.type === ui.AppSelect)[1].props.value,
+    "refund",
   );
 });
 test("automatic budget is reviewed before approval and an insufficient balance blocks submission", async () => {
@@ -538,6 +874,8 @@ test("confirmation displays server-provided duration, authorization and plan tar
   assert.match(html, /11 credits/);
   assert.match(html, /9 credits/);
   assert.match(html, /Up to 20 credits/);
+  assert.match(html, /Remaining spendable credits after reservation/);
+  assert.match(html, />178<\/strong>/);
   assert.match(html, /creating up to 6 strong clips/);
   assert.doesNotMatch(html, /aiming for|minimum clip count/);
   assert.doesNotMatch(html, /6–9 clips/);

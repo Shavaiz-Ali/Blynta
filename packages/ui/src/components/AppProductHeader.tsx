@@ -159,10 +159,12 @@ export function AppCreditsControl({
             )}
             {allowance !== undefined && (
               <p className="text-xs text-muted-foreground">
-                {allowance} included monthly · shared across Blynta
+                {allowance}{" "}
+                {paid ? "included monthly" : "one-time credits · no renewal"} ·
+                shared across Blynta
               </p>
             )}
-            {resetAt && (
+            {paid && resetAt && (
               <p className="text-[11px] text-muted-foreground">
                 Next allocation / renewal:{" "}
                 {new Date(resetAt).toLocaleDateString()}

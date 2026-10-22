@@ -4,6 +4,11 @@ export interface CreditBalance {
   reserved: number;
   plan: "free" | "pro" | "business";
   monthlyCredits: number;
+  totalGranted?: number;
+  totalConsumed?: number;
+  paymentCreditsOwed?: number;
+  planAllocations?: Record<"free" | "pro" | "business", number>;
+  freeCreditsRenew?: boolean;
   nextRenewal?: string | null;
   clipExample?: {
     sourceCredits: number;
@@ -23,6 +28,15 @@ export interface CreditEstimate {
   enabled: boolean;
   totalCredits: number;
   available: number;
+  availableCredits?: number;
+  reservedCredits?: number;
+  estimatedSourceCredits?: number;
+  estimatedOutputCredits?: number;
+  maximumReservation?: number;
+  remainingAfterReservation?: number;
+  hasEnoughCredits?: boolean;
+  creditsNeeded?: number;
+  canProceed?: boolean;
   pricingVersion: string;
   sourceCredits?: number;
   renderCredits?: number;

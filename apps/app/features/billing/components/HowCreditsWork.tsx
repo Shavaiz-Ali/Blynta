@@ -1,6 +1,6 @@
 "use client";
 
-import { AppButton, AppDialog } from "@blynta/ui";
+import { AppButton, AppDialog, AppCardRoot, AppCardContent } from "@blynta/ui";
 import { Film, Scissors, ShieldCheck } from "lucide-react";
 import type { CreditBalance } from "@blynta/types";
 
@@ -35,42 +35,46 @@ export function HowCreditsWork({
         {pricing ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-xl border border-border bg-muted/20 p-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold">
-                  <Film
-                    className="size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  Source video
-                </h3>
-                <p className="mt-1 text-lg font-bold">
-                  1 credit{" "}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    per {pricing.sourceSeconds / 60} minutes
-                  </span>
-                </p>
-              </div>
-              <div className="rounded-xl border border-border bg-muted/20 p-4">
-                <h3 className="flex items-center gap-2 text-sm font-semibold">
-                  <Scissors
-                    className="size-4 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  Generated clips
-                </h3>
-                <p className="mt-1 text-lg font-bold">
-                  1 credit{" "}
-                  <span className="text-xs font-normal text-muted-foreground">
-                    per{" "}
-                    {pricing.outputSeconds === 60
-                      ? "minute"
-                      : `${pricing.outputSeconds} seconds`}
-                  </span>
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-                  Combined generated clip duration.
-                </p>
-              </div>
+              <AppCardRoot>
+                <AppCardContent>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold">
+                    <Film
+                      className="size-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    Source video
+                  </h3>
+                  <p className="mt-1 text-lg font-bold">
+                    1 credit{" "}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      per {pricing.sourceSeconds / 60} minutes
+                    </span>
+                  </p>
+                </AppCardContent>
+              </AppCardRoot>
+              <AppCardRoot>
+                <AppCardContent>
+                  <h3 className="flex items-center gap-2 text-sm font-semibold">
+                    <Scissors
+                      className="size-4 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                    Generated clips
+                  </h3>
+                  <p className="mt-1 text-lg font-bold">
+                    1 credit{" "}
+                    <span className="text-xs font-normal text-muted-foreground">
+                      per{" "}
+                      {pricing.outputSeconds === 60
+                        ? "minute"
+                        : `${pricing.outputSeconds} seconds`}
+                    </span>
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Combined generated clip duration.
+                  </p>
+                </AppCardContent>
+              </AppCardRoot>
             </div>
             {balance.clipExample && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -115,6 +119,11 @@ export function HowCreditsWork({
             units, rounded up once per job.
           </p>
         )}
+        <p className="text-sm text-muted-foreground">
+          Free credits are granted once. Pro and Business credits are allocated
+          after verified subscription renewal payments. Purchased credits join
+          your existing balance.
+        </p>
       </div>
     </AppDialog>
   );

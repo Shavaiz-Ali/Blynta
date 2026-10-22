@@ -56,6 +56,24 @@ export class Customer {
    */
   @Prop()
   currentBillingPeriodEndsAt?: Date;
+
+  @Prop()
+  checkoutLeaseToken?: string;
+
+  @Prop()
+  checkoutLeaseUntil?: Date;
+
+  @Prop()
+  pendingCheckoutId?: string;
+
+  @Prop()
+  pendingCheckoutKey?: string;
+
+  @Prop()
+  pendingCreditCheckoutId?: string;
+
+  @Prop()
+  pendingCreditCheckoutKey?: string;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);

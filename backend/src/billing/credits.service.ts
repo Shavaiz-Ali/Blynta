@@ -12,12 +12,7 @@ import {
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { ClientSession, Connection, Model, Types } from 'mongoose';
-import {
-  User,
-  UserDocument,
-  PLAN_CREDITS,
-  UserPlan,
-} from '../users/schemas/user.schema';
+import { User, UserDocument, UserPlan } from '../users/schemas/user.schema';
 import {
   CreditEntry,
   CreditOperation,
@@ -34,6 +29,7 @@ import {
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { randomUUID } from 'node:crypto';
 import { usageExecution } from './usage-context';
+import { planCredits } from './credit-config';
 
 @Injectable()
 export class CreditsService implements OnModuleInit {
@@ -52,11 +48,11 @@ export class CreditsService implements OnModuleInit {
     return this.config.get('BILLING_CREDITS_V2', 'false') === 'true';
   }
   async onModuleInit() {
-    if (!this.enabled) return;
+    // Payment accounting remains active even while new processing admission is paused.
     const topology = await this.connection.db!.admin().command({ hello: 1 });
     if (!topology.setName && topology.msg !== 'isdbgrid')
       throw new Error(
-        'BILLING_CREDITS_V2 requires MongoDB transactions (replica set or sharded cluster)',
+        'Credit accounting requires MongoDB transactions (replica set or sharded cluster)',
       );
     for (const [model, field] of [
       [this.entries, 'key'],
@@ -82,6 +78,7 @@ export class CreditsService implements OnModuleInit {
         'Billing usage index missing. Run migrate:credit-ledger -- --apply before enabling billing.',
       );
     this.pricing();
+    planCredits(this.config);
   }
   pricing(): PricingSnapshot {
     const raw = this.config.get<string>('BILLING_PRICING_JSON');
@@ -140,6 +137,7 @@ export class CreditsService implements OnModuleInit {
     if (!user) throw new NotFoundException('Account not found');
     if (user.creditLedgerInitialized) return user;
     this.amount(user.creditsBalance);
+    this.amount(user.creditsReserved || 0);
     await this.entries.create(
       [
         {
@@ -147,32 +145,75 @@ export class CreditsService implements OnModuleInit {
           key: `opening:${userId}`,
           operationId: `opening:${userId}`,
           product: 'account',
-          type: 'opening',
-          amount: user.creditsBalance,
+          type: user.freeCreditPolicy === 'one-time-v1' ? 'grant' : 'opening',
+          amount: user.creditsBalance + (user.creditsReserved || 0),
           availableDelta: user.creditsBalance,
-          reservedDelta: 0,
+          reservedDelta: user.creditsReserved || 0,
           availableAfter: user.creditsBalance,
-          reservedAfter: 0,
-          description: 'Opening balance — preserved existing credits',
+          reservedAfter: user.creditsReserved || 0,
+          description:
+            user.freeCreditPolicy === 'one-time-v1'
+              ? 'One-time Free account credits'
+              : 'Opening balance — preserved existing credits',
+          metadata: {
+            source: user.freeCreditPolicy === 'one-time-v1' ? 'free' : 'legacy',
+          },
         },
       ],
       { session },
     );
     user.creditLedgerInitialized = true;
-    user.creditsReserved = 0;
-    if (user.plan === UserPlan.FREE && !user.freeCreditGrantAt) {
-      const next =
-        user.creditsResetAt && user.creditsResetAt > new Date()
-          ? new Date(user.creditsResetAt)
-          : new Date();
-      if (next <= new Date()) next.setUTCMonth(next.getUTCMonth() + 1);
-      user.freeCreditGrantAt = next;
-    }
+    user.creditsReserved ||= 0;
+    user.freeCreditGrantAt = undefined;
     await user.save({ session });
     return user;
   }
   async migrate(userId: string) {
     return this.transaction((s) => this.opening(userId, s));
+  }
+  async createAccount(user: UserDocument) {
+    const data = user.toObject<User>();
+    const created = await this.transaction(async (session) => {
+      // Rebuild the document on transaction retries; an aborted save changes isNew.
+      const [created] = await this.users.create([data], { session });
+      return this.opening(String(created._id), session);
+    });
+    created.$session(null);
+    return created;
+  }
+
+  /** Recover payment reversals without ever taking credits held by running work. */
+  private async recoverDebt(
+    userId: string,
+    session: ClientSession,
+    key: string,
+  ) {
+    const user = await this.users.findById(userId).session(session);
+    if (!user) throw new NotFoundException('Account not found');
+    const amount = Math.min(user.creditDebt || 0, user.creditsBalance);
+    if (!amount) return;
+    user.creditsBalance -= amount;
+    user.creditDebt -= amount;
+    await user.save({ session });
+    await this.entries.create(
+      [
+        {
+          userId,
+          key: `debt:${key}`,
+          operationId: key,
+          product: 'account',
+          type: 'adjustment',
+          amount,
+          availableDelta: -amount,
+          reservedDelta: 0,
+          availableAfter: user.creditsBalance,
+          reservedAfter: user.creditsReserved,
+          description: 'Recovery of refunded or disputed payment credits',
+          metadata: { source: 'payment-debt', debtDelta: -amount },
+        },
+      ],
+      { session },
+    );
   }
   private async entry(
     session: ClientSession,
@@ -184,6 +225,15 @@ export class CreditsService implements OnModuleInit {
     key: string,
     description: string,
   ) {
+    if (type === 'reserve') {
+      const account = await this.users.findById(op.userId).session(session);
+      if (account?.isActive === false)
+        throw new ConflictException('Account is not active');
+      if (account?.creditDebt)
+        throw new ConflictException(
+          'Refunded payment credits must be repaid before starting new work',
+        );
+    }
     const user = await this.users.findOneAndUpdate(
       {
         _id: op.userId,
@@ -230,6 +280,7 @@ export class CreditsService implements OnModuleInit {
       ],
       { session },
     );
+    if (availableDelta > 0) await this.recoverDebt(op.userId, session, key);
   }
   async reserve(
     input: Pick<
@@ -444,10 +495,15 @@ export class CreditsService implements OnModuleInit {
             reservedAfter: user.creditsReserved,
             description,
             metadata,
+            relatedId:
+              typeof metadata.paymentId === 'string'
+                ? metadata.paymentId
+                : undefined,
           },
         ],
         { session },
       );
+      if (amount > 0) await this.recoverDebt(userId, session, key);
       return entry;
     });
   }
@@ -457,16 +513,39 @@ export class CreditsService implements OnModuleInit {
     cycleKey: string,
     paymentId: string,
     plan: string,
+    paymentOccurredAt?: Date,
   ) {
     this.amount(allocation);
     return this.transaction(async (session) => {
       const user = await this.opening(userId, session);
       const key = `payment:${paymentId}`;
       if (await this.entries.exists({ key }).session(session)) return 0;
+      if (paymentOccurredAt) {
+        if (!Number.isFinite(paymentOccurredAt.getTime()))
+          throw new BadRequestException('Invalid payment timestamp');
+        const opening = await this.entries
+          .findOne({ key: `opening:${userId}` })
+          .session(session);
+        if (
+          opening?.metadata?.source === 'legacy' &&
+          opening.createdAt &&
+          paymentOccurredAt < opening.createdAt
+        )
+          throw new ConflictException(
+            'Pre-ledger payment requires historical audit reconciliation; no credits granted',
+          );
+      }
       const [cycle] = await this.entries
         .aggregate<{ amount: number }>([
           { $match: { userId, type: 'grant', 'metadata.cycleKey': cycleKey } },
-          { $group: { _id: null, amount: { $sum: '$amount' } } },
+          {
+            $group: {
+              _id: null,
+              amount: {
+                $sum: { $ifNull: ['$metadata.legacyAllocation', '$amount'] },
+              },
+            },
+          },
         ])
         .session(session);
       // Paid upgrade tops up the cycle allocation. Downgrade never confiscates credits.
@@ -491,12 +570,155 @@ export class CreditsService implements OnModuleInit {
               ? 'Subscription cycle credit allocation'
               : 'Subscription payment — cycle allocation already granted',
             metadata: { cycleKey, paymentId, plan, allocation },
+            relatedId: paymentId,
           },
         ],
         { session },
       );
+      await this.recoverDebt(userId, session, key);
       return amount;
     });
+  }
+  /** Migration marker: the payment is already represented in opening holdings, so add no balance. */
+  async adoptLegacyPayment(
+    userId: string,
+    paymentId: string,
+    allocation: number,
+    cycleKey?: string,
+  ) {
+    this.amount(allocation);
+    return this.transaction(async (session) => {
+      const user = await this.opening(userId, session);
+      const key = `payment:${paymentId}`;
+      if (await this.entries.exists({ key }).session(session)) return;
+      await this.entries.create(
+        [
+          {
+            userId,
+            key,
+            operationId: cycleKey || key,
+            relatedId: paymentId,
+            product: 'account',
+            type: 'grant',
+            amount: 0,
+            availableDelta: 0,
+            reservedDelta: 0,
+            availableAfter: user.creditsBalance,
+            reservedAfter: user.creditsReserved,
+            description:
+              'Historical payment already included in opening holdings — no new credits',
+            metadata: {
+              source: 'legacy-payment',
+              legacyAllocation: allocation,
+              paymentId,
+              cycleKey,
+            },
+          },
+        ],
+        { session },
+      );
+    });
+  }
+  /** Reverse only credits attributed to the verified payment, never an active hold. */
+  async reversePayment(
+    paymentId: string,
+    adjustmentId: string,
+    fraction: number,
+    action: string,
+  ) {
+    if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1)
+      throw new BadRequestException('Invalid payment reversal fraction');
+    return this.transaction(async (session) => {
+      const key = `paddle-adjustment:${adjustmentId}`;
+      const existing = await this.entries.findOne({ key }).session(session);
+      if (existing) return existing;
+      const payment = await this.entries
+        .findOne({ key: `payment:${paymentId}`, type: 'grant' })
+        .session(session);
+      if (!payment)
+        throw new ConflictException('Payment grant missing; retry adjustment');
+      const user = await this.opening(payment.userId, session);
+      const granted = Number(
+        payment.metadata?.legacyAllocation ?? payment.amount,
+      );
+      this.amount(granted);
+      const [prior] = await this.entries
+        .aggregate<{ amount: number }>([
+          {
+            $match: {
+              userId: payment.userId,
+              'metadata.reversedPaymentId': paymentId,
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              amount: { $sum: '$metadata.reversedCredits' },
+            },
+          },
+        ])
+        .session(session);
+      const amount = Math.min(
+        Math.max(0, granted - (prior?.amount || 0)),
+        Math.ceil(granted * fraction),
+      );
+      const debit = Math.min(user.creditsBalance, amount);
+      user.creditsBalance -= debit;
+      user.creditDebt = (user.creditDebt || 0) + amount - debit;
+      this.amount(user.creditDebt);
+      await user.save({ session });
+      const [entry] = await this.entries.create(
+        [
+          {
+            userId: payment.userId,
+            key,
+            operationId: key,
+            relatedId: paymentId,
+            product: 'account',
+            type: 'adjustment',
+            amount: debit,
+            availableDelta: -debit,
+            reservedDelta: 0,
+            availableAfter: user.creditsBalance,
+            reservedAfter: user.creditsReserved,
+            description: `Payment ${action}: ${amount} credits reversed`,
+            metadata: {
+              reversedPaymentId: paymentId,
+              adjustmentId,
+              reversedCredits: amount,
+              debtDelta: amount - debit,
+              action,
+            },
+          },
+        ],
+        { session },
+      );
+      return entry;
+    });
+  }
+  async restorePaymentAdjustment(originalId: string, reversalId: string) {
+    const original = await this.entries.findOne({
+      key: `paddle-adjustment:${originalId}`,
+    });
+    if (!original)
+      throw new ConflictException(
+        'Original adjustment missing; retry reversal',
+      );
+    const amount = Number(original.metadata?.reversedCredits);
+    this.amount(amount);
+    return this.adjust(
+      original.userId,
+      amount,
+      `paddle-restoration:${originalId}`,
+      'Payment dispute reversal — credits restored',
+      'refund',
+      {
+        reversalId,
+        originalId,
+        reversedPaymentId: original.metadata?.reversedPaymentId,
+        reversedCredits: -amount,
+      },
+    );
   }
   async refund(
     userId: string,
@@ -556,6 +778,7 @@ export class CreditsService implements OnModuleInit {
         ],
         { session },
       );
+      await this.recoverDebt(userId, session, key);
       return entry;
     });
   }
@@ -566,18 +789,45 @@ export class CreditsService implements OnModuleInit {
       user = await this.migrate(userId);
     const customer = await this.customers.findOne({ userId: user._id }).lean();
     const renewal =
-      user.plan === UserPlan.FREE
-        ? user.freeCreditGrantAt
-        : customer?.currentBillingPeriodEndsAt;
+      user.plan === UserPlan.FREE ? null : customer?.currentBillingPeriodEndsAt;
+    const [totals] = await this.entries.aggregate<{
+      granted: number;
+      consumed: number;
+    }>([
+      { $match: { userId } },
+      {
+        $group: {
+          _id: null,
+          granted: {
+            $sum: {
+              $cond: [{ $in: ['$type', ['grant', 'opening']] }, '$amount', 0],
+            },
+          },
+          consumed: {
+            $sum: { $cond: [{ $eq: ['$type', 'charge'] }, '$amount', 0] },
+          },
+        },
+      },
+    ]);
     const pricing = this.pricing();
     return {
       enabled: this.enabled,
+      accountActive: user.isActive !== false,
       available: user.creditsBalance,
       reserved: user.creditsReserved || 0,
+      totalGranted: totals?.granted || 0,
+      totalConsumed: Math.max(
+        user.totalCreditsUsed || 0,
+        totals?.consumed || 0,
+      ),
+      paymentCreditsOwed: user.creditDebt || 0,
       nextRenewal: renewal && renewal > new Date() ? renewal : null,
       subscriptionStatus: customer?.paddleSubscriptionStatus || null,
       plan: user.plan,
-      monthlyCredits: PLAN_CREDITS[user.plan],
+      monthlyCredits:
+        user.plan === UserPlan.FREE ? 0 : planCredits(this.config)[user.plan],
+      planAllocations: planCredits(this.config),
+      freeCreditsRenew: false,
       pricing,
       clipExample: clipPrice(30 * 60, 3 * 60, pricing),
       entitlements: {
@@ -596,51 +846,29 @@ export class CreditsService implements OnModuleInit {
     maxOutputSeconds: number,
   ) {
     const b = await this.balance(userId);
+    const price = clipPrice(sourceSeconds, maxOutputSeconds, b.pricing);
+    const creditsNeeded = Math.max(0, price.totalCredits - b.available);
     return {
-      ...clipPrice(sourceSeconds, maxOutputSeconds, b.pricing),
+      ...price,
       available: b.available,
+      availableCredits: b.available,
+      reservedCredits: b.reserved,
+      estimatedSourceCredits: price.sourceCredits,
+      estimatedOutputCredits: price.renderCredits,
+      maximumReservation: price.totalCredits,
+      remainingAfterReservation: b.available - price.totalCredits,
+      hasEnoughCredits: creditsNeeded === 0,
+      creditsNeeded,
+      canProceed:
+        b.enabled &&
+        b.accountActive &&
+        creditsNeeded === 0 &&
+        !b.paymentCreditsOwed,
       enabled: b.enabled,
       pricingVersion: b.pricing.version,
       sourceSeconds,
       maxOutputSeconds,
     };
-  }
-  async grantFreeCycle(userId: string) {
-    return this.transaction(async (session) => {
-      const user = await this.opening(userId, session);
-      const at = user.freeCreditGrantAt;
-      if (user.plan !== UserPlan.FREE || !at || at > new Date()) return;
-      const key = `free-cycle:${userId}:${at.toISOString()}`;
-      const exists = await this.entries.exists({ key }).session(session);
-      if (!exists) {
-        user.creditsBalance += PLAN_CREDITS.free;
-        this.amount(user.creditsBalance);
-        await this.entries.create(
-          [
-            {
-              userId,
-              key,
-              operationId: key,
-              product: 'account',
-              type: 'grant',
-              amount: PLAN_CREDITS.free,
-              availableDelta: PLAN_CREDITS.free,
-              reservedDelta: 0,
-              availableAfter: user.creditsBalance,
-              reservedAfter: user.creditsReserved,
-              description: 'Monthly Free plan credits',
-            },
-          ],
-          { session },
-        );
-      }
-      const next = new Date(at);
-      do {
-        next.setUTCMonth(next.getUTCMonth() + 1);
-      } while (next <= new Date());
-      user.freeCreditGrantAt = next;
-      await user.save({ session });
-    });
   }
   async history(
     userId: string,
@@ -660,11 +888,23 @@ export class CreditsService implements OnModuleInit {
         .sort({ createdAt: -1, _id: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
-        .select('-metadata -key -__v')
+        .select('-key -__v')
         .lean(),
       this.entries.countDocuments(filter),
     ]);
-    return { rows, total, page, totalPages: Math.ceil(total / limit) };
+    return {
+      rows: rows.map(({ metadata, ...entry }) => ({
+        ...entry,
+        relatedId:
+          entry.relatedId ||
+          (typeof metadata?.paymentId === 'string'
+            ? metadata.paymentId
+            : undefined),
+      })),
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+    };
   }
   async assertSourceBudget(operationId: string, duration: number) {
     const op = await this.operations.findOne({ operationId });

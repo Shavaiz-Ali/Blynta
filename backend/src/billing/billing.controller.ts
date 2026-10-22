@@ -12,6 +12,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  Param,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Request as ExpressRequest } from 'express';
@@ -22,6 +23,9 @@ import { BillingService } from './billing.service';
 import { PaddleService } from '../paddle/paddle.service';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { UsersService } from '../users/users.service';
+import { BillingRateLimitGuard } from './billing-rate-limit.guard';
+import { z } from 'zod';
+import { parse } from '../studio/studio.contract';
 
 @Controller('billing')
 export class BillingController {
@@ -33,12 +37,29 @@ export class BillingController {
     private paddleService: PaddleService,
   ) {}
 
+  @Get('checkout-config')
+  @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
+  checkoutConfig() {
+    return { environment: this.paddleService.environment };
+  }
+
+  @Get('checkout-status/:id')
+  @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
+  checkoutStatus(
+    @Request() req: { user: { userId: string } },
+    @Param('id') id: string,
+  ) {
+    if (!/^txn_[a-z0-9]{26}$/.test(id))
+      throw new NotFoundException('Checkout not found');
+    return this.billingService.checkoutStatus(req.user.userId, id);
+  }
+
   /* -------------------------------------------------------------------------- */
   /*                      Checkout session — authenticated                      */
   /* -------------------------------------------------------------------------- */
 
   @Post('checkout-session')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
   async createCheckoutSession(
     @Request() req,
     @Body(new ZodValidationPipe(CreateCheckoutSessionDto))
@@ -48,6 +69,24 @@ export class BillingController {
     if (!user) throw new NotFoundException('User not found');
 
     return this.billingService.createCheckoutSession(user, dto);
+  }
+
+  @Get('credit-packs')
+  @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
+  creditPacks() {
+    return this.billingService.listCreditPacks();
+  }
+
+  @Post('credit-packs/checkout')
+  @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
+  async creditPackCheckout(@Request() req, @Body() body: unknown) {
+    const dto = parse(
+      z.object({ packId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/) }).strict(),
+      body,
+    );
+    const user = await this.usersService.findById(req.user.userId);
+    if (!user) throw new NotFoundException('User not found');
+    return this.billingService.createCreditPackCheckout(user, dto.packId);
   }
 
   /* -------------------------------------------------------------------------- */
@@ -92,8 +131,6 @@ export class BillingController {
         : String(req.rawBody);
     } else if (typeof req.body === 'string') {
       rawBody = req.body;
-    } else if (req.body && typeof req.body === 'object') {
-      rawBody = JSON.stringify(req.body);
     }
 
     if (!rawBody || !sig) {
@@ -148,11 +185,8 @@ export class BillingController {
       `[Paddle Webhook] Received event: ${eventType} (ID: ${eventId})`,
     );
 
-    if (!eventId) {
-      this.logger.warn(
-        `[Paddle Webhook] Event has no eventId — cannot deduplicate. Processing anyway.`,
-      );
-    } else {
+    if (!eventId) throw new Error('Paddle event ID is required');
+    {
       // ── Idempotency check ───────────────────────────────────────────────────
       const alreadyProcessed =
         await this.billingService.isEventProcessed(eventId);
@@ -166,6 +200,10 @@ export class BillingController {
 
     try {
       switch (eventType) {
+        case 'adjustment.created':
+        case 'adjustment.updated':
+          await this.billingService.handlePaymentAdjustment(data);
+          break;
         case 'subscription.created':
         case 'subscription.updated':
         case 'subscription.activated':
@@ -203,6 +241,7 @@ export class BillingController {
             data,
             eventId,
             eventType,
+            event.occurredAt || event.occurred_at,
           );
           break;
 

@@ -11,6 +11,10 @@ import {
   Customer,
   CustomerSchema,
 } from '../src/billing/schemas/customer.schema';
+import {
+  SubscriptionEvent,
+  SubscriptionEventSchema,
+} from '../src/billing/schemas/subscription-event.schema';
 
 async function main() {
   await ConfigModule.forRoot();
@@ -29,13 +33,27 @@ async function main() {
     );
     const usage = connection.model('ProcessingUsage', ProcessingUsageSchema);
     const customers = connection.model(Customer.name, CustomerSchema);
+    const subscriptionEvents = connection.model(
+      SubscriptionEvent.name,
+      SubscriptionEventSchema,
+    );
+    const historicalPayments = await subscriptionEvents.countDocuments({
+      eventType: 'transaction.completed',
+      creditsGranted: { $gt: 0 },
+      'rawPayload.id': { $regex: '^txn_' },
+    });
     const pending = await users.countDocuments({
       creditLedgerInitialized: { $ne: true },
+    });
+    const freeRenewalsToDisable = await users.countDocuments({
+      freeCreditGrantAt: { $exists: true },
     });
     console.log(
       JSON.stringify({
         mode: process.argv.includes('--apply') ? 'apply' : 'dry-run',
         accountsWithoutOpening: pending,
+        freeRenewalsToDisable,
+        historicalPaymentAuditRows: historicalPayments,
       }),
     );
     if (!process.argv.includes('--apply')) return;
@@ -49,6 +67,11 @@ async function main() {
       operations.createIndexes(),
       usage.createIndexes(),
     ]);
+    // No balance/usage changes. The old monthly Free scheduler has been removed.
+    await users.updateMany(
+      { freeCreditGrantAt: { $exists: true } },
+      { $unset: { freeCreditGrantAt: 1 } },
+    );
     const service = new CreditsService(
       connection,
       users as any,
@@ -66,9 +89,37 @@ async function main() {
       await service.migrate(String(user._id));
       migrated++;
     }
+    let paymentMarkers = 0;
+    // Keep prior completed payment grants from being re-applied after processed-event TTL expiry.
+    for await (const event of subscriptionEvents
+      .find({
+        eventType: 'transaction.completed',
+        creditsGranted: { $gt: 0 },
+        'rawPayload.id': { $regex: '^txn_' },
+      })
+      .sort({ _id: 1 })
+      .cursor()) {
+      if (!(await users.exists({ _id: event.userId }))) continue;
+      const payload = event.rawPayload!;
+      const paymentId = String(payload.id);
+      const period = payload.billingPeriod || payload.billing_period;
+      const endsAt = period?.endsAt || period?.ends_at;
+      const cycleKey =
+        endsAt && Number.isFinite(new Date(endsAt).getTime())
+          ? `cycle:${event.paddleSubscriptionId}:${new Date(endsAt).toISOString()}`
+          : undefined;
+      await service.adoptLegacyPayment(
+        String(event.userId),
+        paymentId,
+        event.creditsGranted!,
+        cycleKey,
+      );
+      paymentMarkers++;
+    }
     console.log(
       JSON.stringify({
         migrated,
+        historicalPaymentsReviewed: paymentMarkers,
         policy: 'opening balances only; existing jobs retain legacy billing',
       }),
     );

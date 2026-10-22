@@ -220,6 +220,9 @@ test("profile keeps the shared account menu and existing destinations", () => {
 test("loading and failed profile queries retain all global controls and session identity", () => {
   const fixture = createFixture();
   const { AppHeaderRight } = load("components/layout/AppHeaderRight.tsx", {
+    "@/features/billing/queries": {
+      useCreditBalance: () => ({ data: undefined }),
+    },
     "@blynta/auth/react": {
       useSession: () => ({ data: { user: { name: "Session User" } } }),
     },

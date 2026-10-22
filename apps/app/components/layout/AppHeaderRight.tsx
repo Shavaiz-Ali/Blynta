@@ -5,6 +5,7 @@ import { AppHeaderActions, AppCreditsControl } from "@blynta/ui";
 import { UserDropdown } from "@/features/dashboard/components/UserDropdown";
 import { useSession } from "@blynta/auth/react";
 import { NotificationBell } from "@/features/notifications/components/NotificationBell";
+import { useCreditBalance } from "@/features/billing/queries";
 export function AppHeaderRight({
   profile,
   profileError,
@@ -13,15 +14,18 @@ export function AppHeaderRight({
   profileError: boolean;
 }) {
   const { data: session } = useSession();
+  const credits = useCreditBalance();
   const plan = profile?.plan ?? "free";
-  const allowance = plan === "business" ? 200 : plan === "pro" ? 50 : 5;
+  const allowance =
+    credits.data?.planAllocations?.[plan] ??
+    (plan === "business" ? 200 : plan === "pro" ? 50 : 30);
   return (
     <AppHeaderActions
       credits={
         <AppCreditsControl
-          balance={profile?.creditsBalance}
-          reserved={profile?.creditsReserved}
-          resetAt={profile?.creditsResetAt}
+          balance={credits.data?.available ?? profile?.creditsBalance}
+          reserved={credits.data?.reserved ?? profile?.creditsReserved}
+          resetAt={credits.data?.nextRenewal ?? undefined}
           plan={profile?.plan}
           allowance={profile ? allowance : undefined}
           error={

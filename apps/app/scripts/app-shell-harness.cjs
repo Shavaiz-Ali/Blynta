@@ -78,6 +78,20 @@ function createFixture() {
     "@/features/auth/queries": {
       useCurrentUser: () => ({ data: profile, isError: false }),
     },
+    "@/features/billing/queries": {
+      useCreditBalance: () => {
+        const account = mocks["@/features/auth/queries"].useCurrentUser();
+        return {
+          data: account.data
+            ? {
+                available: account.data.creditsBalance,
+                reserved: account.data.creditsReserved,
+              }
+            : undefined,
+          error: account.isError ? new Error("Credits unavailable") : null,
+        };
+      },
+    },
     "@/features/notifications/queries": {
       useUnreadCountQuery: () => ({ data: { count: 3 } }),
     },
@@ -199,6 +213,7 @@ function workspaceMocks() {
       },
       "./studio-scrollbars.module.css": { default: {} },
       "./rendering.module.css": { default: {} },
+      "./workspace.module.css": { default: {} },
       "next-themes": { useTheme: () => ({ theme: "dark", setTheme() {} }) },
     },
   };
