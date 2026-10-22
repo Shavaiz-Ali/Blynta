@@ -21,6 +21,7 @@ import * as fs from 'fs';
 import { Readable, Transform } from 'stream';
 import { r2FailureDetails } from './r2-diagnostics';
 import type { FinalizeRequestMiddleware } from '@smithy/types';
+import { R2HttpHandler } from './r2-http-handler';
 
 interface SigningDiagnostics {
   r2RequestSignedWithV4?: boolean;
@@ -45,6 +46,15 @@ export class R2Service {
     const accessKeyId = this.credential('R2_ACCESS_KEY_ID');
     const secretAccessKey = this.credential('R2_SECRET_ACCESS_KEY');
 
+    const transport = new R2HttpHandler(
+      {
+        endpoint,
+        accessKeyId,
+        secretAccessKey,
+        buckets: [this.bucket, this.sourceBucket || this.bucket],
+      },
+      (event) => this.logger.log(JSON.stringify(event)),
+    );
     this.client = new S3Client({
       region: 'auto', // R2 uses 'auto', not a real AWS region
       endpoint: endpoint || undefined,
@@ -56,7 +66,7 @@ export class R2Service {
       forcePathStyle: true,
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
-      requestHandler: { connectionTimeout: 10000, socketTimeout: 120000 },
+      requestHandler: transport,
     });
     let endpointHttps = false;
     let endpointIsR2 = false;
@@ -117,6 +127,9 @@ export class R2Service {
         true;
       diagnostics.r2RequestUsesConfiguredEndpoint =
         request.hostname === endpointHostname;
+      transport.observeSignedRequest(
+        args.request as Parameters<R2HttpHandler['handle']>[0],
+      );
       return next(args);
     };
     this.client.middlewareStack.addRelativeTo(observeSigning, {

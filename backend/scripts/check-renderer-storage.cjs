@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const { Readable } = require('node:stream');
 const { ConfigService } = require('@nestjs/config');
 const { UnrecoverableError } = require('bullmq');
+const { NodeHttpHandler } = require('@smithy/node-http-handler');
+const { Logger } = require('@nestjs/common');
 const {
   assertBatchStorage,
   assertBatchTaskKeys,
@@ -92,20 +94,32 @@ for (const sourceKey of [
   );
 }
 async function checkSigning() {
-  for (const source of ['blynta', 'private-sources']) {
-    const r2 = new R2Service(
-      new ConfigService({
-        ...storage,
-        R2_SOURCE_BUCKET_NAME: source,
-        R2_ACCESS_KEY_ID: '1'.repeat(32),
-        R2_SECRET_ACCESS_KEY: '2'.repeat(64),
-      }),
-    );
-    // This script deliberately exercises the compiled SDK signer with an offline transport.
-    const client = r2.client;
-    let requests = 0;
-    client.config.requestHandler = {
-      handle: async (request) => {
+  const originalHandle = NodeHttpHandler.prototype.handle;
+  const originalLog = Logger.prototype.log;
+  const boundaries = [];
+  Logger.prototype.log = (message) => {
+    if (typeof message === 'string' && message.startsWith('{')) {
+      const event = JSON.parse(message);
+      if (event.event === 'r2_http_response') boundaries.push(event);
+    }
+  };
+  try {
+    for (const source of ['blynta', 'private-sources']) {
+      const r2 = new R2Service(
+        new ConfigService({
+          ...storage,
+          R2_SOURCE_BUCKET_NAME: source,
+          R2_ACCESS_KEY_ID: '1'.repeat(32),
+          R2_SECRET_ACCESS_KEY: '2'.repeat(64),
+        }),
+      );
+      // This script deliberately exercises the compiled SDK signer with an offline transport.
+      const client = r2.client;
+      let requests = 0;
+      // Preserve R2HttpHandler and all signing middleware. Stub only its underlying
+      // Node transport; unlike replacing client.config.requestHandler this exercises
+      // the final authorization guard and observation in the compiled image.
+      NodeHttpHandler.prototype.handle = async (request) => {
         requests++;
         assert.equal(request.hostname, new URL(storage.R2_ENDPOINT).hostname);
         assert(request.path.startsWith(`/${source}/`));
@@ -118,29 +132,44 @@ async function checkSigning() {
             body: Readable.from([Buffer.from('{}')]),
           },
         };
-      },
-    };
-    try {
-      await r2.downloadToBuffer(`${prefix}/task.json`);
-      await r2.objectInfo('source-videos/existing/video.mp4');
-      await r2.uploadBuffer(
-        Buffer.from('{}'),
-        `${prefix}/progress.json`,
-        'application/json',
-      );
-      const signed = new URL(
-        await r2.getSignedDownloadUrl('source-videos/existing/video.mp4'),
-      );
-      assert.equal(signed.hostname, new URL(storage.R2_ENDPOINT).hostname);
-      assert(signed.pathname.startsWith(`/${source}/`));
-      assert.equal(
-        signed.searchParams.get('X-Amz-Algorithm'),
-        'AWS4-HMAC-SHA256',
-      );
-      assert.equal(requests, 3);
-    } finally {
-      client.destroy();
+      };
+      try {
+        await r2.downloadToBuffer(`${prefix}/task.json`);
+        await r2.objectInfo('source-videos/existing/video.mp4');
+        await r2.uploadBuffer(
+          Buffer.from('{}'),
+          `${prefix}/progress.json`,
+          'application/json',
+        );
+        const signed = new URL(
+          await r2.getSignedDownloadUrl('source-videos/existing/video.mp4'),
+        );
+        assert.equal(signed.hostname, new URL(storage.R2_ENDPOINT).hostname);
+        assert(signed.pathname.startsWith(`/${source}/`));
+        assert.equal(
+          signed.searchParams.get('X-Amz-Algorithm'),
+          'AWS4-HMAC-SHA256',
+        );
+        assert.equal(requests, 3);
+      } finally {
+        client.destroy();
+      }
     }
+    assert.equal(boundaries.length, 2);
+    assert(
+      boundaries.every(
+        (event) =>
+          event.authorizationWellFormed &&
+          event.credentialMatchesConfigured &&
+          event.signedAuthorizationUnchanged &&
+          event.signedTargetUnchanged &&
+          event.signedHeadersUnchanged &&
+          event.httpStatusCode === 200,
+      ),
+    );
+  } finally {
+    NodeHttpHandler.prototype.handle = originalHandle;
+    Logger.prototype.log = originalLog;
   }
   console.log(
     JSON.stringify({
@@ -154,6 +183,11 @@ async function checkSigning() {
       missingCredentialsRejected: true,
       sigV4Verified: true,
       accountEndpointPreserved: true,
+      finalAuthorizationVerified: true,
+      httpHandlerVersion: require('@smithy/node-http-handler/package.json')
+        .version,
+      signatureV4Version: require('@smithy/signature-v4/package.json').version,
+      s3SDKVersion: require('@aws-sdk/client-s3/package.json').version,
     }),
   );
 }

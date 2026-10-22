@@ -1,5 +1,11 @@
 # R2 signature failure: evidence, deployment and verification
 
+Follow-up: the operator has now confirmed the failing manifest GET and the
+unsuccessful path-style change for job definition revision 7 / image v3. See
+[the final HTTP boundary investigation](r2-http-boundary-investigation.md) for
+the current evidence, new transport checks and remaining production uncertainty.
+The addressing change below is historical and must not be repeated as a new fix.
+
 ## What is established
 
 The supplied CloudWatch event contains only `InvalidRequest: Please use
