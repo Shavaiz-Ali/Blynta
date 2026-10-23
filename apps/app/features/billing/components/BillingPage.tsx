@@ -1,388 +1,687 @@
 "use client";
 
-import { useState } from "react";
-import { toast } from "sonner";
-import {
-  AppBadge,
-  AppButton,
-  AppCardRoot,
-  AppCardHeader,
-  AppCardTitle,
-  AppCardDescription,
-  AppCardContent,
-  AppCardFooter,
-  AppSkeleton,
-} from "@blynta/ui";
-import { Check, CreditCard, HelpCircle } from "lucide-react";
-import { PageContent } from "@/components/layout/PageContent";
-import { useCurrentUser } from "@/features/auth/queries";
-import {
-  useCreditBalance,
-  useCreateCheckoutSession,
-  useCustomerPortal,
-} from "../queries";
-import { usePaddle } from "../paddle-context";
+import * as React from "react";
 import { CreditHistory } from "./CreditHistory";
 import { CreditPacks } from "./CreditPacks";
+import { usePaddle } from "../paddle-context";
 import { HowCreditsWork } from "./HowCreditsWork";
+import { Scissors, WandSparkles, Wallet } from "lucide-react";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import {
+  AppButton,
+  AppCardRoot,
+  AppBadge,
+  AppSkeleton,
+  AppDialog,
+} from "@blynta/ui";
+import { PageContent } from "@/components/layout/PageContent";
 
-const plans = [
+import { useCurrentUser } from "@/features/auth/queries";
+import {
+  useCreateCheckoutSession,
+  useCustomerPortal,
+  useCreditBalance,
+} from "../queries";
+import type { UserPlan as BillingUserPlan } from "./types";
+import type { BillingPlanTier } from "../queries";
+import { cn } from "@/lib/utils";
+import {
+  CoinsIcon,
+  FilmIcon,
+  CrownIcon,
+  CheckIcon,
+  SparklesIcon,
+  ZapIcon,
+  BuildingIcon,
+} from "@/features/dashboard/icons";
+
+/* -------------------------------------------------------------------------- */
+/*                                 Types                                      */
+/* -------------------------------------------------------------------------- */
+
+type UserPlan = BillingUserPlan | "free" | "pro" | "business";
+
+interface PlanMeta {
+  id: "free" | BillingPlanTier;
+  name: string;
+  price: string;
+  priceSuffix: string;
+  credits: number;
+  cta: (currentPlan: UserPlan) => string;
+  features: string[];
+  accent: string;
+  badge?: string;
+  icon: React.ReactNode;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           Plan display config                              */
+/* -------------------------------------------------------------------------- */
+/* NOTE: these are DISPLAY values only. The real source of truth for billing
+   amounts is the corresponding Paddle Price object configured in the
+   dashboard. Keep these strings in sync with Paddle's configured amounts. */
+
+const DISPLAY_PLANS: PlanMeta[] = [
   {
     id: "free",
     name: "Free",
     price: "$0",
+    priceSuffix: "/month",
     credits: 30,
+    cta: (current) => (current === "free" ? "Current plan" : "Downgrade"),
     features: [
-      "AI Clips and Studio",
-      "Shared credits for cloud exports",
-      "Free credits do not renew",
+      "30 one-time credits",
+      "AI Clips and Studio access",
+      "Local timeline editing included",
+      "Cloud exports use shared credits",
+      "720p and 1080p Studio exports",
     ],
+    accent: "border-border/60 bg-card",
+    icon: <FilmIcon className="h-5 w-5" />,
   },
   {
     id: "pro",
     name: "Pro",
     price: "$12",
+    priceSuffix: "/month",
     credits: 50,
+    cta: (current) =>
+      current === "pro"
+        ? "Current plan"
+        : current === "business"
+          ? "Downgrade"
+          : "Upgrade to Pro",
+    badge: "Most popular",
     features: [
-      "AI Clips and Studio",
-      "Advanced prompts and clip styles",
-      "Monthly subscription credits",
+      "50 credits per month",
+      "AI Clips and Studio access",
+      "Local timeline editing included",
+      "Cloud exports use shared credits",
+      "Advanced clip prompts and styles",
+      "720p and 1080p Studio exports",
     ],
+    accent:
+      "border-primary/60 bg-primary/[0.08] shadow-[0_0_0_1px_rgba(13,148,136,0.25)]",
+    icon: <SparklesIcon className="h-5 w-5" />,
   },
   {
     id: "business",
     name: "Business",
     price: "$39",
+    priceSuffix: "/month",
     credits: 200,
+    cta: (current) =>
+      current === "business" ? "Current plan" : "Upgrade to Business",
     features: [
+      "200 credits per month",
       "Everything in Pro",
-      "More credits for your workflow",
-      "Monthly subscription credits",
+      "Shared credits for both products",
+      "Cloud exports use shared credits",
+      "720p and 1080p Studio exports",
     ],
+    accent: "border-border/60 bg-card",
+    icon: <BuildingIcon className="h-5 w-5" />,
   },
-] as const;
+];
 
-export function BillingPage() {
-  const wallet = useCreditBalance();
-  const profile = useCurrentUser();
-  const checkout = usePaddle();
-  const [helpOpen, setHelpOpen] = useState(false);
-  const subscription = useCreateCheckoutSession({
-    onError: (error) => toast.error(error.message),
-  });
-  const portal = useCustomerPortal();
-  const plan = wallet.data?.plan ?? profile.data?.plan ?? "free";
-  const paid = plan !== "free";
-  const busy =
-    subscription.isPending ||
-    portal.isPending ||
-    checkout.status === "opening" ||
-    checkout.status === "confirming";
-  const manage = () =>
-    portal.mutate(undefined, {
-      onError: (error) => toast.error(error.message),
-    });
-  const allowance = (id: "free" | "pro" | "business", fallback: number) =>
-    wallet.data?.planAllocations?.[id] ?? fallback;
+const PLAN_ORDER: Record<UserPlan, number> = {
+  free: 0,
+  pro: 1,
+  business: 2,
+};
+
+/* -------------------------------------------------------------------------- */
+/*                              Stat summary bar                              */
+/* -------------------------------------------------------------------------- */
+
+interface StatItemProps {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  accent?: string;
+}
+
+function StatItem({ icon, label, value, accent }: StatItemProps) {
+  return (
+    <div className="flex items-center gap-2.5 min-w-0">
+      <div
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
+          accent ?? "bg-muted text-muted-foreground",
+        )}
+      >
+        {icon}
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground leading-none mb-0.5">
+          {label}
+        </p>
+        <p className="text-sm font-bold text-foreground leading-none truncate">
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+interface CurrentPlanBarProps {
+  currentPlan: UserPlan;
+  creditsBalance: number | string;
+  creditsResetText: string;
+  reserved: number | string;
+}
+
+function CurrentPlanBar({
+  currentPlan,
+  creditsBalance,
+  creditsResetText,
+  reserved,
+}: CurrentPlanBarProps) {
+  const planLabel =
+    currentPlan === "free"
+      ? "Free"
+      : currentPlan === "pro"
+        ? "Pro"
+        : currentPlan === "business"
+          ? "Business"
+          : "Free";
 
   return (
-    <PageContent>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Billing &amp; Plan
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Your credits, subscription and payment history.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <AppButton
-            variant="outline"
-            size="sm"
-            onClick={() => setHelpOpen(true)}
-            icon={<HelpCircle className="size-4" />}
+    <AppCardRoot className="flex-row flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 rounded-xl border-border/60 bg-muted/20 text-base overflow-visible shadow-none">
+      <StatItem
+        icon={<CoinsIcon className="h-4 w-4" />}
+        label="Credits available"
+        value={creditsBalance}
+        accent="bg-secondary/15 text-secondary-foreground"
+      />
+
+      <div className="h-6 w-px bg-border/60 hidden sm:block" />
+
+      <StatItem
+        icon={<FilmIcon className="h-4 w-4" />}
+        label="Reserved credits"
+        value={reserved}
+        accent="bg-chart-1/15 text-chart-1"
+      />
+
+      <div className="h-6 w-px bg-border/60 hidden sm:block" />
+
+      <StatItem
+        icon={<CrownIcon className="h-4 w-4" />}
+        label="Current plan"
+        value={
+          currentPlan === "free"
+            ? `${planLabel} · 30 one-time credits`
+            : `${planLabel} · ${currentPlan === "business" ? 200 : 50}/month`
+        }
+        accent="bg-primary/15 text-primary"
+      />
+      {currentPlan !== "free" && (
+        <StatItem
+          icon={<CoinsIcon className="h-4 w-4" />}
+          label="Next allocation"
+          value={creditsResetText}
+          accent="bg-secondary/15 text-secondary-foreground"
+        />
+      )}
+    </AppCardRoot>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Plan card                                   */
+/* -------------------------------------------------------------------------- */
+
+interface PlanCardProps {
+  plan: PlanMeta;
+  currentPlan: UserPlan;
+  isLoading: boolean;
+  onUpgrade: (tier: BillingPlanTier) => void;
+}
+
+function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
+  const tierRank = PLAN_ORDER[plan.id];
+  const currentRank = PLAN_ORDER[currentPlan] ?? 0;
+  const isCurrent = plan.id === currentPlan;
+  const isDowngrade = tierRank < currentRank;
+
+  // Action state: current plan -> disabled badge, downgrade -> disabled, upgrade -> actionable
+  const actionDisabled = isCurrent || isDowngrade;
+  const isProAndActionable = plan.id === "pro" && !actionDisabled;
+  const isBusinessActionable = plan.id === "business" && !actionDisabled;
+
+  const buttonLabel = plan.cta(currentPlan);
+
+  return (
+    <AppCardRoot
+      className={cn(
+        "relative flex flex-col gap-0 overflow-visible rounded-2xl border p-5 sm:p-6 text-base shadow-sm transition-all",
+        plan.accent,
+      )}
+    >
+      {/* Badge */}
+      {plan.badge && (
+        <AppBadge className="absolute -top-3 left-5 h-auto gap-0 border-0 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary text-primary-foreground shadow-xs">
+          <ZapIcon className="h-3 w-3 mr-1" />
+          {plan.badge}
+        </AppBadge>
+      )}
+
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <div
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg",
+              plan.id === "pro"
+                ? "bg-primary/15 text-primary"
+                : "bg-muted text-muted-foreground",
+            )}
           >
-            How credits work
-          </AppButton>
-          {paid && (
-            <AppButton
-              size="sm"
-              variant="outline"
-              isLoading={portal.isPending}
-              disabled={busy}
-              onClick={manage}
-            >
-              Manage subscription
-            </AppButton>
-          )}
+            {plan.icon}
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground leading-none">
+              {plan.name}
+            </h3>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {plan.id === "free"
+                ? "30 one-time credits"
+                : `${plan.credits} credits / month`}
+            </p>
+          </div>
         </div>
       </div>
 
-      {(checkout.status === "loading" ||
-        checkout.status === "opening" ||
-        checkout.status === "confirming") && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {checkout.status === "confirming"
-            ? "Confirming payment with the server. Your balance updates after verification."
-            : checkout.status === "opening"
-              ? "Opening secure Paddle checkout…"
-              : "Preparing secure checkout…"}
-        </p>
-      )}
-      {checkout.status === "verified" && (
-        <p role="status" className="text-sm text-primary">
-          Payment verified. Your balance has been refreshed.
-        </p>
-      )}
-      {checkout.status === "closed" && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Checkout closed. Your subscription changes only after a verified
-          payment.
-        </p>
-      )}
-      {checkout.error && (
-        <AppCardRoot className="border-destructive">
-          <AppCardContent className="flex flex-wrap items-center justify-between gap-3">
-            <p role="alert" className="min-w-0 flex-1 text-sm text-destructive">
-              {checkout.error}
-            </p>
-            <AppButton
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                void checkout
-                  .retry()
-                  .catch((error: Error) => toast.error(error.message))
-              }
-            >
-              Retry checkout
-            </AppButton>
-          </AppCardContent>
-        </AppCardRoot>
-      )}
-
-      <section aria-labelledby="billing-overview" className="space-y-3">
-        <h2 id="billing-overview" className="text-base font-semibold">
-          Billing overview
-        </h2>
-        <AppCardRoot>
-          <AppCardContent>
-            {wallet.isPending ? (
-              <div
-                aria-label="Loading credit balance"
-                role="status"
-                className="grid gap-4 sm:grid-cols-3"
-              >
-                {[0, 1, 2].map((i) => (
-                  <AppSkeleton key={i} className="h-14" />
-                ))}
-              </div>
-            ) : wallet.isError ? (
-              <div role="alert" className="flex flex-wrap items-center gap-3">
-                <p className="text-sm text-destructive">
-                  Your credit balance could not be loaded.
-                </p>
-                <AppButton
-                  size="sm"
-                  variant="outline"
-                  onClick={() => wallet.refetch()}
-                >
-                  Retry balance
-                </AppButton>
-              </div>
-            ) : (
-              <dl
-                className={`grid gap-5 sm:grid-cols-2 ${paid && wallet.data?.nextRenewal ? "xl:grid-cols-4" : "lg:grid-cols-3"}`}
-              >
-                <div>
-                  <dt className="text-xs text-muted-foreground">
-                    Available credits
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold tabular-nums">
-                    {wallet.data?.available ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">
-                    Reserved credits
-                  </dt>
-                  <dd className="mt-1 text-3xl font-semibold tabular-nums">
-                    {wallet.data?.reserved ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">
-                    Current subscription
-                  </dt>
-                  <dd className="mt-1 text-lg font-semibold capitalize">
-                    {plan}
-                  </dd>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {paid
-                      ? `${wallet.data?.monthlyCredits ?? allowance(plan, plan === "business" ? 200 : 50)} credits per month`
-                      : `${allowance("free", 30)} one-time credits · no renewal`}
-                  </p>
-                </div>
-                {paid && wallet.data?.nextRenewal && (
-                  <div>
-                    <dt className="text-xs text-muted-foreground">
-                      Next credit allocation
-                    </dt>
-                    <dd className="mt-1 text-lg font-semibold">
-                      {new Date(wallet.data.nextRenewal).toLocaleDateString()}
-                    </dd>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      After verified renewal payment
-                    </p>
-                  </div>
-                )}
-              </dl>
-            )}
-            {wallet.data && !wallet.isError && (
-              <dl className="mt-5 grid grid-cols-2 gap-4 border-t border-border pt-4 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">
-                    Total granted credits
-                  </dt>
-                  <dd className="mt-1 font-semibold tabular-nums">
-                    {wallet.data.totalGranted ?? "—"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">
-                    Total consumed credits
-                  </dt>
-                  <dd className="mt-1 font-semibold tabular-nums">
-                    {wallet.data.totalConsumed ?? "—"}
-                  </dd>
-                </div>
-              </dl>
-            )}
-            {!!wallet.data?.paymentCreditsOwed && (
-              <p role="alert" className="mt-4 text-sm text-destructive">
-                {wallet.data.paymentCreditsOwed} refunded payment credits are
-                owed. New credits repay this amount before processing is
-                available.
-              </p>
-            )}
-          </AppCardContent>
-        </AppCardRoot>
-      </section>
-
-      <section aria-labelledby="subscription-plans" className="space-y-3">
-        <h2 id="subscription-plans" className="text-base font-semibold">
-          Subscription plans
-        </h2>
-        <div className="grid items-stretch gap-4 lg:grid-cols-3">
-          {plans.map((item) => (
-            <AppCardRoot
-              key={item.id}
-              className={item.id === "pro" ? "border-primary" : undefined}
-            >
-              <AppCardHeader>
-                <div className="flex items-center justify-between gap-2">
-                  <AppCardTitle>{item.name}</AppCardTitle>
-                  {item.id === "pro" && (
-                    <AppBadge variant="secondary">Popular</AppBadge>
-                  )}
-                </div>
-                <AppCardDescription>
-                  {item.id === "free"
-                    ? "Start creating, with no subscription."
-                    : "For a consistent creative workflow."}
-                </AppCardDescription>
-              </AppCardHeader>
-              <AppCardContent className="space-y-4">
-                <p className="text-3xl font-semibold tracking-tight">
-                  {item.price}
-                  {item.id !== "free" && (
-                    <span className="text-sm font-normal text-muted-foreground">
-                      {" "}
-                      / month
-                    </span>
-                  )}
-                </p>
-                <p className="text-sm font-medium">
-                  {allowance(item.id, item.credits)}{" "}
-                  {item.id === "free" ? "one-time credits" : "credits / month"}
-                </p>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  {item.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2">
-                      <Check
-                        className="mt-0.5 size-4 shrink-0 text-primary"
-                        aria-hidden="true"
-                      />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-              </AppCardContent>
-              <AppCardFooter className="mt-auto">
-                <AppButton
-                  className="w-full"
-                  variant={item.id === "pro" ? "default" : "outline"}
-                  disabled={
-                    busy ||
-                    wallet.isPending ||
-                    wallet.isError ||
-                    item.id === plan ||
-                    (item.id === "free" && !paid)
-                  }
-                  isLoading={
-                    subscription.isPending &&
-                    subscription.variables?.plan === item.id
-                  }
-                  onClick={() => {
-                    if (paid) manage();
-                    else if (item.id !== "free")
-                      subscription.mutate({ plan: item.id });
-                  }}
-                  icon={
-                    item.id === "free" ? undefined : (
-                      <CreditCard className="size-4" />
-                    )
-                  }
-                >
-                  {item.id === plan
-                    ? "Current plan"
-                    : paid
-                      ? "Manage plan"
-                      : `Upgrade to ${item.name}`}
-                </AppButton>
-              </AppCardFooter>
-            </AppCardRoot>
-          ))}
+      <div className="mb-5">
+        <div className="flex items-baseline gap-1">
+          <span className="text-3xl font-extrabold tracking-tight text-foreground">
+            {plan.price}
+          </span>
+          <span className="text-sm text-muted-foreground font-medium">
+            {plan.priceSuffix}
+          </span>
         </div>
-      </section>
-      <CreditPacks />
-      <CreditHistory />
-      <AppCardRoot>
-        <AppCardContent className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <h2 className="font-semibold">How credits work</h2>
+      </div>
+
+      <ul className="space-y-2.5 mb-6 flex-1">
+        {plan.features.map((feature) => (
+          <li
+            key={feature}
+            className="flex items-start gap-2 text-xs text-foreground/80"
+          >
+            <span
+              className={cn(
+                "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full",
+                plan.id === "pro"
+                  ? "bg-primary/20 text-primary"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              <CheckIcon className="h-2.5 w-2.5" />
+            </span>
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+
+      {isCurrent ? (
+        <div className="inline-flex items-center justify-center h-9 w-full rounded-lg border border-primary/40 bg-primary/10 text-primary text-xs font-bold tracking-wide uppercase">
+          <CrownIcon className="h-3.5 w-3.5 mr-1.5" />
+          Current plan
+        </div>
+      ) : (
+        <AppButton
+          size="default"
+          className="h-9 w-full text-sm font-semibold"
+          variant={plan.id === "pro" ? "default" : "outline"}
+          disabled={actionDisabled || isLoading}
+          isLoading={isLoading && (isProAndActionable || isBusinessActionable)}
+          onClick={() => {
+            if (actionDisabled) return;
+            if (plan.id !== "free") onUpgrade(plan.id as BillingPlanTier);
+          }}
+        >
+          {buttonLabel}
+        </AppButton>
+      )}
+    </AppCardRoot>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               Skeletons                                    */
+/* -------------------------------------------------------------------------- */
+
+function CurrentPlanBarSkeleton() {
+  return (
+    <div className="flex flex-wrap items-center gap-6 px-4 py-3 rounded-xl border border-border/60 bg-muted/20">
+      {[0, 1, 2].map((i) => (
+        <React.Fragment key={i}>
+          <div className="flex items-center gap-2.5">
+            <AppSkeleton className="h-7 w-7 rounded-lg bg-muted animate-pulse" />
+            <div className="space-y-1">
+              <AppSkeleton className="h-2.5 w-16 rounded bg-muted animate-pulse" />
+              <AppSkeleton className="h-3.5 w-10 rounded bg-muted animate-pulse" />
+            </div>
+          </div>
+          {i < 2 && <div className="h-6 w-px bg-border/60 hidden sm:block" />}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+function PlanCardSkeleton() {
+  return (
+    <div className="relative flex flex-col rounded-2xl border border-border/60 bg-card p-5 sm:p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2.5">
+          <AppSkeleton className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+          <div className="space-y-1.5">
+            <AppSkeleton className="h-3 w-14 rounded bg-muted animate-pulse" />
+            <AppSkeleton className="h-2 w-20 rounded bg-muted animate-pulse" />
+          </div>
+        </div>
+      </div>
+      <div className="mb-5">
+        <div className="flex items-baseline gap-1">
+          <AppSkeleton className="h-7 w-16 rounded bg-muted animate-pulse" />
+          <AppSkeleton className="h-3 w-12 rounded bg-muted animate-pulse" />
+        </div>
+      </div>
+      <ul className="space-y-2.5 mb-6 flex-1">
+        {[0, 1, 2, 3].map((i) => (
+          <li key={i} className="flex items-start gap-2">
+            <AppSkeleton className="mt-0.5 h-3.5 w-3.5 rounded-full bg-muted animate-pulse shrink-0" />
+            <AppSkeleton className="h-3.5 w-full rounded bg-muted animate-pulse" />
+          </li>
+        ))}
+      </ul>
+      <AppSkeleton className="h-9 w-full rounded-lg bg-muted animate-pulse" />
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          BillingPage — main export                         */
+/* -------------------------------------------------------------------------- */
+
+export function BillingPage() {
+  const credits = useCreditBalance();
+  const [creditsHelpOpen, setCreditsHelpOpen] = React.useState(false);
+  const [accountOpen, setAccountOpen] = React.useState(false);
+  const [accountTab, setAccountTab] = React.useState<"purchases" | "history">(
+    "history",
+  );
+  const router = useRouter();
+  const checkout = usePaddle();
+  const { data: profile, isLoading: profileLoading } = useCurrentUser();
+  const currentPlan: UserPlan =
+    credits.data?.plan ?? (profile?.plan as UserPlan) ?? "free";
+  const createCheckout = useCreateCheckoutSession({
+    onError: (err: Error) =>
+      toast.error(
+        err.message || "Failed to initiate checkout. Please try again.",
+        { id: "billing-checkout" },
+      ),
+  });
+  const customerPortal = useCustomerPortal();
+  const handleManageSubscription = () =>
+    customerPortal.mutate(undefined, {
+      onError: (err: Error) =>
+        toast.error(err.message || "Failed to open customer portal."),
+    });
+  const creditsResetText = credits.data?.nextRenewal
+    ? new Date(credits.data.nextRenewal).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      })
+    : "Renewal date unavailable";
+  const checkoutBusy =
+    createCheckout.isPending ||
+    customerPortal.isPending ||
+    checkout.status === "opening" ||
+    checkout.status === "confirming";
+  const handleUpgrade = (tier: BillingPlanTier) => {
+    if (currentPlan !== "free") return handleManageSubscription();
+    createCheckout.mutate({ plan: tier });
+  };
+  const openAccount = (tab: "purchases" | "history") => {
+    setAccountTab(tab);
+    setAccountOpen(true);
+  };
+
+  React.useEffect(() => {
+    const syncHash = () => {
+      if (window.location.hash === "#buy-credits") {
+        setAccountTab("purchases");
+        setAccountOpen(true);
+      } else if (window.location.hash === "#credit-history") {
+        setAccountTab("history");
+        setAccountOpen(true);
+      }
+    };
+    queueMicrotask(syncHash);
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
+  }, []);
+
+  return (
+    <PageContent>
+      {/* ── Page heading ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-1.5">
+          {profileLoading ? (
+            <div className="space-y-1.5">
+              <AppSkeleton className="h-8 w-56 bg-muted rounded-lg animate-pulse" />
+              <AppSkeleton className="h-4 w-72 bg-muted rounded-md animate-pulse" />
+            </div>
+          ) : (
+            <>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                Billing &amp; Plan
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Manage your subscription, view remaining credits, and upgrade
+                anytime.
+              </p>
+            </>
+          )}
+        </div>
+
+        {currentPlan !== "free" && (
+          <AppButton
+            variant="outline"
+            size="sm"
+            onClick={handleManageSubscription}
+            isLoading={customerPortal.isPending}
+            className="self-start sm:self-auto"
+          >
+            Manage subscription
+          </AppButton>
+        )}
+      </div>
+
+      {/* ── Current plan / credits summary ── */}
+      {profileLoading || credits.isPending ? (
+        <CurrentPlanBarSkeleton />
+      ) : (
+        <CurrentPlanBar
+          currentPlan={currentPlan}
+          creditsBalance={credits.data?.available ?? "—"}
+          creditsResetText={creditsResetText}
+          reserved={credits.data?.reserved ?? "—"}
+        />
+      )}
+
+      {/* ── Plan cards grid ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        {profileLoading
+          ? [0, 1, 2].map((i) => <PlanCardSkeleton key={i} />)
+          : DISPLAY_PLANS.map((plan) => (
+              <PlanCard
+                key={plan.id}
+                plan={plan}
+                currentPlan={currentPlan}
+                isLoading={checkoutBusy}
+                onUpgrade={handleUpgrade}
+              />
+            ))}
+      </div>
+
+      <section className="space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight">
+              One balance across Blynta
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Source processing and delivered clips use credits. Unused
-              reservations return to your available balance. Subscription
-              credits arrive after verified renewal payments; Free credits are
-              granted once.
+              Create clips and finish your edits with the same credits.
             </p>
           </div>
           <AppButton
             variant="outline"
             size="sm"
-            onClick={() => setHelpOpen(true)}
+            className="self-start"
+            onClick={() => setCreditsHelpOpen(true)}
           >
-            View credit pricing
+            How credits work
           </AppButton>
-        </AppCardContent>
-      </AppCardRoot>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            {
+              Icon: Scissors,
+              title: "AI Clips",
+              copy: "Turn long videos into highlights. Credits cover source processing and delivered clips.",
+            },
+            {
+              Icon: WandSparkles,
+              title: "Studio",
+              copy: "Edit and preview for free. Use your shared credits when you export in the cloud.",
+            },
+            {
+              Icon: Wallet,
+              title: "Your credits, together",
+              copy: "Subscription credits join your balance. Review the maximum cost before starting paid work.",
+            },
+          ].map(({ Icon, title, copy }) => (
+            <AppCardRoot
+              key={title}
+              className="block gap-0 rounded-2xl border-border/60 bg-card p-5 text-base shadow-none"
+            >
+              <div className="mb-4 inline-flex rounded-xl bg-primary/10 p-2.5 text-primary">
+                <Icon className="size-5" aria-hidden="true" />
+              </div>
+              <h3 className="text-sm font-semibold">{title}</h3>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {copy}
+              </p>
+            </AppCardRoot>
+          ))}
+        </div>
+      </section>
       <HowCreditsWork
-        open={helpOpen}
-        onOpenChange={setHelpOpen}
-        balance={wallet.data}
+        open={creditsHelpOpen}
+        onOpenChange={setCreditsHelpOpen}
+        balance={credits.data}
       />
+      <AppDialog
+        open={accountOpen}
+        onOpenChange={setAccountOpen}
+        title="Credits"
+        description="Purchase credits or review your balance activity."
+        size="lg"
+        contentClassName="max-h-[calc(100dvh-2rem)] sm:max-w-5xl"
+        bodyClassName="space-y-4"
+      >
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label="Credit account views"
+        >
+          <AppButton
+            size="sm"
+            variant={accountTab === "purchases" ? "default" : "outline"}
+            aria-pressed={accountTab === "purchases"}
+            onClick={() => setAccountTab("purchases")}
+          >
+            Buy credits
+          </AppButton>
+          <AppButton
+            size="sm"
+            variant={accountTab === "history" ? "default" : "outline"}
+            aria-pressed={accountTab === "history"}
+            onClick={() => setAccountTab("history")}
+          >
+            Credit history
+          </AppButton>
+        </div>
+        {accountTab === "purchases" ? (
+          <CreditPacks onCheckoutOpened={() => setAccountOpen(false)} />
+        ) : (
+          <CreditHistory />
+        )}
+      </AppDialog>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <AppButton
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          onClick={() => openAccount("purchases")}
+        >
+          Buy credits
+        </AppButton>
+        <AppButton
+          variant="link"
+          size="sm"
+          className="h-auto p-0 text-xs"
+          onClick={() => openAccount("history")}
+        >
+          Credit history
+        </AppButton>
+        {credits.isError && (
+          <AppButton
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            onClick={() => void credits.refetch()}
+          >
+            Retry credit balance
+          </AppButton>
+        )}
+        {checkout.error && (
+          <AppButton
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            onClick={() =>
+              void checkout
+                .retry()
+                .catch((err: Error) => toast.error(err.message))
+            }
+          >
+            Retry checkout
+          </AppButton>
+        )}
+      </div>
+      <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <p>
+          All charges are in USD and processed securely by Paddle. Monthly
+          subscriptions renew automatically; cancel anytime from this page.
+        </p>
+        <p>
+          Need a custom volume plan?{" "}
+          <AppButton
+            variant="link"
+            onClick={() => router.push("/settings")}
+            className="h-auto p-0 text-xs font-semibold text-foreground underline-offset-2 hover:underline"
+          >
+            Contact support
+          </AppButton>
+        </p>
+      </div>
     </PageContent>
   );
 }

@@ -8,7 +8,17 @@ const http = require("node:http");
 const Module = require("node:module");
 const app = path.resolve(__dirname, "..");
 const root = path.resolve(app, "../..");
-const output = path.join(root, ".test-results/billing-preview");
+const baseline = process.argv.includes("--baseline");
+const missingToken = process.argv.includes("--missing-token");
+const output = path.join(
+  root,
+  ".test-results",
+  baseline
+    ? "billing-preview-baseline"
+    : missingToken
+      ? "billing-preview-missing-token"
+      : "billing-preview",
+);
 fs.mkdirSync(output, { recursive: true });
 const backendRequire = Module.createRequire(
   path.join(root, "backend/package.json"),
@@ -20,6 +30,7 @@ const publicEnv = backendRequire("dotenv").parse(
   fs.readFileSync(path.join(app, ".env.local")),
 );
 const smoke = process.argv.includes("--sandbox-checkout");
+const port = baseline ? 4321 : missingToken ? 4322 : 4320;
 if (smoke && backendEnv.PADDLE_ENV !== "sandbox")
   throw new Error("This fixture only permits sandbox Paddle");
 const write = (name, text) => {
@@ -27,6 +38,20 @@ const write = (name, text) => {
   fs.writeFileSync(filename, text);
   return filename;
 };
+let billingPage = path.join(app, "features/billing/components/BillingPage");
+if (baseline) {
+  const original = require("node:child_process").execFileSync(
+    "git",
+    ["show", "a6c85c4:apps/app/features/billing/components/BillingPage.tsx"],
+    { cwd: root, encoding: "utf8" },
+  );
+  billingPage = write("OriginalBillingPage.tsx", original);
+  for (const name of ["CreditHistory", "HowCreditsWork", "types"])
+    write(
+      name + ".tsx",
+      `export * from '${path.join(app, "features/billing/components", name).replaceAll("\\", "/")}';`,
+    );
+}
 const loader = write(
   "loader.cjs",
   `module.exports=function(source){return require(${JSON.stringify(require.resolve("typescript"))}).transpileModule(source,{compilerOptions:{module:99,target:9,jsx:4,esModuleInterop:true}}).outputText}`,
@@ -41,7 +66,7 @@ const axios = write(
 );
 const navigation = write(
   "navigation.ts",
-  `import {useMemo} from 'react';export const useSearchParams=()=>useMemo(()=>new URLSearchParams(window.location.search),[]);`,
+  `import {useMemo} from 'react';export const useSearchParams=()=>useMemo(()=>new URLSearchParams(window.location.search),[]);export const useRouter=()=>({push:(url)=>window.location.assign(url)});`,
 );
 const link = write(
   "link.tsx",
@@ -49,7 +74,7 @@ const link = write(
 );
 const entry = write(
   "entry.tsx",
-  `import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{ThemeProvider,useTheme}from'next-themes';import{Toaster}from'sonner';import{BillingPage}from'${path.join(app, "features/billing/components/BillingPage").replaceAll("\\", "/")}';import{PaddleProvider}from'${path.join(app, "features/billing/components/PaddleProvider").replaceAll("\\", "/")}';import{AppButton}from'@blynta/ui';const client=new QueryClient({defaultOptions:{queries:{retry:false}}});function Preview(){const{resolvedTheme,setTheme}=useTheme();return <><div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-4 py-2 text-xs"><span>Local UI fixture · real sandbox checkout${smoke ? " enabled" : " disabled"} · no database or wallet changes</span><AppButton size="sm" variant="outline" onClick={()=>setTheme(resolvedTheme==='dark'?'light':'dark')}>Switch theme</AppButton></div><PaddleProvider><BillingPage/></PaddleProvider><Toaster/></>}createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><ThemeProvider attribute="class" defaultTheme="light"><Preview/></ThemeProvider></QueryClientProvider>);`,
+  `import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{ThemeProvider,useTheme}from'next-themes';import{Toaster}from'sonner';import{BillingPage}from'${billingPage.replaceAll("\\", "/")}';import{PaddleProvider}from'${path.join(app, "features/billing/components/PaddleProvider").replaceAll("\\", "/")}';import{AppButton}from'@blynta/ui';const client=new QueryClient({defaultOptions:{queries:{retry:false}}});function Preview(){const{resolvedTheme,setTheme}=useTheme();return <><div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-4 py-2 text-xs"><span>Local UI fixture · real sandbox checkout${smoke ? " enabled" : " disabled"} · no database or wallet changes</span><AppButton size="sm" variant="outline" onClick={()=>setTheme(resolvedTheme==='dark'?'light':'dark')}>Switch theme</AppButton></div><PaddleProvider><BillingPage/></PaddleProvider><Toaster/></>}createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><ThemeProvider attribute="class" defaultTheme="light"><Preview/></ThemeProvider></QueryClientProvider>);`,
 );
 
 async function main() {
@@ -84,7 +109,9 @@ async function main() {
           new webpack.webpack.DefinePlugin({
             "process.env.NODE_ENV": JSON.stringify("development"),
             "process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN": JSON.stringify(
-              publicEnv.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || "",
+              missingToken
+                ? ""
+                : publicEnv.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN || "",
             ),
             "process.env.NEXT_PUBLIC_PADDLE_ENV": JSON.stringify("sandbox"),
           }),
@@ -275,8 +302,8 @@ async function main() {
         );
       }
     })
-    .listen(4320, "127.0.0.1", () =>
-      console.log("Billing UI verification: http://127.0.0.1:4320/billing"),
+    .listen(port, "127.0.0.1", () =>
+      console.log(`Billing UI verification: http://127.0.0.1:${port}/billing`),
     );
 }
 main().catch((error) => {

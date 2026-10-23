@@ -57,6 +57,7 @@ export function PaddleProvider({ children }: { children: React.ReactNode }) {
       opening.current = null;
     }
     console.warn("[Billing checkout]", { event: "checkout_failed" });
+    toast.error(message, { id: "billing-checkout" });
   }, []);
 
   const confirm = React.useCallback(
@@ -143,9 +144,6 @@ export function PaddleProvider({ children }: { children: React.ReactNode }) {
         });
         fail(
           "Paddle could not complete checkout. Check your payment details or retry.",
-        );
-        toast.error(
-          "Checkout failed. You can retry without changing your subscription.",
         );
       }
     },

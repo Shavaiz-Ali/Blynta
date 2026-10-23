@@ -30,7 +30,9 @@ export function formatCreditPackPrice(price?: {
   }
 }
 
-export function CreditPacks() {
+export function CreditPacks({
+  onCheckoutOpened,
+}: { onCheckoutOpened?: () => void } = {}) {
   const packs = useCreditPacks();
   const checkout = useCreditPackCheckout();
   const paddle = usePaddle();
@@ -95,6 +97,7 @@ export function CreditPacks() {
                   }
                   onClick={() =>
                     checkout.mutate(pack.id, {
+                      onSuccess: onCheckoutOpened,
                       onError: (error) => toast.error(error.message),
                     })
                   }

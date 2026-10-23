@@ -35,8 +35,8 @@ export function HowCreditsWork({
         {pricing ? (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <AppCardRoot>
-                <AppCardContent>
+              <AppCardRoot className="block gap-0 rounded-xl border-border bg-muted/20 p-4 text-base shadow-none">
+                <AppCardContent className="px-0">
                   <h3 className="flex items-center gap-2 text-sm font-semibold">
                     <Film
                       className="size-4 text-muted-foreground"
@@ -52,8 +52,8 @@ export function HowCreditsWork({
                   </p>
                 </AppCardContent>
               </AppCardRoot>
-              <AppCardRoot>
-                <AppCardContent>
+              <AppCardRoot className="block gap-0 rounded-xl border-border bg-muted/20 p-4 text-base shadow-none">
+                <AppCardContent className="px-0">
                   <h3 className="flex items-center gap-2 text-sm font-semibold">
                     <Scissors
                       className="size-4 text-muted-foreground"

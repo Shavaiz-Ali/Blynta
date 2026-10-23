@@ -35,6 +35,8 @@ function load(relative, mocks = {}) {
           AppCardFooter: wrapper,
           AppBadge: wrapper,
           AppSkeleton: wrapper,
+          AppDialog: ({ open, children }) =>
+            open ? React.createElement("div", null, children) : null,
           Table: ({ children }) => React.createElement("table", null, children),
           TableBody: "tbody",
           TableCell: "td",
@@ -230,6 +232,9 @@ test("Free billing overview retains the server balance and hides even an erroneo
       "@/features/auth/queries": {
         useCurrentUser: () => ({ data: { plan: "free" } }),
       },
+      "next/navigation": { useRouter: () => ({ push() {} }) },
+      "@/lib/utils": { cn: (...values) => values.filter(Boolean).join(" ") },
+      "@/features/dashboard/icons": new Proxy({}, { get: () => () => null }),
       "../queries": {
         useCreditBalance: () => ({
           data: {
@@ -252,9 +257,13 @@ test("Free billing overview retains the server balance and hides even an erroneo
   );
   const html = renderToStaticMarkup(React.createElement(BillingPage));
   assert.match(html, /30 one-time credits/);
-  assert.match(html, /no renewal/);
-  assert.match(html, />2<\/dd>/);
-  assert.doesNotMatch(html, /Next credit allocation|2026-11-01|5 credits/);
+  assert.match(html, />2<\/p>/);
+  assert.match(html, /One balance across Blynta/);
+  assert.match(html, /Most popular/);
+  assert.doesNotMatch(
+    html,
+    /Next allocation|2026-11-01|5 credits|Billing overview|Credit purchases|Credit usage history/,
+  );
   assert.match(html, /\$12/);
   assert.match(html, /\$39/);
 });
@@ -531,6 +540,87 @@ test("checkout resume does not reopen an explicit overlay and completion waits f
     if (previousWindow === undefined) delete globalThis.window;
     else globalThis.window = previousWindow;
   }
+});
+
+test("restored billing opens purchases/history in a secondary shared dialog and keeps Upgrade actions", () => {
+  const hooks = hookHarness();
+  const upgrades = [];
+  const ui = {
+    AppButton: function Button() {},
+    AppDialog: function Dialog() {},
+  };
+  const CreditPacks = () => null;
+  const CreditHistory = () => null;
+  const { BillingPage } = load(
+    "apps/app/features/billing/components/BillingPage.tsx",
+    {
+      react: { ...hooks.react, useEffect() {} },
+      "@blynta/ui": ui,
+      "@/components/layout/PageContent": {
+        PageContent: ({ children }) =>
+          React.createElement("main", null, children),
+      },
+      "@/lib/utils": { cn: (...values) => values.filter(Boolean).join(" ") },
+      "@/features/dashboard/icons": new Proxy({}, { get: () => () => null }),
+      "next/navigation": { useRouter: () => ({ push() {} }) },
+      "@/features/auth/queries": {
+        useCurrentUser: () => ({
+          data: { plan: "free", creditsBalance: 99 },
+          isLoading: false,
+        }),
+      },
+      "../queries": {
+        useCreditBalance: () => ({
+          data: { available: 2, reserved: 1, plan: "free" },
+        }),
+        useCreateCheckoutSession: () => ({
+          mutate: (input) => upgrades.push(input),
+          isPending: false,
+        }),
+        useCustomerPortal: () => ({ isPending: false }),
+      },
+      "../paddle-context": {
+        usePaddle: () => ({ status: "error", error: "Missing client token" }),
+      },
+      "./CreditPacks": { CreditPacks },
+      "./CreditHistory": { CreditHistory },
+      "./HowCreditsWork": { HowCreditsWork: () => null },
+    },
+  );
+  let tree = hooks.render(BillingPage);
+  const dialog = () => elements(tree, (e) => e.type === ui.AppDialog)[0];
+  assert.equal(dialog().props.open, false);
+  assert.equal(elements(tree, (e) => e.props?.role === "alert").length, 0);
+  const plan = elements(
+    tree,
+    (e) => e.type?.name === "PlanCard" && e.props.plan.id === "pro",
+  )[0];
+  const card = plan.type(plan.props);
+  elements(card, (e) => e.type === ui.AppButton)[0].props.onClick();
+  assert.deepEqual(upgrades, [{ plan: "pro" }]);
+  elements(
+    tree,
+    (e) => e.type === ui.AppButton && e.props.children === "Buy credits",
+  )
+    .at(-1)
+    .props.onClick();
+  tree = hooks.render(BillingPage);
+  assert.equal(dialog().props.open, true);
+  assert.equal(elements(dialog(), (e) => e.type === CreditPacks).length, 1);
+  elements(
+    dialog(),
+    (e) => e.type === ui.AppButton && e.props.children === "Credit history",
+  )[0].props.onClick();
+  tree = hooks.render(BillingPage);
+  assert.equal(elements(dialog(), (e) => e.type === CreditHistory).length, 1);
+  elements(
+    dialog(),
+    (e) => e.type === ui.AppButton && e.props.children === "Buy credits",
+  )[0].props.onClick();
+  tree = hooks.render(BillingPage);
+  elements(dialog(), (e) => e.type === CreditPacks)[0].props.onCheckoutOpened();
+  tree = hooks.render(BillingPage);
+  assert.equal(dialog().props.open, false);
 });
 
 function elements(root, predicate) {
