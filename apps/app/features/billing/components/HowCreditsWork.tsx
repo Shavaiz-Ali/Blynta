@@ -109,7 +109,10 @@ export function HowCreditsWork({
           />
           <p className="text-sm leading-relaxed text-muted-foreground">
             Credits are reserved before processing. Unused credits are returned,
-            and your final charge never exceeds what you approve.
+            and your final charge never exceeds what you approve. Holds reserve
+            existing credits; releases restore availability without adding new
+            credits. “Recorded” confirms a ledger entry, not the current job or
+            payment status.
           </p>
         </div>
         {pricing && (
@@ -123,6 +126,11 @@ export function HowCreditsWork({
           Free credits are granted once. Pro and Business credits are allocated
           after verified subscription renewal payments. Purchased credits join
           your existing balance.
+        </p>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Credit packs are one-time purchases. Paddle confirms tax and the final
+          total before payment. Monthly subscriptions renew automatically;
+          cancel from Billing &amp; Plan.
         </p>
       </div>
     </AppDialog>

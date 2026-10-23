@@ -199,7 +199,9 @@ async function main() {
     );
     service.getOrCreatePaddleCustomer = async () => {
       if (!owner.paddleCustomerId) {
-        const email = "billing-verification@example.test";
+        const email =
+          process.env.BILLING_PREVIEW_EMAIL ||
+          "billing-verification@example.test";
         const matches = await paddle.customers.list({ email: [email] }).next();
         const created =
           matches[0] ||

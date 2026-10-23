@@ -376,11 +376,81 @@ test("Free billing overview retains the server balance and hides even an erroneo
   assert.match(html, /\$39/);
 });
 
+test("plan metadata failure hides stale prices, disables upgrades and offers contextual retry", () => {
+  const buttons = [];
+  let retries = 0,
+    checkouts = 0;
+  const { BillingPage } = load(
+    "apps/app/features/billing/components/BillingPage.tsx",
+    {
+      "@blynta/ui": {
+        AppButton: (props) => {
+          buttons.push(props);
+          return React.createElement(
+            "button",
+            { disabled: props.disabled },
+            props.children,
+          );
+        },
+      },
+      "@/components/layout/PageContent": {
+        PageContent: ({ children }) =>
+          React.createElement("main", null, children),
+      },
+      "@/features/auth/queries": {
+        useCurrentUser: () => ({ data: { plan: "free" } }),
+      },
+      "next/navigation": { useRouter: () => ({ push() {} }) },
+      "@/lib/utils": { cn: (...values) => values.filter(Boolean).join(" ") },
+      "@/features/dashboard/icons": new Proxy({}, { get: () => () => null }),
+      "../queries": {
+        useCreditBalance: () => ({
+          data: { plan: "free", available: 30, reserved: 0 },
+        }),
+        useCreateCheckoutSession: () => ({ mutate: () => checkouts++ }),
+        useCustomerPortal: () => ({}),
+        useBillingPlans: () => ({
+          isError: true,
+          data: [
+            {
+              id: "pro",
+              credits: 50,
+              enabled: true,
+              price: { amount: "1200", currencyCode: "USD" },
+            },
+          ],
+          refetch: () => retries++,
+        }),
+      },
+      "../paddle-context": { usePaddle: () => ({ status: "ready" }) },
+      "./CreditHistory": { CreditHistory: () => null },
+      "./CreditPacks": { CreditPacks: () => null },
+      "./HowCreditsWork": { HowCreditsWork: () => null },
+    },
+  );
+  const html = renderToStaticMarkup(React.createElement(BillingPage));
+  assert.match(html, /role="alert"/);
+  assert.match(html, /Subscription pricing unavailable/);
+  assert.doesNotMatch(html, /\$12|\$39/);
+  const upgrades = buttons.filter((button) =>
+    String(button.children).startsWith("Upgrade to"),
+  );
+  assert.equal(upgrades.length, 2);
+  for (const button of upgrades) {
+    assert.equal(button.disabled, true);
+    button.onClick();
+  }
+  assert.equal(checkouts, 0);
+  buttons.find((button) => button.children === "Retry loading plans").onClick();
+  assert.equal(retries, 1);
+});
+
 test("credit packs explain missing configuration and configured buttons initiate checkout", () => {
   const previousToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
   process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN = "test_fixture";
   try {
     const calls = [];
+    let catalogFailed = false;
     const AppButton = ({ children, isLoading, ...props }) => {
       void isLoading;
       return React.createElement("button", props, children);
@@ -392,6 +462,8 @@ test("credit packs explain missing configuration and configured buttons initiate
         "../paddle-context": { usePaddle: () => ({ status: "ready" }) },
         "../queries": {
           useCreditPacks: () => ({
+            isError: catalogFailed,
+            refetch() {},
             data: [
               {
                 id: "25",
@@ -423,10 +495,23 @@ test("credit packs explain missing configuration and configured buttons initiate
     buttons[0].props.onClick();
     assert.deepEqual(calls, ["25"]);
     const html = renderToStaticMarkup(tree);
-    assert.match(html, /This credit pack is temporarily unavailable/);
+    assert.match(html, /Unavailable/);
+    assert.match(html, /One-time purchase/);
+    assert.doesNotMatch(
+      html,
+      /Credit purchases|One-time credit pack|Currently unavailable|temporarily unavailable|<h2/,
+    );
     assert.doesNotMatch(html, /PADDLE_PRICE_ID/);
     assert.match(html, /5\.00/);
     assert.match(html, /id="buy-credits"/);
+    catalogFailed = true;
+    const failedTree = CreditPacks();
+    const failedButtons = elements(
+      failedTree,
+      (e) => e.type === AppButton && e.props["aria-label"],
+    );
+    assert.ok(failedButtons.every((button) => button.props.disabled));
+    assert.doesNotMatch(renderToStaticMarkup(failedTree), /5\.00/);
   } finally {
     if (previousToken === undefined)
       delete process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
@@ -466,7 +551,10 @@ test("history distinguishes charges, holds and released holds", () => {
   assert.match(html, /−5/);
   assert.match(html, /5 unlocked/);
   assert.match(html, /\+5/);
-  assert.match(html, /not new credit grants/);
+  assert.doesNotMatch(
+    html,
+    /Credits added, held, spent and returned|not new credit grants|Holds reserve existing/,
+  );
   assert.match(html, /Filter by product/);
   assert.match(html, /Page 1 of 2/);
   assert.doesNotMatch(html, /<table|<thead|RELATED JOB/);

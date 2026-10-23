@@ -37,24 +37,19 @@ export function CreditPacks() {
   return (
     <section
       id="buy-credits"
-      aria-labelledby="credit-purchases"
+      aria-label="Credit packs"
       className="scroll-mt-6 space-y-3"
     >
-      <h2 id="credit-purchases" className="text-base font-semibold">
-        Credit purchases
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        One-time credits without changing your subscription. Tax and your final
-        total are confirmed by Paddle before payment.
-      </p>
       {packs.isPending && (
         <p role="status" className="text-sm text-muted-foreground">
           Loading credit packs…
         </p>
       )}
       {packs.isError && (
-        <div role="alert" className="space-y-2">
-          <p className="text-sm text-destructive">{packs.error.message}</p>
+        <div role="alert" className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">
+            Credit packs unavailable.
+          </p>
           <AppButton
             size="sm"
             variant="outline"
@@ -67,31 +62,34 @@ export function CreditPacks() {
       <div className="grid gap-4 lg:grid-cols-3">
         {packs.data?.map((pack) => {
           const price = formatCreditPackPrice(pack.price);
+          const available =
+            !packs.isError &&
+            pack.enabled &&
+            !!price &&
+            !pack.configurationError;
           return (
             <AppCardRoot key={pack.id}>
               <AppCardHeader>
-                <AppCardTitle>{pack.credits} credits</AppCardTitle>
-                <AppCardDescription>One-time credit pack</AppCardDescription>
+                <AppCardTitle>{pack.credits} Credits</AppCardTitle>
+                <AppCardDescription>One-time purchase</AppCardDescription>
               </AppCardHeader>
               <AppCardContent className="space-y-3">
-                <p className="text-xl font-semibold">
-                  {price || "Currently unavailable"}
-                </p>
-                {pack.configurationError && (
-                  <p className="text-xs text-muted-foreground">
-                    This credit pack is temporarily unavailable.
-                  </p>
+                {available ? (
+                  <p className="text-xl font-semibold">{price}</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Unavailable</p>
                 )}
                 <AppButton
                   className="w-full"
                   variant="outline"
-                  disabled={!pack.enabled || !price || busy}
+                  disabled={!available || busy}
+                  aria-label={`Buy ${pack.credits} credits`}
                   isLoading={
                     checkout.isPending && checkout.variables === pack.id
                   }
                   onClick={() => startPurchase(pack.id)}
                 >
-                  Buy {pack.credits} credits
+                  Buy Credits
                 </AppButton>
               </AppCardContent>
             </AppCardRoot>

@@ -34,9 +34,6 @@ export function CreditHistory() {
         Credit usage history
       </h3>
       <div className={recordListClasses.toolbar}>
-        <p className="text-xs text-muted-foreground">
-          Credits added, held, spent and returned.
-        </p>
         <div className="flex flex-wrap items-center gap-2.5">
           {[
             {
@@ -118,13 +115,6 @@ export function CreditHistory() {
               </AppButton>
             )}
           </AppListEmptyState>
-        }
-        footer={
-          <p className="text-xs text-muted-foreground">
-            Holds reserve existing credits; releases restore availability. They
-            are not new credit grants. Status describes the recorded
-            transaction, not the current job status.
-          </p>
         }
         pagination={
           history.data?.total

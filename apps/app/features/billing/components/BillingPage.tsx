@@ -463,13 +463,34 @@ export function BillingPage() {
               <PlanCard
                 key={plan.id}
                 plan={plan}
-                catalog={catalog.data?.find((item) => item.id === plan.id)}
+                catalog={
+                  catalog.isError
+                    ? undefined
+                    : catalog.data?.find((item) => item.id === plan.id)
+                }
                 currentPlan={currentPlan}
                 isLoading={checkoutBusy}
                 onUpgrade={handleUpgrade}
               />
             ))}
       </div>
+
+      {catalog.isError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+        >
+          <span>Subscription pricing unavailable.</span>
+          <AppButton
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            onClick={() => void catalog.refetch()}
+          >
+            Retry loading plans
+          </AppButton>
+        </div>
+      )}
 
       <section className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -555,10 +576,6 @@ export function BillingPage() {
         </AppTabs>
       </section>
       <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <p>
-          Payments are processed securely by Paddle. Monthly subscriptions renew
-          automatically; cancel anytime from this page.
-        </p>
         <p>
           Need a custom volume plan?{" "}
           <AppButton
