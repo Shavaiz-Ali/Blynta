@@ -1,9 +1,10 @@
 "use client";
+import { authQueryKeys } from "@blynta/types";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { accountRequest } from "@/config/axiosClient";
 export function useEnabledProviders() {
   return useQuery({
-    queryKey: ["auth", "providers"],
+    queryKey: authQueryKeys.providers(),
     queryFn: () => accountRequest<string[]>("providers"),
     retry: false,
     staleTime: 60000,

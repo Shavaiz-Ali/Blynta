@@ -1,4 +1,5 @@
 "use client";
+import { PLAN, USER_ROLE } from "@blynta/types";
 import { AppButton } from "@blynta/ui";
 
 import * as React from "react";
@@ -126,14 +127,16 @@ export function UserDetailCard({
                   variant="outline"
                   className="text-xs capitalize border-primary/30 bg-primary/10 text-primary"
                 >
-                  {user.plan === "pro" && <Zap className="size-3 mr-1" />}
-                  {user.plan === "business" && (
+                  {user.plan === PLAN.PRO && <Zap className="size-3 mr-1" />}
+                  {user.plan === PLAN.BUSINESS && (
                     <Briefcase className="size-3 mr-1" />
                   )}
                   {user.plan}
                 </Badge>
                 <Badge
-                  variant={user.role === "admin" ? "secondary" : "outline"}
+                  variant={
+                    user.role === USER_ROLE.ADMIN ? "secondary" : "outline"
+                  }
                   className="text-xs capitalize"
                 >
                   {user.role}

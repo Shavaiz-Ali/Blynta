@@ -23,11 +23,41 @@ function load(relative, mocks = {}) {
   const fixtureModule = { exports: {} };
   new Function("require", "module", "exports", source)(
     (id) => {
+      if (id === "@blynta/types")
+        return mocks[id] || load("packages/types/src/index.ts", mocks);
       if (id === "@blynta/ui" && mocks[id]) {
         const wrapper = ({ children }) =>
           React.createElement("div", null, children);
         const defaults = {
+          AppTable: load("packages/ui/src/components/AppTable.tsx", mocks)
+            .AppTable,
+          AppTableRow: load("packages/ui/src/components/AppTableRow.tsx", mocks)
+            .AppTableRow,
+          appTableRowActionClassName: load(
+            "packages/ui/src/components/AppTableRow.tsx",
+            mocks,
+          ).appTableRowActionClassName,
+          AppCard: wrapper,
           AppCardRoot: wrapper,
+          AppTabs: wrapper,
+          AppTabsContent: wrapper,
+          AppListSkeleton: ({ label }) =>
+            React.createElement(
+              "div",
+              { role: "status", "aria-label": label },
+              label,
+            ),
+          AppListEmptyState: ({ title, description, children }) =>
+            React.createElement(
+              "div",
+              { role: "status" },
+              title,
+              description,
+              children,
+            ),
+          recordListClasses: load(
+            "packages/ui/src/components/list-presentation.ts",
+          ).recordListClasses,
           AppCardHeader: wrapper,
           AppCardTitle: wrapper,
           AppCardDescription: wrapper,
@@ -107,8 +137,16 @@ function history(query) {
     {
       "../queries": { useCreditHistory: () => ({ refetch() {}, ...query }) },
       "@blynta/ui": {
-        AppButton: ({ children, contentClassName, ...props }) => {
+        AppButton: ({
+          children,
+          contentClassName,
+          icon,
+          iconPosition,
+          ...props
+        }) => {
           void contentClassName;
+          void icon;
+          void iconPosition;
           return React.createElement("button", props, children);
         },
         AppDropdown: ({ trigger }) => trigger,
@@ -136,6 +174,52 @@ test("Paddle environment rejects missing, secret and mismatched tokens", () => {
   assert.throws(
     () => checkoutEnvironment("test_fixture", "sandbox", "production"),
     /mismatch/,
+  );
+});
+
+test("shared plan ordering preserves all serialized plan IDs and auth cache identities", () => {
+  const shared = load("packages/types/src/index.ts");
+  const plans = [shared.PLAN.FREE, shared.PLAN.PRO, shared.PLAN.BUSINESS];
+  assert.deepEqual(plans, ["free", "pro", "business"]);
+  for (let current = 0; current < plans.length; current++)
+    for (let target = 0; target < plans.length; target++)
+      assert.equal(
+        shared.getPlanChangeType(plans[current], plans[target]),
+        current === target
+          ? "current"
+          : target > current
+            ? "upgrade"
+            : "downgrade",
+      );
+  assert.equal(shared.isPaidPlan("free"), false);
+  assert.equal(shared.isPaidPlan("business"), true);
+  assert.deepEqual(shared.userQueryKeys.me(), ["user", "me"]);
+  assert.deepEqual(shared.userQueryKeys.referralStats(), [
+    "user",
+    "referral-stats",
+  ]);
+  assert.deepEqual(shared.authQueryKeys.providers(), ["auth", "providers"]);
+  assert.deepEqual(shared.USER_ROLE, { USER: "user", ADMIN: "admin" });
+});
+
+test("billing hashes remain compatible and real minor-unit prices are formatted without fallback prices", () => {
+  const { creditTabFromHash } = load("apps/app/features/billing/constants.ts");
+  assert.equal(creditTabFromHash("#buy-credits"), "purchases");
+  assert.equal(creditTabFromHash("#credit-history"), "history");
+  assert.equal(creditTabFromHash("#other"), undefined);
+  const { formatBillingPrice } = load("apps/app/features/billing/format.ts");
+  assert.match(
+    formatBillingPrice({ amount: "2200", currencyCode: "USD" }),
+    /22/,
+  );
+  assert.match(
+    formatBillingPrice({ amount: "500", currencyCode: "JPY" }, true),
+    /500 JPY/,
+  );
+  assert.equal(formatBillingPrice(), undefined);
+  assert.equal(
+    formatBillingPrice({ amount: "-100", currencyCode: "USD" }),
+    undefined,
   );
 });
 
@@ -248,6 +332,28 @@ test("Free billing overview retains the server balance and hides even an erroneo
         }),
         useCreateCheckoutSession: () => ({ isPending: false }),
         useCustomerPortal: () => ({ isPending: false }),
+        useBillingPlans: () => ({
+          data: [
+            {
+              id: "free",
+              credits: 30,
+              enabled: true,
+              price: { amount: "0", currencyCode: "USD" },
+            },
+            {
+              id: "pro",
+              credits: 50,
+              enabled: true,
+              price: { amount: "1200", currencyCode: "USD" },
+            },
+            {
+              id: "business",
+              credits: 200,
+              enabled: true,
+              price: { amount: "3900", currencyCode: "USD" },
+            },
+          ],
+        }),
       },
       "../paddle-context": { usePaddle: () => ({ status: "ready" }) },
       "./CreditHistory": { CreditHistory: () => null },
@@ -260,6 +366,8 @@ test("Free billing overview retains the server balance and hides even an erroneo
   assert.match(html, />2<\/p>/);
   assert.match(html, /One balance across Blynta/);
   assert.match(html, /Most popular/);
+  assert.match(html, /Credit Management/);
+  assert.doesNotMatch(html, /Retry checkout/);
   assert.doesNotMatch(
     html,
     /Next allocation|2026-11-01|5 credits|Billing overview|Credit purchases|Credit usage history/,
@@ -353,7 +461,7 @@ test("history distinguishes charges, holds and released holds", () => {
     description: "Video work",
     createdAt: "2026-10-08T00:00:00Z",
   }));
-  const html = history({ data: { rows, page: 1, totalPages: 2 } });
+  const html = history({ data: { rows, page: 1, total: 21, totalPages: 2 } });
   assert.match(html, /5 held/);
   assert.match(html, /−5/);
   assert.match(html, /5 unlocked/);
@@ -361,6 +469,9 @@ test("history distinguishes charges, holds and released holds", () => {
   assert.match(html, /not new credit grants/);
   assert.match(html, /Filter by product/);
   assert.match(html, /Page 1 of 2/);
+  assert.doesNotMatch(html, /<table|<thead|RELATED JOB/);
+  assert.match(html, /group px-4 py-3.5 sm:px-5 sm:py-4/);
+  assert.match(html, /Recorded/);
 });
 test("history loading, failure, and empty states are accessible", () => {
   assert.match(history({ isPending: true }), /role="status"/);
@@ -371,6 +482,161 @@ test("history loading, failure, and empty states are accessible", () => {
   assert.match(
     history({ data: { rows: [], totalPages: 0 } }),
     /No transactions match/,
+  );
+});
+
+test("credit rows retain related job actions and complete non-navigable references", () => {
+  const entry = {
+    _id: "grant",
+    product: "ai-clips",
+    type: "grant",
+    amount: 30,
+    availableDelta: 30,
+    description: "One-time credits",
+    createdAt: "2026-10-22T00:00:00Z",
+    relatedId: "video-one",
+  };
+  const html = history({ data: { rows: [entry], total: 1, totalPages: 1 } });
+  assert.match(html, /href="\/my-clips\/video-one"/);
+  assert.match(html, /View video/);
+  assert.match(html, /\+30 credits/);
+  const reference = history({
+    data: {
+      rows: [{ ...entry, product: "account", relatedId: "txn_full_reference" }],
+      total: 1,
+      totalPages: 1,
+    },
+  });
+  assert.match(reference, /Reference: txn_full_reference/);
+  assert.doesNotMatch(reference, /<a /);
+});
+
+test("shared AppTable supports different keyed data, server pagination and disabled/loading/empty states", () => {
+  const { AppTable } = load("packages/ui/src/components/AppTable.tsx");
+  const { AppTableRow } = load("packages/ui/src/components/AppTableRow.tsx");
+  const render = (props) =>
+    renderToStaticMarkup(React.createElement(AppTable, props));
+  const props = {
+    label: "Projects",
+    data: [
+      { id: "project-b", name: "Second project" },
+      { id: "project-a", name: "First project" },
+    ],
+    getRowKey: (row) => row.id,
+    renderRow: (row) =>
+      React.createElement(AppTableRow, {
+        icon: "P",
+        title: row.name,
+        action: React.createElement("button", null, "Open"),
+      }),
+    pagination: {
+      page: 2,
+      totalPages: 3,
+      total: 41,
+      pageSize: 20,
+      visibleCount: 2,
+      onPageChange() {},
+    },
+  };
+  const html = render(props);
+  assert.match(html, /aria-label="Projects"/);
+  assert.match(html, /Second project.*First project/);
+  assert.match(html, /21–22/);
+  assert.match(html, /Page 2 of 3/);
+  const tree = AppTable(props);
+  assert.deepEqual(
+    elements(tree, (e) => e.type === React.Fragment).map((e) => e.key),
+    ["project-b", "project-a"],
+  );
+  assert.match(render({ ...props, disabled: true }), /inert=""/);
+  assert.equal(
+    (
+      render({ ...props, disabled: true }).match(/<button[^>]*disabled=""/g) ||
+      []
+    ).length,
+    2,
+  );
+  assert.match(
+    render({ ...props, isLoading: true, loadingLabel: "Loading projects" }),
+    /role="status" aria-label="Loading projects"/,
+  );
+  assert.doesNotMatch(render({ ...props, isLoading: true }), /Second project/);
+  assert.match(
+    render({ ...props, data: [], pagination: undefined }),
+    /No records/,
+  );
+  assert.match(
+    render({
+      ...props,
+      errorState: React.createElement("p", { role: "alert" }, "Unavailable"),
+    }),
+    /role="alert"/,
+  );
+  assert.match(
+    render({
+      label: "Invoices",
+      data: [{ reference: "invoice-one", amount: 37 }],
+      getRowKey: (row) => row.reference,
+      renderRow: (row) =>
+        React.createElement(AppTableRow, {
+          icon: "$",
+          title: row.reference,
+          metadata: row.amount,
+        }),
+    }),
+    /invoice-one/,
+  );
+});
+
+test("Activity retains its badges, metadata, View action and internal URL validation through AppTableRow", () => {
+  const { ActivityItem } = load(
+    "apps/app/features/activity/components/ActivityItem.tsx",
+    {
+      "@/components/ui/badge": {
+        Badge: ({ children, className }) =>
+          React.createElement("span", { className }, children),
+      },
+      "@/features/dashboard/icons": new Proxy({}, { get: () => () => null }),
+      "@blynta/ui": {
+        AppButton: ({ children, className }) =>
+          React.createElement("button", { className }, children),
+      },
+    },
+  );
+  const activity = {
+    _id: "record",
+    category: "job",
+    type: "job.complete",
+    status: "success",
+    title: "Completed video",
+    description: "Your video is ready",
+    createdAt: "2026-10-22T00:00:00Z",
+    activityUrl: "/dashboard/jobs/video-one",
+    metadata: {
+      amount: 9,
+      clipCount: 3,
+      plan: "pro",
+      sourcePlatform: "youtube",
+    },
+  };
+  const render = (row) =>
+    renderToStaticMarkup(React.createElement(ActivityItem, { activity: row }));
+  const html = render(activity);
+  assert.match(html, /href="\/jobs\/video-one"/);
+  assert.match(html, />View<\/button>/);
+  assert.match(html, /9 credits/);
+  assert.match(html, /3 clips/);
+  assert.match(html, /Plan: PRO/);
+  assert.match(html, /Platform: youtube/);
+  assert.match(html, /hover:bg-muted\/30/);
+  assert.match(html, /pl-12 sm:pl-0/);
+  assert.doesNotMatch(
+    render({ ...activity, activityUrl: "//outside.test" }),
+    /<a /,
+  );
+  assert.match(
+    render({ ...activity, category: "billing", activityUrl: "/billing" }),
+    />Manage<\/button>/,
   );
 });
 
@@ -542,12 +808,14 @@ test("checkout resume does not reopen an explicit overlay and completion waits f
   }
 });
 
-test("restored billing opens purchases/history in a secondary shared dialog and keeps Upgrade actions", () => {
+test("billing keeps original Upgrade actions and switches distinct in-page tabs without dialogs", () => {
   const hooks = hookHarness();
   const upgrades = [];
   const ui = {
     AppButton: function Button() {},
     AppDialog: function Dialog() {},
+    AppTabs: function Tabs() {},
+    AppTabsContent: function Panel() {},
   };
   const CreditPacks = () => null;
   const CreditHistory = () => null;
@@ -578,6 +846,28 @@ test("restored billing opens purchases/history in a secondary shared dialog and 
           isPending: false,
         }),
         useCustomerPortal: () => ({ isPending: false }),
+        useBillingPlans: () => ({
+          data: [
+            {
+              id: "free",
+              credits: 30,
+              enabled: true,
+              price: { amount: "0", currencyCode: "USD" },
+            },
+            {
+              id: "pro",
+              credits: 50,
+              enabled: true,
+              price: { amount: "1200", currencyCode: "USD" },
+            },
+            {
+              id: "business",
+              credits: 200,
+              enabled: true,
+              price: { amount: "3900", currencyCode: "USD" },
+            },
+          ],
+        }),
       },
       "../paddle-context": {
         usePaddle: () => ({ status: "error", error: "Missing client token" }),
@@ -588,9 +878,13 @@ test("restored billing opens purchases/history in a secondary shared dialog and 
     },
   );
   let tree = hooks.render(BillingPage);
-  const dialog = () => elements(tree, (e) => e.type === ui.AppDialog)[0];
-  assert.equal(dialog().props.open, false);
-  assert.equal(elements(tree, (e) => e.props?.role === "alert").length, 0);
+  const tabs = () => elements(tree, (e) => e.type === ui.AppTabs)[0];
+  assert.equal(elements(tree, (e) => e.type === ui.AppDialog).length, 0);
+  assert.equal(tabs().props.value, "purchases");
+  assert.equal(
+    elements(tree, (e) => e.props?.children === "Retry checkout").length,
+    0,
+  );
   const plan = elements(
     tree,
     (e) => e.type?.name === "PlanCard" && e.props.plan.id === "pro",
@@ -598,29 +892,35 @@ test("restored billing opens purchases/history in a secondary shared dialog and 
   const card = plan.type(plan.props);
   elements(card, (e) => e.type === ui.AppButton)[0].props.onClick();
   assert.deepEqual(upgrades, [{ plan: "pro" }]);
-  elements(
-    tree,
-    (e) => e.type === ui.AppButton && e.props.children === "Buy credits",
-  )
-    .at(-1)
-    .props.onClick();
-  tree = hooks.render(BillingPage);
-  assert.equal(dialog().props.open, true);
-  assert.equal(elements(dialog(), (e) => e.type === CreditPacks).length, 1);
-  elements(
-    dialog(),
-    (e) => e.type === ui.AppButton && e.props.children === "Credit history",
-  )[0].props.onClick();
-  tree = hooks.render(BillingPage);
-  assert.equal(elements(dialog(), (e) => e.type === CreditHistory).length, 1);
-  elements(
-    dialog(),
-    (e) => e.type === ui.AppButton && e.props.children === "Buy credits",
-  )[0].props.onClick();
-  tree = hooks.render(BillingPage);
-  elements(dialog(), (e) => e.type === CreditPacks)[0].props.onCheckoutOpened();
-  tree = hooks.render(BillingPage);
-  assert.equal(dialog().props.open, false);
+  const previousWindow = globalThis.window;
+  globalThis.window = {
+    location: { href: "http://localhost/billing?_ptxn=txn_existing" },
+    history: {
+      replaceState(_a, _b, url) {
+        globalThis.window.location.href = String(url);
+      },
+    },
+  };
+  try {
+    tabs().props.onValueChange("history");
+    tree = hooks.render(BillingPage);
+    assert.equal(tabs().props.value, "history");
+    assert.match(window.location.href, /_ptxn=txn_existing#credit-history/);
+    assert.equal(elements(tree, (e) => e.type === CreditPacks).length, 1);
+    assert.equal(elements(tree, (e) => e.type === CreditHistory).length, 1);
+    assert.ok(
+      elements(tree, (e) => e.type === ui.AppTabsContent).every(
+        (e) => e.props.keepMounted,
+      ),
+    );
+    tabs().props.onValueChange("purchases");
+    tree = hooks.render(BillingPage);
+    assert.equal(tabs().props.value, "purchases");
+    assert.match(window.location.href, /#buy-credits/);
+  } finally {
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
 });
 
 function elements(root, predicate) {
@@ -632,13 +932,109 @@ function elements(root, predicate) {
     ...elements(root.props?.children, predicate),
   ];
 }
+test("Activity keeps controlled category, status, debounced search, refresh and clamped pagination", async () => {
+  const hooks = hookHarness();
+  let latest,
+    cleanup,
+    loading = false,
+    failed = false,
+    scrolled = 0;
+  const invalidations = [];
+  const ui = { AppTable: function Table() {}, AppButton: function Button() {} };
+  const Filter = function Filters() {};
+  const { ActivityPage } = load(
+    "apps/app/features/activity/components/ActivityPage.tsx",
+    {
+      react: {
+        ...hooks.react,
+        useEffect: (effect) => {
+          cleanup?.();
+          cleanup = effect();
+        },
+      },
+      "next/navigation": { useRouter: () => ({ push() {} }) },
+      "@tanstack/react-query": {
+        useQueryClient: () => ({
+          invalidateQueries: (options) => invalidations.push(options),
+        }),
+      },
+      "@/features/auth/queries": {
+        useCurrentUser: () => ({ data: { plan: "free" } }),
+      },
+      "@/components/layout/PageContent": { PageContent: function Page() {} },
+      "@/features/dashboard/components/InviteMembersDialog": {
+        InviteMembersDialog: function Invite() {},
+      },
+      "@/features/dashboard/icons": new Proxy({}, { get: () => () => null }),
+      "@/lib/utils": { cn: (...values) => values.filter(Boolean).join(" ") },
+      "./ActivityFilterBar": { ActivityFilterBar: Filter },
+      "./ActivityItem": { ActivityItem: function Item() {} },
+      "./ActivitySkeleton": { ActivitySkeleton: function Skeleton() {} },
+      "@blynta/ui": ui,
+      "../queries": {
+        useActivities: (options) => {
+          latest = options;
+          return {
+            data: { activities: [{ _id: "event" }], total: 31, totalPages: 3 },
+            isLoading: loading,
+            isError: failed,
+          };
+        },
+        useActivityStats: () => ({ data: {} }),
+        activityKeys: { all: ["activities"] },
+      },
+    },
+  );
+  try {
+    let tree = hooks.render(ActivityPage);
+    const table = () => elements(tree, (e) => e.type === ui.AppTable)[0].props;
+    const filter = () => elements(tree, (e) => e.type === Filter)[0].props;
+    table().contentRef.current = { scrollIntoView: () => scrolled++ };
+    table().pagination.onPageChange(99);
+    tree = hooks.render(ActivityPage);
+    assert.equal(latest.page, 3);
+    assert.equal(table().pagination.totalPages, 3);
+    assert.equal(scrolled, 1);
+    filter().onSelectCategory("billing");
+    tree = hooks.render(ActivityPage);
+    assert.equal(latest.category, "billing");
+    assert.equal(latest.page, 1);
+    filter().onSelectStatus("failed");
+    tree = hooks.render(ActivityPage);
+    assert.equal(latest.status, "failed");
+    filter().onSearchChange("  invoice  ");
+    tree = hooks.render(ActivityPage);
+    await new Promise((resolve) => setTimeout(resolve, 380));
+    tree = hooks.render(ActivityPage);
+    assert.equal(latest.search, "invoice");
+    elements(
+      tree,
+      (e) => e.type === ui.AppButton && typeof e.props.onClick === "function",
+    )[0].props.onClick();
+    assert.deepEqual(invalidations, [{ queryKey: ["activities"] }]);
+    filter().onResetFilters();
+    tree = hooks.render(ActivityPage);
+    assert.equal(latest.category, undefined);
+    assert.equal(latest.status, undefined);
+    assert.equal(latest.page, 1);
+    loading = true;
+    tree = hooks.render(ActivityPage);
+    assert.equal(table().isLoading, true);
+    loading = false;
+    failed = true;
+    tree = hooks.render(ActivityPage);
+    assert.ok(table().errorState);
+  } finally {
+    cleanup?.();
+  }
+});
 test("history dropdown selections reset pagination and preserve both query filters", () => {
   const hooks = hookHarness();
   let latest;
   const ui = {
     AppButton: function Button() {},
     AppSelect: function Select() {},
-    AppPagination: function Pagination() {},
+    AppTable: function Table() {},
   };
   const { CreditHistory } = load(
     "apps/app/features/billing/components/CreditHistory.tsx",
@@ -654,9 +1050,19 @@ test("history dropdown selections reset pagination and preserve both query filte
     },
   );
   let tree = hooks.render(CreditHistory);
-  elements(tree, (e) => e.type === ui.AppPagination)[0].props.onPageChange(2);
+  elements(
+    tree,
+    (e) => e.type === ui.AppTable,
+  )[0].props.pagination.onPageChange(2);
   tree = hooks.render(CreditHistory);
   assert.equal(latest.page, 2);
+  elements(tree, (e) => e.type === ui.AppSelect)[0].props.onValueChange("all");
+  tree = hooks.render(CreditHistory);
+  assert.equal(
+    latest.page,
+    2,
+    "reselecting an unchanged filter preserves the selected page",
+  );
   elements(tree, (e) => e.type === ui.AppSelect)[0].props.onValueChange(
     "studio",
   );

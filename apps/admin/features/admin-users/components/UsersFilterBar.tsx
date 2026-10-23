@@ -1,4 +1,5 @@
 "use client";
+import { PLAN, PLAN_LABELS } from "@blynta/types";
 
 import * as React from "react";
 import { AppInput as Input } from "@/components/common/primitives";
@@ -68,9 +69,11 @@ export function UsersFilterBar({
           }
         >
           <SelectItem value="all">All Plans</SelectItem>
-          <SelectItem value="free">Free</SelectItem>
-          <SelectItem value="pro">Pro</SelectItem>
-          <SelectItem value="business">Business</SelectItem>
+          <SelectItem value={PLAN.FREE}>{PLAN_LABELS[PLAN.FREE]}</SelectItem>
+          <SelectItem value={PLAN.PRO}>{PLAN_LABELS[PLAN.PRO]}</SelectItem>
+          <SelectItem value={PLAN.BUSINESS}>
+            {PLAN_LABELS[PLAN.BUSINESS]}
+          </SelectItem>
         </Select>
 
         {/* Status filter */}

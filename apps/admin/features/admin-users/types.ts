@@ -1,5 +1,5 @@
-export type UserRole = "user" | "admin";
-export type UserPlan = "free" | "pro" | "business";
+export type { UserRole, SubscriptionPlan as UserPlan } from "@blynta/types";
+import type { UserRole, SubscriptionPlan as UserPlan } from "@blynta/types";
 
 export interface AdminUserItem {
   _id: string;

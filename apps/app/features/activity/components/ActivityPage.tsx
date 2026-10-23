@@ -8,7 +8,7 @@ import { PageContent } from "@/components/layout/PageContent";
 
 import { InviteMembersDialog } from "@/features/dashboard/components/InviteMembersDialog";
 import { AppButton } from "@blynta/ui";
-import { AppCard } from "@blynta/ui";
+import { AppTable, AppListEmptyState } from "@blynta/ui";
 import { ActivityFilterBar } from "./ActivityFilterBar";
 import { ActivityItem } from "./ActivityItem";
 import { ActivitySkeleton } from "./ActivitySkeleton";
@@ -21,8 +21,6 @@ import {
   CreditCardIcon,
   PlusIcon,
   RefreshCwIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
   UserPlusIcon,
   UserIcon,
 } from "@/features/dashboard/icons";
@@ -189,14 +187,11 @@ function EmptyState({
   }, [category, hasQueryFilters, onInvite, onReset, plan, router]);
 
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-      <div className="h-14 w-14 rounded-2xl bg-muted/70 border border-border/60 flex items-center justify-center mb-3.5 shadow-2xs">
-        {content.icon}
-      </div>
-      <h3 className="text-base font-bold text-foreground">{content.title}</h3>
-      <p className="text-xs text-muted-foreground max-w-sm mt-1 mb-5">
-        {content.description}
-      </p>
+    <AppListEmptyState
+      icon={content.icon}
+      title={content.title}
+      description={content.description}
+    >
       <AppButton
         variant={content.variant}
         size="sm"
@@ -206,7 +201,7 @@ function EmptyState({
       >
         {content.buttonLabel}
       </AppButton>
-    </div>
+    </AppListEmptyState>
   );
 }
 
@@ -404,85 +399,46 @@ export function ActivityPage() {
         />
 
         {/* ── Feed Content Section ── */}
-        {isLoading ? (
-          <ActivitySkeleton />
-        ) : isError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center text-sm text-destructive font-medium shadow-xs">
-            Failed to load activity log. Please check your connection and try
-            refreshing.
-          </div>
-        ) : (
-          <div className="space-y-4" ref={listTopRef}>
-            <AppCard
-              useDefaultClasses={false}
-              className={cn(
-                "rounded-lg border border-border/70 bg-card/70 backdrop-blur-sm shadow-xs overflow-hidden transition-opacity duration-200 block p-0",
-                isFetching && "opacity-60",
-              )}
-              contentClassName="p-0 divide-y divide-border/30 w-full"
-            >
-              {activities.length === 0 ? (
-                <EmptyState
-                  category={activeCategory}
-                  hasQueryFilters={hasQueryFilters}
-                  plan={profile?.plan ?? "free"}
-                  onReset={handleResetFilters}
-                  onInvite={() => setInviteOpen(true)}
-                />
-              ) : (
-                activities.map((activity) => (
-                  <ActivityItem key={activity._id} activity={activity} />
-                ))
-              )}
-            </AppCard>
-
-            {/* ── Pagination Controls ── */}
-            {total > 0 && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 pb-6 border-t border-border/40">
-                <p className="text-xs text-muted-foreground">
-                  Showing{" "}
-                  <span className="font-semibold text-foreground">
-                    {(page - 1) * LIMIT + 1}–
-                    {Math.min((page - 1) * LIMIT + activities.length, total)}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-semibold text-foreground">{total}</span>{" "}
-                  events
-                </p>
-
-                <div className="flex items-center gap-2 self-end sm:self-center">
-                  <AppButton
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => goToPage(page - 1)}
-                    icon={<ChevronLeftIcon className="h-3.5 w-3.5" />}
-                    iconPosition="left"
-                    className="h-8 text-xs font-medium px-3 whitespace-nowrap cursor-pointer shadow-2xs"
-                  >
-                    Previous
-                  </AppButton>
-
-                  <span className="text-xs font-mono font-medium text-foreground px-2.5 py-1 rounded-md bg-muted/60 border border-border/50 select-none">
-                    {page} / {totalPages}
-                  </span>
-
-                  <AppButton
-                    variant="outline"
-                    size="sm"
-                    disabled={page >= totalPages}
-                    onClick={() => goToPage(page + 1)}
-                    icon={<ChevronRightIcon className="h-3.5 w-3.5" />}
-                    iconPosition="right"
-                    className="h-8 text-xs font-medium px-3 whitespace-nowrap cursor-pointer shadow-2xs"
-                  >
-                    Next
-                  </AppButton>
-                </div>
+        <AppTable
+          label="Activity records"
+          data={activities}
+          getRowKey={(activity) => activity._id}
+          renderRow={(activity) => <ActivityItem activity={activity} />}
+          isLoading={isLoading}
+          loadingState={<ActivitySkeleton />}
+          isFetching={isFetching}
+          contentRef={listTopRef}
+          errorState={
+            isError && (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center text-sm text-destructive font-medium shadow-xs">
+                Failed to load activity log. Please check your connection and
+                try refreshing.
               </div>
-            )}
-          </div>
-        )}
+            )
+          }
+          emptyState={
+            <EmptyState
+              category={activeCategory}
+              hasQueryFilters={hasQueryFilters}
+              plan={profile?.plan ?? "free"}
+              onReset={handleResetFilters}
+              onInvite={() => setInviteOpen(true)}
+            />
+          }
+          pagination={
+            total > 0
+              ? {
+                  page,
+                  totalPages,
+                  total,
+                  pageSize: LIMIT,
+                  visibleCount: activities.length,
+                  itemLabel: "events",
+                  onPageChange: goToPage,
+                }
+              : undefined
+          }
+        />
       </div>
       <InviteMembersDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </PageContent>

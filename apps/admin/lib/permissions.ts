@@ -1,3 +1,4 @@
+import { USER_ROLE } from "@blynta/types";
 export const permissions = [
   "users.read",
   "users.update",
@@ -14,5 +15,5 @@ export type Permission = (typeof permissions)[number];
 
 // Only the backend's current admin role grants access. Future roles must first be enforced there.
 export function can(role: string | undefined, permission: Permission): boolean {
-  return role === "admin" && permissions.includes(permission);
+  return role === USER_ROLE.ADMIN && permissions.includes(permission);
 }

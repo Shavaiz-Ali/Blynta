@@ -1,59 +1,20 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
 import {
   AppButton,
   AppSelect,
-  AppPagination,
-  AppCardRoot,
-  AppCardHeader,
-  AppCardTitle,
-  AppCardDescription,
-  AppCardContent,
-  AppBadge,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-  TableCaption,
+  AppTable,
+  AppListEmptyState,
+  recordListClasses,
 } from "@blynta/ui";
-import type { CreditTransaction } from "@blynta/types";
+import { Wallet } from "lucide-react";
 import { useCreditHistory } from "../queries";
-
-const products = [
-  ["", "All products"],
-  ["ai-clips", "AI Clips"],
-  ["studio", "Studio"],
-  ["account", "Account"],
-];
-const transactions = [
-  ["", "All transactions"],
-  ["charge", "Charges"],
-  ["reserve", "Reservations"],
-  ["release", "Releases"],
-  ["grant", "Credit grants"],
-  ["refund", "Refunds"],
-  ["adjustment", "Adjustments"],
-  ["opening", "Opening balance"],
-];
-const labels = {
-  reserve: "Reserved",
-  release: "Released",
-  charge: "Charged",
-  grant: "Credit grant",
-  refund: "Refund",
-  adjustment: "Adjustment",
-  opening: "Opening balance",
-};
-function creditAmount(entry: CreditTransaction) {
-  if (entry.type === "reserve") return `${entry.amount.toLocaleString()} held`;
-  if (entry.type === "release")
-    return `${entry.amount.toLocaleString()} unlocked`;
-  if (entry.type === "charge") return `−${entry.amount.toLocaleString()}`;
-  return `${entry.availableDelta >= 0 ? "+" : "−"}${Math.abs(entry.availableDelta).toLocaleString()}`;
-}
+import {
+  CREDIT_PRODUCT_OPTIONS,
+  CREDIT_TYPE_OPTIONS,
+  CREDIT_HISTORY_PAGE_SIZE,
+} from "../constants";
+import { CreditHistoryItem } from "./CreditHistoryItem";
 
 export function CreditHistory() {
   const [page, setPage] = useState(1);
@@ -62,157 +23,124 @@ export function CreditHistory() {
   const history = useCreditHistory(page, product, type);
   const rows = history.data?.rows ?? [];
   const busy = history.isFetching || history.isPending;
+  const reset = () => {
+    setProduct("");
+    setType("");
+    setPage(1);
+  };
   return (
-    <section aria-labelledby="credit-history" className="min-w-0">
-      <AppCardRoot>
-        <AppCardHeader>
-          <AppCardTitle id="credit-history">Credit usage history</AppCardTitle>
-          <AppCardDescription>
-            Credits added, held, spent and returned.
-          </AppCardDescription>
-          <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2 lg:max-w-lg">
-            {[
-              {
-                label: "Filter by product",
-                value: product,
-                options: products,
-                update: setProduct,
-              },
-              {
-                label: "Filter by transaction type",
-                value: type,
-                options: transactions,
-                update: setType,
-              },
-            ].map((filter) => (
-              <AppSelect
-                key={filter.label}
-                aria-label={filter.label}
-                value={filter.value || "all"}
-                size="sm"
-                options={filter.options.map(([value, label]) => ({
-                  value: value || "all",
-                  label,
-                }))}
-                onValueChange={(value) => {
-                  filter.update(value === "all" ? "" : value);
-                  setPage(1);
-                }}
-              />
-            ))}
-          </div>
-        </AppCardHeader>
-        <AppCardContent className="min-w-0 space-y-4">
-          {history.isPending ? (
-            <p role="status" className="py-4 text-sm text-muted-foreground">
-              Loading credit history…
-            </p>
-          ) : history.error ? (
-            <div role="alert" className="space-y-3 py-4">
-              <p className="text-sm text-destructive">
-                Could not load credit history.
-              </p>
+    <section aria-labelledby="credit-history" className="min-w-0 space-y-4">
+      <h3 id="credit-history" className="sr-only">
+        Credit usage history
+      </h3>
+      <div className={recordListClasses.toolbar}>
+        <p className="text-xs text-muted-foreground">
+          Credits added, held, spent and returned.
+        </p>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {[
+            {
+              label: "Filter by product",
+              value: product,
+              options: CREDIT_PRODUCT_OPTIONS,
+              update: setProduct,
+            },
+            {
+              label: "Filter by transaction type",
+              value: type,
+              options: CREDIT_TYPE_OPTIONS,
+              update: setType,
+            },
+          ].map((filter) => (
+            <AppSelect
+              key={filter.label}
+              aria-label={filter.label}
+              value={filter.value || "all"}
+              size="default"
+              className="bg-background/80"
+              wrapperClassName="w-full sm:w-44"
+              options={filter.options}
+              onValueChange={(value) => {
+                const next = value === "all" ? "" : value;
+                if (next === filter.value) return;
+                filter.update(next);
+                setPage(1);
+              }}
+            />
+          ))}
+          {(product || type) && (
+            <AppButton
+              variant="ghost"
+              size="sm"
+              className="h-9 px-2.5 text-xs text-muted-foreground hover:text-foreground shrink-0 cursor-pointer"
+              onClick={reset}
+            >
+              Reset
+            </AppButton>
+          )}
+        </div>
+      </div>
+      <AppTable
+        label="Credit transactions and recorded balance movements"
+        data={rows}
+        getRowKey={(entry) => entry._id}
+        renderRow={(entry) => <CreditHistoryItem entry={entry} />}
+        isLoading={history.isPending}
+        loadingLabel="Loading credit history"
+        isFetching={history.isFetching}
+        errorState={
+          history.error && (
+            <div
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 p-8 text-center text-sm text-destructive font-medium shadow-xs"
+            >
+              <p>Could not load credit history.</p>
               <AppButton
                 variant="outline"
                 size="sm"
+                className="mt-3"
                 onClick={() => history.refetch()}
               >
                 Try again
               </AppButton>
             </div>
-          ) : rows.length === 0 ? (
-            <div role="status" className="space-y-3 py-4">
-              <p className="text-sm text-muted-foreground">
-                No transactions match these filters.
-              </p>
-              {(product || type) && (
-                <AppButton
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setProduct("");
-                    setType("");
-                    setPage(1);
-                  }}
-                >
-                  Clear filters
-                </AppButton>
-              )}
-            </div>
-          ) : (
-            <Table>
-              <TableCaption className="sr-only">
-                Credit transactions and recorded balance movements
-              </TableCaption>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Transaction</TableHead>
-                  <TableHead>Credits</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Related job or payment</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((entry) => (
-                  <TableRow key={entry._id}>
-                    <TableCell>
-                      <p className="font-medium">{labels[entry.type]}</p>
-                      <p className="max-w-xs whitespace-normal text-xs text-muted-foreground">
-                        {entry.description}
-                      </p>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap font-medium tabular-nums">
-                      {creditAmount(entry)}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      <time dateTime={entry.createdAt}>
-                        {new Date(entry.createdAt).toLocaleString()}
-                      </time>
-                    </TableCell>
-                    <TableCell>
-                      {entry.relatedId ? (
-                        entry.product === "ai-clips" ? (
-                          <Link
-                            className="text-primary underline-offset-4 hover:underline"
-                            href={`/my-clips/${entry.relatedId}`}
-                          >
-                            View video
-                          </Link>
-                        ) : (
-                          <span
-                            className="block max-w-48 truncate text-xs"
-                            title={entry.relatedId}
-                          >
-                            {entry.relatedId}
-                          </span>
-                        )
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <AppBadge variant="secondary">Recorded</AppBadge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          )
+        }
+        emptyState={
+          <AppListEmptyState
+            icon={<Wallet className="h-6 w-6 text-muted-foreground" />}
+            title="No transactions match these filters."
+            description="Credit grants, reservations and usage will appear here as they are recorded."
+          >
+            {(product || type) && (
+              <AppButton size="sm" variant="outline" onClick={reset}>
+                Clear filters
+              </AppButton>
+            )}
+          </AppListEmptyState>
+        }
+        footer={
           <p className="text-xs text-muted-foreground">
             Holds reserve existing credits; releases restore availability. They
             are not new credit grants. Status describes the recorded
             transaction, not the current job status.
           </p>
-          <AppPagination
-            page={page}
-            totalPages={history.data?.totalPages ?? 1}
-            total={history.data?.total ?? 0}
-            disabled={busy || !!history.error}
-            onPageChange={setPage}
-          />
-        </AppCardContent>
-      </AppCardRoot>
+        }
+        pagination={
+          history.data?.total
+            ? {
+                page,
+                totalPages: history.data.totalPages,
+                total: history.data.total,
+                pageSize: CREDIT_HISTORY_PAGE_SIZE,
+                visibleCount: rows.length,
+                itemLabel: "transactions",
+                disabled: busy || !!history.error,
+                onPageChange: setPage,
+              }
+            : undefined
+        }
+      />
     </section>
   );
 }

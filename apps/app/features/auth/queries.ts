@@ -16,16 +16,8 @@ import { PROVIDERS_DEFAULT } from "./api";
 /*                              Query keys                                    */
 /* -------------------------------------------------------------------------- */
 
-export const authQueryKeys = {
-  providers: () => ["auth", "providers"] as const,
-};
-
-export const userQueryKeys = {
-  all: ["user"] as const,
-  me: () => [...userQueryKeys.all, "me"] as const,
-  referrals: () => [...userQueryKeys.all, "referrals"] as const,
-  referralStats: () => [...userQueryKeys.all, "referral-stats"] as const,
-};
+export { authQueryKeys, userQueryKeys } from "@blynta/types";
+import { authQueryKeys, userQueryKeys } from "@blynta/types";
 
 /* -------------------------------------------------------------------------- */
 /*                                Types                                       */

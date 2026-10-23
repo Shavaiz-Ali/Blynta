@@ -10,29 +10,15 @@ import {
 import { useCreditPacks, useCreditPackCheckout } from "../queries";
 import { usePaddle } from "../paddle-context";
 import { toast } from "sonner";
+import { formatBillingPrice } from "../format";
+import { BILLING_CHECKOUT_TOAST_ID } from "../constants";
 
-export function formatCreditPackPrice(price?: {
+export const formatCreditPackPrice = (price?: {
   amount: string;
   currencyCode: string;
-}) {
-  if (!price) return undefined;
-  try {
-    const formatter = new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency: price.currencyCode,
-    });
-    const amount = Number(price.amount);
-    if (!Number.isSafeInteger(amount) || amount < 0) return undefined;
-    const digits = formatter.resolvedOptions().maximumFractionDigits ?? 2;
-    return `${formatter.format(amount / 10 ** digits)} ${price.currencyCode}`;
-  } catch {
-    return undefined;
-  }
-}
+}) => formatBillingPrice(price, true);
 
-export function CreditPacks({
-  onCheckoutOpened,
-}: { onCheckoutOpened?: () => void } = {}) {
+export function CreditPacks() {
   const packs = useCreditPacks();
   const checkout = useCreditPackCheckout();
   const paddle = usePaddle();
@@ -40,6 +26,14 @@ export function CreditPacks({
     checkout.isPending ||
     paddle.status === "opening" ||
     paddle.status === "confirming";
+  const startPurchase = (packId: string) =>
+    checkout.mutate(packId, {
+      onError: (error) =>
+        toast.error(error.message, {
+          id: BILLING_CHECKOUT_TOAST_ID,
+          action: { label: "Retry", onClick: () => startPurchase(packId) },
+        }),
+    });
   return (
     <section
       id="buy-credits"
@@ -95,12 +89,7 @@ export function CreditPacks({
                   isLoading={
                     checkout.isPending && checkout.variables === pack.id
                   }
-                  onClick={() =>
-                    checkout.mutate(pack.id, {
-                      onSuccess: onCheckoutOpened,
-                      onError: (error) => toast.error(error.message),
-                    })
-                  }
+                  onClick={() => startPurchase(pack.id)}
                 >
                   Buy {pack.credits} credits
                 </AppButton>

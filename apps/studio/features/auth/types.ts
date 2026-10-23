@@ -1,7 +1,14 @@
-export type AuthProvider = "local" | "google" | "facebook";
+import type {
+  AuthProvider as SharedAuthProvider,
+  UserRole,
+} from "@blynta/types";
+export type AuthProvider = Extract<
+  SharedAuthProvider,
+  "local" | "google" | "facebook"
+>;
 export interface AuthUser {
   id: string;
   email: string;
-  role: string;
+  role: UserRole;
   accessToken: string;
 }

@@ -1,4 +1,5 @@
 "use client";
+import { PLAN, isPaidPlan } from "@blynta/types";
 
 import * as React from "react";
 import Link from "next/link";
@@ -28,12 +29,10 @@ function formatResetDate(dateStr?: string | null): string {
 
 export function ProfilePlanCard({ profile }: Props) {
   const balance = useCreditBalance();
-  const planLabel = (profile.plan ?? "free").toLowerCase();
-  const isPro = planLabel === "pro" || planLabel === "business";
+  const planLabel = (profile.plan ?? PLAN.FREE).toLowerCase();
+  const isPro = isPaidPlan(planLabel);
   const credits = balance.data?.available ?? profile.creditsBalance ?? 0;
-  const maxCredits =
-    balance.data?.planAllocations?.[profile.plan ?? "free"] ??
-    (planLabel === "business" ? 200 : isPro ? 50 : 30);
+  const maxCredits = balance.data?.planAllocations?.[profile.plan ?? PLAN.FREE];
 
   return (
     <div className="rounded-xl border border-border/80 bg-card shadow-xs overflow-hidden">
@@ -98,7 +97,8 @@ export function ProfilePlanCard({ profile }: Props) {
           </div>
           <p className="text-[11px] text-muted-foreground">
             {balance.data?.reserved ?? profile.creditsReserved ?? 0} held ·{" "}
-            {maxCredits} {isPro ? "included monthly" : "one-time credits"}
+            {maxCredits ?? "—"}{" "}
+            {isPro ? "included monthly" : "one-time credits"}
           </p>
         </div>
 

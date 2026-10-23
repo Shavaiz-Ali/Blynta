@@ -17,6 +17,8 @@ function load(relative, mocks = {}, cache = new Map()) {
     if (id in mocks) return mocks[id];
     let target;
     if (id.startsWith("@/")) target = path.join(root, id.slice(2));
+    else if (id === "@blynta/types")
+      target = path.resolve(root, "../../packages/types/src/index");
     else if (id === "@blynta/ui")
       target = path.resolve(root, "../../packages/ui/src/index");
     else if (id.startsWith("@blynta/ui/"))
@@ -86,6 +88,7 @@ function createFixture() {
             ? {
                 available: account.data.creditsBalance,
                 reserved: account.data.creditsReserved,
+                planAllocations: { free: 30, pro: 50, business: 200 },
               }
             : undefined,
           error: account.isError ? new Error("Credits unavailable") : null,

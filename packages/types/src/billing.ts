@@ -1,13 +1,39 @@
+import type { SubscriptionPlan } from "./plans";
+
+export const CREDIT_PRODUCT = {
+  AI_CLIPS: "ai-clips",
+  STUDIO: "studio",
+  ACCOUNT: "account",
+} as const;
+export type CreditProduct =
+  (typeof CREDIT_PRODUCT)[keyof typeof CREDIT_PRODUCT];
+export const CREDIT_TRANSACTION_TYPE = {
+  OPENING: "opening",
+  GRANT: "grant",
+  RESERVE: "reserve",
+  CHARGE: "charge",
+  RELEASE: "release",
+  REFUND: "refund",
+  ADJUSTMENT: "adjustment",
+} as const;
+export type CreditTransactionType =
+  (typeof CREDIT_TRANSACTION_TYPE)[keyof typeof CREDIT_TRANSACTION_TYPE];
+export interface BillingPlan {
+  id: SubscriptionPlan;
+  credits: number;
+  enabled: boolean;
+  price?: { amount: string; currencyCode: string };
+}
 export interface CreditBalance {
   enabled: boolean;
   available: number;
   reserved: number;
-  plan: "free" | "pro" | "business";
+  plan: SubscriptionPlan;
   monthlyCredits: number;
   totalGranted?: number;
   totalConsumed?: number;
   paymentCreditsOwed?: number;
-  planAllocations?: Record<"free" | "pro" | "business", number>;
+  planAllocations?: Record<SubscriptionPlan, number>;
   freeCreditsRenew?: boolean;
   nextRenewal?: string | null;
   clipExample?: {
@@ -49,15 +75,8 @@ export interface CreditEstimate {
 }
 export interface CreditTransaction {
   _id: string;
-  product: "ai-clips" | "studio" | "account";
-  type:
-    | "opening"
-    | "grant"
-    | "reserve"
-    | "charge"
-    | "release"
-    | "refund"
-    | "adjustment";
+  product: CreditProduct;
+  type: CreditTransactionType;
   amount: number;
   availableDelta: number;
   reservedDelta: number;

@@ -1,9 +1,9 @@
 // TODO: replace placeholders with real Auth types once the auth logic layer is implemented.
 // This file is for auth types shared across the feature (forms, session, tokens, etc.).
 
-export type AuthProvider = "local" | "google" | "facebook" | "apple" | "github";
+export type { AuthProvider, SubscriptionPlan as UserPlan } from "@blynta/types";
+import type { AuthProvider, SubscriptionPlan as UserPlan } from "@blynta/types";
 
-export type UserPlan = "free" | "pro" | "business";
 export type { UserRole } from "@blynta/types";
 import type { UserRole } from "@blynta/types";
 

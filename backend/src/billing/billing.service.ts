@@ -561,6 +561,43 @@ export class BillingService {
     );
   }
 
+  /** Read-only presentation catalogue; never used to grant credits or authorize a plan. */
+  async listPlans() {
+    const allocations = planCredits(this.configService);
+    const paid = await Promise.all(
+      ([UserPlan.PRO, UserPlan.BUSINESS] as const).map(async (id) => {
+        try {
+          const price = await this.paddleService.paddle.prices.get(
+            this.paddleService.getPriceIdForPlan(id),
+          );
+          if (
+            price.status !== 'active' ||
+            price.billingCycle?.interval !== 'month' ||
+            price.billingCycle.frequency !== 1
+          )
+            throw new Error('Unavailable monthly price');
+          return {
+            id,
+            credits: allocations[id],
+            enabled: true,
+            price: price.unitPrice,
+          };
+        } catch {
+          return { id, credits: allocations[id], enabled: false };
+        }
+      }),
+    );
+    return [
+      {
+        id: UserPlan.FREE,
+        credits: allocations.free,
+        enabled: true,
+        price: { amount: '0', currencyCode: 'USD' },
+      },
+      ...paid,
+    ];
+  }
+
   async createCreditPackCheckout(user: UserDocument, packId: string) {
     if (!this.credits?.enabled)
       throw new ServiceUnavailableException(

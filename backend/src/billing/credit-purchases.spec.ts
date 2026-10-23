@@ -95,6 +95,70 @@ function fixture(
 }
 
 describe('Paddle credit purchases', () => {
+  test('the read-only plan catalogue uses Paddle prices and backend allocations', async () => {
+    const f = fixture({
+      BILLING_PRO_CREDITS: 75,
+      BILLING_BUSINESS_CREDITS: 250,
+    });
+    f.paddle.paddle.prices.get.mockImplementation(async (id: string) => ({
+      status: 'active',
+      billingCycle: { interval: 'month', frequency: 1 },
+      unitPrice: {
+        amount: id === 'pri_pro' ? '2200' : '5700',
+        currencyCode: 'EUR',
+      },
+    }));
+    const plans = await f.service.listPlans();
+    expect(plans).toEqual([
+      {
+        id: 'free',
+        credits: 30,
+        enabled: true,
+        price: { amount: '0', currencyCode: 'USD' },
+      },
+      {
+        id: 'pro',
+        credits: 75,
+        enabled: true,
+        price: { amount: '2200', currencyCode: 'EUR' },
+      },
+      {
+        id: 'business',
+        credits: 250,
+        enabled: true,
+        price: { amount: '5700', currencyCode: 'EUR' },
+      },
+    ]);
+    expect(f.paddle.paddle.transactions.create).not.toHaveBeenCalled();
+    expect(f.credits.adjust).not.toHaveBeenCalled();
+  });
+  test.each([
+    { status: 'archived', billingCycle: { interval: 'month', frequency: 1 } },
+    { status: 'active', billingCycle: null },
+    { status: 'active', billingCycle: { interval: 'year', frequency: 1 } },
+    { status: 'active', billingCycle: { interval: 'month', frequency: 2 } },
+  ])(
+    'unavailable or mismatched subscription prices are not advertised: %j',
+    async (price) => {
+      const f = fixture();
+      f.paddle.paddle.prices.get.mockResolvedValue(price);
+      const plans = await f.service.listPlans();
+      expect(
+        plans.slice(1).every((plan) => !plan.enabled && !('price' in plan)),
+      ).toBe(true);
+    },
+  );
+  test('a Paddle catalogue failure disables paid plans without inventing a price', async () => {
+    const f = fixture();
+    f.paddle.paddle.prices.get.mockRejectedValue(
+      new Error('Paddle unavailable'),
+    );
+    const plans = await f.service.listPlans();
+    expect(plans[0].enabled).toBe(true);
+    expect(
+      plans.slice(1).every((plan) => !plan.enabled && !('price' in plan)),
+    ).toBe(true);
+  });
   test('subscription checkout returns a transaction/environment and reuses it on retry', async () => {
     const f = fixture();
     jest

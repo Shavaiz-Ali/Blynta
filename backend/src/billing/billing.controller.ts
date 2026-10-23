@@ -77,6 +77,12 @@ export class BillingController {
     return this.billingService.listCreditPacks();
   }
 
+  @Get('plans')
+  @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
+  plans() {
+    return this.billingService.listPlans();
+  }
+
   @Post('credit-packs/checkout')
   @UseGuards(AuthGuard('jwt'), BillingRateLimitGuard)
   async creditPackCheckout(@Request() req, @Body() body: unknown) {

@@ -3,7 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { AppButton } from "@blynta/ui";
+import {
+  AppButton,
+  AppTableRow,
+  appTableRowActionClassName,
+  recordListClasses,
+} from "@blynta/ui";
 import {
   FilmIcon,
   CreditCardIcon,
@@ -25,7 +30,6 @@ import {
   ActivityStatus,
   ActivityType,
 } from "../types";
-import { cn } from "@/lib/utils";
 
 interface ActivityItemProps {
   activity: Activity;
@@ -146,10 +150,7 @@ function getCategoryBadge(category: ActivityCategory) {
       );
     default:
       return (
-        <Badge
-          variant="secondary"
-          className="bg-muted text-muted-foreground border-border/60 text-[11px] font-medium px-2 py-0.5"
-        >
+        <Badge variant="secondary" className={recordListClasses.neutralBadge}>
           System
         </Badge>
       );
@@ -240,86 +241,60 @@ export function ActivityItem({ activity }: ActivityItemProps) {
   const isBillingAction = activity.category === ActivityCategory.BILLING;
 
   return (
-    <div className="group px-4 py-3.5 sm:px-5 sm:py-4 transition-all duration-150 hover:bg-muted/30">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-        {/* Left: Icon and Details */}
-        <div className="flex items-start gap-3.5 flex-1 min-w-0">
-          <div
-            className={cn(
-              "h-9 w-9 sm:h-10 sm:w-10 rounded-xl flex items-center justify-center shrink-0 border transition-colors shadow-2xs mt-0.5 sm:mt-0",
-              getActivityIconContainerClass(activity.category),
-            )}
-          >
-            {getActivityIcon(activity)}
-          </div>
-
-          <div className="flex-1 min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs sm:text-sm font-semibold text-foreground truncate max-w-sm sm:max-w-md">
-                {activity.title}
+    <AppTableRow
+      icon={getActivityIcon(activity)}
+      iconClassName={getActivityIconContainerClass(activity.category)}
+      title={activity.title}
+      badges={
+        <>
+          {getCategoryBadge(activity.category)}
+          {getStatusIndicator(activity.status)}
+        </>
+      }
+      description={activity.description}
+      metadata={
+        activity.metadata && (
+          <>
+            {metaAmount && (
+              <span className="inline-flex items-center text-[11px] font-medium text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
+                {metaAmount} {metaAmount === "1" ? "credit" : "credits"}
               </span>
-              {getCategoryBadge(activity.category)}
-              {getStatusIndicator(activity.status)}
-            </div>
-
-            {activity.description && (
-              <p className="text-xs text-muted-foreground line-clamp-1 leading-relaxed">
-                {activity.description}
-              </p>
             )}
-
-            {/* Quick Metadata pills */}
-            {activity.metadata && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                {metaAmount && (
-                  <span className="inline-flex items-center text-[11px] font-medium text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                    {metaAmount} {metaAmount === "1" ? "credit" : "credits"}
-                  </span>
-                )}
-                {metaClipCount && (
-                  <span className="inline-flex items-center text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                    {metaClipCount} {metaClipCount === "1" ? "clip" : "clips"}
-                  </span>
-                )}
-                {metaPlan && (
-                  <span className="inline-flex items-center text-[11px] font-medium text-violet-500 bg-violet-500/10 px-2 py-0.5 rounded-md border border-violet-500/20">
-                    Plan: {metaPlan.toUpperCase()}
-                  </span>
-                )}
-                {metaSourcePlatform && (
-                  <span className="inline-flex items-center text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/50">
-                    Platform: {metaSourcePlatform}
-                  </span>
-                )}
-              </div>
+            {metaClipCount && (
+              <span className="inline-flex items-center text-[11px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
+                {metaClipCount} {metaClipCount === "1" ? "clip" : "clips"}
+              </span>
             )}
-          </div>
-        </div>
-
-        {/* Right: Timestamp and Action Button */}
-        <div className="flex items-center gap-3 shrink-0 self-end sm:self-center pl-12 sm:pl-0">
-          <span
-            className="text-xs text-muted-foreground font-mono whitespace-nowrap min-w-[50px] text-right"
-            title={new Date(activity.createdAt).toLocaleString()}
-          >
-            {formatRelativeTime(activity.createdAt)}
-          </span>
-
-          {targetUrl && (
-            <Link href={targetUrl} className="shrink-0">
-              <AppButton
-                variant="outline"
-                size="sm"
-                icon={<ArrowRightIcon className="h-3 w-3 opacity-70" />}
-                iconPosition="right"
-                className="h-7 sm:h-8 text-xs font-semibold px-2.5 sm:px-3 hover:border-primary/40 hover:bg-primary/5 cursor-pointer shadow-2xs whitespace-nowrap shrink-0"
-              >
-                {isBillingAction ? "Manage" : "View"}
-              </AppButton>
-            </Link>
-          )}
-        </div>
-      </div>
-    </div>
+            {metaPlan && (
+              <span className="inline-flex items-center text-[11px] font-medium text-violet-500 bg-violet-500/10 px-2 py-0.5 rounded-md border border-violet-500/20">
+                Plan: {metaPlan.toUpperCase()}
+              </span>
+            )}
+            {metaSourcePlatform && (
+              <span className="inline-flex items-center text-[11px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded-md border border-border/50">
+                Platform: {metaSourcePlatform}
+              </span>
+            )}
+          </>
+        )
+      }
+      timestamp={formatRelativeTime(activity.createdAt)}
+      timestampTitle={new Date(activity.createdAt).toLocaleString()}
+      action={
+        targetUrl && (
+          <Link href={targetUrl} className="shrink-0">
+            <AppButton
+              variant="outline"
+              size="sm"
+              icon={<ArrowRightIcon className="h-3 w-3 opacity-70" />}
+              iconPosition="right"
+              className={appTableRowActionClassName}
+            >
+              {isBillingAction ? "Manage" : "View"}
+            </AppButton>
+          </Link>
+        )
+      }
+    />
   );
 }

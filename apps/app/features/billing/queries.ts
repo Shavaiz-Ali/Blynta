@@ -9,7 +9,17 @@ import {
 } from "@tanstack/react-query";
 import { axiosClient } from "@/config/axiosClient";
 import { userQueryKeys } from "@/features/auth/queries";
-import type { CreditBalance, CreditHistoryPage } from "@blynta/types";
+import type {
+  CreditBalance,
+  CreditHistoryPage,
+  BillingPlan,
+  PaidPlan,
+} from "@blynta/types";
+import {
+  billingKeys,
+  BILLING_ENDPOINTS,
+  CREDIT_HISTORY_PAGE_SIZE,
+} from "./constants";
 import { useEffect, useRef } from "react";
 import { usePaddle, type CheckoutPayload } from "./paddle-context";
 export { invalidateCurrentUser } from "./cache";
@@ -18,9 +28,9 @@ export function useCreditBalance() {
   const client = useQueryClient();
   const previous = useRef<string | undefined>(undefined);
   const result = useQuery({
-    queryKey: ["billing", "credits"],
+    queryKey: billingKeys.credits(),
     queryFn: async () =>
-      (await axiosClient.get<CreditBalance>("/billing/credits")).data,
+      (await axiosClient.get<CreditBalance>(BILLING_ENDPOINTS.credits)).data,
     refetchInterval: (query) => (query.state.data?.reserved ? 5000 : 30000),
     staleTime: 5000,
   });
@@ -37,7 +47,7 @@ export function useCreditBalance() {
   useEffect(() => {
     if (previous.current !== undefined && signature !== previous.current) {
       void client.invalidateQueries({ queryKey: userQueryKeys.me() });
-      void client.invalidateQueries({ queryKey: ["billing", "history"] });
+      void client.invalidateQueries({ queryKey: billingKeys.history });
     }
     previous.current = signature;
   }, [client, signature]);
@@ -45,13 +55,13 @@ export function useCreditBalance() {
 }
 export function useCreditHistory(page: number, product: string, type: string) {
   return useQuery({
-    queryKey: ["billing", "history", page, product, type],
+    queryKey: billingKeys.historyPage(page, product, type),
     queryFn: async () =>
       (
-        await axiosClient.get<CreditHistoryPage>("/billing/credits/history", {
+        await axiosClient.get<CreditHistoryPage>(BILLING_ENDPOINTS.history, {
           params: {
             page,
-            limit: 20,
+            limit: CREDIT_HISTORY_PAGE_SIZE,
             ...(product ? { product } : {}),
             ...(type ? { type } : {}),
           },
@@ -64,7 +74,7 @@ export function useCreditHistory(page: number, product: string, type: string) {
 /*                              Types & DTOs                                  */
 /* -------------------------------------------------------------------------- */
 
-export type BillingPlanTier = "pro" | "business";
+export type BillingPlanTier = PaidPlan;
 
 export type CreateCheckoutSessionInput = {
   plan: BillingPlanTier;
@@ -96,7 +106,7 @@ export function useCreateCheckoutSession(
     mutationFn: async (input) => {
       await checkout.prepare();
       const { data } = await axiosClient.post<CheckoutSessionResult>(
-        "/billing/checkout-session",
+        BILLING_ENDPOINTS.checkout,
         input,
       );
       await checkout.openCheckout(data);
@@ -117,7 +127,7 @@ export function useCustomerPortal() {
   return useMutation({
     mutationFn: async () => {
       const { data } = await axiosClient.get<{ url: string }>(
-        "/billing/customer-portal",
+        BILLING_ENDPOINTS.portal,
       );
       return data;
     },
@@ -139,9 +149,9 @@ export interface CreditPack {
 
 export function useCreditPacks() {
   return useQuery({
-    queryKey: ["billing", "packs"],
+    queryKey: billingKeys.packs(),
     queryFn: async () =>
-      (await axiosClient.get<CreditPack[]>("/billing/credit-packs")).data,
+      (await axiosClient.get<CreditPack[]>(BILLING_ENDPOINTS.packs)).data,
     staleTime: 60000,
   });
 }
@@ -152,11 +162,20 @@ export function useCreditPackCheckout() {
     mutationFn: async (packId: string) => {
       await checkout.prepare();
       const { data } = await axiosClient.post<CheckoutPayload>(
-        "/billing/credit-packs/checkout",
+        BILLING_ENDPOINTS.packCheckout,
         { packId },
       );
       await checkout.openCheckout(data);
       return data;
     },
+  });
+}
+
+export function useBillingPlans() {
+  return useQuery({
+    queryKey: billingKeys.plans(),
+    queryFn: async () =>
+      (await axiosClient.get<BillingPlan[]>(BILLING_ENDPOINTS.plans)).data,
+    staleTime: 60000,
   });
 }

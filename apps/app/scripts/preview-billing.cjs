@@ -72,9 +72,13 @@ const link = write(
   "link.tsx",
   `import React from 'react';export default function Link(props){return <a {...props}/>}`,
 );
+const invite = write(
+  "invite.tsx",
+  "export function InviteMembersDialog(){return null;}",
+);
 const entry = write(
   "entry.tsx",
-  `import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{ThemeProvider,useTheme}from'next-themes';import{Toaster}from'sonner';import{BillingPage}from'${billingPage.replaceAll("\\", "/")}';import{PaddleProvider}from'${path.join(app, "features/billing/components/PaddleProvider").replaceAll("\\", "/")}';import{AppButton}from'@blynta/ui';const client=new QueryClient({defaultOptions:{queries:{retry:false}}});function Preview(){const{resolvedTheme,setTheme}=useTheme();return <><div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-4 py-2 text-xs"><span>Local UI fixture · real sandbox checkout${smoke ? " enabled" : " disabled"} · no database or wallet changes</span><AppButton size="sm" variant="outline" onClick={()=>setTheme(resolvedTheme==='dark'?'light':'dark')}>Switch theme</AppButton></div><PaddleProvider><BillingPage/></PaddleProvider><Toaster/></>}createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><ThemeProvider attribute="class" defaultTheme="light"><Preview/></ThemeProvider></QueryClientProvider>);`,
+  `import React from 'react';import{createRoot}from'react-dom/client';import{QueryClient,QueryClientProvider}from'@tanstack/react-query';import{ThemeProvider,useTheme}from'next-themes';import{Toaster}from'sonner';import{ActivityPage}from'${path.join(app, "features/activity/components/ActivityPage").replaceAll("\\", "/")}';import{BillingPage}from'${billingPage.replaceAll("\\", "/")}';import{PaddleProvider}from'${path.join(app, "features/billing/components/PaddleProvider").replaceAll("\\", "/")}';import{AppButton}from'@blynta/ui';const client=new QueryClient({defaultOptions:{queries:{retry:false}}});function Preview(){const{resolvedTheme,setTheme}=useTheme();return <><div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-4 py-2 text-xs"><span>Local UI fixture · real sandbox checkout${smoke ? " enabled" : " disabled"} · no database or wallet changes</span><AppButton size="sm" variant="outline" onClick={()=>setTheme(resolvedTheme==='dark'?'light':'dark')}>Switch theme</AppButton></div><PaddleProvider>{window.location.pathname==='/activity'?<ActivityPage/>:<BillingPage/>}</PaddleProvider><Toaster/></>}createRoot(document.getElementById('root')).render(<QueryClientProvider client={client}><ThemeProvider attribute="class" defaultTheme="light"><Preview/></ThemeProvider></QueryClientProvider>);`,
 );
 
 async function main() {
@@ -95,9 +99,14 @@ async function main() {
           ],
           alias: {
             "@/features/auth/queries": auth,
+            "@/features/dashboard/components/InviteMembersDialog": invite,
             "@/config/axiosClient": axios,
             "@": app,
-            "@blynta/ui": path.join(root, "packages/ui/src/index.ts"),
+            "@blynta/ui$": path.join(root, "packages/ui/src/index.ts"),
+            "@blynta/ui/primitives": path.join(
+              root,
+              "packages/ui/src/primitives",
+            ),
             "next/navigation": navigation,
             "next/link": link,
           },
@@ -202,7 +211,6 @@ async function main() {
       }
       return owner.paddleCustomerId;
     };
-    await service.getOrCreatePaddleCustomer();
   }
   const wallet = {
     enabled: true,
@@ -243,7 +251,37 @@ async function main() {
         const route = url.pathname.slice(4);
         let data;
         if (route === "/billing/credits") data = wallet;
-        else if (route === "/billing/checkout-config")
+        else if (route === "/billing/plans" && service)
+          data = await service.listPlans();
+        else if (route === "/activities/stats")
+          data = {
+            total: 21,
+            jobsCount: 21,
+            jobsCompleted: 21,
+            creditsUsed: 1,
+            billingEvents: 0,
+          };
+        else if (route === "/activities") {
+          const page = Number(url.searchParams.get("page") || 1);
+          data = {
+            activities: [
+              {
+                _id: String(page),
+                category: "job",
+                type: "job.complete",
+                title: "Local visual fixture",
+                description: "Preview-only activity record",
+                status: "success",
+                createdAt: "2026-10-23T10:00:00Z",
+                metadata: {},
+              },
+            ],
+            total: 21,
+            page,
+            limit: 15,
+            totalPages: 2,
+          };
+        } else if (route === "/billing/checkout-config")
           data = { environment: "sandbox" };
         else if (route === "/billing/credit-packs")
           data = [25, 50, 100].map((credits) => ({

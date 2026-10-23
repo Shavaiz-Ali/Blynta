@@ -15,6 +15,7 @@ import {
   type PaddleEnvironment,
 } from "../paddle-context";
 import { checkoutEnvironment, createPaddleLoader } from "../paddle-client";
+import { BILLING_CHECKOUT_TOAST_ID } from "../constants";
 export { usePaddle } from "../paddle-context";
 
 const loadPaddle = createPaddleLoader();
@@ -39,6 +40,9 @@ export function PaddleProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
   const verificationTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
   const resumeAttempted = React.useRef<string | null>(null);
+  const retryAction = React.useRef<(() => Promise<void>) | undefined>(
+    undefined,
+  );
 
   const clearUrl = React.useCallback(() => {
     const url = new URL(window.location.href);
@@ -57,7 +61,13 @@ export function PaddleProvider({ children }: { children: React.ReactNode }) {
       opening.current = null;
     }
     console.warn("[Billing checkout]", { event: "checkout_failed" });
-    toast.error(message, { id: "billing-checkout" });
+    toast.error(message, {
+      id: BILLING_CHECKOUT_TOAST_ID,
+      action: {
+        label: "Retry",
+        onClick: () => void retryAction.current?.().catch(() => {}),
+      },
+    });
   }, []);
 
   const confirm = React.useCallback(
@@ -291,14 +301,20 @@ export function PaddleProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
-  const retry = async () => {
+  const retry = React.useCallback(async () => {
     if (transaction.current)
       await resume(transaction.current).catch((cause: Error) => {
         fail(cause.message);
         throw cause;
       });
     else await prepare();
-  };
+  }, [resume, fail, prepare]);
+  React.useEffect(() => {
+    retryAction.current = retry;
+    return () => {
+      retryAction.current = undefined;
+    };
+  }, [retry]);
   return (
     <PaddleContext.Provider
       value={{ status, error, prepare, openCheckout, retry }}

@@ -13,7 +13,8 @@ import {
   AppCardRoot,
   AppBadge,
   AppSkeleton,
-  AppDialog,
+  AppTabs,
+  AppTabsContent,
 } from "@blynta/ui";
 import { PageContent } from "@/components/layout/PageContent";
 
@@ -22,8 +23,30 @@ import {
   useCreateCheckoutSession,
   useCustomerPortal,
   useCreditBalance,
+  useBillingPlans,
 } from "../queries";
-import type { UserPlan as BillingUserPlan } from "./types";
+import {
+  PLAN,
+  PLAN_LABELS,
+  isPaidPlan,
+  getPlanChangeType,
+  type SubscriptionPlan as UserPlan,
+  type BillingPlan,
+} from "@blynta/types";
+import {
+  PLAN_PRESENTATION,
+  planAllowanceText,
+  planActionLabel,
+  type PlanPresentation,
+} from "../plans";
+import {
+  CREDIT_TAB,
+  CREDIT_TAB_HASH,
+  creditTabFromHash,
+  BILLING_CHECKOUT_TOAST_ID,
+  type CreditTab,
+} from "../constants";
+import { formatBillingPrice } from "../format";
 import type { BillingPlanTier } from "../queries";
 import { cn } from "@/lib/utils";
 import {
@@ -31,105 +54,8 @@ import {
   FilmIcon,
   CrownIcon,
   CheckIcon,
-  SparklesIcon,
   ZapIcon,
-  BuildingIcon,
 } from "@/features/dashboard/icons";
-
-/* -------------------------------------------------------------------------- */
-/*                                 Types                                      */
-/* -------------------------------------------------------------------------- */
-
-type UserPlan = BillingUserPlan | "free" | "pro" | "business";
-
-interface PlanMeta {
-  id: "free" | BillingPlanTier;
-  name: string;
-  price: string;
-  priceSuffix: string;
-  credits: number;
-  cta: (currentPlan: UserPlan) => string;
-  features: string[];
-  accent: string;
-  badge?: string;
-  icon: React.ReactNode;
-}
-
-/* -------------------------------------------------------------------------- */
-/*                           Plan display config                              */
-/* -------------------------------------------------------------------------- */
-/* NOTE: these are DISPLAY values only. The real source of truth for billing
-   amounts is the corresponding Paddle Price object configured in the
-   dashboard. Keep these strings in sync with Paddle's configured amounts. */
-
-const DISPLAY_PLANS: PlanMeta[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    priceSuffix: "/month",
-    credits: 30,
-    cta: (current) => (current === "free" ? "Current plan" : "Downgrade"),
-    features: [
-      "30 one-time credits",
-      "AI Clips and Studio access",
-      "Local timeline editing included",
-      "Cloud exports use shared credits",
-      "720p and 1080p Studio exports",
-    ],
-    accent: "border-border/60 bg-card",
-    icon: <FilmIcon className="h-5 w-5" />,
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$12",
-    priceSuffix: "/month",
-    credits: 50,
-    cta: (current) =>
-      current === "pro"
-        ? "Current plan"
-        : current === "business"
-          ? "Downgrade"
-          : "Upgrade to Pro",
-    badge: "Most popular",
-    features: [
-      "50 credits per month",
-      "AI Clips and Studio access",
-      "Local timeline editing included",
-      "Cloud exports use shared credits",
-      "Advanced clip prompts and styles",
-      "720p and 1080p Studio exports",
-    ],
-    accent:
-      "border-primary/60 bg-primary/[0.08] shadow-[0_0_0_1px_rgba(13,148,136,0.25)]",
-    icon: <SparklesIcon className="h-5 w-5" />,
-  },
-  {
-    id: "business",
-    name: "Business",
-    price: "$39",
-    priceSuffix: "/month",
-    credits: 200,
-    cta: (current) =>
-      current === "business" ? "Current plan" : "Upgrade to Business",
-    features: [
-      "200 credits per month",
-      "Everything in Pro",
-      "Shared credits for both products",
-      "Cloud exports use shared credits",
-      "720p and 1080p Studio exports",
-    ],
-    accent: "border-border/60 bg-card",
-    icon: <BuildingIcon className="h-5 w-5" />,
-  },
-];
-
-const PLAN_ORDER: Record<UserPlan, number> = {
-  free: 0,
-  pro: 1,
-  business: 2,
-};
 
 /* -------------------------------------------------------------------------- */
 /*                              Stat summary bar                              */
@@ -168,6 +94,7 @@ function StatItem({ icon, label, value, accent }: StatItemProps) {
 interface CurrentPlanBarProps {
   currentPlan: UserPlan;
   creditsBalance: number | string;
+  allowance?: number;
   creditsResetText: string;
   reserved: number | string;
 }
@@ -175,17 +102,11 @@ interface CurrentPlanBarProps {
 function CurrentPlanBar({
   currentPlan,
   creditsBalance,
+  allowance,
   creditsResetText,
   reserved,
 }: CurrentPlanBarProps) {
-  const planLabel =
-    currentPlan === "free"
-      ? "Free"
-      : currentPlan === "pro"
-        ? "Pro"
-        : currentPlan === "business"
-          ? "Business"
-          : "Free";
+  const planLabel = PLAN_LABELS[currentPlan];
 
   return (
     <AppCardRoot className="flex-row flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3 rounded-xl border-border/60 bg-muted/20 text-base overflow-visible shadow-none">
@@ -211,13 +132,13 @@ function CurrentPlanBar({
         icon={<CrownIcon className="h-4 w-4" />}
         label="Current plan"
         value={
-          currentPlan === "free"
-            ? `${planLabel} · 30 one-time credits`
-            : `${planLabel} · ${currentPlan === "business" ? 200 : 50}/month`
+          currentPlan === PLAN.FREE
+            ? `${planLabel} · ${planAllowanceText(currentPlan, allowance)}`
+            : `${planLabel} · ${allowance ?? "—"}/month`
         }
         accent="bg-primary/15 text-primary"
       />
-      {currentPlan !== "free" && (
+      {currentPlan !== PLAN.FREE && (
         <StatItem
           icon={<CoinsIcon className="h-4 w-4" />}
           label="Next allocation"
@@ -234,24 +155,26 @@ function CurrentPlanBar({
 /* -------------------------------------------------------------------------- */
 
 interface PlanCardProps {
-  plan: PlanMeta;
+  plan: PlanPresentation;
+  catalog?: BillingPlan;
   currentPlan: UserPlan;
   isLoading: boolean;
   onUpgrade: (tier: BillingPlanTier) => void;
 }
 
-function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
-  const tierRank = PLAN_ORDER[plan.id];
-  const currentRank = PLAN_ORDER[currentPlan] ?? 0;
-  const isCurrent = plan.id === currentPlan;
-  const isDowngrade = tierRank < currentRank;
-
-  // Action state: current plan -> disabled badge, downgrade -> disabled, upgrade -> actionable
-  const actionDisabled = isCurrent || isDowngrade;
-  const isProAndActionable = plan.id === "pro" && !actionDisabled;
-  const isBusinessActionable = plan.id === "business" && !actionDisabled;
-
-  const buttonLabel = plan.cta(currentPlan);
+function PlanCard({
+  plan,
+  catalog,
+  currentPlan,
+  isLoading,
+  onUpgrade,
+}: PlanCardProps) {
+  const change = getPlanChangeType(currentPlan, plan.id);
+  const isCurrent = change === "current";
+  const price = formatBillingPrice(catalog?.price);
+  const actionDisabled = change !== "upgrade" || !catalog?.enabled || !price;
+  const buttonLabel = planActionLabel(currentPlan, plan.id);
+  const Icon = plan.Icon;
 
   return (
     <AppCardRoot
@@ -273,21 +196,19 @@ function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
           <div
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-lg",
-              plan.id === "pro"
+              plan.id === PLAN.PRO
                 ? "bg-primary/15 text-primary"
                 : "bg-muted text-muted-foreground",
             )}
           >
-            {plan.icon}
+            <Icon className="h-5 w-5" />
           </div>
           <div>
             <h3 className="text-sm font-bold text-foreground leading-none">
-              {plan.name}
+              {PLAN_LABELS[plan.id]}
             </h3>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              {plan.id === "free"
-                ? "30 one-time credits"
-                : `${plan.credits} credits / month`}
+              {planAllowanceText(plan.id, catalog?.credits)}
             </p>
           </div>
         </div>
@@ -296,16 +217,19 @@ function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
       <div className="mb-5">
         <div className="flex items-baseline gap-1">
           <span className="text-3xl font-extrabold tracking-tight text-foreground">
-            {plan.price}
+            {price ?? "—"}
           </span>
           <span className="text-sm text-muted-foreground font-medium">
-            {plan.priceSuffix}
+            /month
           </span>
         </div>
       </div>
 
       <ul className="space-y-2.5 mb-6 flex-1">
-        {plan.features.map((feature) => (
+        {[
+          planAllowanceText(plan.id, catalog?.credits, true),
+          ...plan.features,
+        ].map((feature) => (
           <li
             key={feature}
             className="flex items-start gap-2 text-xs text-foreground/80"
@@ -313,7 +237,7 @@ function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
             <span
               className={cn(
                 "mt-0.5 flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full",
-                plan.id === "pro"
+                plan.id === PLAN.PRO
                   ? "bg-primary/20 text-primary"
                   : "bg-muted text-muted-foreground",
               )}
@@ -334,12 +258,12 @@ function PlanCard({ plan, currentPlan, isLoading, onUpgrade }: PlanCardProps) {
         <AppButton
           size="default"
           className="h-9 w-full text-sm font-semibold"
-          variant={plan.id === "pro" ? "default" : "outline"}
+          variant={plan.id === PLAN.PRO ? "default" : "outline"}
           disabled={actionDisabled || isLoading}
-          isLoading={isLoading && (isProAndActionable || isBusinessActionable)}
+          isLoading={isLoading && change === "upgrade"}
           onClick={() => {
             if (actionDisabled) return;
-            if (plan.id !== "free") onUpgrade(plan.id as BillingPlanTier);
+            if (plan.id !== PLAN.FREE) onUpgrade(plan.id as BillingPlanTier);
           }}
         >
           {buttonLabel}
@@ -410,20 +334,26 @@ function PlanCardSkeleton() {
 export function BillingPage() {
   const credits = useCreditBalance();
   const [creditsHelpOpen, setCreditsHelpOpen] = React.useState(false);
-  const [accountOpen, setAccountOpen] = React.useState(false);
-  const [accountTab, setAccountTab] = React.useState<"purchases" | "history">(
-    "history",
+  const catalog = useBillingPlans();
+  const [accountTab, setAccountTab] = React.useState<CreditTab>(
+    CREDIT_TAB.PURCHASES,
   );
   const router = useRouter();
   const checkout = usePaddle();
   const { data: profile, isLoading: profileLoading } = useCurrentUser();
   const currentPlan: UserPlan =
-    credits.data?.plan ?? (profile?.plan as UserPlan) ?? "free";
+    credits.data?.plan ?? (profile?.plan as UserPlan) ?? PLAN.FREE;
   const createCheckout = useCreateCheckoutSession({
-    onError: (err: Error) =>
+    onError: (err: Error, variables) =>
       toast.error(
         err.message || "Failed to initiate checkout. Please try again.",
-        { id: "billing-checkout" },
+        {
+          id: BILLING_CHECKOUT_TOAST_ID,
+          action: {
+            label: "Retry",
+            onClick: () => handleUpgrade(variables.plan),
+          },
+        },
       ),
   });
   const customerPortal = useCustomerPortal();
@@ -444,27 +374,36 @@ export function BillingPage() {
     checkout.status === "opening" ||
     checkout.status === "confirming";
   const handleUpgrade = (tier: BillingPlanTier) => {
-    if (currentPlan !== "free") return handleManageSubscription();
+    if (isPaidPlan(currentPlan)) return handleManageSubscription();
     createCheckout.mutate({ plan: tier });
   };
-  const openAccount = (tab: "purchases" | "history") => {
-    setAccountTab(tab);
-    setAccountOpen(true);
+  const selectCreditTab = (value: string) => {
+    if (value !== CREDIT_TAB.PURCHASES && value !== CREDIT_TAB.HISTORY) return;
+    setAccountTab(value);
+    const url = new URL(window.location.href);
+    url.hash = CREDIT_TAB_HASH[value];
+    window.history.replaceState(null, "", url);
   };
-
   React.useEffect(() => {
+    let frame: number | undefined;
     const syncHash = () => {
-      if (window.location.hash === "#buy-credits") {
-        setAccountTab("purchases");
-        setAccountOpen(true);
-      } else if (window.location.hash === "#credit-history") {
-        setAccountTab("history");
-        setAccountOpen(true);
+      const tab = creditTabFromHash(window.location.hash);
+      if (tab) {
+        setAccountTab(tab);
+        if (frame !== undefined) cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(() =>
+          document
+            .getElementById("credit-management")
+            ?.scrollIntoView({ block: "start" }),
+        );
       }
     };
     queueMicrotask(syncHash);
     window.addEventListener("hashchange", syncHash);
-    return () => window.removeEventListener("hashchange", syncHash);
+    return () => {
+      window.removeEventListener("hashchange", syncHash);
+      if (frame !== undefined) cancelAnimationFrame(frame);
+    };
   }, []);
 
   return (
@@ -490,7 +429,7 @@ export function BillingPage() {
           )}
         </div>
 
-        {currentPlan !== "free" && (
+        {currentPlan !== PLAN.FREE && (
           <AppButton
             variant="outline"
             size="sm"
@@ -512,17 +451,19 @@ export function BillingPage() {
           creditsBalance={credits.data?.available ?? "—"}
           creditsResetText={creditsResetText}
           reserved={credits.data?.reserved ?? "—"}
+          allowance={credits.data?.planAllocations?.[currentPlan]}
         />
       )}
 
       {/* ── Plan cards grid ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
-        {profileLoading
+        {profileLoading || catalog.isPending
           ? [0, 1, 2].map((i) => <PlanCardSkeleton key={i} />)
-          : DISPLAY_PLANS.map((plan) => (
+          : PLAN_PRESENTATION.map((plan) => (
               <PlanCard
                 key={plan.id}
                 plan={plan}
+                catalog={catalog.data?.find((item) => item.id === plan.id)}
                 currentPlan={currentPlan}
                 isLoading={checkoutBusy}
                 onUpgrade={handleUpgrade}
@@ -587,89 +528,36 @@ export function BillingPage() {
         onOpenChange={setCreditsHelpOpen}
         balance={credits.data}
       />
-      <AppDialog
-        open={accountOpen}
-        onOpenChange={setAccountOpen}
-        title="Credits"
-        description="Purchase credits or review your balance activity."
-        size="lg"
-        contentClassName="max-h-[calc(100dvh-2rem)] sm:max-w-5xl"
-        bodyClassName="space-y-4"
+      <section
+        aria-labelledby="credit-management"
+        className="space-y-4 min-w-0"
       >
-        <div
-          className="flex flex-wrap gap-2"
-          role="group"
-          aria-label="Credit account views"
+        <h2 id="credit-management" className="text-lg font-bold tracking-tight">
+          Credit Management
+        </h2>
+        <AppTabs
+          value={accountTab}
+          onValueChange={selectCreditTab}
+          variant="default"
+          size="default"
+          className="w-full"
+          tabs={[
+            { value: CREDIT_TAB.PURCHASES, label: "Buy Credits" },
+            { value: CREDIT_TAB.HISTORY, label: "Credit History" },
+          ]}
         >
-          <AppButton
-            size="sm"
-            variant={accountTab === "purchases" ? "default" : "outline"}
-            aria-pressed={accountTab === "purchases"}
-            onClick={() => setAccountTab("purchases")}
-          >
-            Buy credits
-          </AppButton>
-          <AppButton
-            size="sm"
-            variant={accountTab === "history" ? "default" : "outline"}
-            aria-pressed={accountTab === "history"}
-            onClick={() => setAccountTab("history")}
-          >
-            Credit history
-          </AppButton>
-        </div>
-        {accountTab === "purchases" ? (
-          <CreditPacks onCheckoutOpened={() => setAccountOpen(false)} />
-        ) : (
-          <CreditHistory />
-        )}
-      </AppDialog>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <AppButton
-          variant="link"
-          size="sm"
-          className="h-auto p-0 text-xs"
-          onClick={() => openAccount("purchases")}
-        >
-          Buy credits
-        </AppButton>
-        <AppButton
-          variant="link"
-          size="sm"
-          className="h-auto p-0 text-xs"
-          onClick={() => openAccount("history")}
-        >
-          Credit history
-        </AppButton>
-        {credits.isError && (
-          <AppButton
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() => void credits.refetch()}
-          >
-            Retry credit balance
-          </AppButton>
-        )}
-        {checkout.error && (
-          <AppButton
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-xs"
-            onClick={() =>
-              void checkout
-                .retry()
-                .catch((err: Error) => toast.error(err.message))
-            }
-          >
-            Retry checkout
-          </AppButton>
-        )}
-      </div>
+          <AppTabsContent value={CREDIT_TAB.PURCHASES} keepMounted>
+            <CreditPacks />
+          </AppTabsContent>
+          <AppTabsContent value={CREDIT_TAB.HISTORY} keepMounted>
+            <CreditHistory />
+          </AppTabsContent>
+        </AppTabs>
+      </section>
       <div className="pt-2 text-xs text-muted-foreground flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p>
-          All charges are in USD and processed securely by Paddle. Monthly
-          subscriptions renew automatically; cancel anytime from this page.
+          Payments are processed securely by Paddle. Monthly subscriptions renew
+          automatically; cancel anytime from this page.
         </p>
         <p>
           Need a custom volume plan?{" "}

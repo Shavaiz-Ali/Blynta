@@ -15,10 +15,9 @@ export function AppHeaderRight({
 }) {
   const { data: session } = useSession();
   const credits = useCreditBalance();
-  const plan = profile?.plan ?? "free";
-  const allowance =
-    credits.data?.planAllocations?.[plan] ??
-    (plan === "business" ? 200 : plan === "pro" ? 50 : 30);
+  const allowance = profile
+    ? credits.data?.planAllocations?.[profile.plan]
+    : undefined;
   return (
     <AppHeaderActions
       credits={

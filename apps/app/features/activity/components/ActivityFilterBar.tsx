@@ -5,7 +5,7 @@ import { ActivityCategory, ActivityStatus } from "../types";
 import { AppTabs, AppTabItem } from "@blynta/ui";
 import { AppSelect } from "@blynta/ui";
 import { AppInput } from "@blynta/ui";
-import { AppButton } from "@blynta/ui";
+import { AppButton, recordListClasses } from "@blynta/ui";
 import {
   ActivityIcon,
   FilmIcon,
@@ -99,7 +99,7 @@ export function ActivityFilterBar({
   };
 
   return (
-    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5 p-3 sm:p-3.5 rounded-lg border border-border/70 bg-card/60 backdrop-blur-sm shadow-xs">
+    <div className={recordListClasses.toolbar}>
       {/* ── Category Navigation Tabs using AppTabs ── */}
       <div className="overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
         <AppTabs
