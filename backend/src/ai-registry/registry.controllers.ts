@@ -15,7 +15,7 @@ import { AdminGuard } from '../admin/guards/admin.guard';
 import { AIRateLimitGuard } from './ai-rate-limit.guard';
 import { AdminAIService } from './admin-ai.service';
 import { ModelRegistry } from './model-registry.service';
-import { aiTask } from './registry.contract';
+import { aiTask, credentialValidationInput } from './registry.contract';
 import { parseEdit } from '../ai-editor/edit-plan.contract';
 type AIRequest = { user: { userId: string } };
 @Controller('admin/ai')
@@ -64,8 +64,10 @@ export class AdminAIController {
   @Post('credentials/:id/validate') validate(
     @Req() r: AIRequest,
     @Param('id') id: string,
+    @Body() body?: unknown,
   ) {
-    return this.service.validateCredential(r.user.userId, id);
+    const input = parseEdit(credentialValidationInput, body ?? {});
+    return this.service.validateCredential(r.user.userId, id, input.modelId);
   }
   @Get('models') models(@Query() q: unknown) {
     return this.service.list('models', q);

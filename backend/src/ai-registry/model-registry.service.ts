@@ -85,7 +85,8 @@ export class ModelRegistry {
       throw new ServiceUnavailableException('AI credential is unavailable');
     if (
       requireTest &&
-      (!model.enabled ||
+      (credential.lastValidationStatus === 'invalid' ||
+        !model.enabled ||
         !model.capabilities.text ||
         !model.capabilities.structuredOutput ||
         model.lastTestStatus !== 'valid' ||

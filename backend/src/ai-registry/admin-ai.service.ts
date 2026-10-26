@@ -4,6 +4,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { randomUUID } from 'node:crypto';
@@ -19,6 +20,10 @@ import {
 } from '../activities/schemas/activity.schema';
 import { CredentialVault } from './credential-vault.service';
 import { ModelRegistry } from './model-registry.service';
+import {
+  classifyProviderFailure,
+  type ProviderFailure,
+} from './provider-errors';
 import { ProviderAdapterRegistry } from './provider-adapter.registry';
 import { ProviderValidationService } from './provider-validation.service';
 import {
@@ -68,6 +73,19 @@ export class AdminAIService {
   adapterOptions() {
     return { items: this.adapters.options() };
   }
+  private async readyForTasks(id: string) {
+    try {
+      await this.registry.configured(id);
+      return true;
+    } catch (error) {
+      if (
+        error instanceof ServiceUnavailableException ||
+        error instanceof NotFoundException
+      )
+        return false;
+      throw error;
+    }
+  }
   async list(kind: 'providers' | 'models' | 'usage', query: unknown) {
     const q = parseEdit(listInput, query);
     const filter: Record<string, unknown> = {};
@@ -88,19 +106,45 @@ export class AdminAIService {
         .lean();
       return {
         items: await Promise.all(
-          items.map(async (p) => ({
-            ...p,
-            configured: !!(await this.registry.credentials.exists({
-              _id: p.defaultCredentialId ?? null,
-              providerId: String(p._id),
-              enabled: true,
-            })),
-            modelCount: await this.registry.models.countDocuments({
-              providerId: String(p._id),
-              archived: false,
-            }),
-            operationalAdapter: this.adapters.supports(p.adapter),
-          })),
+          items.map(async (p) => {
+            const credentials = await this.registry.credentials
+              .find({
+                providerId: String(p._id),
+                enabled: true,
+                archived: { $ne: true },
+              })
+              .lean();
+            const models = await this.registry.models
+              .find({
+                providerId: String(p._id),
+                archived: { $ne: true },
+              })
+              .lean();
+            const credentialIds = new Set(
+              credentials.map((c) => String(c._id)),
+            );
+            const configured =
+              credentialIds.has(p.defaultCredentialId ?? '') ||
+              models.some((m) => credentialIds.has(m.credentialId ?? ''));
+            let accessibleModelCount = 0;
+            for (const m of models) {
+              if (await this.readyForTasks(String(m._id)))
+                accessibleModelCount++;
+            }
+            return {
+              ...p,
+              configured,
+              credentialConfigured: credentials.length > 0,
+              credentialCount: credentials.length,
+              validatedCredentialCount: credentials.filter(
+                (c) => c.lastValidationStatus === 'valid',
+              ).length,
+              modelCount: models.length,
+              accessibleModelCount,
+              operational: accessibleModelCount > 0,
+              operationalAdapter: this.adapters.supports(p.adapter),
+            };
+          }),
         ),
         page: q.page,
         pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
@@ -117,10 +161,13 @@ export class AdminAIService {
         .limit(PAGINATION.DEFAULT_PAGE_SIZE)
         .lean();
       return {
-        items: items.map((m) => ({
-          ...m,
-          isDefault: String(m._id) === route?.modelId,
-        })),
+        items: await Promise.all(
+          items.map(async (m) => ({
+            ...m,
+            isDefault: String(m._id) === route?.modelId,
+            readyForTasks: await this.readyForTasks(String(m._id)),
+          })),
+        ),
         page: q.page,
         pageSize: PAGINATION.DEFAULT_PAGE_SIZE,
       };
@@ -216,6 +263,7 @@ export class AdminAIService {
           _id: input.defaultCredentialId,
           providerId: id,
           enabled: true,
+          archived: { $ne: true },
         }))
       )
         throw new BadRequestException(
@@ -319,10 +367,10 @@ export class AdminAIService {
     );
     return { removed: true };
   }
-  async validateCredential(actor: string, id: string) {
+  async validateCredential(actor: string, id: string, modelId?: string) {
     this.id(id);
     await this.audit(actor, 'credential.validate', id);
-    return this.validation.validate(id);
+    return this.validation.validate(id, modelId);
   }
   async model(actor: string, body: unknown, id?: string) {
     const input = id
@@ -337,9 +385,7 @@ export class AdminAIService {
       _id: providerId,
     });
     if (!provider || !this.adapters.supports(provider.adapter))
-      throw new BadRequestException(
-        'Only the implemented Google adapter supports models',
-      );
+      throw new BadRequestException('Provider adapter is not implemented');
     const credentialId =
       input.credentialId !== undefined
         ? input.credentialId
@@ -349,6 +395,8 @@ export class AdminAIService {
       !(await this.registry.credentials.exists({
         _id: credentialId,
         providerId,
+        enabled: true,
+        archived: { $ne: true },
       }))
     )
       throw new BadRequestException('Credential does not belong to provider');
@@ -400,15 +448,29 @@ export class AdminAIService {
       throw new BadRequestException('Default must allow free users');
     await this.audit(actor, 'model.default', id);
     // One routing document: concurrent admins cannot create two defaults.
-    return this.registry.routing.findOneAndUpdate(
-      { _id: AI_ROUTING.LEGACY_DEFAULT },
-      { $set: { modelId: id }, $inc: { revision: 1 } },
-      { upsert: true, returnDocument: 'after' },
-    );
+    const filter = { _id: AI_ROUTING.LEGACY_DEFAULT };
+    const update = { $set: { modelId: id }, $inc: { revision: 1 } };
+    try {
+      return await this.registry.routing.findOneAndUpdate(filter, update, {
+        upsert: true,
+        returnDocument: 'after',
+      });
+    } catch (error) {
+      // Two first-time upserts can race on the singleton _id. Keep the same
+      // last-writer-wins policy as subsequent atomic pointer updates.
+      if ((error as { code?: number })?.code !== 11000) throw error;
+      return this.registry.routing.findOneAndUpdate(filter, update, {
+        returnDocument: 'after',
+      });
+    }
   }
   async test(actor: string, id: string) {
     const { model, provider, credential, secret } =
       await this.registry.configured(id, false);
+    if (!model.capabilities.text || !model.capabilities.structuredOutput)
+      throw new BadRequestException(
+        'Model testing for AI tasks requires text and structured output capabilities',
+      );
     await this.audit(actor, 'model.test', id);
     const started = Date.now();
     const before = model.toObject();
@@ -425,6 +487,7 @@ export class AdminAIService {
       status: 'failed',
     };
     let valid = false;
+    let failure: ProviderFailure | undefined;
     try {
       const signal = AbortSignal.timeout(model.settings.timeoutMs);
       const adapter = this.adapters.get(provider.adapter);
@@ -480,13 +543,15 @@ export class AdminAIService {
           (usage.inputTokens * model.pricing.inputCostPerMillionTokens +
             usage.outputTokens * model.pricing.outputCostPerMillionTokens) /
           1000000;
-    } catch {
+    } catch (error) {
       valid = false;
+      failure = classifyProviderFailure(error);
     }
     const fresh = await this.registry.credentials.exists({
       _id: credential._id,
       revision: credential.revision,
       enabled: true,
+      archived: { $ne: true },
     });
     const providerFresh = await this.registry.providers.exists({
       _id: provider._id,
@@ -497,7 +562,7 @@ export class AdminAIService {
     usage.latencyMs = Date.now() - started;
     usage.status = valid ? 'success' : 'failed';
     await this.registry.recordUsage(usage);
-    await this.registry.models.updateOne(
+    const update = await this.registry.models.updateOne(
       {
         _id: id,
         modelId: before.modelId,
@@ -506,6 +571,7 @@ export class AdminAIService {
         tasks: before.tasks,
         credentialId: before.credentialId,
         providerId: before.providerId,
+        archived: { $ne: true },
       },
       {
         $set: {
@@ -518,6 +584,11 @@ export class AdminAIService {
         },
       },
     );
-    return { valid, latencyMs: Date.now() - started };
+    if (update.matchedCount === 0) valid = false;
+    return {
+      valid,
+      ...(valid ? {} : failure),
+      latencyMs: Date.now() - started,
+    };
   }
 }

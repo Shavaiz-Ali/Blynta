@@ -33,6 +33,7 @@ describe('Authenticated AI adapter route registration', () => {
     adapterOptions: jest.fn(() => ({
       items: [{ adapter: 'google', implemented: true }],
     })),
+    validateCredential: jest.fn(() => Promise.resolve({ valid: true })),
   };
   beforeAll(async () => {
     const fixture = await Test.createTestingModule({
@@ -124,6 +125,36 @@ describe('Authenticated AI adapter route registration', () => {
     await request(app.getHttpServer())
       .get(API_ENDPOINTS.aiAdmin.adapters)
       .expect(401);
+  });
+  it('accepts an optional registry model ID for validation and rejects malformed selections', async () => {
+    const id = '111111111111111111111111';
+    const modelId = '222222222222222222222222';
+    const path = `/admin/ai/credentials/${id}/validate`;
+    await request(app.getHttpServer())
+      .post(path)
+      .set('Authorization', `Bearer ${token('admin', 'admin-session')}`)
+      .send({ modelId })
+      .expect(201);
+    expect(service.validateCredential).toHaveBeenLastCalledWith(
+      'admin',
+      id,
+      modelId,
+    );
+    await request(app.getHttpServer())
+      .post(path)
+      .set('Authorization', `Bearer ${token('admin', 'admin-session')}`)
+      .expect(201);
+    expect(service.validateCredential).toHaveBeenLastCalledWith(
+      'admin',
+      id,
+      undefined,
+    );
+    await request(app.getHttpServer())
+      .post(path)
+      .set('Authorization', `Bearer ${token('admin', 'admin-session')}`)
+      .send({ modelId: 'upstream-name' })
+      .expect(400);
+    expect(service.validateCredential).toHaveBeenCalledTimes(2);
   });
   it('rejects an invalid signature and consumer session', async () => {
     await request(app.getHttpServer())

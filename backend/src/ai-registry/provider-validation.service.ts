@@ -4,7 +4,7 @@ import { AI_ERROR_CODES } from '@blynta/types/contracts';
 import { artifactHash } from '../media/pipeline-cache-identity';
 import { ModelRegistry, secretSelection } from './model-registry.service';
 import { CredentialVault } from './credential-vault.service';
-import type { AIModel, AIProvider } from './registry.schemas';
+import type { AIModel } from './registry.schemas';
 import { ProviderAdapterRegistry } from './provider-adapter.registry';
 import {
   AI_LIMITS,
@@ -27,9 +27,9 @@ export class ProviderValidationService {
     private config: ConfigService,
   ) {}
   private async targetModel(
-    provider: AIProvider,
     providerId: string,
     credentialId: string,
+    requestedModelId?: string,
   ) {
     const eligible = {
       providerId,
@@ -38,11 +38,18 @@ export class ProviderValidationService {
       'capabilities.text': true,
       $or: [
         { credentialId },
-        ...(provider.defaultCredentialId === credentialId
-          ? [{ credentialId: null }]
-          : []),
+        // A probe explicitly uses the credential under test. It never changes
+        // the credential inherited by normal model execution.
+        { credentialId: null },
       ],
     };
+    if (requestedModelId)
+      return (
+        (await this.registry.models.findOne({
+          ...eligible,
+          _id: requestedModelId,
+        })) ?? undefined
+      );
     const route = await this.registry.routing.findById(
       AI_ROUTING.LEGACY_DEFAULT,
     );
@@ -56,20 +63,31 @@ export class ProviderValidationService {
     const model = await this.registry.models
       .findOne(eligible)
       .sort({ priority: 1, _id: 1 });
+    if (
+      model &&
+      (await this.registry.models.exists({
+        ...eligible,
+        _id: { $ne: model._id },
+      }))
+    )
+      return undefined;
     return model ?? undefined;
   }
   private modelConfiguration(model: AIModel | undefined) {
     return model
       ? artifactHash({
+          id: String((model as AIModel & { _id?: unknown })._id),
+          providerId: model.providerId,
+          enabled: model.enabled,
+          archived: model.archived,
+          capabilities: model.capabilities,
           modelId: model.modelId,
           credentialId: model.credentialId,
-          maxOutputTokens: model.settings.maxOutputTokens,
-          temperature: model.settings.temperature,
-          timeoutMs: model.settings.timeoutMs,
+          settings: model.settings,
         })
       : undefined;
   }
-  async validate(id: string) {
+  async validate(id: string, requestedModelId?: string) {
     const credential = await this.registry.credentials
       .findOne({ _id: id, enabled: true, archived: { $ne: true } })
       .select(secretSelection);
@@ -85,9 +103,9 @@ export class ProviderValidationService {
     const adapter = this.adapters.get(provider.adapter);
     providerEndpoint(provider);
     const model = await this.targetModel(
-      provider,
       credential.providerId,
       credentialId,
+      requestedModelId,
     );
     const modelId = model?.modelId;
     const context = artifactHash({
@@ -127,22 +145,7 @@ export class ProviderValidationService {
             valid: false,
             code: AI_ERROR_CODES.REQUEST_FAILED,
             message:
-              'Bind an enabled text model to this credential, directly or through its provider default, before testing model access. Credential identity is undetermined.',
-          };
-        } else if (
-          credential.lastValidationStatus === 'valid' &&
-          credential.lastValidationContext === context &&
-          credential.lastSuccessfulValidationAt &&
-          Date.now() - credential.lastSuccessfulValidationAt.getTime() >= 0 &&
-          Date.now() - credential.lastSuccessfulValidationAt.getTime() <
-            AI_LIMITS.CREDENTIAL_SUCCESS_TTL_MS
-        ) {
-          return {
-            valid: true,
-            ...validationOutcome({ valid: true }),
-            latencyMs: Date.now() - started,
-            cached: true,
-            modelId,
+              'Select an enabled, non-archived text model from this provider, unbound or bound to this credential. Without a selection, validation uses the eligible Auto default or a single eligible model. Credential identity is undetermined.',
           };
         } else {
           result = await adapter.validateCredential(
@@ -181,7 +184,11 @@ export class ProviderValidationService {
       !modelId ||
       this.modelConfiguration(model) ===
         this.modelConfiguration(
-          await this.targetModel(provider, credential.providerId, credentialId),
+          await this.targetModel(
+            credential.providerId,
+            credentialId,
+            requestedModelId,
+          ),
         );
     if (!modelFresh)
       result = {
@@ -237,6 +244,7 @@ export class ProviderValidationService {
     return {
       ...result,
       ...validationOutcome(result),
+      ...(!modelId ? { category: 'configuration_error' } : {}),
       latencyMs: Date.now() - started,
       ...(modelId ? { modelId } : {}),
     };

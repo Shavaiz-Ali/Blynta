@@ -51,11 +51,19 @@ export const credentialInput = z
 export const credentialUpdate = credentialInput
   .partial()
   .refine((v) => Object.keys(v).length > 0);
+// modelId is the registry record ID, not the upstream model identifier.
+export const credentialValidationInput = z
+  .object({ modelId: objectId.optional() })
+  .strict();
 export const modelInput = z
   .object({
     providerId: objectId,
     credentialId: objectId.nullable().optional(),
-    modelId: z.string().regex(/^gemini-[a-zA-Z0-9.-]{1,100}$/),
+    modelId: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/),
     displayName: z.string().min(1).max(100),
     description: z.string().max(500).optional(),
     enabled: z.boolean().default(false),

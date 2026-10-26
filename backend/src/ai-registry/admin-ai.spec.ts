@@ -1,7 +1,11 @@
 import { ProviderValidationService } from './provider-validation.service';
 import { ProviderAdapterRegistry } from './provider-adapter.registry';
 import { ConfigService } from '@nestjs/config';
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { AdminAIService } from './admin-ai.service';
 import { ModelRegistry } from './model-registry.service';
@@ -244,6 +248,91 @@ describe('Administrator credential and provider boundaries', () => {
     expect(s.registry.providers.findByIdAndUpdate).not.toHaveBeenCalled();
     expect(s.activities.create).not.toHaveBeenCalled();
   });
+  it('keeps one Auto pointer during concurrent first-default updates, retrying insert collisions', async () => {
+    const s = setup();
+    let policy: { _id: string; modelId: string; revision: number } | undefined;
+    const write = jest.fn(
+      async (
+        filter: { _id: string },
+        update: { $set: { modelId: string } },
+        options: { upsert?: boolean },
+      ) => {
+        const inserting = !policy;
+        await Promise.resolve();
+        if (inserting && policy && options.upsert)
+          throw Object.assign(new Error('Duplicate policy'), { code: 11000 });
+        policy = {
+          _id: filter._id,
+          modelId: update.$set.modelId,
+          revision: (policy?.revision ?? 0) + 1,
+        };
+        return policy;
+      },
+    );
+    Object.assign(s.registry, {
+      configured: jest.fn(() =>
+        Promise.resolve({
+          model: { access: { allowedPlans: ['free'] } },
+        }),
+      ),
+    });
+    Object.assign(s.registry.routing, { findOneAndUpdate: write });
+    await Promise.all([
+      s.service.setDefault(id, id),
+      s.service.setDefault(id, providerId),
+    ]);
+    expect(policy).toEqual({
+      _id: 'editing-default',
+      modelId: providerId,
+      revision: 2,
+    });
+    expect(
+      write.mock.calls.every(([filter]) => filter._id === 'editing-default'),
+    ).toBe(true);
+    expect(write.mock.calls.at(-1)?.[2]).toEqual({ returnDocument: 'after' });
+  });
+  it('reports stored credentials separately from usable bindings and tested models', async () => {
+    const s = setup();
+    const chain = (value: unknown) => {
+      const result = {
+        sort: () => result,
+        skip: () => result,
+        limit: () => result,
+        lean: () => Promise.resolve(value),
+      };
+      return result;
+    };
+    Object.assign(s.registry.providers, { find: () => chain([s.provider]) });
+    Object.assign(s.registry.credentials, {
+      find: () => chain([{ ...s.credential, enabled: true }]),
+    });
+    Object.assign(s.registry.models, {
+      find: () => chain([{ _id: id, credentialId: null }]),
+    });
+    Object.assign(s.registry, {
+      configured: jest
+        .fn()
+        .mockRejectedValue(new ServiceUnavailableException('Needs binding')),
+    });
+    await expect(s.service.list('providers', {})).resolves.toMatchObject({
+      items: [
+        {
+          credentialConfigured: true,
+          credentialCount: 1,
+          configured: false,
+          validatedCredentialCount: 0,
+          operational: false,
+          modelCount: 1,
+        },
+      ],
+    });
+    Object.assign(s.registry.models, {
+      find: () => chain([{ _id: id, credentialId: s.credential._id }]),
+    });
+    await expect(s.service.list('providers', {})).resolves.toMatchObject({
+      items: [{ configured: true, operational: false }],
+    });
+  });
 });
 
 describe('Credential validation diagnostics', () => {
@@ -454,7 +543,7 @@ describe('Credential validation diagnostics', () => {
       expect.anything(),
     );
   });
-  it('reuses a recent generation success but preserves valid state on a later temporary failure', async () => {
+  it('makes a fresh generation request and preserves valid identity on a later temporary failure', async () => {
     const s = validationSetup();
     const saved = {
       ...s.credential,
@@ -474,9 +563,8 @@ describe('Credential validation diagnostics', () => {
     );
     await expect(s.service.validateCredential(id, id)).resolves.toMatchObject({
       valid: true,
-      cached: true,
     });
-    expect(s.transport.fetch).toHaveBeenCalledTimes(1);
+    expect(s.transport.fetch).toHaveBeenCalledTimes(2);
     Object.assign(saved, { lastSuccessfulValidationAt: new Date(0) });
     s.transport.fetch.mockResolvedValueOnce(
       new Response('{"error":{"status":"RESOURCE_EXHAUSTED"}}', {
@@ -569,7 +657,7 @@ describe('Credential validation diagnostics', () => {
     });
     s.registry.models.findOne.mockImplementation((...args: unknown[]) => {
       const query = args[0] as Record<string, unknown>;
-      expect(query.$or).toEqual([{ credentialId: id }]);
+      expect(query.$or).toEqual([{ credentialId: id }, { credentialId: null }]);
       return Object.assign(Promise.resolve(null), {
         sort: jest.fn().mockResolvedValue(null),
       });
@@ -577,12 +665,12 @@ describe('Credential validation diagnostics', () => {
     const result = await s.service.validateCredential(id, id);
     expect(result).toMatchObject({
       valid: false,
-      category: 'malformed_request',
+      category: 'configuration_error',
       credentialStatus: 'undetermined',
     });
     expect(s.transport.fetch).not.toHaveBeenCalled();
   });
-  it('allows unbound models only when this credential is the provider default', async () => {
+  it('allows unbound models when this credential is the provider default', async () => {
     const s = validationSetup();
     Object.assign(s.provider, { defaultCredentialId: id });
     s.registry.models.findOne.mockReturnValue({

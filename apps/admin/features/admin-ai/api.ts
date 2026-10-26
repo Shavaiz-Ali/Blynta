@@ -15,6 +15,11 @@ export interface Provider {
   operationalAdapter?: boolean;
   enabled: boolean;
   configured: boolean;
+  credentialConfigured?: boolean;
+  credentialCount?: number;
+  validatedCredentialCount?: number;
+  accessibleModelCount?: number;
+  operational?: boolean;
   modelCount: number;
   description?: string;
   defaultCredentialId?: string | null;
@@ -25,6 +30,8 @@ export interface Credential {
   enabled: boolean;
   lastValidatedAt?: string;
   lastValidationStatus?: string;
+  lastValidationAttemptStatus?: string;
+  lastValidationMessage?: string;
 }
 export interface AIModel {
   _id: string;
@@ -35,6 +42,7 @@ export interface AIModel {
   description?: string;
   enabled: boolean;
   isDefault: boolean;
+  readyForTasks?: boolean;
   tasks?: AITask[];
   capabilities: {
     text: boolean;

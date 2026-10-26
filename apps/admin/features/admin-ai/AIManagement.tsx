@@ -68,7 +68,11 @@ const providerForm = z.object({
 });
 const modelForm = z.object({
   providerId: z.string().regex(/^[a-f\d]{24}$/i),
-  modelId: z.string().regex(/^gemini-[a-zA-Z0-9.-]{1,100}$/),
+  modelId: z
+    .string()
+    .min(1)
+    .max(200)
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/),
   displayName: name,
   description: z.string().max(500),
   temperature: z
@@ -174,6 +178,8 @@ export function AIManagement({
   const [selectedProvider, setSelectedProvider] = useState("");
   const [credentialProvider, setCredentialProvider] = useState<Provider>();
   const [credentialEdit, setCredentialEdit] = useState<Credential>();
+  const [validationModelId, setValidationModelId] = useState("");
+  const [validationModelPage, setValidationModelPage] = useState(1);
   const params = {
     page,
     ...(search ? { search } : {}),
@@ -190,7 +196,7 @@ export function AIManagement({
   const modelProviderId =
     selectedProvider ||
     modelEdit?.providerId ||
-    catalog.data?.items.find((p) => p.adapter === "google")?._id ||
+    catalog.data?.items.find((p) => p.operationalAdapter)?._id ||
     "";
   const modelCredentials = useQuery({
     queryKey: ["admin-ai", "credentials", modelProviderId],
@@ -215,6 +221,21 @@ export function AIManagement({
   const credentials = useQuery({
     queryKey: ["admin-ai", "credentials", credentialProvider?._id],
     queryFn: () => aiAdminApi.credentials(credentialProvider!._id),
+    enabled: !!credentialProvider,
+  });
+  const validationModels = useQuery({
+    queryKey: [
+      "admin-ai",
+      "validation-models",
+      credentialProvider?._id,
+      validationModelPage,
+    ],
+    queryFn: () =>
+      aiAdminApi.models({
+        providerId: credentialProvider!._id,
+        enabled: "true",
+        page: validationModelPage,
+      }),
     enabled: !!credentialProvider,
   });
   const refresh = async () =>
@@ -555,7 +576,7 @@ export function AIManagement({
                   render: (p) => (
                     <>
                       {p.adapter}
-                      {p.adapter !== "google" && (
+                      {!p.operationalAdapter && (
                         <div className="text-xs">Adapter pending</div>
                       )}
                     </>
@@ -578,7 +599,25 @@ export function AIManagement({
                   header: "Credential",
                   className: "align-top whitespace-normal",
                   render: (p) => (
-                    <>{p.configured ? "Configured" : "Needs credential"}</>
+                    <>
+                      <div>
+                        {p.credentialConfigured
+                          ? `${p.credentialCount} enabled credential(s)`
+                          : "Needs credential"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.configured
+                          ? "Credential binding configured"
+                          : "Assign a provider default or model credential"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {p.validatedCredentialCount ?? 0} credential(s) with
+                        prior validation success ·{" "}
+                        {p.operational
+                          ? "Ready for tasks"
+                          : "No model ready for tasks"}
+                      </div>
+                    </>
                   ),
                 },
                 {
@@ -605,6 +644,8 @@ export function AIManagement({
                         variant="outline"
                         onClick={() => {
                           setCredentialEdit(undefined);
+                          setValidationModelId("");
+                          setValidationModelPage(1);
                           setCredentialProvider(p);
                         }}
                       >
@@ -613,7 +654,7 @@ export function AIManagement({
                       <Button
                         size="sm"
                         variant="ghost"
-                        disabled={busy || p.adapter !== "google"}
+                        disabled={busy || !p.operationalAdapter}
                         onClick={() =>
                           action("patch", "providers/" + p._id, {
                             enabled: !p.enabled,
@@ -707,6 +748,11 @@ export function AIManagement({
                   render: (m) => (
                     <>
                       <AppStatusBadge status={m.lastTestStatus ?? "unknown"} />
+                      <div className="text-xs text-muted-foreground">
+                        {m.readyForTasks
+                          ? "Ready for tasks"
+                          : "Not ready with current configuration"}
+                      </div>
                       {m.lastTestedAt && (
                         <div className="text-xs">
                           {new Date(m.lastTestedAt).toLocaleString()}
@@ -1083,9 +1129,51 @@ export function AIManagement({
             </p>
           )}
           <p className="text-muted-foreground text-sm">
-            Stored secrets are encrypted and cannot be read back. Set the
-            default credential ID in the provider form after adding it.
+            Stored secrets are encrypted and cannot be read back. Validation
+            makes a fresh request using the credential you choose below. It does
+            not assign runtime bindings. For tasks, assign a provider default
+            credential or bind the model directly, test the model, enable it,
+            then assign the Auto default. Models must support the task.
           </p>
+          <label className="grid gap-2 text-sm">
+            Validation model
+            <AppSelect
+              aria-label="Validation model"
+              value={validationModelId}
+              onValueChange={setValidationModelId}
+            >
+              <SelectItem value="">
+                Auto default or only eligible model
+              </SelectItem>
+              {validationModels.data?.items
+                .filter((m) => m.capabilities.text)
+                .map((m) => (
+                  <SelectItem key={m._id} value={m._id}>
+                    {m.displayName}
+                  </SelectItem>
+                ))}
+            </AppSelect>
+            <span className="text-xs text-muted-foreground">
+              With multiple eligible models, select one explicitly. A model
+              bound to another credential cannot be used.
+            </span>
+          </label>
+          {(validationModelPage > 1 ||
+            (validationModels.data?.items.length ?? 0) >=
+              PAGINATION.DEFAULT_PAGE_SIZE) && (
+            <AppPagination
+              page={validationModelPage}
+              hasNext={
+                (validationModels.data?.items.length ?? 0) >=
+                PAGINATION.DEFAULT_PAGE_SIZE
+              }
+              disabled={validationModels.isPending || validationModels.isError}
+              onPageChange={(page) => {
+                setValidationModelPage(page);
+                setValidationModelId("");
+              }}
+            />
+          )}
           {credentials.data?.items.map((c) => (
             <div key={c._id} className="rounded border p-3 text-sm">
               <div>
@@ -1096,6 +1184,12 @@ export function AIManagement({
                 {c.lastValidatedAt
                   ? " · " + new Date(c.lastValidatedAt).toLocaleString()
                   : ""}
+                {c.lastValidationAttemptStatus
+                  ? ` · Latest attempt: ${c.lastValidationAttemptStatus}`
+                  : ""}
+                {c.lastValidationMessage && (
+                  <div>{c.lastValidationMessage}</div>
+                )}
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button
@@ -1110,7 +1204,11 @@ export function AIManagement({
                   variant="outline"
                   disabled={busy || !c.enabled}
                   onClick={() =>
-                    action("post", "credentials/" + c._id + "/validate")
+                    action(
+                      "post",
+                      "credentials/" + c._id + "/validate",
+                      validationModelId ? { modelId: validationModelId } : {},
+                    )
                   }
                 >
                   Validate
@@ -1260,7 +1358,7 @@ export function AIManagement({
                   </AppSelect>
                 </label>
                 <Field
-                  label="Gemini model identifier"
+                  label="Provider model identifier"
                   name="modelId"
                   value={modelEdit?.modelId}
                   required
