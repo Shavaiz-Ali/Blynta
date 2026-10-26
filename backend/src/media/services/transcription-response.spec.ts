@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { TranscriptionService } from './transcription.service';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
 import * as runner from '../utils/run-command-with-progress';
+import Groq from 'groq-sdk';
+import { UnrecoverableError } from 'bullmq';
+
+const mockFetch = (response: () => Response) =>
+  jest.fn(() => Promise.resolve().then(response));
 
 describe('provider output ownership and normalization', () => {
   let directory: string;
@@ -48,11 +53,9 @@ describe('provider output ownership and normalization', () => {
     Reflect.set(s, 'groq', {
       audio: {
         transcriptions: {
-          create: jest
-            .fn()
-            .mockResolvedValue({
-              segments: [{ start: 0, end: 0, text: 'secret' }],
-            }),
+          create: jest.fn().mockResolvedValue({
+            segments: [{ start: 0, end: 0, text: 'secret' }],
+          }),
         },
       },
     });
@@ -62,6 +65,90 @@ describe('provider output ownership and normalization', () => {
       code: 'INVALID_TRANSCRIPT_ARTIFACT',
       details: { reason: 'non_positive_segment_duration', segmentIndex: 0 },
     });
+  });
+  test.each([429, 503, 'connection'] as const)(
+    'SDK owns retries for %s; exhausted requests stop BullMQ retry multiplication',
+    async (failure) => {
+      const s = service('groq');
+      const client = Reflect.get(s, 'groq') as Groq;
+      expect(client.maxRetries).toBe(2);
+      const fetch = mockFetch(() => {
+        if (failure === 'connection') throw new Error('connection lost');
+        return new Response(
+          JSON.stringify({ error: { message: 'private provider content' } }),
+          {
+            status: failure,
+            headers: {
+              'content-type': 'application/json',
+              'retry-after-ms': '1',
+            },
+          },
+        );
+      });
+      // Supply the native Response constructor so the SDK's data: capability
+      // probe is not counted as a transcription API request.
+      Reflect.set(fetch, 'Response', Response);
+      Reflect.set(client, 'fetch', fetch);
+      const result = s.transcribe(audio, undefined, undefined, 5, 'job-test');
+      await expect(result).rejects.toBeInstanceOf(UnrecoverableError);
+      await expect(result).rejects.not.toThrow('private provider content');
+      expect(fetch).toHaveBeenCalledTimes(3);
+    },
+  );
+  test('normalizes a successful provider response once and logs raw timing with job context', async () => {
+    const s = service('groq');
+    const warn = jest.spyOn(Reflect.get(s, 'logger'), 'warn');
+    const fetch = mockFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            segments: [
+              { start: 0, end: 1, text: 'one' },
+              { start: 1, end: 1, text: 'two' },
+            ],
+          }),
+          { headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    Reflect.set(fetch, 'Response', Response);
+    Reflect.set(Reflect.get(s, 'groq'), 'fetch', fetch);
+    expect(
+      await s.transcribe(audio, undefined, undefined, 5, 'job-test'),
+    ).toEqual([{ startTime: 0, endTime: 1, text: 'one two' }]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'transcript.segment.invalid',
+        jobId: 'job-test',
+        rawStart: 1,
+        rawEnd: 1,
+      }),
+    );
+  });
+  test('non-retryable provider rejection and corrupt successful output each make one request', async () => {
+    for (const status of [401, 200]) {
+      const s = service('groq');
+      const fetch = mockFetch(
+        () =>
+          new Response(
+            JSON.stringify(
+              status === 401
+                ? { error: { message: 'secret' } }
+                : { segments: [{ start: 0, end: 0, text: 'secret' }] },
+            ),
+            {
+              status,
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
+      );
+      Reflect.set(fetch, 'Response', Response);
+      Reflect.set(Reflect.get(s, 'groq'), 'fetch', fetch);
+      await expect(
+        s.transcribe(audio, undefined, undefined, 5),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    }
   });
   test('does not read stale output after interrupted or missing Whisper output', async () => {
     await writeFile(

@@ -2,7 +2,8 @@ import { ConfigService } from '@nestjs/config';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Model, Types, model as mongooseModel } from 'mongoose';
-import { Queue } from 'bullmq';
+import { Queue, UnrecoverableError } from 'bullmq';
+import { normalizeTranscriptResponse } from '../media/transcript-validation';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -478,14 +479,14 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
     expect(f.download.downloadVideo).not.toHaveBeenCalled();
     expect(parent.transcript.length).toBeGreaterThan(0);
   });
-  test('invalid ASR output never publishes an artifact or reaches highlights and can retry', async () => {
+  test('invalid ASR output is terminal for BullMQ, publishes no artifact, and permits explicit retry', async () => {
     const f = fixture();
     const { parent, bull } = await f.run({ defer: true });
     f.transcribe.transcribe.mockResolvedValueOnce([
       { startTime: 0, endTime: 0, text: 'bad' },
     ]);
-    await expect(f.processor.process(bull as never)).rejects.toThrow(
-      'non_positive_segment_duration',
+    await expect(f.processor.process(bull as never)).rejects.toBeInstanceOf(
+      UnrecoverableError,
     );
     expect(parent.transcript).toEqual([]);
     expect(parent.errorStage).toBe(JobStatus.TRANSCRIBING);
@@ -494,6 +495,35 @@ describe('real pipeline uses layered cache with each job’s Billing V2 authoriz
     await f.processor.process(bull as never);
     expect(f.download.downloadVideo).toHaveBeenCalledTimes(1);
     expect(parent.transcript.length).toBeGreaterThan(0);
+  });
+  test('repaired transcript reaches highlights, caches safely and resumes without another ASR call or charge', async () => {
+    const f = fixture();
+    const { parent, bull, op } = await f.run({ defer: true });
+    const raw = f.transcript.map((s) => ({
+      start: s.startTime,
+      end: s.endTime,
+      text: s.text,
+    }));
+    raw.splice(1, 0, {
+      start: raw[0].end,
+      end: raw[0].end,
+      text: 'Synthetic boundary speech',
+    });
+    const repaired = normalizeTranscriptResponse(
+      'groq',
+      { segments: raw },
+      3233.461,
+    );
+    f.transcribe.transcribe.mockResolvedValue(repaired);
+    await f.processor.process(bull as never);
+    expect(parent.transcript[0].text).toContain('Synthetic boundary speech');
+    expect(f.discover).toHaveBeenCalledTimes(1);
+    expect(f.cache.rows.size).toBeGreaterThan(0);
+    const charged = op.charged;
+    await f.processor.process({ ...bull, attemptsMade: 1 } as never);
+    expect(f.transcribe.transcribe).toHaveBeenCalledTimes(1);
+    expect(op.charged).toBe(charged);
+    expect(parent.renderManifestReady).toBe(true);
   });
   test.each([undefined, 'A private prompt'])(
     'identical source and instructions reuse all layers (%s)',

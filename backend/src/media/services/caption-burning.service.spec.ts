@@ -2,6 +2,7 @@ import { CaptionBurningService } from './caption-burning.service';
 import { STYLE_PRESETS } from '../style-presets';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
 import * as fs from 'fs';
+import { normalizeTranscriptResponse } from '../transcript-validation';
 jest.mock('../utils/run-command-with-progress', () => ({
   runCommandWithProgress: jest.fn(),
 }));
@@ -9,6 +10,28 @@ const run = jest.mocked(runCommandWithProgress);
 describe('caption Unicode and render safeguards', () => {
   const service = new CaptionBurningService({} as never);
   afterEach(() => jest.restoreAllMocks());
+  test('repaired boundary speech burns within the original timed interval', () => {
+    const segments = normalizeTranscriptResponse(
+      'groq',
+      {
+        segments: [
+          { start: 0, end: 2, text: 'Synthetic' },
+          { start: 2, end: 2, text: 'speech' },
+        ],
+      },
+      10,
+    );
+    const ass = (
+      service as unknown as {
+        buildAss: (
+          segments: ReturnType<typeof normalizeTranscriptResponse>,
+          style: typeof STYLE_PRESETS.default.captionStyle,
+        ) => string;
+      }
+    ).buildAss(segments, STYLE_PRESETS.default.captionStyle);
+    expect(ass).toContain('Dialogue: 0,0:00:00.00,0:00:02.00,');
+    expect(ass.replace(/\{[^}]*\}/g, '')).toContain('Synthetic speech');
+  });
   test.each([
     'Readable English — café',
     'یہ اردو ہے',

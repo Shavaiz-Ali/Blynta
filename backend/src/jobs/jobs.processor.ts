@@ -344,6 +344,7 @@ export class JobsProcessor
             makeThrottledProgressUpdate(),
             undefined,
             audioMetadata!.durationSeconds,
+            jobId,
           );
           assertTranscript(value, actualDuration);
           return value;

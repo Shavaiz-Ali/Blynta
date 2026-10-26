@@ -19,6 +19,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { runCommandWithProgress } from '../utils/run-command-with-progress';
 import { ProcessRegistryService } from '../../common/services/process-registry.service';
+import { UnrecoverableError } from 'bullmq';
 
 export interface TranscriptSegmentDto {
   startTime: number;
@@ -57,7 +58,9 @@ export class TranscriptionService {
           'GROQ_API_KEY is not configured but TRANSCRIPTION_PROVIDER=groq',
         );
       }
-      this.groq = new Groq({ apiKey });
+      // The SDK owns transport retries (including Retry-After). Exhaustion is terminal
+      // for this queue execution, avoiding SDK attempts multiplied by BullMQ attempts.
+      this.groq = new Groq({ apiKey, maxRetries: 2 });
       this.modelName = this.configService.get<string>(
         'GROQ_WHISPER_MODEL',
         'whisper-large-v3-turbo',
@@ -147,6 +150,7 @@ export class TranscriptionService {
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
     verifiedDuration?: number,
+    jobId?: string,
   ): Promise<TranscriptSegmentDto[]> {
     const startedAt = Date.now();
     try {
@@ -163,6 +167,7 @@ export class TranscriptionService {
             onProgress,
             initialPrompt,
             duration,
+            jobId,
           )
         : this.transcribeWithWhisperCpp(
             audioPath,
@@ -205,6 +210,7 @@ export class TranscriptionService {
     onProgress?: (percent: number) => void,
     initialPrompt?: string,
     duration = 0,
+    jobId?: string,
   ): Promise<TranscriptSegmentDto[]> {
     this.logger.log(
       `Transcribing ${audioPath} with Groq (model=${this.modelName})`,
@@ -244,10 +250,31 @@ export class TranscriptionService {
           provider: 'groq',
           durationSeconds: duration,
         });
-      return normalizeTranscriptResponse('groq', transcription, duration);
+      return normalizeTranscriptResponse(
+        'groq',
+        transcription,
+        duration,
+        (event) => this.logger.warn({ ...event, jobId }),
+      );
     } catch (err) {
       assertNotCancelled();
       if (err instanceof TranscriptValidationError) throw err;
+      if (err instanceof Groq.APIError) {
+        // SDK messages can include provider response content. Expose status only.
+        const rawStatus: unknown = err.status;
+        const status = typeof rawStatus === 'number' ? rawStatus : 'connection';
+        this.logger.warn({
+          event: 'transcript.provider_failed',
+          jobId,
+          provider: 'groq',
+          status,
+          retryOwner: 'groq-sdk',
+          maxRetries: 2,
+        });
+        throw new UnrecoverableError(
+          `Groq transcription request failed (status=${status}; SDK retry budget exhausted or non-retryable response)`,
+        );
+      }
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`Groq transcription failed: ${message}`);
       throw new Error(`Groq transcription failed: ${message}`);
