@@ -87,7 +87,8 @@ describe('R2 final Node HTTPS request boundary', () => {
     endpoint: string,
     logs: Record<string, unknown>[],
     clients: S3Client[];
-  let mode: 'ok' | '400' | 'redirect';
+  let mode: 'ok' | '400' | '403' | '404' | '503' | 'redirect';
+  let errorLog: jest.SpyInstance;
   let received: {
     method?: string;
     path: string;
@@ -108,7 +109,9 @@ describe('R2 final Node HTTPS request boundary', () => {
         if (typeof message === 'string' && message.startsWith('{'))
           logs.push(JSON.parse(message) as Record<string, unknown>);
       });
-    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    errorLog = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
     server = createServer(
       {
         cert,
@@ -133,8 +136,10 @@ describe('R2 final Node HTTPS request boundary', () => {
                 'https://untrusted.invalid/private?X-Amz-Signature=never-log-this',
             });
             response.end('<Error><Code>Redirect</Code></Error>');
-          } else if (mode === '400') {
-            response.writeHead(400, { 'content-type': 'application/xml' });
+          } else if (['400', '403', '404', '503'].includes(mode)) {
+            response.writeHead(Number(mode), {
+              'content-type': 'application/xml',
+            });
             response.end(
               '<Error><Code>InvalidRequest</Code><Message>Please use AWS4-HMAC-SHA256</Message></Error>',
             );
@@ -185,6 +190,103 @@ describe('R2 final Node HTTPS request boundary', () => {
     clients.push(client);
     return { r2, client, config };
   }
+  it.each([
+    `${prefix}/progress.json`,
+    `${prefix}/output.mp4`,
+    'clips/parent/clip-captioned.mp4',
+  ])(
+    'logs only an explicitly pending render HEAD miss at debug level: %s',
+    async (objectKey) => {
+      mode = '404';
+      const debug = jest
+        .spyOn(Logger.prototype, 'debug')
+        .mockImplementation(() => undefined);
+      const { r2 } = storage();
+      expect(
+        await r2.fileExists(objectKey, { pendingRenderArtifact: true }),
+      ).toBe(false);
+      expect(errorLog).not.toHaveBeenCalled();
+      const events = debug.mock.calls.map(
+        ([value]) => JSON.parse(String(value)) as Record<string, unknown>,
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: 'r2_render_artifact_pending',
+          operation: 'HeadObjectCommand',
+          httpStatusCode: 404,
+        }),
+      );
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: 'r2_http_response',
+          method: 'HEAD',
+          httpStatusCode: 404,
+        }),
+      );
+      expect(received[0].validSignature).toBe(true);
+    },
+  );
+  it.each(['source', 'manifest', 'completed_output', 'untagged_output'])(
+    'preserves error logging for a required or unclassified %s 404',
+    async (purpose) => {
+      mode = '404';
+      const { r2 } = storage();
+      if (purpose === 'manifest')
+        await expect(r2.downloadToBuffer(key)).rejects.toThrow();
+      else if (purpose === 'completed_output')
+        await expect(r2.objectInfo(`${prefix}/output.mp4`)).rejects.toThrow();
+      else if (purpose === 'source') {
+        // Even an incorrect pending flag cannot downgrade a source check.
+        expect(
+          await r2.fileExists('job-sources/parent/source.mp4', {
+            pendingRenderArtifact: true,
+          }),
+        ).toBe(false);
+      } else
+        expect(await r2.fileExists('clips/parent/clip-captioned.mp4')).toBe(
+          false,
+        );
+      expect(errorLog).toHaveBeenCalledWith(
+        expect.stringContaining('r2_operation_failed'),
+      );
+    },
+  );
+  it.each(['403', '503'] as const)(
+    'preserves %s errors for explicitly pending probes',
+    async (status) => {
+      mode = status;
+      const { r2 } = storage();
+      await expect(
+        r2.fileExists(`${prefix}/progress.json`, {
+          pendingRenderArtifact: true,
+        }),
+      ).rejects.toThrow();
+      expect(errorLog).toHaveBeenCalledWith(
+        expect.stringContaining('r2_operation_failed'),
+      );
+    },
+  );
+  it('isolates concurrent pending and required checks and restores the default afterwards', async () => {
+    mode = '404';
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    const { r2 } = storage();
+    const results = await Promise.allSettled([
+      r2.fileExists(`${prefix}/progress.json`, { pendingRenderArtifact: true }),
+      r2.objectInfo(`${prefix}/output.mp4`),
+    ]);
+    expect(results.map((result) => result.status)).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    expect(debug).toHaveBeenCalled();
+    await expect(
+      r2.objectInfo('job-sources/parent/source.mp4'),
+    ).rejects.toThrow();
+    expect(errorLog).toHaveBeenCalledTimes(2);
+  });
   it('receives valid SigV4 over real HTTPS for the backend PUT and renderer manifest GET at the same target', async () => {
     const backend = storage(),
       renderer = storage();

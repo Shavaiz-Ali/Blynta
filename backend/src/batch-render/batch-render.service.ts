@@ -288,7 +288,11 @@ export class BatchRenderService {
           );
           return result;
         }
-        if (await this.r2.fileExists(`${prefix}/progress.json`)) {
+        if (
+          await this.r2.fileExists(`${prefix}/progress.json`, {
+            pendingRenderArtifact: true,
+          })
+        ) {
           const tick = JSON.parse(
             (
               await this.r2.downloadToBuffer(`${prefix}/progress.json`, 16384)

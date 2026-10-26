@@ -141,6 +141,18 @@ describe('R2 object existence', () => {
       false,
     );
   });
+  it('preserves explicit authentication status even if its error name is NotFound', async () => {
+    const failure = Object.assign(new Error('denied'), {
+      name: 'NotFound',
+      $metadata: { httpStatusCode: 403 },
+    });
+    jest.spyOn(S3Client.prototype, 'send').mockRejectedValue(failure as never);
+    await expect(
+      service().fileExists('clips/parent/clip.mp4', {
+        pendingRenderArtifact: true,
+      }),
+    ).rejects.toBe(failure);
+  });
   it.each([
     Object.assign(new Error('AccessDenied'), {
       $metadata: { httpStatusCode: 403 },

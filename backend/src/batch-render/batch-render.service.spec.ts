@@ -332,6 +332,9 @@ describe('AWS Batch durable execution', () => {
     );
     await service.execute(identity, prepare, tick);
     expect(tick).toHaveBeenCalledWith('cutting', 99);
+    expect(r2.fileExists).toHaveBeenCalledWith(`${prefix}/progress.json`, {
+      pendingRenderArtifact: true,
+    });
   });
   it('cancels and terminates queued/running tasks on cancellation', async () => {
     const abort = new AbortController();

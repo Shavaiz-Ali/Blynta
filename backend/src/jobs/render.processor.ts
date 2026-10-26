@@ -201,7 +201,9 @@ export class RenderProcessor
       if (!Number.isFinite(duration) || duration <= 0)
         throw new Error('Invalid clip duration');
       // PUT is atomic: a prior attempt may have uploaded before its Mongo commit.
-      if (await this.r2.fileExists(objectKey)) {
+      if (
+        await this.r2.fileExists(objectKey, { pendingRenderArtifact: true })
+      ) {
         await this.jobs.updateClip(jobId, clipId, {
           status: JobStatus.COMPLETED,
           processingState: ClipProcessingState.READY,

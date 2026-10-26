@@ -1,4 +1,5 @@
 import { STORAGE_POLICY } from './storage.constants';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import {
   cancellationSignal,
   assertNotCancelled,
@@ -34,6 +35,7 @@ export class R2Service {
   private readonly client: S3Client;
   private readonly bucket: string;
   private readonly sourceBucket: string;
+  private readonly pendingRenderHead = new AsyncLocalStorage<boolean>();
 
   constructor(private configService: ConfigService) {
     this.bucket = this.configService.get<string>('R2_BUCKET_NAME', '');
@@ -53,7 +55,15 @@ export class R2Service {
         secretAccessKey,
         buckets: [this.bucket, this.sourceBucket || this.bucket],
       },
-      (event) => this.logger.log(JSON.stringify(event)),
+      (event) => {
+        if (
+          this.pendingRenderHead.getStore() === true &&
+          event.method === 'HEAD' &&
+          event.httpStatusCode === 404
+        )
+          this.logger.debug(JSON.stringify(event));
+        else this.logger.log(JSON.stringify(event));
+      },
     );
     this.client = new S3Client({
       region: 'auto', // R2 uses 'auto', not a real AWS region
@@ -92,9 +102,16 @@ export class R2Service {
         try {
           return await next(args);
         } catch (error) {
-          this.logger.error(
+          const expectedPending =
+            this.pendingRenderHead.getStore() === true &&
+            context.commandName === 'HeadObjectCommand' &&
+            (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+              ?.httpStatusCode === HttpStatus.NOT_FOUND;
+          this.logger[expectedPending ? 'debug' : 'error'](
             JSON.stringify({
-              event: 'r2_operation_failed',
+              event: expectedPending
+                ? 'r2_render_artifact_pending'
+                : 'r2_operation_failed',
               operation: context.commandName,
               endpointHttps,
               endpointIsR2,
@@ -245,13 +262,25 @@ export class R2Service {
     return objectKey;
   }
 
-  async fileExists(objectKey: string): Promise<boolean> {
+  async fileExists(
+    objectKey: string,
+    options?: { pendingRenderArtifact?: boolean },
+  ): Promise<boolean> {
+    // Only explicit pre-completion render probes qualify; required checks retain errors.
+    const pending =
+      options?.pendingRenderArtifact === true &&
+      (objectKey.startsWith('clips/') ||
+        /^job-sources\/batch\/[a-f0-9]{64}\/(progress\.json|output\.mp4)$/.test(
+          objectKey,
+        ));
     try {
-      await this.client.send(
-        new HeadObjectCommand({
-          Bucket: this.bucketFor(objectKey),
-          Key: objectKey,
-        }),
+      await this.pendingRenderHead.run(pending, () =>
+        this.client.send(
+          new HeadObjectCommand({
+            Bucket: this.bucketFor(objectKey),
+            Key: objectKey,
+          }),
+        ),
       );
       return true;
     } catch (error) {
@@ -259,6 +288,11 @@ export class R2Service {
         name?: string;
         $metadata?: { httpStatusCode?: number };
       };
+      if (
+        failure.$metadata?.httpStatusCode !== undefined &&
+        failure.$metadata.httpStatusCode !== 404
+      )
+        throw error;
       if (
         failure.$metadata?.httpStatusCode === HttpStatus.NOT_FOUND ||
         failure.name === 'NotFound' ||
