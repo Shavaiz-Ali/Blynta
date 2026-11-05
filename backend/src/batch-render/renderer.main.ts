@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { execFileSync } from 'node:child_process';
 import { runRenderer } from './renderer';
 import { UnrecoverableError } from 'bullmq';
+import { renderFailure } from './render-failure';
 import { r2FailureDetails } from '../storage/r2-diagnostics';
 import {
   MediaCommandError,
@@ -17,6 +18,10 @@ async function main() {
       if (!filters.includes(filter))
         throw new Error(`Missing FFmpeg filter: ${filter}`);
     execFileSync('fc-match', ['Noto Sans Arabic'], { stdio: 'ignore' });
+    for (const family of ['Montserrat', 'Anton']) {
+      const matched = execFileSync('fc-match', ['--format=%{family}', family], { encoding: 'utf8' });
+      if (!matched.toLowerCase().includes(family.toLowerCase())) throw new Error(`Missing renderer font: ${family}`);
+    }
     console.log('Renderer image preflight passed');
     return;
   }
@@ -41,6 +46,7 @@ void main().catch((error: unknown) => {
   console.error(
     JSON.stringify({
       ...r2FailureDetails(error),
+      ...renderFailure(error),
       stderr:
         error instanceof MediaCommandError
           ? safeDiagnostic(error.stderr)
@@ -48,5 +54,8 @@ void main().catch((error: unknown) => {
     }),
   );
   // Exit 2 is reserved for deterministic configuration/input failures; Batch must not retry it.
-  process.exitCode = error instanceof UnrecoverableError ? 2 : 1;
+  process.exitCode =
+    error instanceof UnrecoverableError || !renderFailure(error).retryable
+      ? 2
+      : 1;
 });

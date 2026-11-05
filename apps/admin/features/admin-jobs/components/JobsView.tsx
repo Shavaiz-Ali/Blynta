@@ -22,9 +22,7 @@ import {
 import { DataTable, Column } from "@/components/common/DataTable";
 import { QueryErrorState } from "@/components/common/QueryErrorState";
 import { AppBadge as Badge } from "@/components/common/primitives";
-import { AppButton, AppLinkButton } from "@blynta/ui";
-import { AppInput as Input } from "@/components/common/primitives";
-import { AppSelect as Select } from "@blynta/ui";
+import { AppButton, AppLinkButton, AppInput, AppSelect } from "@blynta/ui";
 import { SelectItem } from "@blynta/ui/primitives/select";
 import {
   Search,
@@ -179,14 +177,6 @@ export function JobsView() {
               </span>
             </div>
           )}
-          {job.status === "failed" && job.errorMessage && (
-            <span
-              className="text-[11px] text-destructive/90 truncate max-w-40 font-mono"
-              title={job.errorMessage}
-            >
-              {job.errorMessage.slice(0, 35)}…
-            </span>
-          )}
         </div>
       ),
     },
@@ -194,33 +184,27 @@ export function JobsView() {
       key: "clipsCount",
       header: "Clips",
       render: (job) => (
-        <Badge
-          variant="outline"
-          className="tabular-nums font-mono text-xs font-semibold"
-        >
-          {job.clips?.length ?? job.clipsCount ?? 0}
-        </Badge>
+        <span className="text-xs font-semibold tabular-nums text-foreground">
+          {job.clips?.length ?? 0}
+        </span>
       ),
     },
     {
-      key: "videoDuration",
+      key: "duration",
       header: "Duration",
       render: (job) => (
-        <span className="text-xs text-muted-foreground tabular-nums font-mono">
+        <span className="text-xs text-muted-foreground font-mono">
           {formatDuration(job.videoDuration)}
         </span>
       ),
     },
     {
-      key: "stylePreset",
-      header: "Subtitle Preset",
+      key: "preset",
+      header: "Preset",
       render: (job) => (
-        <Badge
-          variant="secondary"
-          className="text-[10px] capitalize font-medium"
-        >
-          {job.stylePreset || "default"}
-        </Badge>
+        <span className="text-xs text-muted-foreground capitalize">
+          {job.stylePreset?.replaceAll("_", " ") || "default"}
+        </span>
       ),
     },
     {
@@ -248,7 +232,7 @@ export function JobsView() {
               size="xs"
               onClick={(e) => handleRetry(e, job._id)}
               disabled={retryMutation.isPending}
-              className="gap-1 text-destructive hover:bg-destructive/10 border-destructive/30"
+              className="h-7 gap-1 text-destructive hover:bg-destructive/10 border-destructive/30 shadow-2xs text-xs font-semibold"
               title="Re-queue failed job"
             >
               <RotateCw
@@ -263,6 +247,7 @@ export function JobsView() {
             render={<Link href={`/jobs/${job._id}`} />}
             title="Open job details"
             aria-label={`Open details for ${job.videoTitle || job._id}`}
+            className="h-7 w-7 rounded-lg"
           >
             <Eye className="size-3.5" />
           </AppLinkButton>
@@ -279,7 +264,10 @@ export function JobsView() {
         description="Track video ingestion, transcription, highlight detection, and rendering."
         action={
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="font-mono text-xs">
+            <Badge
+              variant="outline"
+              className="border-primary/30 bg-primary/10 text-primary font-semibold text-xs px-2.5 py-1"
+            >
               {data?.meta?.total !== undefined
                 ? `${data.meta.total.toLocaleString()} Total Jobs`
                 : "Loading..."}
@@ -289,28 +277,26 @@ export function JobsView() {
       />
 
       {/* Filter Bar */}
-      <div className="rounded-lg border bg-card p-4 space-y-3">
+      <div className="rounded-xl border border-border/70 bg-card p-4 space-y-3 shadow-xs transition-colors">
         <div className="flex flex-wrap gap-3 items-center">
-          {/* Search Input - using shadcn Input */}
-          <div className="relative w-full min-w-0 flex-1 sm:min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-            <Input
+          <div className="w-full min-w-0 flex-1 sm:min-w-64">
+            <AppInput
               type="text"
+              size="sm"
               placeholder="Search by video title, URL, or user email..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setParams((p) => ({ ...p, page: 1 }));
               }}
-              className="pl-9 h-9 text-xs"
+              prefixIcon={<Search className="size-4" />}
             />
           </div>
 
-          {/* Status Select - using shadcn Select */}
-          <Select
+          <AppSelect
             aria-label="Job status"
             size="sm"
-            wrapperClassName="w-full sm:w-40"
+            wrapperClassName="w-full sm:w-44"
             value={statusFilter || "all"}
             onValueChange={(val) => {
               setStatusFilter(val === "all" ? "" : (val as JobStatus));
@@ -324,31 +310,35 @@ export function JobsView() {
             <SelectItem value="cutting_clips">FFmpeg Render</SelectItem>
             <SelectItem value="completed">Completed</SelectItem>
             <SelectItem value="failed">Failed</SelectItem>
-          </Select>
+          </AppSelect>
         </div>
 
         {/* Quick Filter Status Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto overscroll-x-contain border-t border-border/60 pt-2 text-xs">
-          <span className="text-[11px] text-muted-foreground shrink-0 flex items-center gap-1">
+        <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain border-t border-border/50 pt-2.5 text-xs">
+          <span className="text-[11px] font-semibold text-muted-foreground shrink-0 flex items-center gap-1 mr-1">
             <Filter className="size-3" /> Quick Filter:
           </span>
-          {QUICK_FILTERS.map((pill) => (
-            <AppButton
-              key={pill.label}
-              onClick={() => {
-                setStatusFilter(pill.val as JobStatus | "");
-                setParams((p) => ({ ...p, page: 1 }));
-              }}
-              className={cn(
-                "px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap",
-                statusFilter === pill.val
-                  ? "bg-primary text-primary-foreground font-semibold"
-                  : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted",
-              )}
-            >
-              {pill.label}
-            </AppButton>
-          ))}
+          {QUICK_FILTERS.map((pill) => {
+            const active = statusFilter === pill.val;
+            return (
+              <button
+                key={pill.label}
+                type="button"
+                onClick={() => {
+                  setStatusFilter(pill.val as JobStatus | "");
+                  setParams((p) => ({ ...p, page: 1 }));
+                }}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-xs transition-all cursor-pointer",
+                  active
+                    ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                    : "bg-muted/50 text-muted-foreground hover:text-foreground hover:bg-muted border border-border/40 font-medium",
+                )}
+              >
+                {pill.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 

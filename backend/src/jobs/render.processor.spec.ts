@@ -73,6 +73,9 @@ describe('independent clip processor lifecycle', () => {
   };
   const r2 = {
     fileExists: jest.fn(() => Promise.resolve(false)),
+    objectInfo: jest.fn(() =>
+      Promise.resolve({ size: 6, contentType: 'video/mp4' }),
+    ),
     downloadToLocal: jest.fn(async (_key: string, path: string) =>
       writeFile(path, 'source'),
     ),
@@ -246,7 +249,7 @@ describe('independent clip processor lifecycle', () => {
       await progress('captioning', 50);
       return {
         outputKey: 'job-sources/batch/test/output.mp4',
-        bytes: 4,
+        bytes: 6,
         cuttingSeconds: 2,
         captioningSeconds: 3,
       };

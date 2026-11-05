@@ -12,12 +12,12 @@ export function NotificationsView() {
     <div className="space-y-6">
       <AppPageHeader
         title="Notifications"
-        description="Processing failures requiring attention."
+        description="Processing failures and operational alerts requiring administrator attention."
       />
-      <p className="text-sm text-muted-foreground">
-        These alerts come from failed jobs. Read/unread state, billing alerts,
-        and security notifications are not yet connected.
-      </p>
+      <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs text-xs text-muted-foreground leading-relaxed">
+        These alerts reflect pipeline failures across processing jobs. Read/unread status, billing thresholds,
+        and infrastructure security warnings will sync here automatically.
+      </div>
       {query.isError ? (
         <QueryErrorState onRetry={() => void query.refetch()} />
       ) : (

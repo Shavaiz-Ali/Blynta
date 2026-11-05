@@ -31,7 +31,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         >
           <TooltipProvider>
             {children}
-            <Toaster />
+            <Toaster position="top-right" closeButton richColors />
           </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>

@@ -146,7 +146,18 @@ describe('one-shot renderer', () => {
     await expect(run()).rejects.toBeInstanceOf(UnrecoverableError);
     expect(ClipCuttingService.prototype.cutClip).not.toHaveBeenCalled();
     expect(r2.uploadFile).not.toHaveBeenCalled();
-    expect(r2.uploadBuffer).not.toHaveBeenCalled();
+    expect(r2.uploadBuffer).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      `${prefix}/failure.json`,
+      'application/json',
+    );
+    const failure = JSON.parse(r2.uploadBuffer.mock.calls[0][0].toString());
+    expect(failure).toMatchObject({
+      code: 'RENDER_SOURCE_NOT_FOUND',
+      stage: 'source_check',
+      jobId: 'aws-1',
+      retryable: false,
+    });
   });
   it.each([
     new Error('network timeout'),
@@ -193,6 +204,25 @@ describe('one-shot renderer', () => {
     expect(CaptionBurningService.prototype.burnCaptions).not.toHaveBeenCalled();
     expect(uploaded.toString()).toBe('cut');
   });
+  it('classifies a required missing manifest without rendering or publishing success', async () => {
+    const error = Object.assign(new Error('missing'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
+    r2.downloadToBuffer.mockRejectedValueOnce(error);
+    await expect(run()).rejects.toMatchObject({ renderFailure: { code: 'RENDER_MANIFEST_NOT_FOUND', retryable: false } });
+    expect(ClipCuttingService.prototype.cutClip).not.toHaveBeenCalled();
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+  });
+  it('rejects malformed manifest JSON deterministically', async () => {
+    r2.downloadToBuffer.mockResolvedValueOnce(Buffer.from('{'));
+    await expect(run()).rejects.toMatchObject({ renderFailure: { code: 'RENDER_MANIFEST_INVALID', retryable: false } });
+    expect(r2.uploadFile).not.toHaveBeenCalled();
+  });
+  it('publishes a safe FFmpeg failure code without transcript, URL or stderr in the marker', async () => {
+    jest.mocked(ClipCuttingService.prototype.cutClip).mockRejectedValueOnce(new Error('private https://example.invalid?signature=secret'));
+    await expect(run()).rejects.toThrow();
+    const marker = r2.uploadBuffer.mock.calls.find(call => call[1] === `${prefix}/failure.json`);
+    expect(JSON.parse(marker[0].toString())).toMatchObject({ jobId: 'aws-1', code: 'RENDER_FFMPEG_FAILED', stage: 'cutting' });
+    expect(marker[0].toString()).not.toMatch(/private|signature|secret/);
+  });
   it('never publishes a marker on FFmpeg failure', async () => {
     jest
       .mocked(ClipCuttingService.prototype.cutClip)
@@ -224,6 +254,7 @@ describe('one-shot renderer', () => {
         expect.stringContaining(`"stage":"${stage}"`),
       );
       const log = logs.mock.calls
+        .filter(([entry]) => typeof entry === 'string')
         .map(([entry]) => JSON.parse(entry))
         .find((entry) => entry.stage === stage);
       expect(log).toMatchObject({

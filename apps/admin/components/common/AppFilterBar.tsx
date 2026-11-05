@@ -11,7 +11,7 @@ export function AppFilterBar({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-wrap items-center gap-3 rounded-lg border bg-card p-4",
+        "flex min-w-0 flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card p-3.5 sm:p-4 shadow-xs transition-colors",
         className,
       )}
     >

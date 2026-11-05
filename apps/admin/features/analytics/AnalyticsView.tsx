@@ -28,7 +28,7 @@ export function AnalyticsView() {
         title="Analytics"
         description="Daily user growth and processing outcomes · last 14 days"
       />
-      <label className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-4 text-sm">
+      <label className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card p-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground shadow-xs">
         Metric
         <AppSelect
           aria-label="Metric"
@@ -49,18 +49,22 @@ export function AnalyticsView() {
         <AppSpinner />
       ) : query.data?.points.length ? (
         <>
-          <Chart points={query.data.points} label={analyticsMetrics[metric]} />
-          <details className="rounded-lg border bg-card p-4">
-            <summary className="cursor-pointer rounded-md text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <div className="rounded-xl border border-border/70 bg-card p-5 shadow-xs">
+            <Chart points={query.data.points} label={analyticsMetrics[metric]} />
+          </div>
+          <details className="rounded-xl border border-border/70 bg-card p-4 shadow-xs">
+            <summary className="cursor-pointer rounded-md text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors">
               View source values
             </summary>
-            <DataTable
-              data={query.data.points.map((p) => ({ ...p, id: p.date }))}
-              columns={[
-                { key: "date", header: "Date" },
-                { key: "value", header: analyticsMetrics[metric] },
-              ]}
-            />
+            <div className="pt-4">
+              <DataTable
+                data={query.data.points.map((p) => ({ ...p, id: p.date }))}
+                columns={[
+                  { key: "date", header: "Date" },
+                  { key: "value", header: analyticsMetrics[metric] },
+                ]}
+              />
+            </div>
           </details>
         </>
       ) : (

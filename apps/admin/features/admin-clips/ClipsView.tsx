@@ -6,11 +6,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAdminJobsQuery } from "@/features/admin-jobs/queries";
 import { AppPageHeader } from "@/components/common/AppPageHeader";
-import { AppInput } from "@blynta/ui";
-import { AppButton } from "@blynta/ui";
+import { AppInput, AppButton } from "@blynta/ui";
 import { DataTable } from "@/components/common/DataTable";
 import { AppStatusBadge } from "@/components/common/AppStatusBadge";
 import { QueryErrorState } from "@/components/common/QueryErrorState";
+import { Search } from "lucide-react";
 
 export function ClipsView() {
   const router = useRouter();
@@ -42,7 +42,7 @@ export function ClipsView() {
         title="Generated clips"
         description="Inspect generated videos and open their parent jobs in a full detail page."
       />
-      <div className="rounded-lg border bg-card p-4">
+      <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs transition-colors">
         <AppInput
           label="Find parent jobs"
           value={search}
@@ -51,6 +51,7 @@ export function ClipsView() {
             setPage(1);
           }}
           placeholder="Search video title or source"
+          prefixIcon={<Search className="size-4" />}
         />
       </div>
       {query.isError ? (
@@ -68,14 +69,22 @@ export function ClipsView() {
                 header: "Parent job",
                 render: (clip) => (
                   <Link
-                    className="font-medium text-primary hover:underline"
+                    className="font-semibold text-primary hover:underline text-xs"
                     href={ADMIN_ROUTES.job(clip.jobId)}
                   >
                     {clip.title}
                   </Link>
                 ),
               },
-              { key: "owner", header: "Owner" },
+              {
+                key: "owner",
+                header: "Owner",
+                render: (clip) => (
+                  <span className="text-xs text-muted-foreground font-medium">
+                    {clip.owner}
+                  </span>
+                ),
+              },
               {
                 key: "status",
                 header: "Status",
@@ -86,8 +95,11 @@ export function ClipsView() {
               {
                 key: "duration",
                 header: "Duration",
-                render: (clip) =>
-                  `${Math.max(0, clip.endTime - clip.startTime).toFixed(1)}s`,
+                render: (clip) => (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {Math.max(0, clip.endTime - clip.startTime).toFixed(1)}s
+                  </span>
+                ),
               },
               {
                 key: "preview",
@@ -95,31 +107,35 @@ export function ClipsView() {
                 render: (clip) =>
                   clip.outputUrl && /^https?:\/\//i.test(clip.outputUrl) ? (
                     <video
-                      className="w-48 rounded-md"
+                      className="w-48 rounded-lg border border-border/60 shadow-xs"
                       controls
                       preload="none"
                       src={clip.outputUrl}
                       aria-label={`Preview clip from ${clip.title}`}
                     />
                   ) : (
-                    "Preview unavailable"
+                    <span className="text-xs text-muted-foreground">Preview unavailable</span>
                   ),
               },
             ]}
           />
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
             <AppButton
               variant="outline"
+              size="sm"
+              className="h-8 text-xs font-semibold shadow-2xs border-border/70"
               disabled={page <= 1 || query.isFetching}
               onClick={() => setPage(page - 1)}
             >
               Previous jobs
             </AppButton>
-            <span>
-              Job page {page} / {Math.max(1, query.data?.meta.totalPages || 1)}
+            <span className="font-medium text-foreground">
+              Job page {page} of {Math.max(1, query.data?.meta.totalPages || 1)}
             </span>
             <AppButton
               variant="outline"
+              size="sm"
+              className="h-8 text-xs font-semibold shadow-2xs border-border/70"
               disabled={
                 page >= (query.data?.meta.totalPages || 1) || query.isFetching
               }

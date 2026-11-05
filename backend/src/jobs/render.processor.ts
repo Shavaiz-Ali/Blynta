@@ -25,6 +25,12 @@ import { FfmpegProgress } from '../media/utils/ffmpeg-progress';
 import { ClipRenderProgress, clipProgressSample } from './render-progress';
 import { RenderSourceService } from './render-source.service';
 import { RenderCapacityService } from './render-capacity.service';
+import { MediaInspectionService } from '../media/services/media-inspection.service';
+import { withR2ObjectContext } from '../storage/r2-object-context';
+import {
+  renderFailure,
+  terminalRenderFailure,
+} from '../batch-render/render-failure';
 
 interface RenderData {
   jobId: string;
@@ -47,6 +53,7 @@ export class RenderProcessor
     private sources: RenderSourceService,
     private capacity: RenderCapacityService,
     @Optional() private batch?: BatchRenderService,
+    @Optional() private inspection?: MediaInspectionService,
   ) {
     super();
   }
@@ -107,8 +114,12 @@ export class RenderProcessor
   }
 
   async process(bullJob: BullJob<RenderData>) {
-    await this.jobs.runMediaExecution(bullJob.data.jobId, () =>
-      this.processRender(bullJob),
+    await withR2ObjectContext(
+      { jobId: bullJob.data.jobId, clipId: bullJob.data.clipId },
+      () =>
+        this.jobs.runMediaExecution(bullJob.data.jobId, () =>
+          this.processRender(bullJob),
+        ),
     );
   }
 
@@ -126,6 +137,14 @@ export class RenderProcessor
     }
     const started = Date.now();
     let directory: string | undefined;
+    const workspace = async () => {
+      if (!directory) {
+        const root = join(this.config.get<string>('STORAGE_ROOT', '/var/blynta/storage'), 'renders');
+        await mkdir(root, { recursive: true });
+        directory = await mkdtemp(join(root, `${jobId}-${clipId}-`));
+      }
+      return directory;
+    };
     let sourceLease:
       Awaited<ReturnType<RenderSourceService['acquire']>> | undefined;
     let state = ClipProcessingState.QUEUED;
@@ -181,36 +200,74 @@ export class RenderProcessor
     };
     const transition = async (next: ClipProcessingState) => {
       state = next;
-      await this.jobs.updateClip(jobId, clipId, {
-        status:
-          next === ClipProcessingState.READY
-            ? JobStatus.COMPLETED
-            : JobStatus.CUTTING_CLIPS,
-        processingState: next,
-      });
+      await this.jobs.updateClip(
+        jobId,
+        clipId,
+        {
+          status:
+            next === ClipProcessingState.READY
+              ? JobStatus.COMPLETED
+              : JobStatus.CUTTING_CLIPS,
+          processingState: next,
+        },
+        this.batch?.enabled === true,
+        clip.retryQueuedAt,
+      );
       publish(undefined, true);
     };
     try {
       // Validate before the first storage HEAD, including the durable-output recovery path.
       if (this.batch?.enabled) assertBatchStorage(this.config);
-      await this.jobs.updateClip(jobId, clipId, {
-        attemptCount: (clip.attemptCount ?? 0) + 1,
-      });
+      await this.jobs.updateClip(
+        jobId,
+        clipId,
+        {
+          attemptCount: (clip.attemptCount ?? 0) + 1,
+        },
+        this.batch?.enabled === true,
+        clip.retryQueuedAt,
+      );
       if (!parent.sourceObjectKey)
         throw new Error('Durable source reference missing');
       if (!Number.isFinite(duration) || duration <= 0)
         throw new Error('Invalid clip duration');
       // PUT is atomic: a prior attempt may have uploaded before its Mongo commit.
-      if (await this.r2.fileExists(objectKey)) {
-        await this.jobs.updateClip(jobId, clipId, {
-          status: JobStatus.COMPLETED,
-          processingState: ClipProcessingState.READY,
-          r2ObjectKey: objectKey,
-          outputUrl: objectKey,
-          hasCaptions,
-          errorMessage: '',
-          errorStage: '',
-        });
+      let recovered = await withR2ObjectContext(
+          { artifactType: 'published_output', expectedToExist: false },
+          () => this.r2.fileExists(objectKey),
+        );
+      if (recovered && this.batch?.enabled) {
+          const info = await withR2ObjectContext(
+            { artifactType: 'published_output', expectedToExist: true },
+            () => this.r2.objectInfo(objectKey),
+          );
+          recovered = !!info.size && (!info.contentType || info.contentType === 'video/mp4');
+          if (recovered && this.inspection) {
+            const local = join(await workspace(), 'recovered.mp4');
+            await this.r2.downloadToLocal(objectKey, local, { maxBytes: info.size });
+            try {
+              const media = await this.inspection.inspect(local, true);
+              recovered = (await stat(local)).size === info.size && media.hasVideo && Number.isFinite(media.durationSeconds) && Math.abs(media.durationSeconds - duration) <= 0.25;
+            } catch { assertNotCancelled(); throw terminalRenderFailure({ code: 'RENDER_OUTPUT_INVALID', stage: 'recovery_verification', retryable: false }); }
+          }
+          if (!recovered) this.logger.warn({ event: 'render.recovery_invalid', jobId, clipId, code: 'RENDER_OUTPUT_INVALID' });
+      }
+      if (recovered) {
+        await this.jobs.updateClip(
+          jobId,
+          clipId,
+          {
+            status: JobStatus.COMPLETED,
+            processingState: ClipProcessingState.READY,
+            r2ObjectKey: objectKey,
+            outputUrl: objectKey,
+            hasCaptions,
+            errorMessage: '',
+            errorStage: '',
+          },
+          this.batch?.enabled === true,
+          clip.retryQueuedAt,
+        );
         state = ClipProcessingState.READY;
         publish(undefined, true);
         await publishing;
@@ -225,12 +282,7 @@ export class RenderProcessor
         );
         return;
       }
-      const root = join(
-        this.config.get<string>('STORAGE_ROOT', '/var/blynta/storage'),
-        'renders',
-      );
-      await mkdir(root, { recursive: true });
-      directory = await mkdtemp(join(root, `${jobId}-${clipId}-`));
+      directory = await workspace();
       assertNotCancelled();
       await transition(ClipProcessingState.QUEUED);
       assertNotCancelled();
@@ -282,7 +334,7 @@ export class RenderProcessor
             );
             await publishing;
           },
-          { jobId },
+          { jobId, clipId },
         );
         assertNotCancelled();
         cuttingSeconds = result.cuttingSeconds ?? 0;
@@ -291,6 +343,25 @@ export class RenderProcessor
         await this.r2.downloadToLocal(result.outputKey, final, {
           maxBytes: result.bytes,
         });
+        if ((await stat(final)).size !== result.bytes)
+          throw terminalRenderFailure({
+            code: 'RENDER_OUTPUT_INVALID',
+            stage: 'output_download',
+            retryable: false,
+          });
+        if (this.inspection) {
+          const media = await this.inspection.inspect(final, true);
+          if (
+            !media.hasVideo ||
+            !Number.isFinite(media.durationSeconds) ||
+            Math.abs(media.durationSeconds - duration) > 0.25
+          )
+            throw terminalRenderFailure({
+              code: 'RENDER_OUTPUT_INVALID',
+              stage: 'media_verification',
+              retryable: false,
+            });
+        }
       } else {
         await this.cutting.cutClip(
           sourceLease!.path,
@@ -398,12 +469,18 @@ export class RenderProcessor
       const current = await this.jobs.findJob(jobId);
       const durable = current?.clips.find((c) => c._id.toString() === clipId);
       if (durable?.status !== JobStatus.COMPLETED)
-        await this.jobs.updateClip(jobId, clipId, {
-          status: JobStatus.PENDING,
-          processingState: ClipProcessingState.QUEUED,
-          errorMessage: message,
-          errorStage: failureStage,
-        });
+        await this.jobs.updateClip(
+          jobId,
+          clipId,
+          {
+            status: JobStatus.PENDING,
+            processingState: ClipProcessingState.QUEUED,
+            errorMessage: message,
+            errorStage: failureStage,
+          },
+          this.batch?.enabled === true,
+          clip.retryQueuedAt,
+        );
       this.logger.error(
         JSON.stringify({
           event: 'render_failed',
@@ -413,6 +490,7 @@ export class RenderProcessor
           message,
           retryCount: bullJob.attemptsMade,
           retryable: !(error instanceof UnrecoverableError),
+          ...(this.batch?.enabled ? { failure: renderFailure(error) } : {}),
         }),
       );
       throw error;

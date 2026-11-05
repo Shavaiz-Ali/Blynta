@@ -5,6 +5,8 @@ import { DataTable } from "@/components/common/DataTable";
 import { AppStatusBadge } from "@/components/common/AppStatusBadge";
 import { AppButton } from "@blynta/ui";
 import { QueryErrorState } from "@/components/common/QueryErrorState";
+import { Activity, RefreshCw } from "lucide-react";
+
 export function SystemHealthView() {
   const query = useAdminQueuesQuery();
   return (
@@ -15,9 +17,12 @@ export function SystemHealthView() {
         action={
           <AppButton
             variant="outline"
+            size="sm"
             isLoading={query.isFetching}
             onClick={() => void query.refetch()}
+            className="h-8 gap-1.5 shadow-2xs border-border/70 text-xs font-semibold cursor-pointer"
           >
+            <RefreshCw className={`size-3.5 ${query.isFetching ? "animate-spin text-primary" : ""}`} />
             Refresh
           </AppButton>
         }
@@ -26,11 +31,14 @@ export function SystemHealthView() {
         <QueryErrorState onRetry={() => void query.refetch()} />
       ) : (
         <>
-          <p className="text-xs text-muted-foreground">
-            {query.dataUpdatedAt
-              ? `Last checked ${new Date(query.dataUpdatedAt).toLocaleString()}`
-              : "Checking queues…"}
-          </p>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Activity className="size-3.5 text-primary" />
+            <span>
+              {query.dataUpdatedAt
+                ? `Telemetry checked at ${new Date(query.dataUpdatedAt).toLocaleTimeString()}`
+                : "Checking queues…"}
+            </span>
+          </div>
           <DataTable
             loading={query.isLoading}
             data={(query.data || []).map((q) => ({ ...q, id: q.name }))}

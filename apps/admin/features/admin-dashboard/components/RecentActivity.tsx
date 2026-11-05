@@ -26,48 +26,42 @@ export function QueueSnapshot({
   queues: DashboardStats["queueHealth"];
 }) {
   return (
-    <AppCardRoot>
-      <AppCardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <AppCardTitle className="text-lg">Processing queues</AppCardTitle>
-          <AppCardDescription>
+    <AppCardRoot className="rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+      <AppCardHeader className="flex flex-col gap-3 border-b border-border/60 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-0.5">
+          <AppCardTitle className="text-base font-bold text-foreground">
+            Processing queues
+          </AppCardTitle>
+          <AppCardDescription className="text-xs text-muted-foreground">
             Live workload across Blynta workers
           </AppCardDescription>
         </div>
         <AppCardAction>
           <Link
             href="/queues"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
           >
             Monitor queues <ArrowUpRight className="size-3.5" />
           </Link>
         </AppCardAction>
       </AppCardHeader>
-      <AppCardContent>
-        <div className="overflow-x-auto rounded-lg border">
-          <Table className="w-full min-w-[620px] text-sm">
-            <TableHeader className="bg-muted/40 text-left text-xs text-muted-foreground">
-              <TableRow>
-                <TableHead className="px-4 py-3 font-medium">Worker</TableHead>
-                <TableHead className="px-4 py-3 font-medium">Status</TableHead>
-                <TableHead className="px-4 py-3 text-right font-medium">
-                  Active
-                </TableHead>
-                <TableHead className="px-4 py-3 text-right font-medium">
-                  Waiting
-                </TableHead>
-                <TableHead className="px-4 py-3 text-right font-medium">
-                  Delayed
-                </TableHead>
-                <TableHead className="px-4 py-3 text-right font-medium">
-                  Failed
-                </TableHead>
+      <AppCardContent className="p-5">
+        <div className="overflow-x-auto rounded-lg border border-border/60">
+          <Table className="w-full min-w-[620px] text-xs">
+            <TableHeader className="bg-muted/30 border-b border-border/60 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="px-4 py-3">Worker</TableHead>
+                <TableHead className="px-4 py-3">Status</TableHead>
+                <TableHead className="px-4 py-3 text-right">Active</TableHead>
+                <TableHead className="px-4 py-3 text-right">Waiting</TableHead>
+                <TableHead className="px-4 py-3 text-right">Delayed</TableHead>
+                <TableHead className="px-4 py-3 text-right">Failed</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody className="divide-y">
+            <TableBody className="divide-y divide-border/40">
               {queues.map((queue) => (
-                <TableRow key={queue.name} className="hover:bg-muted/25">
-                  <TableCell className="px-4 py-3 font-medium">
+                <TableRow key={queue.name} className="hover:bg-muted/30 transition-colors">
+                  <TableCell className="px-4 py-3 font-semibold text-foreground">
                     {queue.label}
                   </TableCell>
                   <TableCell className="px-4 py-3">
@@ -81,16 +75,16 @@ export function QueueSnapshot({
                       }
                     />
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right tabular-nums">
+                  <TableCell className="px-4 py-3 text-right tabular-nums font-medium">
                     {queue.active}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right tabular-nums">
+                  <TableCell className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                     {queue.waiting}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right tabular-nums">
+                  <TableCell className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                     {queue.delayed}
                   </TableCell>
-                  <TableCell className="px-4 py-3 text-right tabular-nums">
+                  <TableCell className="px-4 py-3 text-right tabular-nums font-semibold text-destructive">
                     {queue.failed}
                   </TableCell>
                 </TableRow>
@@ -109,36 +103,38 @@ export function RecentActivity({
   events: DashboardStats["recentAudit"];
 }) {
   return (
-    <AppCardRoot>
-      <AppCardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0 space-y-1">
-          <AppCardTitle className="text-lg">Recent activity</AppCardTitle>
-          <AppCardDescription>
+    <AppCardRoot className="rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+      <AppCardHeader className="flex flex-col gap-3 border-b border-border/60 p-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-0.5">
+          <AppCardTitle className="text-base font-bold text-foreground">
+            Recent activity
+          </AppCardTitle>
+          <AppCardDescription className="text-xs text-muted-foreground">
             Latest administrative and system events
           </AppCardDescription>
         </div>
         <AppCardAction>
           <Link
             href="/audit"
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
           >
             Audit log <ArrowUpRight className="size-3.5" />
           </Link>
         </AppCardAction>
       </AppCardHeader>
-      <AppCardContent>
+      <AppCardContent className="p-5">
         {events.length ? (
-          <ul className="divide-y">
+          <ul className="divide-y divide-border/40 text-xs">
             {events.slice(0, 6).map((event) => (
               <li
                 key={event._id}
-                className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4"
+                className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4 hover:bg-muted/20 px-2 rounded-lg transition-colors"
               >
                 <div className="min-w-0">
-                  <p className="break-words font-medium">
+                  <p className="break-words font-semibold text-foreground">
                     {event.title || event.action}
                   </p>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     {event.adminName ||
                       event.adminEmail ||
                       event.actorType ||
@@ -146,7 +142,7 @@ export function RecentActivity({
                   </p>
                 </div>
                 <time
-                  className="shrink-0 text-xs text-muted-foreground sm:max-w-28 sm:text-right"
+                  className="shrink-0 text-[11px] text-muted-foreground sm:text-right"
                   dateTime={event.createdAt}
                 >
                   {formatDistanceToNow(new Date(event.createdAt), {
@@ -157,7 +153,7 @@ export function RecentActivity({
             ))}
           </ul>
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">
+          <p className="py-8 text-center text-xs text-muted-foreground">
             No recent activity has been recorded.
           </p>
         )}

@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AppButton, AppPagination, AppPopover, AppCheckbox } from "@blynta/ui";
-import { Columns3 } from "lucide-react";
+import { Columns3, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Column<T> {
@@ -112,13 +112,17 @@ export function DataTable<T extends { _id?: string; id?: string }>({
         <AppPopover
           title="Visible columns"
           trigger={
-            <AppButton variant="outline" size="sm">
-              <Columns3 className="size-4" />
+            <AppButton
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs font-medium shadow-2xs border-border/70 hover:bg-muted/60 cursor-pointer"
+            >
+              <Columns3 className="size-3.5 text-muted-foreground mr-1.5" />
               Columns
             </AppButton>
           }
         >
-          <div className="grid gap-3">
+          <div className="grid gap-2.5 p-1">
             {columns.map((column) => {
               const isVisible = !hiddenColumns.includes(column.key);
               return (
@@ -141,17 +145,16 @@ export function DataTable<T extends { _id?: string; id?: string }>({
         </AppPopover>
       </div>
 
-      <div className="min-w-0 overflow-x-auto rounded-lg border bg-card">
-        <Table className="min-w-[640px]">
-          <TableHeader className="bg-muted/40">
-            <TableRow>
+      <div className="min-w-0 overflow-x-auto rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+        <Table className="w-full min-w-[760px] text-xs">
+          <TableHeader className="bg-muted/40 border-b border-border/70">
+            <TableRow className="hover:bg-transparent border-b border-border/70">
               {visibleColumns.map((column) => (
                 <TableHead
                   key={column.key}
                   className={cn(
-                    "h-12 px-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+                    "h-11 px-5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground align-middle whitespace-nowrap",
                     column.className,
-                    "align-middle",
                   )}
                   aria-sort={
                     sorting?.sortBy === column.key
@@ -165,6 +168,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                     <AppButton
                       variant="ghost"
                       size="sm"
+                      className="-ml-2 h-7 px-2 text-[11px] font-semibold tracking-wider uppercase text-muted-foreground hover:text-foreground"
                       onClick={() =>
                         sorting.onSortChange(
                           column.key,
@@ -176,7 +180,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                       }
                     >
                       {column.header}
-                      <span aria-hidden="true">
+                      <span aria-hidden="true" className="ml-1 text-xs">
                         {sorting.sortBy === column.key
                           ? sorting.sortOrder === "asc"
                             ? "↑"
@@ -194,10 +198,10 @@ export function DataTable<T extends { _id?: string; id?: string }>({
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }, (_, index) => (
-                <TableRow key={index}>
+                <TableRow key={index} className="border-b border-border/50">
                   {visibleColumns.map((column) => (
-                    <TableCell key={column.key}>
-                      <Skeleton className="h-5 w-full" />
+                    <TableCell key={column.key} className="px-5 py-4">
+                      <Skeleton className="h-4 w-full rounded" />
                     </TableCell>
                   ))}
                 </TableRow>
@@ -210,6 +214,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                   onClick={(event) => openRow(row, event)}
                   onKeyDown={(event) => openRowWithKeyboard(row, event)}
                   className={cn(
+                    "border-b border-border/50 transition-colors hover:bg-muted/40",
                     onRowClick &&
                       "cursor-pointer focus-visible:bg-muted/50 focus-visible:outline-none",
                   )}
@@ -218,7 +223,7 @@ export function DataTable<T extends { _id?: string; id?: string }>({
                     <TableCell
                       key={column.key}
                       className={cn(
-                        "px-6 py-5 whitespace-normal",
+                        "px-5 py-3.5 text-xs text-foreground align-middle whitespace-normal",
                         column.className,
                       )}
                     >
@@ -235,9 +240,12 @@ export function DataTable<T extends { _id?: string; id?: string }>({
               <TableRow>
                 <TableCell
                   colSpan={visibleColumns.length}
-                  className="py-12 text-center text-muted-foreground"
+                  className="py-16 text-center"
                 >
-                  {emptyMessage}
+                  <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <Inbox className="size-8 stroke-[1.5] text-muted-foreground/60" />
+                    <p className="text-sm font-medium">{emptyMessage}</p>
+                  </div>
                 </TableCell>
               </TableRow>
             )}
@@ -246,15 +254,17 @@ export function DataTable<T extends { _id?: string; id?: string }>({
       </div>
 
       {pagination && (pagination.total > 0 || pagination.page > 1) && (
-        <AppPagination
-          page={pagination.page}
-          totalPages={pagination.totalPages}
-          total={pagination.total}
-          pageSize={pagination.limit}
-          onPageChange={pagination.onPageChange}
-          onPageSizeChange={pagination.onLimitChange}
-          disabled={loading}
-        />
+        <div className="pt-2">
+          <AppPagination
+            page={pagination.page}
+            totalPages={pagination.totalPages}
+            total={pagination.total}
+            pageSize={pagination.limit}
+            onPageChange={pagination.onPageChange}
+            onPageSizeChange={pagination.onLimitChange}
+            disabled={loading}
+          />
+        </div>
       )}
     </div>
   );

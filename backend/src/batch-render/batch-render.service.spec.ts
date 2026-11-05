@@ -38,6 +38,15 @@ describe('AWS Batch durable execution', () => {
       findById: (key: string) => ({
         lean: async () => (records.get(key) ? { ...records.get(key) } : null),
       }),
+      findOne: (filter: any) => ({
+        lean: async () =>
+          [...records.values()].find(
+            (r) =>
+              r.owner?.jobId === filter['owner.jobId'] &&
+              r.owner?.clipId === filter['owner.clipId'] &&
+              filter.state.$in.includes(r.state),
+          ) ?? null,
+      }),
       create: jest.fn(async (record) => {
         if (records.has(record._id))
           throw Object.assign(new Error(), { code: 11000 });
@@ -90,6 +99,231 @@ describe('AWS Batch durable execution', () => {
       .mockResolvedValue({ jobId: 'aws-1', status: 'SUCCEEDED' } as any);
   });
   afterEach(() => (service as any).client.destroy());
+  it('resumes an interrupted PREPARING record under the same atomic submission claim', async () => {
+    records.set(id, {
+      _id: id,
+      prefix,
+      state: 'PREPARING',
+      deadline: new Date(Date.now() + 60000),
+    });
+    await service.execute(identity, prepare, tick, {
+      jobId: 'parent',
+      clipId: 'clip',
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(prepare).toHaveBeenCalledTimes(1);
+  });
+  it.each(['SUBMITTED', 'UNKNOWN'])('blocks a new clip attempt while its predecessor is %s', async state => {
+    records.set('previous', { _id: 'previous', owner: { jobId: 'parent', clipId: 'clip' }, state });
+    await expect(service.execute(identity, prepare, tick, { jobId: 'parent', clipId: 'clip' })).rejects.toThrow('RENDER_PREVIOUS_ATTEMPT_ACTIVE');
+    expect(send).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+  });
+  it('coalesces concurrent same-attempt owners instead of treating them as different attempts', async () => {
+    await Promise.all([service.execute(identity, prepare, tick, { jobId: 'parent', clipId: 'clip' }),
+      service.execute(identity, prepare, tick, { jobId: 'parent', clipId: 'clip' })]);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+  it('propagates progress-consumer errors rather than hiding them as optional storage failures', async () => {
+    jest.mocked(service.status).mockResolvedValueOnce({ status: 'RUNNING' } as any);
+    r2.fileExists.mockResolvedValue(true);
+    r2.downloadToBuffer.mockResolvedValueOnce(Buffer.from(JSON.stringify({ jobId: 'aws-1', phase: 'cutting', percent: 10 })));
+    await expect(service.execute(identity, prepare, jest.fn().mockRejectedValue(new Error('database unavailable')))).rejects.toThrow('database unavailable');
+    expect(records.get(id).state).toBe('SUBMITTED');
+  });
+  it('classifies manifest upload failure without submitting Batch', async () => {
+    r2.uploadBuffer.mockRejectedValueOnce(new Error('transport unavailable'));
+    await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
+      'transport unavailable',
+    );
+    expect(send).not.toHaveBeenCalled();
+    expect(records.get(id)).toMatchObject({
+      state: 'FAILED',
+      failureCode: 'RENDER_MANIFEST_UPLOAD_FAILED',
+    });
+  });
+  it('waits through every non-terminal Batch state before retrieving a result', async () => {
+    for (const status of [
+      'SUBMITTED',
+      'PENDING',
+      'RUNNABLE',
+      'STARTING',
+      'RUNNING',
+    ])
+      jest.mocked(service.status).mockResolvedValueOnce({ status } as any);
+    await service.execute(identity, prepare, tick);
+    expect(service.status).toHaveBeenCalledTimes(6);
+    expect(r2.downloadToBuffer).toHaveBeenCalledTimes(1);
+    expect(records.get(id).lastBatchStatus).toBe('SUCCEEDED');
+  });
+  it('tolerates bounded temporary DescribeJobs errors without another submission', async () => {
+    jest
+      .mocked(service.status)
+      .mockRejectedValueOnce(
+        Object.assign(new Error(), { $metadata: { httpStatusCode: 503 } }),
+      );
+    await service.execute(identity, prepare, tick);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(service.status).toHaveBeenCalledTimes(2);
+  });
+  it('bounds repeated DescribeJobs errors and preserves the AWS ID for reattachment', async () => {
+    jest.mocked(service.status).mockRejectedValue(
+      Object.assign(new Error('unavailable'), {
+        $metadata: { httpStatusCode: 503 },
+      }),
+    );
+    await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
+      'unavailable',
+    );
+    expect(service.status).toHaveBeenCalledTimes(4);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(records.get(id).jobId).toBe('aws-1');
+  });
+  it('records container startup evidence rather than blaming an optional R2 404', async () => {
+    jest.mocked(service.status).mockResolvedValue({
+      status: 'FAILED',
+      statusReason: 'Image could not start',
+      container: {
+        reason: 'CannotPullContainerError',
+        logStreamName: 'render/test',
+        image: 'renderer@sha256:fixture',
+      },
+    } as any);
+    await expect(
+      service.execute(identity, prepare, tick),
+    ).rejects.toBeInstanceOf(UnrecoverableError);
+    expect(records.get(id)).toMatchObject({
+      failureCode: 'RENDER_BATCH_START_FAILED',
+      diagnostics: {
+        logStreamName: 'render/test',
+        image: 'renderer@sha256:fixture',
+        containerReason: 'CannotPullContainerError',
+      },
+    });
+  });
+  it.each([true, false])(
+    'accepts only the final attempt failure marker (matching=%s)',
+    async (matching) => {
+      jest.mocked(service.status).mockResolvedValue({
+        status: 'FAILED',
+        attempts: [{}, {}],
+        container: { exitCode: 2 },
+      } as any);
+      r2.fileExists.mockImplementation(async (key) =>
+        key.endsWith('/failure.json'),
+      );
+      r2.downloadToBuffer.mockResolvedValue(
+        Buffer.from(
+          JSON.stringify({
+            jobId: 'aws-1',
+            attempt: matching ? 2 : 1,
+            code: 'RENDER_SOURCE_NOT_FOUND',
+            stage: 'source_check',
+            retryable: false,
+            extra: 'private text must not persist',
+          }),
+        ),
+      );
+      await expect(
+        service.execute(identity, prepare, tick),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(records.get(id).failureCode).toBe(
+        matching ? 'RENDER_SOURCE_NOT_FOUND' : 'RENDER_BATCH_FAILED',
+      );
+      expect(JSON.stringify(records.get(id))).not.toContain('private text');
+    },
+  );
+  it('ignores a failure marker belonging to a different Batch job', async () => {
+    jest.mocked(service.status).mockResolvedValue({
+      status: 'FAILED',
+      container: { exitCode: 2 },
+    } as any);
+    r2.fileExists.mockResolvedValue(true);
+    r2.downloadToBuffer.mockResolvedValue(
+      Buffer.from(
+        JSON.stringify({
+          jobId: 'old-job',
+          attempt: 1,
+          code: 'RENDER_SOURCE_NOT_FOUND',
+          stage: 'source_check',
+          retryable: false,
+        }),
+      ),
+    );
+    await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
+      'RENDER_BATCH_FAILED',
+    );
+  });
+  it('allows bounded delayed result visibility after SUCCEEDED without re-rendering', async () => {
+    r2.downloadToBuffer.mockRejectedValueOnce(
+      Object.assign(new Error(), { $metadata: { httpStatusCode: 404 } }),
+    );
+    await service.execute(identity, prepare, tick);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(r2.downloadToBuffer).toHaveBeenCalledTimes(2);
+    expect(records.get(id).state).toBe('SUCCEEDED');
+  });
+  it.each(['result', 'output'])(
+    'fails specifically when the required %s is absent after SUCCEEDED',
+    async (kind) => {
+      const missing = Object.assign(new Error('missing'), {
+        name: 'NotFound',
+        $metadata: { httpStatusCode: 404 },
+      });
+      if (kind === 'result') r2.downloadToBuffer.mockRejectedValue(missing);
+      else r2.objectInfo.mockRejectedValue(missing);
+      await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
+        'RENDER_OUTPUT_NOT_FOUND',
+      );
+      expect(records.get(id)).toMatchObject({
+        state: 'FAILED',
+        failureCode: 'RENDER_OUTPUT_NOT_FOUND',
+        retryable: false,
+      });
+      expect(send).toHaveBeenCalledTimes(1);
+    },
+  );
+  it.each([
+    null,
+    [],
+    {
+      jobId: 'aws-1',
+      outputKey: `${prefix}/output.mp4`,
+      bytes: 123,
+      hasVideo: false,
+    },
+  ])(
+    'rejects malformed or invalid media evidence without publishing success (%j)',
+    async (result) => {
+      r2.downloadToBuffer.mockResolvedValue(
+        Buffer.from(JSON.stringify(result)),
+      );
+      await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
+        'RENDER_OUTPUT_INVALID',
+      );
+      expect(records.get(id).state).toBe('FAILED');
+    },
+  );
+  it('treats optional progress GET disappearance as non-fatal', async () => {
+    jest
+      .mocked(service.status)
+      .mockResolvedValueOnce({ status: 'RUNNING' } as any);
+    r2.fileExists.mockResolvedValue(true);
+    r2.downloadToBuffer.mockRejectedValueOnce(
+      Object.assign(new Error(), { $metadata: { httpStatusCode: 404 } }),
+    );
+    await service.execute(identity, prepare, tick);
+    expect(records.get(id).state).toBe('SUCCEEDED');
+  });
+  it('still terminates a task when CancelJob races with container startup', async () => {
+    send
+      .mockRejectedValueOnce(new Error('already running'))
+      .mockResolvedValueOnce({});
+    await service.cancel('aws-1');
+    expect(
+      send.mock.calls.map(([command]) => command.constructor.name),
+    ).toEqual(['CancelJobCommand', 'TerminateJobCommand']);
+  });
   it('defaults to local and rejects misspelled modes', () => {
     expect(renderMode()).toBe('local');
     expect(() => renderMode('batch')).toThrow();
@@ -304,7 +538,7 @@ describe('AWS Batch durable execution', () => {
   it('ignores output markers from a FAILED Batch task', async () => {
     jest.mocked(service.status).mockResolvedValue({ status: 'FAILED' } as any);
     await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
-      'task failed',
+      'RENDER_BATCH_START_FAILED',
     );
     expect(r2.downloadToBuffer).not.toHaveBeenCalled();
     expect(records.get(id).state).toBe('FAILED');
@@ -316,7 +550,7 @@ describe('AWS Batch durable execution', () => {
   ])('rejects mismatched output identity or size: %j', async (result) => {
     r2.downloadToBuffer.mockResolvedValue(Buffer.from(JSON.stringify(result)));
     await expect(service.execute(identity, prepare, tick)).rejects.toThrow(
-      /Invalid Batch result|verification failed/,
+      'RENDER_OUTPUT_INVALID',
     );
     expect(records.get(id).state).not.toBe('SUCCEEDED');
   });
@@ -343,7 +577,7 @@ describe('AWS Batch durable execution', () => {
       mediaExecution.run({ signal: abort.signal, children: new Set() }, () =>
         service.execute(identity, prepare, tick),
       ),
-    ).rejects.toThrow('cancelled');
+    ).rejects.toThrow('RENDER_TIMEOUT');
     expect(send.mock.calls.map(([c]) => c.constructor.name)).toEqual([
       'SubmitJobCommand',
       'CancelJobCommand',

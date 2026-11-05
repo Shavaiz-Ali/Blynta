@@ -63,9 +63,13 @@ export function assertBatchTaskKeys(task: RenderTask, prefix: string) {
   )
     throw new UnrecoverableError('Invalid Batch output key');
   const writes = new Set(
-    ['task.json', 'progress.json', 'result.json', 'output.mp4'].map(
-      (name) => `${prefix}/${name}`,
-    ),
+    [
+      'task.json',
+      'progress.json',
+      'result.json',
+      'failure.json',
+      'output.mp4',
+    ].map((name) => `${prefix}/${name}`),
   );
   if (task.kind === 'clip') {
     if (
@@ -96,6 +100,7 @@ export type RenderTask = {
   version: 1;
   outputKey: string;
   deadline: number;
+  owner?: { jobId?: string; clipId?: string };
 } & (
   | {
       kind: 'clip';
@@ -119,6 +124,8 @@ export interface RenderResult {
   bytes: number;
   cuttingSeconds?: number;
   captioningSeconds?: number;
+  durationSeconds?: number;
+  hasVideo?: boolean;
 }
 
 export function renderMode(value: unknown = 'local') {

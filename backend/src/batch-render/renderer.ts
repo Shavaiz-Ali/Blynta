@@ -18,6 +18,11 @@ import {
 import { R2Service } from '../storage/r2.service';
 import { r2FailureDetails } from '../storage/r2-diagnostics';
 import {
+  withR2ObjectContext,
+  r2ObjectContext,
+} from '../storage/r2-object-context';
+import { annotateRenderFailure, renderFailure } from './render-failure';
+import {
   assertBatchStorage,
   assertBatchTaskKeys,
   RenderTask,
@@ -31,6 +36,58 @@ export async function runRenderer(
   r2 = new R2Service(config),
   registry = new ProcessRegistryService(),
 ) {
+  let canPublishFailure = false;
+  try {
+    return await withR2ObjectContext({ batchJobId: jobId }, () =>
+      runRendererTask(key, jobId, config, r2, registry, () => {
+        canPublishFailure = true;
+      }),
+    );
+  } catch (error) {
+    const detail = renderFailure(error);
+    new Logger('BatchRenderer').error({
+      event: 'renderer.failed',
+      batchJobId: jobId,
+      ...detail,
+    });
+    // A failure marker never authorizes success. Its Batch ID and attempt are checked
+    // only after AWS reports FAILED; a prior retry's marker cannot explain a later attempt.
+    if (
+      canPublishFailure &&
+      /^job-sources\/batch\/[a-f0-9]{64}\/task\.json$/.test(key) &&
+      jobId
+    ) {
+      await r2
+        .uploadBuffer(
+          Buffer.from(
+            JSON.stringify({
+              jobId,
+              attempt: Number(process.env.AWS_BATCH_JOB_ATTEMPT || 1),
+              ...detail,
+            }),
+          ),
+          key.replace(/task\.json$/, 'failure.json'),
+          'application/json',
+        )
+        .catch(() =>
+          new Logger('BatchRenderer').warn({
+            event: 'renderer.failure_marker_unavailable',
+            batchJobId: jobId,
+          }),
+        );
+    }
+    throw error;
+  }
+}
+
+async function runRendererTask(
+  key: string,
+  jobId: string,
+  config: ConfigService,
+  r2: R2Service,
+  registry: ProcessRegistryService,
+  validated: () => void,
+) {
   if (!/^job-sources\/batch\/[a-f0-9]{64}\/task\.json$/.test(key) || !jobId)
     throw new UnrecoverableError('Invalid renderer task identity');
   assertBatchStorage(config);
@@ -43,6 +100,7 @@ export async function runRenderer(
     try {
       return await work();
     } catch (error) {
+      annotateRenderFailure(error, stage);
       logger.error(
         JSON.stringify({
           event: 'renderer_stage_failed',
@@ -59,21 +117,47 @@ export async function runRenderer(
     }
   };
   const prefix = key.slice(0, -'/task.json'.length);
-  const task = JSON.parse(
-    (
-      await atStage('manifest_download', 'GetObject', () =>
-        r2.downloadToBuffer(key, 2 * 1024 * 1024),
-      )
-    ).toString(),
-  ) as RenderTask;
-  assertBatchTaskKeys(task, prefix);
+  const task = await atStage(
+    'manifest_download',
+    'GetObject',
+    async () =>
+      JSON.parse(
+        (await r2.downloadToBuffer(key, 2 * 1024 * 1024)).toString(),
+      ) as RenderTask,
+  );
+  try {
+    assertBatchTaskKeys(task, prefix);
+  } catch (error) {
+    throw annotateRenderFailure(error, 'manifest_download');
+  }
+  validated();
+  const context = r2ObjectContext.getStore();
+  if (context)
+    for (const name of ['jobId', 'clipId'] as const) {
+      const id = task.owner?.[name];
+      if (typeof id === 'string' && /^[a-f0-9]{24}$/.test(id))
+        context[name] = id;
+    }
+  logger.log({
+    event: 'renderer.started',
+    ...context,
+    batchJobId: jobId,
+    manifestKey: key,
+    outputKey: task.outputKey,
+    kind: task.kind,
+    captionSegments: task.kind === 'clip' ? task.segments?.length : undefined,
+    fontFamily: task.kind === 'clip' ? task.style?.fontFamily : undefined,
+  });
   if (
     task.version !== 1 ||
     task.outputKey !== `${prefix}/output.mp4` ||
     !Number.isFinite(task.deadline) ||
     task.deadline <= Date.now()
   )
-    throw new UnrecoverableError('Invalid or expired task');
+    throw annotateRenderFailure(
+      new UnrecoverableError('Invalid or expired task'),
+      task.deadline <= Date.now() ? 'timeout' : 'manifest_download',
+    );
   const directory = await mkdtemp(join(tmpdir(), 'blynta-batch-'));
   const abort = new AbortController();
   const stop = () => abort.abort();
@@ -113,7 +197,10 @@ export async function runRenderer(
           if (task.kind === 'clip') {
             try {
               await atStage('source_check', 'HeadObject', () =>
-                r2.objectInfo(task.sourceKey),
+                withR2ObjectContext(
+                  { artifactType: 'source', expectedToExist: true },
+                  () => r2.objectInfo(task.sourceKey),
+                ),
               );
             } catch (error) {
               const failure = error as {
@@ -124,8 +211,11 @@ export async function runRenderer(
                 failure.$metadata?.httpStatusCode === 404 ||
                 ['NotFound', 'NoSuchKey'].includes(failure.name ?? '')
               )
-                throw new UnrecoverableError(
-                  'Renderer source object is missing; restore the durable source before retrying',
+                throw Object.assign(
+                  new UnrecoverableError(
+                    'Renderer source object is missing; restore the durable source before retrying',
+                  ),
+                  { renderFailure: renderFailure(error, 'source_check') },
                 );
               throw error;
             }
@@ -238,7 +328,10 @@ export async function runRenderer(
             !probe.hasVideo ||
             Math.abs(probe.durationSeconds - duration) > 0.25
           )
-            throw new Error('Remote render failed media verification');
+            throw annotateRenderFailure(
+              new Error('Remote render failed media verification'),
+              'media_verification',
+            );
           progress('uploading', 99, true);
           await writes;
           await atStage('output_upload', 'PutObject', () =>
@@ -249,11 +342,17 @@ export async function runRenderer(
             !bytes ||
             (
               await atStage('output_verification', 'HeadObject', () =>
-                r2.objectInfo(task.outputKey),
+                withR2ObjectContext(
+                  { artifactType: 'batch_output', expectedToExist: true },
+                  () => r2.objectInfo(task.outputKey),
+                ),
               )
             ).size !== bytes
           )
-            throw new Error('Remote upload verification failed');
+            throw annotateRenderFailure(
+              new Error('Remote upload verification failed'),
+              'output_verification',
+            );
           assertNotCancelled();
           // This marker alone never authorizes backend completion: Batch must SUCCEED.
           await atStage('result_upload', 'PutObject', () =>
@@ -265,6 +364,8 @@ export async function runRenderer(
                   bytes,
                   cuttingSeconds,
                   captioningSeconds,
+                  durationSeconds: probe.durationSeconds,
+                  hasVideo: probe.hasVideo,
                 }),
               ),
               `${prefix}/result.json`,

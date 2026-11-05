@@ -73,13 +73,13 @@ export function BillingView() {
         ]}
       />
       {tab !== "subscriptions" ? (
-        <section className="rounded-lg border p-6">
-          <h2 className="font-medium">
+        <section className="rounded-xl border border-border/70 bg-card p-6 shadow-xs">
+          <h2 className="text-base font-bold text-foreground">
             {tab === "plans"
               ? "Plan catalog not connected"
               : "Transaction feed not connected"}
           </h2>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-1.5 text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl">
             {tab === "plans"
               ? "Assigned plans are visible on subscriptions. Plan prices, limits, and editing are managed outside this console."
               : "Payment transactions and webhook events are not available from the current admin API."}
@@ -87,10 +87,11 @@ export function BillingView() {
         </section>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-4 rounded-lg border bg-card p-4">
+          <div className="flex flex-wrap items-end gap-4 rounded-xl border border-border/70 bg-card p-4 shadow-xs transition-colors">
             <div className="min-w-56 flex-1">
               <AppInput
                 label="Search customers"
+                placeholder="Search by customer email or ID..."
                 value={params.search || ""}
                 onChange={(e) =>
                   setParams({ ...params, search: e.target.value, page: 1 })

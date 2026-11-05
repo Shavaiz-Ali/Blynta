@@ -14,7 +14,23 @@ import { AppDataTable as AppTable } from "@/components/common/DataTable";
 import { AppPageHeader } from "@/components/common/AppPageHeader";
 import { AppFilterBar } from "@/components/common/AppFilterBar";
 import { AppStatusBadge } from "@/components/common/AppStatusBadge";
-import { Search } from "lucide-react";
+import {
+  Search,
+  MoreHorizontal,
+  Pencil,
+  Play,
+  Power,
+  Trash2,
+  Star,
+  Key,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { Usage } from "./api";
 import { SelectItem } from "@blynta/ui/primitives/select";
 import { useRef, useState } from "react";
@@ -557,91 +573,93 @@ export function AIManagement({
               }
               columns={[
                 {
-                  key: "column-0",
+                  key: "provider",
                   header: "Provider",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[160px]",
                   render: (p) => (
-                    <>
-                      {p.name}
-                      <div className="text-muted-foreground text-xs">
-                        {p.code}
-                      </div>
-                    </>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-bold text-foreground text-xs sm:text-sm">{p.name}</span>
+                      <span className="text-muted-foreground font-mono text-[11px]">{p.code}</span>
+                    </div>
                   ),
                 },
                 {
-                  key: "column-1",
+                  key: "adapter",
                   header: "Adapter",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[120px]",
                   render: (p) => (
-                    <>
-                      {p.adapter}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium text-foreground text-xs capitalize">{p.adapter}</span>
                       {!p.operationalAdapter && (
-                        <div className="text-xs">Adapter pending</div>
+                        <span className="text-[10px] text-amber-500 font-medium">Adapter pending</span>
                       )}
-                    </>
+                    </div>
                   ),
                 },
                 {
-                  key: "column-2",
+                  key: "status",
                   header: "Status",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[100px]",
                   render: (p) => (
-                    <>
-                      <AppStatusBadge
-                        status={p.enabled ? "enabled" : "disabled"}
-                      />
-                    </>
+                    <AppStatusBadge
+                      status={p.enabled ? "enabled" : "disabled"}
+                    />
                   ),
                 },
                 {
-                  key: "column-3",
+                  key: "credential",
                   header: "Credential",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[220px]",
                   render: (p) => (
-                    <>
-                      <div>
+                    <div className="flex flex-col gap-1">
+                      <div className="font-semibold text-foreground text-xs">
                         {p.credentialConfigured
                           ? `${p.credentialCount} enabled credential(s)`
                           : "Needs credential"}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-[11px] text-muted-foreground leading-tight">
                         {p.configured
                           ? "Credential binding configured"
                           : "Assign a provider default or model credential"}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {p.validatedCredentialCount ?? 0} credential(s) with
-                        prior validation success ·{" "}
-                        {p.operational
-                          ? "Ready for tasks"
-                          : "No model ready for tasks"}
+                      <div className="text-[11px] text-muted-foreground leading-tight">
+                        {p.validatedCredentialCount ?? 0} validated ·{" "}
+                        <span className={p.operational ? "text-primary font-medium" : "text-amber-500"}>
+                          {p.operational ? "Ready for tasks" : "No model ready"}
+                        </span>
                       </div>
-                    </>
+                    </div>
                   ),
                 },
                 {
-                  key: "column-4",
+                  key: "models",
                   header: "Models",
-                  className: "align-top whitespace-normal",
-                  render: (p) => <>{p.modelCount}</>,
+                  className: "align-middle min-w-[80px]",
+                  render: (p) => (
+                    <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
+                      {p.modelCount}
+                    </span>
+                  ),
                 },
                 {
-                  key: "column-5",
+                  key: "actions",
                   header: "Actions",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle text-right min-w-[220px]",
                   render: (p) => (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
                       <Button
-                        size="sm"
+                        size="xs"
                         variant="outline"
+                        className="h-7 px-2.5 text-xs font-semibold shadow-2xs border-border/70 hover:bg-muted/60"
                         onClick={() => setProviderEdit(p)}
                       >
+                        <Pencil className="size-3 mr-1 text-muted-foreground" />
                         Edit
                       </Button>
                       <Button
-                        size="sm"
+                        size="xs"
                         variant="outline"
+                        className="h-7 px-2.5 text-xs font-semibold shadow-2xs border-border/70 hover:bg-muted/60"
                         onClick={() => {
                           setCredentialEdit(undefined);
                           setValidationModelId("");
@@ -649,11 +667,13 @@ export function AIManagement({
                           setCredentialProvider(p);
                         }}
                       >
+                        <Key className="size-3 mr-1 text-muted-foreground" />
                         Credentials
                       </Button>
                       <Button
-                        size="sm"
-                        variant="ghost"
+                        size="xs"
+                        variant="outline"
+                        className="h-7 px-2.5 text-xs font-semibold shadow-2xs border-border/70 hover:bg-muted/60"
                         disabled={busy || !p.operationalAdapter}
                         onClick={() =>
                           action("patch", "providers/" + p._id, {
@@ -661,6 +681,7 @@ export function AIManagement({
                           })
                         }
                       >
+                        <Power className="size-3 mr-1 text-muted-foreground" />
                         {p.enabled ? "Disable" : "Enable"}
                       </Button>
                     </div>
@@ -689,137 +710,181 @@ export function AIManagement({
               }
               columns={[
                 {
-                  key: "column-0",
+                  key: "model",
                   header: "Model",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[200px]",
                   render: (m) => (
-                    <>
-                      {m.displayName}
-                      {m.isDefault && <Badge className="ml-2">Default</Badge>}
-                      <div className="text-muted-foreground text-xs">
-                        {m.modelId} ·{" "}
-                        {catalog.data?.items.find((p) => p._id === m.providerId)
-                          ?.name ?? m.providerId}
+                    <div className="flex flex-col gap-1 min-w-[180px]">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground text-xs sm:text-sm">{m.displayName}</span>
+                        {m.isDefault && (
+                          <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0 h-4">
+                            Default
+                          </Badge>
+                        )}
                       </div>
-                      <AppStatusBadge
-                        status={m.enabled ? "enabled" : "disabled"}
-                      />
-                    </>
+                      <div className="text-muted-foreground text-[11px] font-mono">
+                        {m.modelId} ·{" "}
+                        {catalog.data?.items.find((p) => p._id === m.providerId)?.name ?? m.providerId}
+                      </div>
+                      <div className="pt-0.5">
+                        <AppStatusBadge status={m.enabled ? "enabled" : "disabled"} />
+                      </div>
+                    </div>
                   ),
                 },
                 {
-                  key: "column-1",
+                  key: "access",
                   header: "Access",
-                  className: "align-top whitespace-normal",
-                  render: (m) => <>{m.access.allowedPlans.join(", ")}</>,
+                  className: "align-middle min-w-[110px]",
+                  render: (m) => (
+                    <div className="flex flex-wrap gap-1">
+                      {m.access.allowedPlans.map((plan) => (
+                        <span
+                          key={plan}
+                          className="rounded-md border border-border/60 bg-muted/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                        >
+                          {plan}
+                        </span>
+                      ))}
+                    </div>
+                  ),
                 },
                 {
-                  key: "column-2",
+                  key: "capabilities",
                   header: "Capabilities",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[180px]",
                   render: (m) => (
-                    <>
+                    <div className="flex flex-wrap gap-1 max-w-[240px]">
                       {Object.entries(m.capabilities)
                         .filter(([, v]) => v)
-                        .map(
-                          ([k]) =>
+                        .map(([k]) => {
+                          const label =
                             ({
                               text: "Text",
                               vision: "Vision",
                               audioInput: "Audio input",
                               structuredOutput: "Structured output",
                               toolCalling: "Tool calling",
-                            })[k] ?? k,
-                        )
-                        .join(", ")}
-                    </>
+                            })[k] ?? k;
+                          return (
+                            <span
+                              key={k}
+                              className="rounded-md border border-border/50 bg-secondary/40 px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground"
+                            >
+                              {label}
+                            </span>
+                          );
+                        })}
+                    </div>
                   ),
                 },
                 {
-                  key: "column-3",
+                  key: "priority",
                   header: "Priority",
-                  className: "align-top whitespace-normal",
-                  render: (m) => <>{m.priority}</>,
+                  className: "align-middle min-w-[80px]",
+                  render: (m) => (
+                    <span className="font-mono text-xs font-semibold tabular-nums text-foreground">
+                      {m.priority}
+                    </span>
+                  ),
                 },
                 {
-                  key: "column-4",
+                  key: "lastTest",
                   header: "Last test",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[160px]",
                   render: (m) => (
-                    <>
-                      <AppStatusBadge status={m.lastTestStatus ?? "unknown"} />
-                      <div className="text-xs text-muted-foreground">
+                    <div className="flex flex-col gap-1 min-w-[150px]">
+                      <div>
+                        <AppStatusBadge status={m.lastTestStatus ?? "unknown"} />
+                      </div>
+                      <div className="text-[11px] text-muted-foreground leading-tight">
                         {m.readyForTasks
                           ? "Ready for tasks"
                           : "Not ready with current configuration"}
                       </div>
                       {m.lastTestedAt && (
-                        <div className="text-xs">
+                        <div className="text-[10px] text-muted-foreground font-mono">
                           {new Date(m.lastTestedAt).toLocaleString()}
                         </div>
                       )}
-                    </>
+                    </div>
                   ),
                 },
                 {
-                  key: "column-5",
+                  key: "actions",
                   header: "Actions",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle text-right min-w-[180px]",
                   render: (m) => (
-                    <>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedProvider("");
-                            setModelEdit(m);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() =>
-                            action("post", "models/" + m._id + "/test")
+                    <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        className="h-7 px-2.5 text-xs font-semibold shadow-2xs border-border/70 hover:bg-muted/60"
+                        onClick={() => {
+                          setSelectedProvider("");
+                          setModelEdit(m);
+                        }}
+                      >
+                        <Pencil className="size-3 mr-1 text-muted-foreground" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        className="h-7 px-2.5 text-xs font-semibold shadow-2xs border-border/70 hover:bg-muted/60"
+                        disabled={busy}
+                        onClick={() => action("post", "models/" + m._id + "/test")}
+                      >
+                        <Play className="size-3 mr-1 text-primary" />
+                        Test
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              variant="outline"
+                              size="icon-xs"
+                              className="h-7 w-7 rounded-md border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/60 shadow-2xs"
+                              aria-label="More actions"
+                            >
+                              <MoreHorizontal className="size-3.5" />
+                            </Button>
                           }
-                        >
-                          Test
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy}
-                          onClick={() =>
-                            action("patch", "models/" + m._id, {
-                              enabled: !m.enabled,
-                            })
-                          }
-                        >
-                          {m.enabled ? "Disable" : "Enable"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || m.isDefault}
-                          onClick={() =>
-                            action("post", "models/" + m._id + "/set-default")
-                          }
-                        >
-                          Set default
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={busy || m.isDefault}
-                          onClick={() => action("delete", "models/" + m._id)}
-                        >
-                          Archive
-                        </Button>
-                      </div>
-                    </>
+                        />
+                        <DropdownMenuContent align="end" className="w-44 rounded-xl p-1 shadow-lg">
+                          <DropdownMenuItem
+                            disabled={busy || m.isDefault}
+                            className="rounded-lg text-xs font-medium cursor-pointer"
+                            onClick={() => action("post", "models/" + m._id + "/set-default")}
+                          >
+                            <Star className="size-3.5 mr-2 text-amber-500" />
+                            {m.isDefault ? "Default Model" : "Set as default"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={busy}
+                            className="rounded-lg text-xs font-medium cursor-pointer"
+                            onClick={() =>
+                              action("patch", "models/" + m._id, {
+                                enabled: !m.enabled,
+                              })
+                            }
+                          >
+                            <Power className="size-3.5 mr-2 text-muted-foreground" />
+                            {m.enabled ? "Disable model" : "Enable model"}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={busy || m.isDefault}
+                            className="rounded-lg text-xs font-medium text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+                            onClick={() => action("delete", "models/" + m._id)}
+                          >
+                            <Trash2 className="size-3.5 mr-2 text-destructive" />
+                            Archive model
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   ),
                 },
               ]}
@@ -875,40 +940,51 @@ export function AIManagement({
               }
               columns={[
                 {
-                  key: "column-0",
+                  key: "model",
                   header: "Model",
-                  className: "align-top whitespace-normal",
-                  render: (u) => <>{u.modelId}</>,
-                },
-                {
-                  key: "column-1",
-                  header: "Outcome",
-                  className: "align-top whitespace-normal",
-                  render: (u) => <>{u.status}</>,
-                },
-                {
-                  key: "column-2",
-                  header: "Tokens in/out",
-                  className: "align-top whitespace-normal",
+                  className: "align-middle min-w-[160px]",
                   render: (u) => (
-                    <>
-                      {u.inputTokens ?? "Unknown"} /{" "}
-                      {u.outputTokens ?? "Unknown"}
-                    </>
+                    <span className="font-mono text-xs font-semibold text-foreground">
+                      {u.modelId}
+                    </span>
                   ),
                 },
                 {
-                  key: "column-3",
-                  header: "Latency",
-                  className: "align-top whitespace-normal",
-                  render: (u) => <>{u.latencyMs} ms</>,
+                  key: "outcome",
+                  header: "Outcome",
+                  className: "align-middle min-w-[100px]",
+                  render: (u) => (
+                    <AppStatusBadge status={u.status || "unknown"} />
+                  ),
                 },
                 {
-                  key: "column-4",
-                  header: "Estimated USD",
-                  className: "align-top whitespace-normal",
+                  key: "tokens",
+                  header: "Tokens (In / Out)",
+                  className: "align-middle min-w-[140px]",
                   render: (u) => (
-                    <>{u.estimatedCostUsd?.toFixed(6) ?? "Unknown"}</>
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {u.inputTokens?.toLocaleString() ?? "—"} / {u.outputTokens?.toLocaleString() ?? "—"}
+                    </span>
+                  ),
+                },
+                {
+                  key: "latency",
+                  header: "Latency",
+                  className: "align-middle min-w-[100px]",
+                  render: (u) => (
+                    <span className="font-mono text-xs tabular-nums text-foreground">
+                      {u.latencyMs} ms
+                    </span>
+                  ),
+                },
+                {
+                  key: "cost",
+                  header: "Estimated Cost",
+                  className: "align-middle text-right min-w-[120px]",
+                  render: (u) => (
+                    <span className="font-mono text-xs font-bold tabular-nums text-foreground">
+                      {typeof u.estimatedCostUsd === "number" ? `$${u.estimatedCostUsd.toFixed(6)}` : "—"}
+                    </span>
                   ),
                 },
               ]}

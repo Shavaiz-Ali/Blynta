@@ -3,99 +3,106 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Bell, LogOut } from "lucide-react";
-import { AppPopover, AppIdentityAvatar } from "@blynta/ui";
+import { Bell } from "lucide-react";
+import { AppProductHeader, AppAccountMenu, AppButton } from "@blynta/ui";
 import { ThemeToggle } from "./ThemeToggle";
-import { AppButton, AppLinkButton } from "./AppButton";
 import { navigation } from "@/lib/navigation";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
 
-export function AdminTopbar() {
+export interface AdminTopbarProps {
+  collapsed: boolean;
+  onCollapse: () => void;
+  onMenu: () => void;
+}
+
+export function AdminTopbar({
+  collapsed,
+  onCollapse,
+  onMenu,
+}: AdminTopbarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+
   const page = navigation
     .flatMap((group) => group.items)
     .find(
       (item) =>
         item.href === pathname ||
-        (item.href === "/ai" && pathname.startsWith("/ai/")),
+        (item.href !== "/" && pathname.startsWith(item.href)),
     );
+
   const aiSection = /^\/ai\/(providers|models|usage)(?:\/|$)/.exec(
     pathname,
   )?.[1];
 
   return (
-    <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b bg-background px-4 py-3 sm:px-6">
-      <div className="flex items-center gap-3">
-        <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="h-4" />
+    <AppProductHeader
+      collapsed={collapsed}
+      onCollapse={onCollapse}
+      onMenu={onMenu}
+      sidebarId="admin-sidebar"
+    >
+      <div className="flex w-full min-w-0 items-center justify-between gap-4">
+        {/* Left: Breadcrumb / Page Title */}
         <nav
           aria-label="Breadcrumb"
-          className="flex items-center gap-2 text-sm text-muted-foreground"
+          className="flex items-center gap-2 text-xs text-muted-foreground min-w-0"
         >
-          <Link href="/" className="hover:text-foreground">
+          <Link
+            href="/"
+            className="hover:text-foreground font-medium transition-colors"
+          >
             Admin
           </Link>
-          <span aria-hidden="true">/</span>
-          <span className="font-medium text-foreground">
-            {page?.title || "Details"}
+          <span aria-hidden="true" className="text-muted-foreground/40">
+            /
+          </span>
+          <span className="font-semibold text-foreground truncate">
+            {page?.title || "Overview"}
           </span>
           {aiSection && (
             <>
-              <span aria-hidden="true">/</span>
-              <span className="capitalize text-foreground">{aiSection}</span>
+              <span aria-hidden="true" className="text-muted-foreground/40">
+                /
+              </span>
+              <span className="capitalize text-foreground font-medium">
+                {aiSection}
+              </span>
             </>
           )}
         </nav>
-      </div>
 
-      <div className="flex items-center gap-1">
-        <AppLinkButton
-          variant="ghost"
-          size="icon-sm"
-          render={<Link href="/notifications" />}
-          aria-label="Notifications"
-        >
-          <Bell />
-        </AppLinkButton>
-        <ThemeToggle />
-        <AppPopover
-          trigger={
-            <AppButton
-              variant="ghost"
-              className="h-auto gap-3 px-2 py-1"
-              aria-label="Account"
-            >
-              <span className="hidden text-right sm:block">
-                <span className="block text-sm font-semibold">
-                  {session?.user.name || "Administrator"}
-                </span>
-                <span className="block text-xs capitalize text-muted-foreground">
-                  {session?.user.role || "Admin"}
-                </span>
-              </span>
-              <AppIdentityAvatar
-                name={session?.user.name || session?.user.email || "Admin"}
-              />
-            </AppButton>
-          }
-        >
-          <div>
-            <p className="mb-3 break-all text-sm text-muted-foreground">
-              {session?.user.email}
-            </p>
-            <AppButton
-              variant="outline"
-              className="w-full justify-start"
-              onClick={() => signOut({ callbackUrl: "/login" })}
-            >
-              <LogOut />
-              Sign out
-            </AppButton>
-          </div>
-        </AppPopover>
+        {/* Right Actions */}
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+          <AppButton
+            variant="ghost"
+            size="icon-sm"
+            className="h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            aria-label="Notifications"
+            render={<Link href="/notifications" />}
+          >
+            <Bell className="size-4" />
+          </AppButton>
+
+          <ThemeToggle />
+
+          <AppAccountMenu
+            profile={{
+              name: session?.user?.name || "Administrator",
+              email: session?.user?.email || "admin@blynta.com",
+              plan: "Admin",
+            }}
+            links={[
+              { label: "Overview", render: <Link href="/" /> },
+              { label: "Settings", render: <Link href="/settings" /> },
+              { label: "Audit Logs", render: <Link href="/audit" /> },
+            ]}
+            onSignOut={async (onSuccess) => {
+              await onSuccess();
+              await signOut({ callbackUrl: "/login" });
+            }}
+          />
+        </div>
       </div>
-    </header>
+    </AppProductHeader>
   );
 }

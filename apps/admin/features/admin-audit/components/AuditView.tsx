@@ -110,7 +110,7 @@ export function AuditView() {
         description="Administrative actions and system events recorded by the backend."
       />
 
-      <div className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 rounded-xl border border-border/70 bg-card p-4 shadow-xs md:grid-cols-2 xl:grid-cols-4 transition-colors">
         <AppInput
           label="Search"
           placeholder="Title or description"

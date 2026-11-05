@@ -4,7 +4,7 @@ import {
   assertNotCancelled,
 } from '../jobs/cancellation-context';
 import { pipeline } from 'node:stream/promises';
-import { Injectable, Logger, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UnrecoverableError } from 'bullmq';
 import {
@@ -22,6 +22,11 @@ import { Readable, Transform } from 'stream';
 import { r2FailureDetails } from './r2-diagnostics';
 import type { FinalizeRequestMiddleware } from '@smithy/types';
 import { R2HttpHandler } from './r2-http-handler';
+import {
+  r2ObjectContext,
+  withR2ObjectContext,
+  isObjectMissing,
+} from './r2-object-context';
 
 interface SigningDiagnostics {
   r2RequestSignedWithV4?: boolean;
@@ -53,7 +58,14 @@ export class R2Service {
         secretAccessKey,
         buckets: [this.bucket, this.sourceBucket || this.bucket],
       },
-      (event) => this.logger.log(JSON.stringify(event)),
+      (event) => {
+        if (
+          event.httpStatusCode === 404 &&
+          r2ObjectContext.getStore()?.expectedToExist === false
+        )
+          this.logger.debug(JSON.stringify(event));
+        else this.logger.log(JSON.stringify(event));
+      },
     );
     this.client = new S3Client({
       region: 'auto', // R2 uses 'auto', not a real AWS region
@@ -92,6 +104,13 @@ export class R2Service {
         try {
           return await next(args);
         } catch (error) {
+          // Optional HEAD absence is an existence result, not an R2 operation failure.
+          if (
+            ['HeadObjectCommand', 'GetObjectCommand'].includes(context.commandName ?? '') &&
+            isObjectMissing(error) &&
+            r2ObjectContext.getStore()?.expectedToExist === false
+          )
+            throw error;
           this.logger.error(
             JSON.stringify({
               event: 'r2_operation_failed',
@@ -247,42 +266,64 @@ export class R2Service {
 
   async fileExists(objectKey: string): Promise<boolean> {
     try {
-      await this.client.send(
-        new HeadObjectCommand({
-          Bucket: this.bucketFor(objectKey),
-          Key: objectKey,
-        }),
-      );
+      await this.headObject(objectKey, false);
       return true;
     } catch (error) {
-      const failure = error as {
-        name?: string;
-        $metadata?: { httpStatusCode?: number };
-      };
-      if (
-        failure.$metadata?.httpStatusCode === HttpStatus.NOT_FOUND ||
-        failure.name === 'NotFound' ||
-        failure.name === 'NoSuchKey'
-      )
-        return false;
+      if (isObjectMissing(error)) return false;
       // Authentication, configuration and connectivity failures are not missing files.
       throw error;
     }
   }
 
   async objectInfo(objectKey: string) {
-    const result = await this.client.send(
-      new HeadObjectCommand({
-        Bucket: this.bucketFor(objectKey),
-        Key: objectKey,
-      }),
-      { abortSignal: cancellationSignal() },
-    );
+    const result = await this.headObject(objectKey, true);
     return {
       size: result.ContentLength,
       contentType: result.ContentType,
       etag: result.ETag,
     };
+  }
+
+  private async headObject(objectKey: string, expectedToExist: boolean) {
+    const context = r2ObjectContext.getStore();
+    const bucket = this.bucketFor(objectKey);
+    return withR2ObjectContext(
+      { expectedToExist: context?.expectedToExist ?? expectedToExist },
+      async () => {
+        const report = (statusCode?: number) => {
+          // Detailed keys are emitted only at explicitly scoped pipeline call sites.
+          if (!context) return;
+          const event = {
+            event: 'r2.object_check',
+            ...r2ObjectContext.getStore(),
+            bucket,
+            objectKey,
+            statusCode,
+          };
+          if (
+            statusCode === 404 &&
+            r2ObjectContext.getStore()?.expectedToExist === false
+          )
+            this.logger.debug(event);
+          else if (statusCode && statusCode >= 400) this.logger.warn(event);
+          else this.logger.log(event);
+        };
+        try {
+          const result = await this.client.send(
+            new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
+            { abortSignal: cancellationSignal() },
+          );
+          report(result.$metadata?.httpStatusCode ?? 200);
+          return result;
+        } catch (error) {
+          report(
+            (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+              ?.httpStatusCode ?? (isObjectMissing(error) ? 404 : undefined),
+          );
+          throw error;
+        }
+      },
+    );
   }
 
   /**

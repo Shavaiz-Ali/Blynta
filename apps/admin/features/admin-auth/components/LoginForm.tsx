@@ -3,8 +3,7 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { AppButton } from "@blynta/ui";
-import { AppInput } from "@blynta/ui";
+import { AppButton, AppInput } from "@blynta/ui";
 import { ShieldCheck, AlertCircle, Lock, Mail } from "lucide-react";
 import { toast } from "sonner";
 
@@ -59,24 +58,28 @@ export function LoginForm() {
 
   return (
     <div className="mx-auto min-w-0 w-full max-w-md">
-      <div className="space-y-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm sm:p-8">
+      <div className="space-y-6 rounded-2xl border border-border/80 bg-card/90 backdrop-blur-md p-6 sm:p-8 text-card-foreground shadow-sm">
         {/* Header */}
         <div className="text-center space-y-2">
-          <div className="mx-auto size-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center shadow-xs ring-1 ring-primary/20">
+          <div className="mx-auto size-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center shadow-xs ring-1 ring-primary/20 mb-3">
             <ShieldCheck className="size-6" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            Internal Console
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl flex items-center justify-center">
             Admin Portal
+            <span className="text-primary font-serif font-normal ml-0.5">.</span>
           </h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Sign in with your administrative credentials to manage Blynta.
+          <p className="text-xs sm:text-sm text-muted-foreground max-w-xs mx-auto leading-relaxed">
+            Sign in with your administrative credentials to manage Blynta platform operations.
           </p>
         </div>
 
         {error && (
           <div
             role="alert"
-            className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+            className="flex gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs sm:text-sm text-destructive"
           >
             <AlertCircle className="mt-0.5 size-4 shrink-0" />
             <p>{error}</p>
@@ -111,7 +114,7 @@ export function LoginForm() {
           <AppButton
             type="submit"
             size="lg"
-            className="mt-2 w-full font-semibold"
+            className="mt-2 w-full font-semibold shadow-xs cursor-pointer"
             isLoading={loading}
           >
             Sign In to Admin

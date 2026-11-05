@@ -8,8 +8,23 @@ export interface BatchExecution {
   deadline: Date;
   error?: string;
   retryable?: boolean;
+  failureCode?: string;
+  failureStage?: string;
+  lastBatchStatus?: string;
+  outputKey?: string;
+  durationSeconds?: number;
+  diagnostics?: {
+    statusReason?: string;
+    containerReason?: string;
+    exitCode?: number;
+    logStreamName?: string;
+    jobDefinition?: string;
+    image?: string;
+    attempts?: number;
+  };
   owner?: {
     jobId?: string;
+    clipId?: string;
     planId?: string;
     revision?: number;
     generation?: number;
@@ -26,6 +41,12 @@ export const BatchExecutionSchema = new Schema<BatchExecution>(
     deadline: { type: Date, required: true, index: true },
     error: String,
     retryable: Boolean,
+    failureCode: String,
+    failureStage: String,
+    lastBatchStatus: String,
+    outputKey: String,
+    durationSeconds: Number,
+    diagnostics: { type: Schema.Types.Mixed },
     owner: { type: Schema.Types.Mixed },
   },
   { timestamps: true },

@@ -2,9 +2,7 @@
 import { PLAN, PLAN_LABELS } from "@blynta/types";
 
 import * as React from "react";
-import { AppInput as Input } from "@/components/common/primitives";
-import { AppButton as Button } from "@/components/common/primitives";
-import { AppSelect as Select } from "@blynta/ui";
+import { AppInput, AppButton, AppSelect } from "@blynta/ui";
 import { SelectItem } from "@blynta/ui/primitives/select";
 import { Search, X } from "lucide-react";
 import { ListUsersParams, UserPlan } from "../types";
@@ -30,33 +28,33 @@ export function UsersFilterBar({
     filters.isActive !== undefined;
 
   return (
-    <div className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-card rounded-lg border p-4">
+    <div className="flex flex-col md:flex-row gap-3 items-start md:items-center bg-card rounded-xl border border-border/70 p-3.5 sm:p-4 shadow-xs transition-colors">
       {/* Search */}
       <form
         onSubmit={handleSearchSubmit}
         className="flex w-full min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center"
       >
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <Input
+        <div className="flex-1 min-w-0">
+          <AppInput
             type="text"
+            size="sm"
             placeholder="Search by name, email, referral code..."
             value={filters.search || ""}
             onChange={(e) =>
               onFilterChange({ search: e.target.value || undefined, page: 1 })
             }
-            className="pl-9"
+            prefixIcon={<Search className="size-4" />}
           />
         </div>
-        <Button type="submit" size="sm" className="w-full sm:w-auto">
+        <AppButton type="submit" size="sm" className="w-full sm:w-auto font-semibold shadow-xs">
           Search
-        </Button>
+        </AppButton>
       </form>
 
       {/* Filters */}
       <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
         {/* Plan filter */}
-        <Select
+        <AppSelect
           aria-label="Subscription plan"
           size="sm"
           wrapperClassName="w-full sm:w-40"
@@ -74,10 +72,10 @@ export function UsersFilterBar({
           <SelectItem value={PLAN.BUSINESS}>
             {PLAN_LABELS[PLAN.BUSINESS]}
           </SelectItem>
-        </Select>
+        </AppSelect>
 
         {/* Status filter */}
-        <Select
+        <AppSelect
           aria-label="Account status"
           size="sm"
           wrapperClassName="w-full sm:w-40"
@@ -98,18 +96,18 @@ export function UsersFilterBar({
           <SelectItem value="all">All Statuses</SelectItem>
           <SelectItem value="active">Active</SelectItem>
           <SelectItem value="inactive">Inactive</SelectItem>
-        </Select>
+        </AppSelect>
 
         {hasActiveFilters && (
-          <Button
+          <AppButton
             variant="ghost"
             size="sm"
             onClick={onReset}
-            className="gap-1.5 text-muted-foreground hover:text-foreground"
+            className="gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
           >
             <X className="size-3.5" />
             Clear
-          </Button>
+          </AppButton>
         )}
       </div>
     </div>

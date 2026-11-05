@@ -27,11 +27,11 @@ export function SettingsView() {
         description={`Platform ${section.toLowerCase()} configuration.`}
       />
       {section === "Security" && (
-        <p className="text-sm text-muted-foreground">
-          Only the backend admin role currently has console access. Support and
-          analyst roles require backend permission enforcement before they can
-          be enabled.
-        </p>
+        <div className="rounded-xl border border-border/70 bg-card p-4 shadow-xs text-xs text-muted-foreground leading-relaxed">
+          <strong className="text-foreground block mb-1">Access Control Policy:</strong>
+          Only the backend administrator role currently possesses console authorization. Support, auditor, and
+          analyst roles require backend role-permission mapping before they can be assigned.
+        </div>
       )}
     </div>
   );

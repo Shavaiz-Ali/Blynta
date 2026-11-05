@@ -40,10 +40,10 @@ function InfoRow({ icon, label, value }: InfoRowProps) {
     <div className="flex items-start gap-3 py-3">
       <div className="mt-0.5 shrink-0 text-muted-foreground">{icon}</div>
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">
+        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">
           {label}
         </p>
-        <div className="text-sm font-medium text-foreground">{value}</div>
+        <div className="text-xs sm:text-sm font-medium text-foreground">{value}</div>
       </div>
     </div>
   );
@@ -95,22 +95,22 @@ export function UserDetailCard({
   ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
       {/* ─── Left: User info ─── */}
-      <Card className="lg:col-span-2">
-        <CardHeader className="pb-0">
+      <Card className="lg:col-span-2 rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+        <CardHeader className="p-5 pb-3">
           <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xl select-none">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary border border-primary/25 font-bold text-xl select-none">
               {(user.name || user.email)[0].toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-base truncate">
+              <CardTitle className="text-lg font-bold text-foreground truncate">
                 {user.name || "No name"}
               </CardTitle>
-              <p className="text-sm text-muted-foreground truncate mt-0.5">
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
                 {user.email}
               </p>
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+              <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
                 <Badge
                   variant={user.isActive ? "default" : "destructive"}
                   className="text-xs"
@@ -125,7 +125,7 @@ export function UserDetailCard({
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="text-xs capitalize border-primary/30 bg-primary/10 text-primary"
+                  className="text-xs capitalize border-primary/30 bg-primary/10 text-primary font-semibold"
                 >
                   {user.plan === PLAN.PRO && <Zap className="size-3 mr-1" />}
                   {user.plan === PLAN.BUSINESS && (
@@ -146,9 +146,9 @@ export function UserDetailCard({
           </div>
         </CardHeader>
 
-        <CardContent>
-          <Separator className="mb-1" />
-          <div className="divide-y divide-border">
+        <CardContent className="p-5 pt-0">
+          <Separator className="mb-2 bg-border/50" />
+          <div className="divide-y divide-border/50">
             <InfoRow
               icon={<Hash className="size-4" />}
               label="User ID"
@@ -166,7 +166,7 @@ export function UserDetailCard({
             <InfoRow
               icon={<Shield className="size-4" />}
               label="Plan"
-              value={<span className="capitalize">{user.plan}</span>}
+              value={<span className="capitalize font-semibold">{user.plan}</span>}
             />
             <InfoRow
               icon={<Coins className="size-4 text-primary" />}
@@ -184,8 +184,10 @@ export function UserDetailCard({
                   {onAdjustCredits && (
                     <AppButton
                       type="button"
+                      variant="outline"
+                      size="sm"
                       onClick={onAdjustCredits}
-                      className="px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary dark:text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                      className="h-7 text-xs font-semibold border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 transition-colors shadow-2xs"
                     >
                       Adjust Credits
                     </AppButton>
@@ -221,25 +223,25 @@ export function UserDetailCard({
       </Card>
 
       {/* ─── Right column ─── */}
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {/* Stats */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <BarChart3 className="size-4 text-muted-foreground" />
-              Stats
+        <Card className="rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <BarChart3 className="size-4 text-primary" />
+              Activity Stats
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-2">
+          <CardContent className="p-4 pt-1">
+            <div className="grid grid-cols-2 gap-2.5">
               {statItems.map(({ label, value, icon }) => (
                 <div
                   key={label}
-                  className="rounded-lg border border-border bg-muted/30 p-3 text-center flex flex-col items-center gap-1"
+                  className="rounded-xl border border-border/60 bg-muted/20 p-3 text-center flex flex-col items-center gap-1 transition-colors"
                 >
                   {icon}
-                  <p className="text-2xl font-bold text-foreground">{value}</p>
-                  <p className="text-xs text-muted-foreground leading-none">
+                  <p className="text-xl font-extrabold text-foreground tabular-nums">{value}</p>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground leading-none">
                     {label}
                   </p>
                 </div>
@@ -249,16 +251,16 @@ export function UserDetailCard({
         </Card>
 
         {/* Billing */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <CreditCard className="size-4 text-muted-foreground" />
+        <Card className="rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <CreditCard className="size-4 text-primary" />
               Billing
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-1">
             {customer ? (
-              <div className="divide-y divide-border">
+              <div className="divide-y divide-border/50">
                 <InfoRow
                   icon={<CreditCard className="size-3.5" />}
                   label="Paddle Customer"
@@ -308,7 +310,7 @@ export function UserDetailCard({
                 )}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
+              <p className="text-xs text-muted-foreground text-center py-4">
                 No billing record
               </p>
             )}
@@ -318,19 +320,19 @@ export function UserDetailCard({
 
       {/* ─── Recent Activity ─── */}
       {recentActivities.length > 0 && (
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Activity className="size-4 text-muted-foreground" />
-              Recent Activity
+        <Card className="lg:col-span-3 rounded-xl border border-border/70 bg-card shadow-xs transition-colors">
+          <CardHeader className="p-5 pb-2">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              <Activity className="size-4 text-primary" />
+              Recent Account Activity
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="divide-y divide-border">
+          <CardContent className="p-5 pt-0">
+            <div className="divide-y divide-border/50">
               {recentActivities.slice(0, 8).map((act) => (
                 <div
                   key={act._id}
-                  className="flex flex-wrap items-start gap-3 py-3 sm:flex-nowrap"
+                  className="flex flex-wrap items-start gap-3 py-3 sm:flex-nowrap hover:bg-muted/20 px-2 rounded-lg transition-colors"
                 >
                   <div className="mt-0.5 shrink-0">
                     {act.status === "completed" || act.status === "success" ? (
@@ -342,7 +344,7 @@ export function UserDetailCard({
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground">
+                    <p className="text-xs sm:text-sm font-semibold text-foreground">
                       {act.title}
                     </p>
                     {act.description && (
@@ -355,7 +357,7 @@ export function UserDetailCard({
                     <Badge variant="outline" className="text-xs capitalize">
                       {act.category}
                     </Badge>
-                    <p className="text-xs text-muted-foreground mt-1">
+                    <p className="text-[11px] text-muted-foreground mt-1">
                       {format(new Date(act.createdAt), "MMM d, h:mm a")}
                     </p>
                   </div>

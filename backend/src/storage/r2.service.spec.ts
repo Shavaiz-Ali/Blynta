@@ -3,6 +3,8 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { R2Service } from './r2.service';
 import { Readable } from 'node:stream';
 import { UnrecoverableError } from 'bullmq';
+import { Logger } from '@nestjs/common';
+import { withR2ObjectContext } from './r2-object-context';
 
 describe('R2 credential configuration', () => {
   const valid = {
@@ -131,6 +133,97 @@ describe('R2 object existence', () => {
       true,
     );
   });
+  it('logs an optional cache miss with job/clip/key context at debug level', async () => {
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    const error = Object.assign(new Error('NotFound'), {
+      name: 'NotFound',
+      $metadata: { httpStatusCode: 404 },
+    });
+    jest.spyOn(S3Client.prototype, 'send').mockRejectedValue(error as never);
+    expect(
+      await withR2ObjectContext(
+        {
+          jobId: 'parent',
+          clipId: 'clip',
+          batchJobId: 'aws-1',
+          artifactType: 'progress',
+          expectedToExist: false,
+        },
+        () => service().fileExists('job-sources/batch/task/progress.json'),
+      ),
+    ).toBe(false);
+    expect(debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'r2.object_check',
+        jobId: 'parent',
+        clipId: 'clip',
+        batchJobId: 'aws-1',
+        artifactType: 'progress',
+        bucket: 'test',
+        objectKey: 'job-sources/batch/task/progress.json',
+        expectedToExist: false,
+        statusCode: 404,
+      }),
+    );
+  });
+  it('preserves a required output 404 and reports it as expected-to-exist', async () => {
+    const warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    const error = Object.assign(new Error('NotFound'), {
+      $metadata: { httpStatusCode: 404 },
+    });
+    jest.spyOn(S3Client.prototype, 'send').mockRejectedValue(error as never);
+    await expect(
+      withR2ObjectContext(
+        {
+          jobId: 'parent',
+          artifactType: 'batch_output',
+          expectedToExist: true,
+        },
+        () => service().objectInfo('job-sources/batch/task/output.mp4'),
+      ),
+    ).rejects.toBe(error);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'r2.object_check',
+        expectedToExist: true,
+        statusCode: 404,
+      }),
+    );
+  });
+  it('does not turn an explicit 403 into absence even if the SDK error name says NotFound', async () => {
+    const error = Object.assign(new Error('denied'), {
+      name: 'NotFound',
+      $metadata: { httpStatusCode: 403 },
+    });
+    jest.spyOn(S3Client.prototype, 'send').mockRejectedValue(error as never);
+    await expect(service().fileExists('clips/output.mp4')).rejects.toBe(error);
+  });
+  it('isolates concurrent object-check correlation contexts', async () => {
+    const log = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation(() => undefined);
+    jest
+      .spyOn(S3Client.prototype, 'send')
+      .mockResolvedValue({ $metadata: { httpStatusCode: 200 } } as never);
+    await Promise.all(
+      ['one', 'two'].map((jobId) =>
+        withR2ObjectContext({ jobId, artifactType: 'source' }, () =>
+          service().objectInfo(`job-sources/${jobId}/source.mp4`),
+        ),
+      ),
+    );
+    for (const jobId of ['one', 'two'])
+      expect(log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId,
+          objectKey: `job-sources/${jobId}/source.mp4`,
+        }),
+      );
+  });
   it('returns false only for a missing object', async () => {
     jest.spyOn(S3Client.prototype, 'send').mockRejectedValue(
       Object.assign(new Error('NotFound'), {
@@ -179,6 +272,7 @@ describe('R2 object existence', () => {
           Bucket: 'private-sources',
         }) as unknown,
       }),
+      { abortSignal: undefined },
     );
     const sign = jest
       .spyOn(storage, 'getSignedDownloadUrl')

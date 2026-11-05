@@ -10,6 +10,7 @@ const { ConfigService } = require('@nestjs/config');
 const { execFileSync } = require('node:child_process');
 const { r2TargetId } = require('../dist/src/storage/r2-http-handler');
 const { R2Service } = require('../dist/src/storage/r2.service');
+const { r2FailureDetails } = require('../dist/src/storage/r2-diagnostics');
 
 async function inspect(
   jobId,
@@ -17,6 +18,7 @@ async function inspect(
   config,
   readManifest = false,
   compareCredentials = false,
+  options = {},
 ) {
   if (!/^[a-f0-9-]{36}$/i.test(jobId)) throw new Error('Invalid job ID');
   const job = (await batch.send(new DescribeJobsCommand({ jobs: [jobId] })))
@@ -130,6 +132,15 @@ async function inspect(
     definition: job.jobDefinition,
     image: job.container?.image,
     exitCode: job.container?.exitCode,
+    status: job.status,
+    statusReason: r2FailureDetails({ message: job.statusReason }).message,
+    containerReason: r2FailureDetails({ message: job.container?.reason }).message,
+    logStreamName: job.container?.logStreamName,
+    attempts: job.attempts?.map(attempt => ({ exitCode: attempt.container?.exitCode,
+      reason: r2FailureDetails({ message: attempt.container?.reason }).message,
+      statusReason: r2FailureDetails({ message: attempt.statusReason }).message,
+      logStreamName: attempt.container?.logStreamName })),
+    logConfiguration: definition.containerProperties?.logConfiguration,
     manifestArgumentValid: !!manifest,
     secretMappings,
     routingMatchesEC2: routeMatches,
@@ -150,9 +161,46 @@ async function inspect(
       const bytes = await r2.downloadToBuffer(manifest, 2 * 1024 * 1024);
       result.manifestReadSucceededWithEC2Credentials = true;
       result.manifestBytes = bytes.length;
+      if (options.readArtifacts) {
+        const task = JSON.parse(bytes.toString());
+        const prefix = manifest.slice(0, -'/task.json'.length);
+        const expectedKey = `${prefix}/output.mp4`;
+        result.outputKeyMatchesManifest = task.outputKey === expectedKey;
+        result.artifactChecks = [];
+        const keys = [
+          ...(task.kind === 'clip' && typeof task.sourceKey === 'string' ? [[task.sourceKey, 'source', true]] : []),
+          [manifest, 'manifest', true], [expectedKey, 'batch_output', job.status === 'SUCCEEDED'],
+          [`${prefix}/result.json`, 'result', job.status === 'SUCCEEDED'],
+          [`${prefix}/progress.json`, 'progress', false], [`${prefix}/failure.json`, 'failure', false],
+        ];
+        for (const [objectKey, artifactType, expectedToExist] of keys) {
+          const check = { event: 'r2.object_check', batchJobId: jobId,
+            jobId: task.owner?.jobId ?? /^job-sources\/([a-f0-9]{24})\//.exec(task.sourceKey || '')?.[1],
+            clipId: task.owner?.clipId, artifactType, objectKey, expectedToExist,
+            bucket: /^(job-sources|source-videos)\//.test(objectKey) ? routing.R2_SOURCE_BUCKET_NAME || routing.R2_BUCKET_NAME : routing.R2_BUCKET_NAME };
+          try { const info = await r2.objectInfo(objectKey); Object.assign(check, {statusCode:200,size:info.size}); }
+          catch (error) { Object.assign(check,{statusCode:error.$metadata?.httpStatusCode,exceptionType:r2FailureDetails(error).exceptionType}); }
+          result.artifactChecks.push(check);
+        }
+      }
     } finally {
       r2.client.destroy();
     }
+  }
+  if (options.readLogs) {
+    const group = definition.containerProperties?.logConfiguration?.options?.['awslogs-group'];
+    const stream = job.container?.logStreamName || job.attempts?.at(-1)?.container?.logStreamName;
+    if (group && stream) {
+      try {
+        const response = JSON.parse(execFileSync('aws', ['logs','get-log-events','--log-group-name',group,
+          '--log-stream-name',stream,'--limit','80','--region',job.jobDefinition.split(':')[3],
+          '--output','json','--no-cli-pager'], {encoding:'utf8',stdio:['ignore','pipe','pipe'],timeout:15000,
+          maxBuffer:2*1024*1024,windowsHide:true}));
+        result.rendererLogErrors = (response.events || []).map(event => event.message)
+          .filter(message => /fail|error|exception|cannot|invalid|font|ENOENT|notfound/i.test(message)).slice(-20)
+          .map(message => r2FailureDetails({message}).message);
+      } catch { result.rendererLogRead = 'unavailable; verify logs:GetLogEvents permission and AWS CLI'; }
+    } else result.rendererLogRead = 'no log stream; inspect container startup failure reason';
   }
   return result;
 }
@@ -166,8 +214,9 @@ if (require.main === module) {
     process.argv[2] || '',
     batch,
     new ConfigService(),
-    process.argv.includes('--read-manifest'),
+    process.argv.includes('--read-manifest') || process.argv.includes('--read-artifacts'),
     process.argv.includes('--compare-credentials'),
+    { readArtifacts: process.argv.includes('--read-artifacts'), readLogs: process.argv.includes('--read-logs') },
   )
     .then((result) => console.log(JSON.stringify(result)))
     .catch(() => {

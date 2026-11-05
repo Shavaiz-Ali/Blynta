@@ -26,10 +26,10 @@ export function CapabilityView({
       ) : query.isError ? (
         <QueryErrorState onRetry={() => void query.refetch()} />
       ) : query.data && !query.data.available ? (
-        <section className="space-y-3 rounded-lg border p-6">
+        <section className="space-y-3 rounded-xl border border-border/70 bg-card p-6 shadow-xs">
           <AppStatusBadge status="unavailable" />
-          <h2 className="font-medium">Not connected</h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
+          <h2 className="text-base font-bold text-foreground">Not connected</h2>
+          <p className="max-w-2xl text-xs sm:text-sm text-muted-foreground leading-relaxed">
             {query.data.reason}
           </p>
         </section>
