@@ -371,7 +371,7 @@ export function SourceVideoDetails({ jobId }: SourceVideoDetailsProps) {
         /* Failed state with retry */
         <div
           className={
-            hasClipFailures ? "space-y-4 py-2" : "max-w-3xl space-y-4 py-2"
+            hasClipFailures ? "space-y-4 py-2" : "max-w-7xl space-y-4 py-2"
           }
         >
           <JobProcessingView job={job} />

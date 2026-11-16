@@ -45,9 +45,9 @@ export function JobProcessingView({ job }: { job: Job }) {
   return (
     <section
       aria-label="Video processing"
-      className="space-y-5 rounded-2xl border border-border/70 bg-card/60 p-4 shadow-xs sm:p-6"
+      className="space-y-5 rounded-2xl border border-border/70 bg-card/60 p-4 shadow-xs sm:p-6 w-full"
     >
-      <div className="space-y-2">
+      <div className="space-y-2 w-full">
         <h2 className="text-lg font-semibold">
           {stopped
             ? job.status === "cancelling"
