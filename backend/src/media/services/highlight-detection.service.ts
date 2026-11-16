@@ -164,6 +164,17 @@ function outputDiagnostics(value: unknown) {
   }
   return { finishReason, inputTokens, outputTokens, reasoningTokens };
 }
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+/** Optional attribution headers; only sent when configured. */
+function openRouterHeaders(config: ConfigService): Record<string, string> {
+  const referer = config.get<string>('OPENROUTER_SITE_URL');
+  const title = config.get<string>('OPENROUTER_SITE_NAME');
+  return {
+    ...(referer ? { 'HTTP-Referer': referer } : {}),
+    ...(title ? { 'X-OpenRouter-Title': title } : {}),
+  };
+}
 
 function completeHighlightObject(result: {
   object: unknown;
@@ -249,6 +260,7 @@ export class HighlightDetectionService {
     );
 
     const apiKey =
+      this.configService.get<string>('OPENROUTER_API_KEY') ||
       this.configService.get<string>('LLM_API_KEY') ||
       this.configService.get<string>('GROQ_API_KEY');
 
@@ -265,6 +277,16 @@ export class HighlightDetectionService {
       );
       const openai = createOpenAI({ apiKey, baseURL });
       this.model = openai.chat(this.resolvedModelName);
+    } else if (this.provider === 'openrouter') {
+      const openrouter = createOpenAI({
+        apiKey,
+        baseURL: this.configService.get<string>(
+          'LLM_BASE_URL',
+          OPENROUTER_BASE_URL,
+        ),
+        headers: openRouterHeaders(this.configService),
+      });
+      this.model = openrouter.chat(this.resolvedModelName);
     } else {
       const google = createGoogleGenerativeAI({ apiKey });
       this.model = google(this.resolvedModelName);
@@ -351,7 +373,12 @@ export class HighlightDetectionService {
       baseURL:
         this.provider === 'groq'
           ? this.configService.get<string>('LLM_BASE_URL', LEGACY_GROQ_ENDPOINT)
-          : 'google',
+          : this.provider === 'openrouter'
+            ? this.configService.get<string>(
+                'LLM_BASE_URL',
+                OPENROUTER_BASE_URL,
+              )
+            : 'google',
       model: selection?.modelId || model || this.resolvedModelName,
       minScore: MIN_HIGHLIGHT_SCORE,
       temperature: 0.3,
@@ -608,9 +635,21 @@ export class HighlightDetectionService {
       throw new Error('Highlight attempts exhausted');
     }) as typeof meteredGenerateObject;
   }
+
   private configuredModel(model?: string): LanguageModel {
     if (!model || model === this.resolvedModelName)
       return this.model as LanguageModel;
+    if (this.provider === 'openrouter')
+      return createOpenAI({
+        apiKey:
+          this.configService.get<string>('OPENROUTER_API_KEY') ||
+          this.configService.get<string>('LLM_API_KEY'),
+        baseURL: this.configService.get<string>(
+          'LLM_BASE_URL',
+          OPENROUTER_BASE_URL,
+        ),
+        headers: openRouterHeaders(this.configService),
+      }).chat(model);
     const apiKey =
       this.configService.get<string>('LLM_API_KEY') ||
       this.configService.get<string>('GROQ_API_KEY');
@@ -624,7 +663,6 @@ export class HighlightDetectionService {
         }).chat(model)
       : createGoogleGenerativeAI({ apiKey })(model);
   }
-
   selectCandidates(
     candidates: HighlightDto[],
     segments: TranscriptSegmentDto[],
