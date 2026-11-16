@@ -260,7 +260,6 @@ export class HighlightDetectionService {
     );
 
     const apiKey =
-      this.configService.get<string>('OPENROUTER_API_KEY') ||
       this.configService.get<string>('LLM_API_KEY') ||
       this.configService.get<string>('GROQ_API_KEY');
 
@@ -639,20 +638,18 @@ export class HighlightDetectionService {
   private configuredModel(model?: string): LanguageModel {
     if (!model || model === this.resolvedModelName)
       return this.model as LanguageModel;
+    const apiKey =
+      this.configService.get<string>('LLM_API_KEY') ||
+      this.configService.get<string>('GROQ_API_KEY');
     if (this.provider === 'openrouter')
       return createOpenAI({
-        apiKey:
-          this.configService.get<string>('OPENROUTER_API_KEY') ||
-          this.configService.get<string>('LLM_API_KEY'),
+        apiKey,
         baseURL: this.configService.get<string>(
           'LLM_BASE_URL',
           OPENROUTER_BASE_URL,
         ),
         headers: openRouterHeaders(this.configService),
       }).chat(model);
-    const apiKey =
-      this.configService.get<string>('LLM_API_KEY') ||
-      this.configService.get<string>('GROQ_API_KEY');
     return this.provider === 'groq'
       ? createOpenAI({
           apiKey,
@@ -663,6 +660,7 @@ export class HighlightDetectionService {
         }).chat(model)
       : createGoogleGenerativeAI({ apiKey })(model);
   }
+
   selectCandidates(
     candidates: HighlightDto[],
     segments: TranscriptSegmentDto[],
