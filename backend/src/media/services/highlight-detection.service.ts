@@ -164,6 +164,7 @@ function outputDiagnostics(value: unknown) {
   }
   return { finishReason, inputTokens, outputTokens, reasoningTokens };
 }
+
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
 /** Optional attribution headers; only sent when configured. */
@@ -174,6 +175,27 @@ function openRouterHeaders(config: ConfigService): Record<string, string> {
     ...(referer ? { 'HTTP-Referer': referer } : {}),
     ...(title ? { 'X-OpenRouter-Title': title } : {}),
   };
+}
+
+function createOpenRouterClient(config: ConfigService, apiKey?: string) {
+  return createOpenAI({
+    apiKey,
+    baseURL: config.get<string>('LLM_BASE_URL', OPENROUTER_BASE_URL),
+    headers: openRouterHeaders(config),
+    // Ask OpenRouter to skip hidden reasoning so the output budget goes to the JSON.
+    // Models that force reasoning ignore this.
+    fetch: (url, init) => {
+      let patched = init;
+      try {
+        const body = JSON.parse(String(init?.body));
+        body.reasoning = { enabled: false };
+        patched = { ...init, body: JSON.stringify(body) };
+      } catch {
+        /* non-JSON body: send unchanged */
+      }
+      return fetch(url, patched);
+    },
+  });
 }
 
 function completeHighlightObject(result: {
@@ -277,15 +299,9 @@ export class HighlightDetectionService {
       const openai = createOpenAI({ apiKey, baseURL });
       this.model = openai.chat(this.resolvedModelName);
     } else if (this.provider === 'openrouter') {
-      const openrouter = createOpenAI({
-        apiKey,
-        baseURL: this.configService.get<string>(
-          'LLM_BASE_URL',
-          OPENROUTER_BASE_URL,
-        ),
-        headers: openRouterHeaders(this.configService),
-      });
-      this.model = openrouter.chat(this.resolvedModelName);
+      this.model = createOpenRouterClient(this.configService, apiKey).chat(
+        this.resolvedModelName,
+      );
     } else {
       const google = createGoogleGenerativeAI({ apiKey });
       this.model = google(this.resolvedModelName);
@@ -642,14 +658,7 @@ export class HighlightDetectionService {
       this.configService.get<string>('LLM_API_KEY') ||
       this.configService.get<string>('GROQ_API_KEY');
     if (this.provider === 'openrouter')
-      return createOpenAI({
-        apiKey,
-        baseURL: this.configService.get<string>(
-          'LLM_BASE_URL',
-          OPENROUTER_BASE_URL,
-        ),
-        headers: openRouterHeaders(this.configService),
-      }).chat(model);
+      return createOpenRouterClient(this.configService, apiKey).chat(model);
     return this.provider === 'groq'
       ? createOpenAI({
           apiKey,
@@ -1464,25 +1473,28 @@ export class HighlightDetectionService {
   }
 
   /**
-   * Groq's own JSON validation failures include a `failed_generation`
-   * field inside responseBody showing the model's actual (invalid) raw
-   * output — this is the single most useful piece of information for
-   * diagnosing WHY validation failed (truncation vs. malformed structure
-   * vs. something else), and previously was never logged.
+   * Logs the provider's own error message (first 500 chars of the response
+   * body) alongside the status code. Provider error bodies describe the
+   * failure (invalid model, unsupported parameter, rate limit) and do not
+   * contain our prompts. This is the most useful signal for diagnosing
+   * 400/401/429 responses from Groq/OpenRouter.
    */
   private logFullErrorBody(error: unknown, label: string): void {
     const e = error as
       | {
           statusCode?: number;
           name?: string;
-          lastError?: { statusCode?: number };
+          responseBody?: unknown;
+          lastError?: { statusCode?: number; responseBody?: unknown };
         }
       | undefined;
+    const body = e?.responseBody ?? e?.lastError?.responseBody;
     this.logger.error({
       event: 'highlights.provider.failed',
       label,
       statusCode: e?.statusCode ?? e?.lastError?.statusCode,
       name: e?.name,
+      providerError: typeof body === 'string' ? body.slice(0, 500) : undefined,
     });
   }
 
