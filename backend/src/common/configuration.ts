@@ -55,7 +55,7 @@ export function validateEnvironment(
     RENDER_EXECUTION_MODE: ['local', 'aws_batch'],
     MEDIA_WORKER_ROLE: ['all', 'pipeline', 'render', 'studio', 'editing'],
     PADDLE_ENV: ['sandbox', 'production'],
-    LLM_PROVIDER: ['google', 'groq', 'openrouter'],
+    LLM_PROVIDER: ['google', 'groq', 'openrouter', 'rapidapi'],
   })) {
     if (
       env[key] !== undefined &&

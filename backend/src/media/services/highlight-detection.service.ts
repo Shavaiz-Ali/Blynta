@@ -166,6 +166,124 @@ function outputDiagnostics(value: unknown) {
 }
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+const RAPIDAPI_DEFAULT_HOST = 'chatgpt-42.p.rapidapi.com';
+const RAPIDAPI_DEFAULT_PATH = '/gpt4o';
+
+/** Create a Vercel AI SDK compatible LanguageModel for RapidAPI */
+function createRapidApiClient(
+  config: ConfigService,
+  modelName: string,
+  apiKey?: string,
+): LanguageModel {
+  const rapidApiKey =
+    apiKey ||
+    config.get<string>('RAPIDAPI_KEY') ||
+    config.get<string>('LLM_API_KEY') ||
+    '';
+  const rapidApiHost = config.get<string>(
+    'RAPIDAPI_HOST',
+    RAPIDAPI_DEFAULT_HOST,
+  );
+  const endpointPath = config.get<string>(
+    'RAPIDAPI_PATH',
+    RAPIDAPI_DEFAULT_PATH,
+  );
+
+  return {
+    specificationVersion: 'v1',
+    provider: 'rapidapi',
+    modelId: modelName || 'gpt4o',
+    defaultObjectGenerationMode: 'json',
+    async doGenerate(options: any) {
+      const messages: Array<{ role: string; content: string }> = [];
+
+      // Extract system instructions or messages
+      for (const m of options.prompt || []) {
+        if (m.role === 'system') {
+          const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+          messages.push({ role: 'system', content });
+        } else if (m.role === 'user') {
+          const textParts = Array.isArray(m.content)
+            ? m.content.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n')
+            : String(m.content || '');
+          messages.push({ role: 'user', content: textParts });
+        } else if (m.role === 'assistant') {
+          const textParts = Array.isArray(m.content)
+            ? m.content.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n')
+            : String(m.content || '');
+          messages.push({ role: 'assistant', content: textParts });
+        }
+      }
+
+      // If mode is json or schema is specified, reinforce strict JSON instructions
+      if (options.mode?.type === 'object-json' || options.schema) {
+        messages.push({
+          role: 'system',
+          content:
+            'CRITICAL: Output ONLY a valid JSON object matching the requested schema. Do NOT include markdown code blocks, backticks, or any conversational text.',
+        });
+      }
+
+      const postData = JSON.stringify({
+        messages,
+        web_access: false,
+      });
+
+      const url = `https://${rapidApiHost}${endpointPath}`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'x-rapidapi-key': rapidApiKey,
+          'x-rapidapi-host': rapidApiHost,
+          'Content-Type': 'application/json',
+        },
+        body: postData,
+        signal: options.abortSignal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        throw new Error(
+          `RapidAPI request failed with status ${response.status}: ${errorText}`,
+        );
+      }
+
+      const data: any = await response.json();
+      let text = data.result || data.response || data.message || '';
+      if (typeof text !== 'string') {
+        text = JSON.stringify(text);
+      }
+
+      // Clean markdown formatting if present
+      text = text.trim();
+      if (text.startsWith('```json')) {
+        text = text.slice(7);
+      } else if (text.startsWith('```')) {
+        text = text.slice(3);
+      }
+      if (text.endsWith('```')) {
+        text = text.slice(0, -3);
+      }
+      text = text.trim();
+
+      return {
+        text,
+        finishReason: 'stop',
+        usage: {
+          promptTokens: Math.ceil((postData.length || 0) / 4),
+          completionTokens: Math.ceil((text.length || 0) / 4),
+        },
+        rawCall: {
+          rawPrompt: messages,
+          rawSettings: {},
+        },
+      };
+    },
+    async doStream(): Promise<never> {
+      throw new Error('Streaming not supported for RapidAPI highlight provider');
+    },
+  } as unknown as LanguageModel;
+}
 
 /** Optional attribution headers; only sent when configured. */
 function openRouterHeaders(config: ConfigService): Record<string, string> {
@@ -302,6 +420,12 @@ export class HighlightDetectionService {
       this.model = createOpenRouterClient(this.configService, apiKey).chat(
         this.resolvedModelName,
       );
+    } else if (this.provider === 'rapidapi') {
+      this.model = createRapidApiClient(
+        this.configService,
+        this.resolvedModelName,
+        apiKey,
+      );
     } else {
       const google = createGoogleGenerativeAI({ apiKey });
       this.model = google(this.resolvedModelName);
@@ -393,7 +517,9 @@ export class HighlightDetectionService {
                 'LLM_BASE_URL',
                 OPENROUTER_BASE_URL,
               )
-            : 'google',
+            : this.provider === 'rapidapi'
+              ? this.configService.get<string>('RAPIDAPI_HOST', RAPIDAPI_DEFAULT_HOST)
+              : 'google',
       model: selection?.modelId || model || this.resolvedModelName,
       minScore: MIN_HIGHLIGHT_SCORE,
       temperature: 0.3,
@@ -659,6 +785,8 @@ export class HighlightDetectionService {
       this.configService.get<string>('GROQ_API_KEY');
     if (this.provider === 'openrouter')
       return createOpenRouterClient(this.configService, apiKey).chat(model);
+    if (this.provider === 'rapidapi')
+      return createRapidApiClient(this.configService, model, apiKey);
     return this.provider === 'groq'
       ? createOpenAI({
           apiKey,
