@@ -200,16 +200,23 @@ function createRapidApiClient(
       // Extract system instructions or messages
       for (const m of options.prompt || []) {
         if (m.role === 'system') {
-          const content = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+          const content =
+            typeof m.content === 'string'
+              ? m.content
+              : JSON.stringify(m.content);
           messages.push({ role: 'system', content });
         } else if (m.role === 'user') {
           const textParts = Array.isArray(m.content)
-            ? m.content.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n')
+            ? m.content
+                .map((p: any) => (p.type === 'text' ? p.text : ''))
+                .join('\n')
             : String(m.content || '');
           messages.push({ role: 'user', content: textParts });
         } else if (m.role === 'assistant') {
           const textParts = Array.isArray(m.content)
-            ? m.content.map((p: any) => (p.type === 'text' ? p.text : '')).join('\n')
+            ? m.content
+                .map((p: any) => (p.type === 'text' ? p.text : ''))
+                .join('\n')
             : String(m.content || '');
           messages.push({ role: 'assistant', content: textParts });
         }
@@ -280,7 +287,9 @@ function createRapidApiClient(
       };
     },
     async doStream(): Promise<never> {
-      throw new Error('Streaming not supported for RapidAPI highlight provider');
+      throw new Error(
+        'Streaming not supported for RapidAPI highlight provider',
+      );
     },
   } as unknown as LanguageModel;
 }
@@ -410,6 +419,9 @@ export class HighlightDetectionService {
     }
 
     if (this.provider === 'groq') {
+      this.logger.log(
+        `Using Groq for highlight detection - model: ${this.resolvedModelName}`,
+      );
       const baseURL = this.configService.get<string>(
         'LLM_BASE_URL',
         LEGACY_GROQ_ENDPOINT,
@@ -417,16 +429,25 @@ export class HighlightDetectionService {
       const openai = createOpenAI({ apiKey, baseURL });
       this.model = openai.chat(this.resolvedModelName);
     } else if (this.provider === 'openrouter') {
+      this.logger.log(
+        `Using OpenRouter for highlight detection - model: ${this.resolvedModelName}`,
+      );
       this.model = createOpenRouterClient(this.configService, apiKey).chat(
         this.resolvedModelName,
       );
     } else if (this.provider === 'rapidapi') {
+      this.logger.log(
+        `Using RapidAPI for highlight detection - model: ${this.resolvedModelName}`,
+      );
       this.model = createRapidApiClient(
         this.configService,
         this.resolvedModelName,
         apiKey,
       );
     } else {
+      this.logger.log(
+        `Using Google for highlight detection - model: ${this.resolvedModelName}`,
+      );
       const google = createGoogleGenerativeAI({ apiKey });
       this.model = google(this.resolvedModelName);
     }
@@ -518,7 +539,10 @@ export class HighlightDetectionService {
                 OPENROUTER_BASE_URL,
               )
             : this.provider === 'rapidapi'
-              ? this.configService.get<string>('RAPIDAPI_HOST', RAPIDAPI_DEFAULT_HOST)
+              ? this.configService.get<string>(
+                  'RAPIDAPI_HOST',
+                  RAPIDAPI_DEFAULT_HOST,
+                )
               : 'google',
       model: selection?.modelId || model || this.resolvedModelName,
       minScore: MIN_HIGHLIGHT_SCORE,
