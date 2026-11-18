@@ -198,9 +198,10 @@ export class JobsProcessor
         dedupeKey: `activity:job:${jobId}:start`,
       });
 
-      // const resolution: '720p' | '1080p' =
-      //   user.plan === UserPlan.PRO || user.plan === UserPlan.BUSINESS ? '1080p' : '720p';
-      const resolution: '720p' | '1080p' | '360p' | '240p' = '240p';
+      const resolution: '720p' | '1080p' =
+        user.plan === UserPlan.PRO || user.plan === UserPlan.BUSINESS
+          ? '1080p'
+          : '720p';
 
       let lastProgressUpdate = 0;
       const makeThrottledProgressUpdate = () => (percent: number) => {
