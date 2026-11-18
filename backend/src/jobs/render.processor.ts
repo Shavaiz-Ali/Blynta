@@ -31,6 +31,8 @@ import {
   renderFailure,
   terminalRenderFailure,
 } from '../batch-render/render-failure';
+import { FaceDetectionService } from '../media/services/face-detection.service';
+import { resolveClipCrop, computeMedianCropX } from '../media/utils/face-crop.util';
 
 interface RenderData {
   jobId: string;
@@ -54,6 +56,7 @@ export class RenderProcessor
     private capacity: RenderCapacityService,
     @Optional() private batch?: BatchRenderService,
     @Optional() private inspection?: MediaInspectionService,
+    @Optional() private faceDetection?: FaceDetectionService,
   ) {
     super();
   }
@@ -293,6 +296,39 @@ export class RenderProcessor
       const raw = join(directory, 'clip.mp4');
       ffmpegStarted = Date.now();
       let final = raw;
+
+      // -----------------------------------------------------------------------
+      // Face-aware crop: attempt detection on the local source video.
+      // This runs only on the non-batch path (sourceLease is available).
+      // Any failure silently falls back to center-crop.
+      // -----------------------------------------------------------------------
+      let faceCropX: number | string | undefined;
+      if (!this.batch?.enabled && this.faceDetection && sourceLease) {
+        try {
+          const detection = await this.faceDetection.detect(
+            sourceLease.path,
+            parent.videoDuration,
+          );
+          if (detection) {
+            const cropResult = resolveClipCrop(
+              detection,
+              clip.startTime,
+              clip.endTime,
+            );
+            if (cropResult !== null) {
+              faceCropX = cropResult.cropX;
+              this.logger.log(
+                `[face-detection] [jobId=${jobId}][clipId=${clipId}] mode=${cropResult.mode} cropX=${cropResult.cropX}`,
+              );
+            }
+          }
+        } catch (err) {
+          this.logger.warn(
+            `[face-detection] [jobId=${jobId}][clipId=${clipId}] Detection failed, using center-crop: ${err}`,
+          );
+        }
+      }
+
       if (this.batch?.enabled) {
         const preset = resolveStylePreset(parent.stylePreset);
         const highlight = parent.highlights.find(
@@ -371,6 +407,7 @@ export class RenderProcessor
           (sample) => {
             if (state === ClipProcessingState.CUTTING) publish(sample);
           },
+          faceCropX,
         );
         ffmpegElapsedMs += Date.now() - ffmpegStarted;
         cuttingSeconds = (Date.now() - ffmpegStarted) / 1000;
@@ -498,16 +535,19 @@ export class RenderProcessor
       await drainMediaChildren();
       await publishing;
       const finalParent = await this.jobs.findJob(jobId).catch(() => null);
+      const isTerminalRelease =
+        !finalParent ||
+        [
+          JobStatus.COMPLETED,
+          JobStatus.FAILED,
+          JobStatus.CANCELLING,
+          JobStatus.CANCELLED,
+        ].includes(finalParent.status);
+      if (isTerminalRelease && sourceLease) {
+        this.faceDetection?.invalidate(sourceLease.path);
+      }
       await sourceLease
-        ?.release(
-          !finalParent ||
-            [
-              JobStatus.COMPLETED,
-              JobStatus.FAILED,
-              JobStatus.CANCELLING,
-              JobStatus.CANCELLED,
-            ].includes(finalParent.status),
-        )
+        ?.release(isTerminalRelease)
         .catch((error) =>
           this.logger.warn(
             `[jobId=${jobId}][clipId=${clipId}] Source cleanup failed: ${error}`,

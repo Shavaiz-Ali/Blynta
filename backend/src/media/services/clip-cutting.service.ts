@@ -9,12 +9,20 @@ export class ClipCuttingService {
 
   constructor(private processRegistry: ProcessRegistryService) {}
 
+  /**
+   * Cut and vertically crop a clip from a source video.
+   *
+   * @param cropX Optional pixel X offset (number) or dynamic FFmpeg crop expression
+   *   (string) for the 9:16 crop window. When omitted the existing center-crop
+   *   behaviour is preserved.
+   */
   async cutClip(
     sourceVideoPath: string,
     startTime: number,
     endTime: number,
     outputPath: string,
     onProgress?: (progress: FfmpegProgress) => void,
+    cropX?: number | string,
   ): Promise<string> {
     const duration = endTime - startTime;
     if (duration <= 0) {
@@ -24,7 +32,7 @@ export class ClipCuttingService {
     }
 
     this.logger.log(
-      `Cutting clip: ${/^https?:/.test(sourceVideoPath) ? 'private R2 source' : sourceVideoPath} [${startTime}s - ${endTime}s] -> ${outputPath}`,
+      `Cutting clip: ${/^https?:/.test(sourceVideoPath) ? 'private R2 source' : sourceVideoPath} [${startTime}s - ${endTime}s] -> ${outputPath}${cropX !== undefined ? ` cropX=${cropX}` : ''}`,
     );
     await this.cutAndCropWithFfmpeg(
       sourceVideoPath,
@@ -32,6 +40,7 @@ export class ClipCuttingService {
       duration,
       outputPath,
       onProgress,
+      cropX,
     );
     return outputPath;
   }
@@ -42,7 +51,16 @@ export class ClipCuttingService {
     duration: number,
     outputPath: string,
     onProgress?: (progress: FfmpegProgress) => void,
+    cropX?: number | string,
   ): Promise<void> {
+    // When cropX is provided, use it as the explicit left-edge offset for the
+    // 9:16 crop window. Otherwise fall back to the original center-crop
+    // expression `crop=ih*9/16:ih` (implicit x=(iw-ow)/2 centering by FFmpeg).
+    const cropFilter =
+      cropX !== undefined
+        ? `crop=ih*9/16:ih:${cropX}:0,scale=1080:1920:flags=lanczos`
+        : 'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos';
+
     await runCommandWithProgress(
       'ffmpeg',
       [
@@ -53,7 +71,7 @@ export class ClipCuttingService {
         '-t',
         String(duration),
         '-vf',
-        'crop=ih*9/16:ih,scale=1080:1920:flags=lanczos',
+        cropFilter,
         '-c:v',
         'libx264',
         '-preset',
