@@ -69,6 +69,7 @@ import {
   HighlightDetectionService,
   HighlightSchema,
   HighlightsResponseSchema,
+  createRapidApiClient,
 } from './highlight-detection.service';
 import { buildHighlightSystemPrompt } from '../prompts/highlight-detection.prompts';
 
@@ -1316,4 +1317,228 @@ describe('registry highlight adapter integration', () => {
       expect(mockGenerateObject).toHaveBeenCalledTimes(1);
     },
   );
+
+  describe('RapidAPI default routing integration', () => {
+    const fakeJsonPayload = {
+      videoTitle: 'RapidAPI Highlights',
+      videoDescription: 'A video description',
+      keywords: 'ai, highlights',
+      hashtags: ['#ai', '#shorts'],
+      highlights: [
+        {
+          startTime: 0,
+          endTime: 25,
+          reason: 'Good hook',
+          score: 0.95,
+          contextComplete: true,
+          presetRelevant: true,
+          groundedQuote: 'A transcript excerpt about a surprising idea.',
+          clipTitle: 'Great hook',
+          clipDescription: 'Engaging start',
+        },
+      ],
+    };
+
+    it('injects schema, strips fences, parses usage, honors abort signal, and skips registry usage for auto default routing', async () => {
+      const autoSelection = {
+        registryId: '111111111111111111111111',
+        providerId: '222222222222222222222222',
+        modelId: 'gemini-registered',
+        configurationHash: 'synthetic-hash',
+        auto: true,
+      };
+
+      const model = {
+        modelId: 'gemini-registered',
+        providerId: autoSelection.providerId,
+        settings: {
+          timeoutMs: 5000,
+          maxOutputTokens: 512,
+          temperature: 0.2,
+          maxRetries: 0,
+        },
+        pricing: {
+          inputCostPerMillionTokens: 1,
+          outputCostPerMillionTokens: 2,
+          currency: 'USD',
+        },
+      };
+
+      const routing = {
+        resolve: jest.fn().mockResolvedValue({
+          model,
+          provider: { adapter: 'google' },
+          secret: 'synthetic-registry-key',
+        }),
+      };
+      const registry = { recordUsage: jest.fn().mockResolvedValue(undefined) };
+      const googleLanguageModel = jest.fn();
+
+      const service = new HighlightDetectionService(
+        new ConfigService({
+          LLM_PROVIDER: 'rapidapi',
+          LLM_MODEL_NAME: 'gpt4o',
+          LLM_API_KEY: 'test-rapid-key',
+          RAPIDAPI_HOST: 'chatgpt-42.p.rapidapi.com',
+          RAPIDAPI_PATH: '/gpt4o',
+          HIGHLIGHT_PROVIDER_MAX_RETRIES: 0,
+        }),
+        routing as never,
+        registry as never,
+        {
+          get: () => ({
+            languageModel: googleLanguageModel,
+          }),
+        } as never,
+      );
+
+      mockGenerateObject.mockResolvedValueOnce({
+        object: HighlightsResponseSchema.parse(fakeJsonPayload),
+        usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
+      });
+
+      const result = await service.detectHighlightsWithMetadata(
+        [
+          {
+            startTime: 0,
+            endTime: 30,
+            text: 'A transcript excerpt about a surprising idea.',
+          },
+        ],
+        {
+          videoDuration: 30,
+          registeredModel: { userId: 'owner', selection: autoSelection },
+        },
+      );
+
+      // 1. Google adapter should NOT have been invoked
+      expect(googleLanguageModel).not.toHaveBeenCalled();
+
+      // 2. Output parsed cleanly
+      expect(result.highlights).toHaveLength(1);
+      expect(result.highlights[0].clipTitle).toBe('Great hook');
+
+      // 3. Registry usage tracking skipped for RapidAPI default routing
+      expect(registry.recordUsage).not.toHaveBeenCalled();
+
+      // 4. cacheConfiguration distinguishes RapidAPI default routing
+      const cacheConfig = service.cacheConfiguration(undefined, autoSelection);
+      expect(cacheConfig.provider).toBe('rapidapi');
+      expect(cacheConfig.model).toBe('gpt4o');
+      expect(cacheConfig.registeredModel?.providerId).toBe('rapidapi');
+    });
+
+    it('custom fetch proxy injects schema into system message, strips fences, parses usage, and honors abort signal', async () => {
+      const config = new ConfigService({
+        LLM_PROVIDER: 'rapidapi',
+        LLM_API_KEY: 'test-rapid-key',
+        RAPIDAPI_HOST: 'chatgpt-42.p.rapidapi.com',
+        RAPIDAPI_PATH: '/gpt4o',
+      });
+
+      let capturedFetchOptions: any;
+      const originalCreateOpenAI = jest.requireMock('@ai-sdk/openai').createOpenAI;
+      originalCreateOpenAI.mockImplementationOnce((options: any) => {
+        capturedFetchOptions = options;
+        return {
+          chat: jest.fn((modelName: string) => ({
+            modelId: modelName,
+            provider: 'openai.chat',
+          })),
+        };
+      });
+
+      createRapidApiClient(config, 'gpt4o');
+      expect(capturedFetchOptions).toBeDefined();
+      expect(typeof capturedFetchOptions.fetch).toBe('function');
+
+      let capturedUrl = '';
+      let capturedBody: any;
+      let capturedSignal: AbortSignal | undefined;
+
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn().mockImplementation(async (url: string, init: any) => {
+        capturedUrl = url;
+        capturedBody = JSON.parse(init.body);
+        capturedSignal = init.signal;
+
+        if (init?.signal?.aborted) {
+          throw new DOMException('This operation was aborted', 'AbortError');
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+          json: async () => ({
+            result: '```json\n' + JSON.stringify(fakeJsonPayload) + '\n```',
+          }),
+        };
+      }) as any;
+
+      try {
+        const controller = new AbortController();
+
+        const testInit = {
+          method: 'POST',
+          body: JSON.stringify({
+            messages: [
+              { role: 'system', content: 'Base system prompt' },
+              { role: 'user', content: 'Base user prompt' },
+            ],
+            response_format: {
+              type: 'json_schema',
+              json_schema: {
+                schema: {
+                  type: 'object',
+                  properties: { videoTitle: { type: 'string' } },
+                },
+              },
+            },
+          }),
+          signal: controller.signal,
+        };
+
+        const response = await capturedFetchOptions.fetch(
+          'https://chatgpt-42.p.rapidapi.com/v1/chat/completions',
+          testInit,
+        );
+        const data = await response.json();
+
+        // 1. URL and method check
+        expect(capturedUrl).toBe('https://chatgpt-42.p.rapidapi.com/gpt4o');
+        expect(capturedBody.web_access).toBe(false);
+
+        // 2. Schema injected into system message
+        const sysMsg = capturedBody.messages.find((m: any) => m.role === 'system');
+        expect(sysMsg.content).toContain('JSON Schema to strictly adhere to:');
+        expect(sysMsg.content).toContain('properties');
+        expect(sysMsg.content).toContain('Output ONLY a valid JSON object');
+
+        // 3. Fences stripped from response
+        const content = data.choices[0].message.content;
+        expect(content.startsWith('```')).toBe(false);
+        expect(content.endsWith('```')).toBe(false);
+        expect(JSON.parse(content).videoTitle).toBe('RapidAPI Highlights');
+
+        // 4. Token usage estimated
+        expect(data.usage.prompt_tokens).toBeGreaterThan(0);
+        expect(data.usage.completion_tokens).toBeGreaterThan(0);
+        expect(data.usage.total_tokens).toBe(
+          data.usage.prompt_tokens + data.usage.completion_tokens,
+        );
+
+        // 5. Abort signal honored
+        controller.abort();
+        await expect(
+          capturedFetchOptions.fetch(
+            'https://chatgpt-42.p.rapidapi.com/v1/chat/completions',
+            testInit,
+          ),
+        ).rejects.toThrow('aborted');
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
 });

@@ -169,8 +169,8 @@ const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 const RAPIDAPI_DEFAULT_HOST = 'chatgpt-42.p.rapidapi.com';
 const RAPIDAPI_DEFAULT_PATH = '/gpt4o';
 
-/** Create a Vercel AI SDK compatible LanguageModel for RapidAPI */
-function createRapidApiClient(
+/** Create a Vercel AI SDK compatible LanguageModel for RapidAPI via createOpenAI and custom fetch */
+export function createRapidApiClient(
   config: ConfigService,
   modelName: string,
   apiKey?: string,
@@ -189,55 +189,60 @@ function createRapidApiClient(
     RAPIDAPI_DEFAULT_PATH,
   );
 
-  return {
-    specificationVersion: 'v1',
-    provider: 'rapidapi',
-    modelId: modelName || 'gpt4o',
-    defaultObjectGenerationMode: 'json',
-    async doGenerate(options: any) {
-      const messages: Array<{ role: string; content: string }> = [];
+  const client = createOpenAI({
+    apiKey: rapidApiKey || 'dummy-rapidapi-key',
+    baseURL: `https://${rapidApiHost}`,
+    fetch: async (url, init) => {
+      let messages: Array<{ role: string; content: string }> = [];
+      let schemaText = '';
 
-      // Extract system instructions or messages
-      for (const m of options.prompt || []) {
-        if (m.role === 'system') {
-          const content =
-            typeof m.content === 'string'
-              ? m.content
-              : JSON.stringify(m.content);
-          messages.push({ role: 'system', content });
-        } else if (m.role === 'user') {
-          const textParts = Array.isArray(m.content)
-            ? m.content
-                .map((p: any) => (p.type === 'text' ? p.text : ''))
-                .join('\n')
-            : String(m.content || '');
-          messages.push({ role: 'user', content: textParts });
-        } else if (m.role === 'assistant') {
-          const textParts = Array.isArray(m.content)
-            ? m.content
-                .map((p: any) => (p.type === 'text' ? p.text : ''))
-                .join('\n')
-            : String(m.content || '');
-          messages.push({ role: 'assistant', content: textParts });
+      if (init?.body) {
+        try {
+          const body = JSON.parse(String(init.body));
+          if (Array.isArray(body.messages)) {
+            messages = body.messages.map((m: any) => ({
+              role: m.role || 'user',
+              content:
+                typeof m.content === 'string'
+                  ? m.content
+                  : Array.isArray(m.content)
+                    ? m.content
+                        .map((part: any) =>
+                          part?.type === 'text' ? part.text : '',
+                        )
+                        .join('\n')
+                    : String(m.content ?? ''),
+            }));
+          }
+          const schemaObj = body.response_format?.json_schema?.schema;
+          if (schemaObj) {
+            schemaText = JSON.stringify(schemaObj);
+          }
+        } catch {
+          /* non-JSON body: pass through messages as is */
         }
       }
 
-      // If mode is json or schema is specified, reinforce strict JSON instructions
-      if (options.mode?.type === 'object-json' || options.schema) {
-        messages.push({
-          role: 'system',
-          content:
-            'CRITICAL: Output ONLY a valid JSON object matching the requested schema. Do NOT include markdown code blocks, backticks, or any conversational text.',
-        });
+      const jsonInstruction =
+        'Output ONLY a valid JSON object matching the requested schema. Do NOT include markdown code blocks, backticks, or any conversational text.';
+      const combinedInstruction = schemaText
+        ? `JSON Schema to strictly adhere to:\n${schemaText}\n\n${jsonInstruction}`
+        : jsonInstruction;
+
+      const systemIdx = messages.findIndex((m) => m.role === 'system');
+      if (systemIdx >= 0) {
+        messages[systemIdx].content = `${messages[systemIdx].content}\n\n${combinedInstruction}`;
+      } else {
+        messages.unshift({ role: 'system', content: combinedInstruction });
       }
 
+      const rapidApiUrl = `https://${rapidApiHost}${endpointPath}`;
       const postData = JSON.stringify({
         messages,
         web_access: false,
       });
 
-      const url = `https://${rapidApiHost}${endpointPath}`;
-      const response = await fetch(url, {
+      const response = await fetch(rapidApiUrl, {
         method: 'POST',
         headers: {
           'x-rapidapi-key': rapidApiKey,
@@ -245,7 +250,7 @@ function createRapidApiClient(
           'Content-Type': 'application/json',
         },
         body: postData,
-        signal: options.abortSignal,
+        signal: init?.signal,
       });
 
       if (!response.ok) {
@@ -261,7 +266,6 @@ function createRapidApiClient(
         text = JSON.stringify(text);
       }
 
-      // Clean markdown formatting if present
       text = text.trim();
       if (text.startsWith('```json')) {
         text = text.slice(7);
@@ -273,25 +277,39 @@ function createRapidApiClient(
       }
       text = text.trim();
 
-      return {
-        text,
-        finishReason: 'stop',
+      const promptTokens = Math.ceil((postData.length || 0) / 4);
+      const completionTokens = Math.ceil((text.length || 0) / 4);
+
+      const chatCompletionResponse = {
+        id: `rapidapi-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: modelName || 'gpt4o',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: text,
+            },
+            finish_reason: 'stop',
+          },
+        ],
         usage: {
-          promptTokens: Math.ceil((postData.length || 0) / 4),
-          completionTokens: Math.ceil((text.length || 0) / 4),
-        },
-        rawCall: {
-          rawPrompt: messages,
-          rawSettings: {},
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
         },
       };
+
+      return new Response(JSON.stringify(chatCompletionResponse), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     },
-    async doStream(): Promise<never> {
-      throw new Error(
-        'Streaming not supported for RapidAPI highlight provider',
-      );
-    },
-  } as unknown as LanguageModel;
+  });
+
+  return client.chat(modelName || 'gpt4o');
 }
 
 /** Optional attribution headers; only sent when configured. */
@@ -526,25 +544,42 @@ export class HighlightDetectionService {
   }
 
   cacheConfiguration(model?: string, selection?: HighlightModelSelection) {
+    const isRapidApiOverride =
+      this.provider === 'rapidapi' && (!selection || selection.auto === true);
+    const effectiveProvider = isRapidApiOverride ? 'rapidapi' : this.provider;
+    const effectiveModel = isRapidApiOverride
+      ? this.resolvedModelName
+      : selection?.modelId || model || this.resolvedModelName;
+
     return {
-      ...(selection ? { registeredModel: selection } : {}),
+      ...(selection
+        ? {
+            registeredModel: isRapidApiOverride
+              ? {
+                  ...selection,
+                  modelId: this.resolvedModelName,
+                  providerId: 'rapidapi',
+                }
+              : selection,
+          }
+        : {}),
       version: DETECTION_VERSION,
-      provider: this.provider,
+      provider: effectiveProvider,
       baseURL:
-        this.provider === 'groq'
+        effectiveProvider === 'groq'
           ? this.configService.get<string>('LLM_BASE_URL', LEGACY_GROQ_ENDPOINT)
-          : this.provider === 'openrouter'
+          : effectiveProvider === 'openrouter'
             ? this.configService.get<string>(
                 'LLM_BASE_URL',
                 OPENROUTER_BASE_URL,
               )
-            : this.provider === 'rapidapi'
+            : effectiveProvider === 'rapidapi'
               ? this.configService.get<string>(
                   'RAPIDAPI_HOST',
                   RAPIDAPI_DEFAULT_HOST,
                 )
               : 'google',
-      model: selection?.modelId || model || this.resolvedModelName,
+      model: effectiveModel,
       minScore: MIN_HIGHLIGHT_SCORE,
       temperature: 0.3,
       outputTokens: DIRECT_MAX_OUTPUT_TOKENS,
@@ -667,12 +702,16 @@ export class HighlightDetectionService {
         parentSignal?.throwIfAborted();
         const attemptStarted = Date.now();
         const attemptUsage = { ...usage, call: attempt };
+        const isRapidApiDefault =
+          this.provider === 'rapidapi' && binding.selection.auto === true;
         const requestLog = {
           jobId: options?.jobId,
-          modelId: usage.modelId,
-          providerId: usage.providerId,
-          provider: resolved.provider.adapter,
-          providerModelId: usage.providerModelId,
+          modelId: isRapidApiDefault ? this.resolvedModelName : usage.modelId,
+          providerId: isRapidApiDefault ? 'rapidapi' : usage.providerId,
+          provider: isRapidApiDefault ? 'rapidapi' : resolved.provider.adapter,
+          providerModelId: isRapidApiDefault
+            ? this.resolvedModelName
+            : usage.providerModelId,
           timeoutMs,
           attempt,
           maxAttempts: maxRetries + 1,
@@ -691,15 +730,23 @@ export class HighlightDetectionService {
           signal = args[0].abortSignal
             ? AbortSignal.any([args[0].abortSignal, timeout])
             : timeout;
+
+          const languageModelInstance = isRapidApiDefault
+            ? createRapidApiClient(
+                this.configService,
+                this.resolvedModelName,
+              )
+            : await this.adapters
+                .get(resolved.provider.adapter)
+                .languageModel(
+                  resolved.model,
+                  resolved.provider,
+                  resolved.secret,
+                );
+
           const result = await meteredGenerateObject({
             ...args[0],
-            model: await this.adapters
-              .get(resolved.provider.adapter)
-              .languageModel(
-                resolved.model,
-                resolved.provider,
-                resolved.secret,
-              ),
+            model: languageModelInstance,
             temperature:
               resolved.model.settings.temperature ?? args[0].temperature,
             maxOutputTokens,
@@ -716,24 +763,26 @@ export class HighlightDetectionService {
             outputTokens = result.usage.outputTokens;
           const pricing = resolved.model.pricing;
           phase = 'usage';
-          await this.registry.recordUsage({
-            ...attemptUsage,
-            latencyMs: Date.now() - attemptStarted,
-            status: 'success',
-            inputTokens,
-            outputTokens,
-            totalTokens: result.usage.totalTokens,
-            ...(pricing &&
-            inputTokens !== undefined &&
-            outputTokens !== undefined
-              ? {
-                  estimatedCostUsd:
-                    (inputTokens * pricing.inputCostPerMillionTokens +
-                      outputTokens * pricing.outputCostPerMillionTokens) /
-                    1e6,
-                }
-              : {}),
-          });
+          if (!isRapidApiDefault) {
+            await this.registry.recordUsage({
+              ...attemptUsage,
+              latencyMs: Date.now() - attemptStarted,
+              status: 'success',
+              inputTokens,
+              outputTokens,
+              totalTokens: result.usage.totalTokens,
+              ...(pricing &&
+              inputTokens !== undefined &&
+              outputTokens !== undefined
+                ? {
+                    estimatedCostUsd:
+                      (inputTokens * pricing.inputCostPerMillionTokens +
+                        outputTokens * pricing.outputCostPerMillionTokens) /
+                      1e6,
+                  }
+                : {}),
+            });
+          }
           this.logger.log({
             event: 'highlights.registered.succeeded',
             ...requestLog,
@@ -762,15 +811,17 @@ export class HighlightDetectionService {
             failure,
             ...outputDiagnostics(error),
           });
-          await this.registry
-            .recordUsage({
-              ...attemptUsage,
-              latencyMs: Date.now() - attemptStarted,
-              errorCode: failure.code,
-            })
-            .catch(() =>
-              this.logger.error('Highlight failure usage persistence failed'),
-            );
+          if (!isRapidApiDefault) {
+            await this.registry
+              .recordUsage({
+                ...attemptUsage,
+                latencyMs: Date.now() - attemptStarted,
+                errorCode: failure.code,
+              })
+              .catch(() =>
+                this.logger.error('Highlight failure usage persistence failed'),
+              );
+          }
           if (
             failure.retryable &&
             failure.category !== 'structured_output' &&
