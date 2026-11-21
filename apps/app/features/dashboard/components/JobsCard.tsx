@@ -6,8 +6,7 @@ import Link from "next/link";
 import { JobsSkeleton } from "./JobsSkeleton";
 import { Job, JobStatus } from "@/features/jobs";
 import { ViewModeToggle } from "./ViewModeToggle";
-import { JobCardGrid } from "./JobCardGrid";
-import { JobCardList } from "./JobCardList";
+import { SourceVideoCard } from "@/features/jobs/components/SourceVideoCard";
 import {
   FilmIcon,
   YoutubeIcon,
@@ -144,13 +143,13 @@ export function JobsCard({
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {jobs.slice(0, 9).map((job) => (
-            <JobCardGrid key={job._id || job.id} job={job} />
+            <SourceVideoCard key={job._id || job.id} job={job} viewMode="grid" />
           ))}
         </div>
       ) : (
         <div className="space-y-2.5">
           {jobs.slice(0, 9).map((job) => (
-            <JobCardList key={job._id || job.id} job={job} />
+            <SourceVideoCard key={job._id || job.id} job={job} viewMode="list" />
           ))}
         </div>
       )}
