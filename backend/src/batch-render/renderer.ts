@@ -242,18 +242,95 @@ async function runRendererTask(
                   ),
                 ),
             );
+            const cropMode =
+              typeof task.cropX === 'string'
+                ? 'dynamic'
+                : typeof task.cropX === 'number'
+                  ? 'static'
+                  : 'center';
+
+            logger.log({
+              event: 'face-detection.crop_received',
+              batchJobId: jobId,
+              clipId: task.owner?.clipId,
+              cropXPresent: task.cropX !== undefined,
+              cropMode,
+            });
+
+            let finalCropX: number | string | undefined = task.cropX;
+            if (finalCropX !== undefined) {
+              if (
+                typeof finalCropX === 'number' &&
+                (!Number.isFinite(finalCropX) || finalCropX < 0)
+              ) {
+                logger.warn({
+                  event: 'face-detection.invalid_crop_coordinates',
+                  batchJobId: jobId,
+                  clipId: task.owner?.clipId,
+                  receivedCropX: finalCropX,
+                  reason: 'Negative or non-finite cropX',
+                  fallback: 'center',
+                });
+                finalCropX = undefined;
+              } else if (
+                typeof finalCropX === 'string' &&
+                (!finalCropX.trim() || !/^[0-9a-zA-Z_+\-*/().,\s]+$/.test(finalCropX))
+              ) {
+                logger.warn({
+                  event: 'face-detection.invalid_crop_coordinates',
+                  batchJobId: jobId,
+                  clipId: task.owner?.clipId,
+                  receivedCropX: finalCropX,
+                  reason: !finalCropX.trim()
+                    ? 'Empty cropX expression'
+                    : 'Forbidden characters in cropX expression',
+                  fallback: 'center',
+                });
+                finalCropX = undefined;
+              }
+            }
+
+            if (finalCropX !== undefined) {
+              logger.log({
+                event: 'face-detection.crop_applied',
+                batchJobId: jobId,
+                clipId: task.owner?.clipId,
+                cropX: finalCropX,
+                selectedCropMode: cropMode,
+                cropFilter: `crop=ih*9/16:ih:${finalCropX}:0`,
+                outputDimensions: '1080x1920',
+              });
+            } else {
+              logger.log({
+                event: 'face-detection.center_crop_used',
+                batchJobId: jobId,
+                clipId: task.owner?.clipId,
+                reason: task.cropX === undefined ? 'no_crop_in_task' : 'invalid_crop_coordinates',
+              });
+            }
+
             progress('cutting', 0, true);
             const raw = join(directory, 'clip.mp4');
             const cutStarted = Date.now();
-            await atStage('cutting', 'FFmpegSignedSourceRead', () =>
-              new ClipCuttingService(registry).cutClip(
-                source,
-                task.start,
-                task.end,
-                raw,
-                (p) => progress('cutting', p.progress),
-              ),
-            );
+            await atStage('cutting', 'FFmpegSignedSourceRead', () => {
+              const cuttingService = new ClipCuttingService(registry);
+              return finalCropX !== undefined
+                ? cuttingService.cutClip(
+                    source,
+                    task.start,
+                    task.end,
+                    raw,
+                    (p) => progress('cutting', p.progress),
+                    finalCropX,
+                  )
+                : cuttingService.cutClip(
+                    source,
+                    task.start,
+                    task.end,
+                    raw,
+                    (p) => progress('cutting', p.progress),
+                  );
+            });
             cuttingSeconds = (Date.now() - cutStarted) / 1000;
             output = raw;
             if (task.segments.length) {

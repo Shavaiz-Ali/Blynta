@@ -109,6 +109,7 @@ export type RenderTask = {
       end: number;
       segments: { startTime: number; endTime: number; text: string }[];
       style: CaptionStyleConfig;
+      cropX?: number | string;
     }
   | {
       kind: 'edit';

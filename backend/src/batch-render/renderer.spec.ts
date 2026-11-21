@@ -204,6 +204,41 @@ describe('one-shot renderer', () => {
     expect(CaptionBurningService.prototype.burnCaptions).not.toHaveBeenCalled();
     expect(uploaded.toString()).toBe('cut');
   });
+  it('applies numeric cropX when provided in the manifest', async () => {
+    task.cropX = 420;
+    await run();
+    expect(ClipCuttingService.prototype.cutClip).toHaveBeenCalledWith(
+      expect.stringContaining('https://private.'),
+      10,
+      20,
+      expect.any(String),
+      expect.any(Function),
+      420,
+    );
+  });
+  it('applies dynamic cropX expression when provided in the manifest', async () => {
+    task.cropX = '400+sin(t)*50';
+    await run();
+    expect(ClipCuttingService.prototype.cutClip).toHaveBeenCalledWith(
+      expect.stringContaining('https://private.'),
+      10,
+      20,
+      expect.any(String),
+      expect.any(Function),
+      '400+sin(t)*50',
+    );
+  });
+  it('falls back to center crop when cropX contains invalid characters', async () => {
+    task.cropX = '400; rm -rf /';
+    await run();
+    expect(ClipCuttingService.prototype.cutClip).toHaveBeenCalledWith(
+      expect.stringContaining('https://private.'),
+      10,
+      20,
+      expect.any(String),
+      expect.any(Function),
+    );
+  });
   it('classifies a required missing manifest without rendering or publishing success', async () => {
     const error = Object.assign(new Error('missing'), { name: 'NoSuchKey', $metadata: { httpStatusCode: 404 } });
     r2.downloadToBuffer.mockRejectedValueOnce(error);

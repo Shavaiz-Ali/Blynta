@@ -135,14 +135,25 @@ export class FaceDetectionService implements OnModuleDestroy {
    *
    * @param videoPath Local filesystem path to the video file.
    * @param durationSeconds Optional duration in seconds used for duration-aware timeout.
+   * @param context Optional correlation identifiers for structured logging.
    * @returns Parsed detection data or null on any error.
    */
-  detect(videoPath: string, durationSeconds?: number): Promise<VideoFaceDetection | null> {
+  detect(
+    videoPath: string,
+    durationSeconds?: number,
+    context?: { jobId?: string; videoId?: string },
+  ): Promise<VideoFaceDetection | null> {
     const absPath = resolve(videoPath);
     this.evictExpired();
 
     let entry = this.cache.get(absPath);
     if (entry) {
+      this.logger.log({
+        event: 'face-detection.cache_hit',
+        jobId: context?.jobId,
+        videoId: context?.videoId,
+        path: absPath,
+      });
       // LRU refresh: re-insert at end of Map
       entry.lastAccessedAt = Date.now();
       this.cache.delete(absPath);
@@ -153,7 +164,7 @@ export class FaceDetectionService implements OnModuleDestroy {
     // LRU eviction if cache size reaches limit
     this.ensureCacheCapacity();
 
-    const resultPromise = this.run(absPath, durationSeconds);
+    const resultPromise = this.run(absPath, durationSeconds, context);
     entry = {
       result: resultPromise,
       createdAt: Date.now(),
@@ -180,7 +191,9 @@ export class FaceDetectionService implements OnModuleDestroy {
   private async run(
     absPath: string,
     durationSeconds?: number,
+    context?: { jobId?: string; videoId?: string },
   ): Promise<VideoFaceDetection | null> {
+    const startTime = Date.now();
     // Check cancellation and process registry health before launching
     this.processRegistry?.assertRunning();
     assertNotCancelled();
@@ -209,9 +222,18 @@ export class FaceDetectionService implements OnModuleDestroy {
       this.configuredTimeoutMs ??
       Math.min(1800_000, Math.max(120_000, estimatedTimeoutMs));
 
-    this.logger.log(
-      `[face-detection] Starting detection: ${absPath} (interval=${this.interval}s, timeout=${timeoutMs}ms)`,
-    );
+    this.logger.log({
+      event: 'face-detection.detection_started',
+      jobId: context?.jobId,
+      videoId: context?.videoId,
+      videoDuration: durationSeconds,
+      detector: 'mediapipe_blazeface',
+      configuration: {
+        interval: this.interval,
+        confidence: this.confidence,
+        timeoutMs,
+      },
+    });
 
     // Concurrency throttling: route through hostCommand to share slots with FFmpeg/Whisper
     const limited = hostCommand(this.python, args);
@@ -230,9 +252,14 @@ export class FaceDetectionService implements OnModuleDestroy {
           env: limited.env,
         });
       } catch (err) {
-        this.logger.warn(
-          `[face-detection] Failed to spawn Python subprocess: ${err}`,
-        );
+        this.logger.error({
+          event: 'face-detection.detection_failed',
+          jobId: context?.jobId,
+          videoId: context?.videoId,
+          stage: 'spawn',
+          errorName: err instanceof Error ? err.name : 'SpawnError',
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
         resolve(null);
         return;
       }
@@ -261,9 +288,13 @@ export class FaceDetectionService implements OnModuleDestroy {
       const timer = setTimeout(() => {
         if (closed) return;
         timedOut = true;
-        this.logger.warn(
-          `[face-detection] Subprocess PID ${proc.pid} timed out after ${timeoutMs}ms, terminating`,
-        );
+        this.logger.warn({
+          event: 'face-detection.detection_failed',
+          jobId: context?.jobId,
+          videoId: context?.videoId,
+          stage: 'timeout',
+          errorMessage: `Subprocess timed out after ${timeoutMs}ms`,
+        });
         this.terminateSubprocess(proc);
       }, timeoutMs);
       timer.unref?.();
@@ -280,7 +311,14 @@ export class FaceDetectionService implements OnModuleDestroy {
       proc.on('error', (err) => {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
-        this.logger.warn(`[face-detection] Subprocess error: ${err}`);
+        this.logger.error({
+          event: 'face-detection.detection_failed',
+          jobId: context?.jobId,
+          videoId: context?.videoId,
+          stage: 'process_error',
+          errorName: err.name,
+          errorMessage: err.message,
+        });
         resolve(null);
       });
 
@@ -295,9 +333,13 @@ export class FaceDetectionService implements OnModuleDestroy {
         }
 
         if (code !== 0) {
-          this.logger.warn(
-            `[face-detection] Subprocess exited with code ${code}`,
-          );
+          this.logger.warn({
+            event: 'face-detection.detection_failed',
+            jobId: context?.jobId,
+            videoId: context?.videoId,
+            stage: 'exit_code',
+            errorMessage: `Subprocess exited with code ${code}`,
+          });
           resolve(null);
           return;
         }
@@ -305,22 +347,46 @@ export class FaceDetectionService implements OnModuleDestroy {
         try {
           const parsed = JSON.parse(stdout.trim());
           if (!parsed.success) {
-            this.logger.warn(
-              `[face-detection] Service returned error: ${parsed.error}`,
-            );
+            this.logger.warn({
+              event: 'face-detection.detection_failed',
+              jobId: context?.jobId,
+              videoId: context?.videoId,
+              stage: 'service_error',
+              errorMessage: parsed.error,
+            });
             resolve(null);
             return;
           }
           const result = this.normalize(parsed);
-          this.logger.log(
-            `[face-detection] Done: ${result.frames.length} frames sampled, ` +
-              `source=${result.sourceWidth}x${result.sourceHeight}`,
+          const durationMs = Date.now() - startTime;
+          const totalDetectedFaces = result.frames.reduce(
+            (sum, f) => sum + f.faces.length,
+            0,
           );
+          const framesWithFaces = result.frames.filter((f) => f.faces.length > 0).length;
+
+          this.logger.log({
+            event: 'face-detection.detection_completed',
+            jobId: context?.jobId,
+            videoId: context?.videoId,
+            processingDurationMs: durationMs,
+            totalFramesAnalyzed: result.frames.length,
+            framesWithFaces,
+            totalDetectedFaces,
+            sourceWidth: result.sourceWidth,
+            sourceHeight: result.sourceHeight,
+            status: 'success',
+          });
           resolve(result);
         } catch (err) {
-          this.logger.warn(
-            `[face-detection] Failed to parse JSON output: ${err}`,
-          );
+          this.logger.error({
+            event: 'face-detection.detection_failed',
+            jobId: context?.jobId,
+            videoId: context?.videoId,
+            stage: 'json_parse',
+            errorName: err instanceof Error ? err.name : 'SyntaxError',
+            errorMessage: err instanceof Error ? err.message : String(err),
+          });
           resolve(null);
         }
       });

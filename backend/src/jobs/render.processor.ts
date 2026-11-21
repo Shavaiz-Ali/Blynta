@@ -289,8 +289,44 @@ export class RenderProcessor
       assertNotCancelled();
       await transition(ClipProcessingState.QUEUED);
       assertNotCancelled();
-      if (!this.batch?.enabled)
-        sourceLease = await this.sources.acquire(jobId, parent.sourceObjectKey);
+      // -----------------------------------------------------------------------
+      // Source Video Access on EC2
+      // When batch rendering is enabled, acquire source lease specifically
+      // if face detection is active, so detection can run on the source video.
+      // RenderSourceService caches concurrent leases per (jobId, objectKey),
+      // downloading only once for all clips of the same parent video.
+      // -----------------------------------------------------------------------
+      const faceDetectionEnabled =
+        this.config.get<string>('FACE_DETECTION_ENABLED', 'true') !== 'false';
+
+      if (!this.batch?.enabled || (faceDetectionEnabled && this.faceDetection)) {
+        this.logger.log({
+          event: 'face-detection.source_acquisition_started',
+          jobId,
+          clipId,
+          sourceObjectKey: parent.sourceObjectKey,
+        });
+        try {
+          sourceLease = await this.sources.acquire(jobId, parent.sourceObjectKey);
+          this.logger.log({
+            event: 'face-detection.source_acquisition_completed',
+            jobId,
+            clipId,
+            sourcePath: sourceLease.path,
+            videoDuration: parent.videoDuration,
+          });
+        } catch (sourceErr) {
+          this.logger.warn({
+            event: 'face-detection.source_acquisition_failed',
+            jobId,
+            clipId,
+            error: sourceErr instanceof Error ? sourceErr.message : String(sourceErr),
+          });
+          if (!this.batch?.enabled) {
+            throw sourceErr;
+          }
+        }
+      }
       assertNotCancelled();
       await transition(ClipProcessingState.CUTTING);
       const raw = join(directory, 'clip.mp4');
@@ -299,15 +335,17 @@ export class RenderProcessor
 
       // -----------------------------------------------------------------------
       // Face-aware crop: attempt detection on the local source video.
-      // This runs only on the non-batch path (sourceLease is available).
-      // Any failure silently falls back to center-crop.
+      // Runs once per source video (cached by FaceDetectionService).
+      // Any failure safely falls back to center-crop.
       // -----------------------------------------------------------------------
       let faceCropX: number | string | undefined;
-      if (!this.batch?.enabled && this.faceDetection && sourceLease) {
+      let cropMode: 'static' | 'dynamic' | 'center' = 'center';
+      if (faceDetectionEnabled && this.faceDetection && sourceLease) {
         try {
           const detection = await this.faceDetection.detect(
             sourceLease.path,
             parent.videoDuration,
+            { jobId, videoId: parent.sourceObjectKey },
           );
           if (detection) {
             const cropResult = resolveClipCrop(
@@ -317,16 +355,53 @@ export class RenderProcessor
             );
             if (cropResult !== null) {
               faceCropX = cropResult.cropX;
-              this.logger.log(
-                `[face-detection] [jobId=${jobId}][clipId=${clipId}] mode=${cropResult.mode} cropX=${cropResult.cropX}`,
-              );
+              cropMode = cropResult.mode;
+              this.logger.log({
+                event: 'face-detection.crop_calculated',
+                jobId,
+                clipId,
+                clipStartTime: clip.startTime,
+                clipEndTime: clip.endTime,
+                cropX: cropResult.cropX,
+                cropMode: cropResult.mode,
+                faceFound: true,
+                smoothingApplied: cropResult.mode === 'dynamic',
+              });
+            } else {
+              this.logger.log({
+                event: 'face-detection.crop_fallback',
+                jobId,
+                clipId,
+                reason: 'No faces detected in highlight time window',
+                fallbackMode: 'center',
+              });
             }
+          } else {
+            this.logger.log({
+              event: 'face-detection.crop_fallback',
+              jobId,
+              clipId,
+              reason: 'Detection returned null or empty result',
+              fallbackMode: 'center',
+            });
           }
         } catch (err) {
-          this.logger.warn(
-            `[face-detection] [jobId=${jobId}][clipId=${clipId}] Detection failed, using center-crop: ${err}`,
-          );
+          this.logger.warn({
+            event: 'face-detection.crop_fallback',
+            jobId,
+            clipId,
+            reason: `Detection threw exception: ${err instanceof Error ? err.message : String(err)}`,
+            fallbackMode: 'center',
+          });
         }
+      } else if (!faceDetectionEnabled) {
+        this.logger.log({
+          event: 'face-detection.crop_fallback',
+          jobId,
+          clipId,
+          reason: 'Face detection disabled via configuration',
+          fallbackMode: 'center',
+        });
       }
 
       if (this.batch?.enabled) {
@@ -338,6 +413,16 @@ export class RenderProcessor
           preset.key !== DEFAULT_STYLE_PRESET_KEY
             ? preset.captionStyle
             : resolveEditorStyle(highlight?.style).captionStyle;
+
+        this.logger.log({
+          event: 'face-detection.crop_manifest_prepared',
+          jobId,
+          clipId,
+          cropXPresent: faceCropX !== undefined,
+          cropMode,
+          manifestVersion: 1,
+        });
+
         const result = await this.batch.execute(
           `clip/${jobId}/${clipId}/${clip.retryCount ?? 0}/${clip.retryQueuedAt ? new Date(clip.retryQueuedAt).getTime() : 0}`,
           (prefix, deadline) =>
@@ -351,6 +436,7 @@ export class RenderProcessor
               end: clip.endTime,
               segments,
               style,
+              ...(faceCropX !== undefined ? { cropX: faceCropX } : {}),
             }),
           async (phase, percent) => {
             const next =
@@ -548,10 +634,21 @@ export class RenderProcessor
       }
       await sourceLease
         ?.release(isTerminalRelease)
+        .then(() => {
+          this.logger.log({
+            event: 'face-detection.source_cleanup_completed',
+            jobId,
+            clipId,
+            isTerminalRelease,
+          });
+        })
         .catch((error) =>
-          this.logger.warn(
-            `[jobId=${jobId}][clipId=${clipId}] Source cleanup failed: ${error}`,
-          ),
+          this.logger.warn({
+            event: 'face-detection.source_cleanup_failed',
+            jobId,
+            clipId,
+            error: error instanceof Error ? error.message : String(error),
+          }),
         );
       if (directory)
         await rm(directory, { recursive: true, force: true }).catch((error) =>
