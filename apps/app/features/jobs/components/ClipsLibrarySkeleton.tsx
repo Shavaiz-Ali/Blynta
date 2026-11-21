@@ -54,22 +54,26 @@ export function ClipsLibrarySkeleton({
           {Array.from({ length: 6 }).map((_, i) => (
             <div
               key={i}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-3 py-7 rounded-lg border border-border/80 bg-card shadow-xs"
+              className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-xs"
             >
-              <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                <Skeleton className="h-16 w-28 sm:h-20 sm:w-36 rounded-lg shrink-0" />
-                <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex flex-col gap-4 p-3 sm:flex-row sm:items-center">
+                {/* thumbnail: matches h-16 w-28 sm:h-20 sm:w-36 rounded-md */}
+                <Skeleton className="h-16 w-28 shrink-0 rounded-md sm:h-20 sm:w-36" />
+                {/* text block */}
+                <div className="min-w-0 flex-1 space-y-1.5">
                   <Skeleton className="h-4 w-3/4 rounded-md" />
                   <div className="flex flex-wrap items-center gap-2">
                     <Skeleton className="h-3 w-24 rounded-md" />
                     <Skeleton className="h-3 w-28 rounded-md" />
                   </div>
+                  {/* status badge */}
                   <Skeleton className="h-5 w-32 max-w-full rounded-full" />
                 </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                <Skeleton className="h-8 w-24 rounded-lg" />
-                <Skeleton className="h-8 w-8 rounded-lg" />
+                {/* actions */}
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                  <Skeleton className="h-8 w-24 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
               </div>
             </div>
           ))}

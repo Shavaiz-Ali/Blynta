@@ -69,7 +69,10 @@ export function JobsSkeleton({
                 {/* text block: flex-1 min-w-0 space-y-1 */}
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <Skeleton className="h-4 w-4/5" />
-                  <Skeleton className="h-3 w-2/5" />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Skeleton className="h-3 w-24 rounded-md" />
+                    <Skeleton className="h-3 w-28 rounded-md" />
+                  </div>
                   {/* status badge placeholder */}
                   <Skeleton className="h-5 w-28 rounded-full" />
                 </div>
