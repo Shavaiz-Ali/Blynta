@@ -41,7 +41,7 @@ export function JobCardList({ job }: JobCardListProps) {
     <AppCard
       onClick={handleRowClick}
       useDefaultClasses={false}
-      contentClassName="flex flex-col p-0! sm:flex-row sm:items-stretch"
+      contentClassName="flex flex-col p-3 sm:flex-row sm:items-stretch"
       className={cn(
         "group relative gap-0 cursor-pointer overflow-hidden rounded-xl p-0! transition-[border-color,box-shadow,background-color] duration-200 hover:border-primary/35 hover:bg-card/90 hover:shadow-sm",
         isProcessing && "border-chart-4/30 bg-chart-4/[0.02]",
