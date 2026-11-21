@@ -340,6 +340,12 @@ export class JobsProcessor
           localAudioPath: audioPath,
         });
         const create = async () => {
+          this.logger.log({
+            event: 'transcript.pipeline_transcribe_started',
+            jobId,
+            audioDuration: audioMetadata!.durationSeconds,
+            videoDuration: actualDuration,
+          });
           const value = await this.transcriptionService.transcribe(
             audioPath,
             makeThrottledProgressUpdate(),
@@ -348,6 +354,13 @@ export class JobsProcessor
             jobId,
           );
           assertTranscript(value, actualDuration);
+          this.logger.log({
+            event: 'transcript.pipeline_transcribe_completed',
+            jobId,
+            segmentsCount: value.length,
+            audioDuration: audioMetadata!.durationSeconds,
+            videoDuration: actualDuration,
+          });
           return value;
         };
         const key = artifactHash({

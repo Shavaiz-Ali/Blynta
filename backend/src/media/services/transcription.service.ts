@@ -239,6 +239,17 @@ export class TranscriptionService {
       assertNotCancelled();
       onProgress?.(100);
       const response = transcription as unknown as Record<string, unknown>;
+      const rawSegments = Array.isArray(response.segments)
+        ? response.segments
+        : [];
+      this.logger.log({
+        event: 'transcript.received',
+        jobId,
+        provider: 'groq',
+        audioDuration: duration,
+        segmentsCount: rawSegments.length,
+      });
+
       if (
         (response.segments === undefined ||
           (Array.isArray(response.segments) && !response.segments.length)) &&
@@ -250,15 +261,42 @@ export class TranscriptionService {
           provider: 'groq',
           durationSeconds: duration,
         });
-      return normalizeTranscriptResponse(
+
+      const normalized = normalizeTranscriptResponse(
         'groq',
         transcription,
         duration,
-        (event) => this.logger.warn({ ...event, jobId }),
+        (event) => {
+          if (event.event === 'transcript.segment.normalized') {
+            this.logger.log({ ...event, jobId });
+          } else {
+            this.logger.warn({ ...event, jobId });
+          }
+        },
       );
+
+      this.logger.log({
+        event: 'transcript.accepted',
+        jobId,
+        provider: 'groq',
+        audioDuration: duration,
+        segmentCount: normalized.length,
+      });
+
+      return normalized;
     } catch (err) {
       assertNotCancelled();
-      if (err instanceof TranscriptValidationError) throw err;
+      if (err instanceof TranscriptValidationError) {
+        this.logger.error({
+          event: 'transcript.rejected',
+          jobId,
+          provider: 'groq',
+          audioDuration: duration,
+          reason: err.details.reason,
+          segmentIndex: err.details.segmentIndex,
+        });
+        throw err;
+      }
       if (err instanceof Groq.APIError) {
         // SDK messages can include provider response content. Expose status only.
         const rawStatus: unknown = err.status;

@@ -16,6 +16,14 @@ export class TranscriptValidationError extends UnrecoverableError {
   }
 }
 
+/**
+ * Bounded ASR chunk drift tolerance in seconds.
+ * ASR models (e.g. Whisper) decode speech in 30-second fixed chunk windows.
+ * The final segment often extrapolates timestamps up to the end of the 30-second chunk
+ * even when the actual audio stream ended earlier.
+ */
+export const ASR_END_TOLERANCE_SECONDS = 30;
+
 /** Artifact validation is strict: persisted timestamps must already be numbers. */
 export function transcriptIssue(
   value: unknown,
@@ -43,8 +51,10 @@ export function transcriptIssue(
     else if (s.startTime < 0) reason = 'negative_start';
     else if (s.endTime <= s.startTime) reason = 'non_positive_segment_duration';
     else if (s.startTime < previousStart) reason = 'segments_out_of_order';
+    else if (s.startTime >= duration + ASR_END_TOLERANCE_SECONDS)
+      reason = 'segment_exceeds_media_duration';
     // Preserve the existing bounded ASR end tolerance, not an unbounded acceptance.
-    else if (s.endTime > duration + 30)
+    else if (s.endTime > duration + ASR_END_TOLERANCE_SECONDS)
       reason = 'segment_exceeds_media_duration';
     if (reason) return { reason, segmentIndex: i };
     previousStart = s!.startTime as number;
@@ -208,6 +218,7 @@ export function normalizeTranscriptResponse(
   }
   // Validate chronology before any merges. Never sort a corrupt provider response.
   for (const [index, s] of parsed.entries()) {
+    const isLast = index === parsed.length - 1;
     const issue = transcriptIssue(
       [{ ...s, text: s.text || 'silence' }],
       duration,
@@ -215,23 +226,54 @@ export function normalizeTranscriptResponse(
     if (issue) report(index, issue.reason);
     if (!Number.isFinite(s.startTime) || !Number.isFinite(s.endTime))
       fail(index, 'invalid_timestamp');
-    let adjusted = false;
+
+    let startAdjusted = false;
     if (s.startTime < 0 && s.startTime >= -epsilon) {
       s.startTime = 0;
-      adjusted = true;
-    }
-    if (s.endTime > duration && s.endTime <= duration + epsilon) {
-      s.endTime = duration;
-      adjusted = true;
+      startAdjusted = true;
     }
     if (s.startTime < 0 || s.endTime < 0) fail(index, 'negative_start');
-    if (s.startTime > duration || s.endTime > duration)
-      fail(index, 'segment_exceeds_media_duration');
+
+    // Segments starting at or beyond the media duration are completely outside the audio.
+    if (s.startTime >= duration) fail(index, 'segment_exceeds_media_duration');
+
+    const originalEnd = s.endTime;
+    let endClamped = false;
+    let endClampedEpsilon = false;
+
+    if (s.endTime > duration) {
+      if (s.endTime <= duration + epsilon) {
+        s.endTime = duration;
+        endClampedEpsilon = true;
+      } else if (isLast && s.endTime <= duration + ASR_END_TOLERANCE_SECONDS) {
+        s.endTime = duration;
+        endClamped = true;
+        diagnostic?.({
+          event: 'transcript.segment.normalized',
+          provider,
+          segmentIndex: index,
+          originalStart: (raw as Record<string, unknown>[])[index]?.start,
+          originalEnd,
+          correctedStart: s.startTime,
+          correctedEnd: s.endTime,
+          audioDuration: duration,
+          reason: 'clamped_trailing_asr_window',
+        });
+      } else {
+        fail(index, 'segment_exceeds_media_duration');
+      }
+    }
+
     if (index && s.startTime < parsed[index - 1].startTime)
       fail(index, 'segments_out_of_order');
     if (s.endTime < s.startTime - epsilon)
       fail(index, 'non_positive_segment_duration');
-    if (adjusted) repaired(index, 'boundary_precision');
+
+    if (endClamped) {
+      repaired(index, 'clamp_trailing_asr_window');
+    } else if (startAdjusted || endClampedEpsilon) {
+      repaired(index, 'boundary_precision');
+    }
   }
   for (const [index, s] of parsed.entries()) {
     if (s.endTime <= s.startTime) {
