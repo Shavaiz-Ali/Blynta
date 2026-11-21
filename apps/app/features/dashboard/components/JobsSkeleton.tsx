@@ -60,18 +60,24 @@ export function JobsSkeleton({
           ) : (
             <div
               key={i}
-              className="flex flex-col gap-3 rounded-lg border border-border/80 bg-card px-3 py-7 shadow-xs sm:flex-row sm:items-center sm:gap-4"
+              className="overflow-hidden rounded-lg border border-border/80 bg-card shadow-xs"
             >
-              <div className="flex min-w-0 flex-1 items-center gap-3.5">
-                <Skeleton className="h-14 w-24 shrink-0 rounded-lg sm:h-16 sm:w-28" />
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-3 w-full max-w-64" />
+              {/* matches AppCard with contentClassName="flex-col gap-4 sm:flex-row sm:items-center" and p-3 */}
+              <div className="flex flex-col gap-4 p-3 sm:flex-row sm:items-center">
+                {/* thumbnail: matches h-16 w-28 sm:h-20 sm:w-36 rounded-md */}
+                <Skeleton className="h-16 w-28 shrink-0 rounded-md sm:h-20 sm:w-36" />
+                {/* text block: flex-1 min-w-0 space-y-1 */}
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Skeleton className="h-4 w-4/5" />
+                  <Skeleton className="h-3 w-2/5" />
+                  {/* status badge placeholder */}
+                  <Skeleton className="h-5 w-28 rounded-full" />
                 </div>
-              </div>
-              <div className="flex items-center gap-3 self-end sm:self-auto">
-                <Skeleton className="h-5 w-20 rounded-full" />
-                <Skeleton className="h-8 w-8" />
+                {/* actions: shrink-0, self-end on mobile / self-center on sm */}
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <Skeleton className="h-8 w-24 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
               </div>
             </div>
           ),
