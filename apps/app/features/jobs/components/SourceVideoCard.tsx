@@ -63,9 +63,9 @@ export function SourceVideoCard({
     <ClipLibraryCard
       viewMode={viewMode}
       onClick={open}
-      className={
-        isProcessing ? "border-chart-4/30 bg-chart-4/[0.02]" : undefined
-      }
+      className={`
+        ${isProcessing ? "border-chart-4/30 bg-chart-4/[0.02]" : "!p-0"}
+      `}
       thumbnail={
         <ClipLibraryThumbnail
           viewMode={viewMode}
